@@ -1,4 +1,4 @@
-import std/[times, unittest]
+import std/[strutils, times, unittest]
 
 import figdraw
 
@@ -103,6 +103,40 @@ suite "NimKit tooltips":
     check TooltipDrawLevel notin window.buildRenders().layers
     check root.subviews().len == 1
     discard window.drainAnimations()
+
+  test "asynchronous tooltip renders attributed multiline text":
+    let
+      window = newWindow("Rich tooltip", frame = rect(0, 0, 420, 220))
+      root = newView()
+      button = newButton("Hover", frame = rect(20, 20, 80, 24))
+      source = "**Declaration**\n\n```nim\nproc example(value: int): bool\n```"
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(source, style)
+    let keywordIndex = storage.stringValue().find("proc")
+    require keywordIndex >= 0
+    check storage.attributesAt(keywordIndex).foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    button.toolTip = source
+    root.addSubview(button)
+    window.setContentView(root)
+    discard window.mouseMovedAt(button.pointToWindow(initPoint(8, 8)))
+    window.showToolTipAtPoint(button, initPoint(8, 8), storage)
+    let renders = window.buildRenders()
+    check renders.layerContainsText(TooltipDrawLevel, storage.stringValue())
+    var bubbleFound = false
+    var multilineFound = false
+    for node in renders[TooltipDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox.w > 0 and node.screenBox.h > 0:
+        bubbleFound = true
+        check node.screenBox.x + node.screenBox.w <= root.bounds().size.width
+        check node.screenBox.y + node.screenBox.h <= root.bounds().size.height
+      elif node.kind == nkText and node.renderedText() == storage.stringValue():
+        multilineFound =
+          node.textLayout.lines.len >= 2 and node.textLayout.fonts.len >= 2
+    check bubbleFound
+    check multilineFound
+    window.hideToolTipForView(button)
+    check TooltipDrawLevel notin window.buildRenders().layers
 
   test "outline tooltips follow hovered rows without changing focus":
     let

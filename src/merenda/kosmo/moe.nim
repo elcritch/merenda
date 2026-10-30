@@ -4,7 +4,7 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[algorithm, hashes, monotimes, options, os, strutils, tables, unicode]
+import std/[algorithm, hashes, json, monotimes, options, os, strutils, tables, unicode]
 import ./panekeys
 import ./lsptcp
 export panekeys.KosmoPaneCommand
@@ -2949,13 +2949,13 @@ proc cancelPointerHover*(editor: KosmoEditor, requestId: int) =
 
 proc pollPointerHover*(
     editor: KosmoEditor, target: KosmoHoverTarget, requestId: int
-): tuple[done: bool, text: string] =
+): tuple[done: bool, text: string, markdown: bool] =
   if editor.isNil or editor.editor.isNil or requestId < 0:
-    return (true, "")
+    return (true, "", false)
   let found = editor.editor.bufferById(target.bufferId.toMoeBufferId)
   if found.isNone or found.get.contentVersion != target.version:
     editor.cancelPointerHover(requestId)
-    return (true, "")
+    return (true, "", false)
   let response = editor.editor.lsp.checkResponse(requestId)
   if response.status == moeLspService.lrsPending:
     return
@@ -2964,6 +2964,10 @@ proc pollPointerHover*(
     let hover = moeLspService.parseHoverResponse(response.result.get)
     if hover.isSome:
       result.text = moeLspIntegration.getHoverText(hover.get)
+      let contents = hover.get.contents
+      result.markdown =
+        contents.kind == JObject and contents.hasKey("kind") and
+        contents["kind"].getStr() == "markdown"
 
 func requestsTabClose(commandText: string): bool =
   let parts = strutils.splitWhitespace(commandText.strip().toLowerAscii())

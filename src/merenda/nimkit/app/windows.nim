@@ -22,6 +22,7 @@ import ../foundation/events
 import ../foundation/terminaltrace
 import ../foundation/notifications
 import ../text/fieldeditors
+from ../text/textstorage import TextStorage
 from ../text/textviews import
   TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
   isInsertableText, `insertionPointVisible=`
@@ -117,6 +118,7 @@ type
 
   TooltipOverlayView = ref object of View
     xText: string
+    xRichText: TextStorage
     xAnchor: Point
 
   TooltipLayout = object
@@ -518,6 +520,7 @@ protocol CaretBlinkAnimationProtocol of AnimationProtocol:
 const
   ToolTipShowDelayMilliseconds = 500
   ToolTipMaximumWidth = 320.0'f32
+  ToolTipRichMaximumWidth = 640.0'f32
   ToolTipWindowMargin = 6.0'f32
   ToolTipPointerOffset = initPoint(12.0'f32, 18.0'f32)
   ToolTipFlippedGap = 10.0'f32
@@ -526,16 +529,33 @@ proc toolTipLayout(overlay: TooltipOverlayView, style: TooltipStyle): TooltipLay
   let
     bounds = overlay.bounds()
     maximumBubbleWidth = min(
-      ToolTipMaximumWidth,
+      (if overlay.xRichText.isNil: ToolTipMaximumWidth else: ToolTipRichMaximumWidth),
       max(bounds.size.width - ToolTipWindowMargin * 2.0'f32, 0.0'f32),
     )
     maximumTextWidth = max(maximumBubbleWidth - style.padding.horizontal(), 0.0'f32)
   if overlay.xText.len == 0 or maximumTextWidth <= 0.0'f32:
     return
 
-  result.text = overlay.xText.clippedText(maximumTextWidth, style.text)
-  let
+  var naturalSize: Size
+  if overlay.xRichText.isNil:
+    result.text = overlay.xText.clippedText(maximumTextWidth, style.text)
     naturalSize = result.text.textNaturalSize(style.text)
+  else:
+    let maximumTextHeight = max(
+      bounds.size.height - ToolTipWindowMargin * 2.0'f32 - style.padding.vertical(),
+      0.0'f32,
+    )
+    let measurement = textLayoutForMeasurement(
+      rect(0, 0, maximumTextWidth, maximumTextHeight),
+      overlay.xRichText,
+      style.text,
+      wrap = true,
+    )
+    naturalSize = initSize(
+      min(maximumTextWidth, measurement.bounding.w),
+      min(maximumTextHeight, measurement.bounding.h),
+    )
+  let
     bubbleSize = initSize(
       min(naturalSize.width + style.padding.horizontal(), maximumBubbleWidth),
       naturalSize.height + style.padding.vertical(),
@@ -582,9 +602,18 @@ protocol TooltipOverlayDrawing of ViewDrawingProtocol:
       shadows = style.box.shadows,
       cornerRadii = style.box.cornerRadii,
     )
-    discard context.addText(
-      TooltipDrawLevel, bubble, layout.textRect, layout.text, style.text
-    )
+    if overlay.xRichText.isNil:
+      discard context.addText(
+        TooltipDrawLevel, bubble, layout.textRect, layout.text, style.text
+      )
+    else:
+      let textLayout = textLayout(
+        context.renderRectFor(layout.textRect),
+        overlay.xRichText,
+        style.text,
+        wrap = true,
+      )
+      discard context.addText(TooltipDrawLevel, bubble, layout.textRect, textLayout)
 
 protocol TooltipOverlayHitTesting of ViewProtocol:
   method pointInside(overlay: TooltipOverlayView, point: Point): bool =
@@ -645,6 +674,7 @@ proc clearToolTip(window: Window) =
   window.xToolTipText.setLen(0)
   if not window.xToolTipOverlay.isNil:
     window.xToolTipOverlay.xText.setLen(0)
+    window.xToolTipOverlay.xRichText = nil
     if not window.xToolTipOverlay.superview().isNil:
       window.xToolTipOverlay.removeFromSuperview()
 
@@ -731,7 +761,9 @@ proc updateToolTip(window: Window, target: View, contentPoint: Point) =
   window.xToolTipPoint = contentPoint
   window.scheduleToolTip()
 
-proc showToolTipAtPoint*(window: Window, target: View, point: Point) =
+proc showToolTipAtPoint*(
+    window: Window, target: View, point: Point, richText: TextStorage = nil
+) =
   ## Present asynchronously obtained tooltip text for the currently hovered view.
   if window.isNil or target.isNil or window.xContentView.isNil or
       window.xMouseHoverView != target or not window.xContentView.containsView(target):
@@ -741,6 +773,9 @@ proc showToolTipAtPoint*(window: Window, target: View, point: Point) =
   if window.xToolTipTarget == target:
     window.stopToolTipDelay()
     window.finishToolTipDelay()
+    if not window.xToolTipOverlay.isNil:
+      window.xToolTipOverlay.xRichText = richText
+      window.xToolTipOverlay.needsDisplay = true
 
 proc hideToolTipForView*(window: Window, target: View) =
   ## Dismiss a tooltip only when it belongs to this view.

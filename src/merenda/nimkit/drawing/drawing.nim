@@ -1488,6 +1488,17 @@ proc addText*(
   context.xResources.addFonts(layout)
   context.addFig(textNode(context.renderRectFor(rect), layout))
 
+proc addText*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    layout: GlyphArrangement,
+): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
+  context.xResources.addFonts(layout)
+  context.addFig(layer, parent, textNode(context.renderRectFor(rect), layout))
+
 proc addImage*(
     context: DrawContext,
     rect: nimkitTypes.Rect,

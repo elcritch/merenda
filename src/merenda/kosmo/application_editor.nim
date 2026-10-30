@@ -164,6 +164,18 @@ proc syncMarkdownColorMode(
   controls.xThemeColorMode = mode
   controls.syncMarkdownColorButton()
 
+proc applyDarkMarkdownSyntaxColors(style: var nimkit.MarkdownStyle) =
+  for tokenClass in nimkit.SyntaxTokenClass:
+    style.syntaxTokenColors[tokenClass] = style.codeColor
+  style.syntaxTokenColors[nimkit.stcKeyword] = nimkit.color(0.80, 0.65, 0.96, 1.0)
+  style.syntaxTokenColors[nimkit.stcIdentifier] = nimkit.color(0.54, 0.71, 0.98, 1.0)
+  style.syntaxTokenColors[nimkit.stcString] = nimkit.color(0.65, 0.89, 0.63, 1.0)
+  style.syntaxTokenColors[nimkit.stcNumber] = nimkit.color(0.98, 0.70, 0.53, 1.0)
+  style.syntaxTokenColors[nimkit.stcComment] = style.mutedColor
+  style.syntaxTokenColors[nimkit.stcOperator] = nimkit.color(0.54, 0.71, 0.98, 1.0)
+  style.syntaxTokenColors[nimkit.stcPunctuation] = nimkit.color(0.58, 0.60, 0.70, 1.0)
+  style.syntaxTokenColors[nimkit.stcPreprocessor] = nimkit.color(0.80, 0.65, 0.96, 1.0)
+
 proc markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
   if not controls.isNil and controls.xColorMode == kmcmDark:
@@ -179,18 +191,7 @@ proc markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.Markdow
     result.ruleColor = nimkit.color(0.35, 0.40, 0.49, 1.0)
     result.codeBlockStyle.backgroundColor = nimkit.color(0.08, 0.10, 0.14, 1.0)
     result.codeBlockStyle.outlineColor = nimkit.color(0.28, 0.33, 0.42, 1.0)
-    for tokenClass in nimkit.SyntaxTokenClass:
-      result.syntaxTokenColors[tokenClass] = result.codeColor
-    result.syntaxTokenColors[nimkit.stcKeyword] = nimkit.color(0.80, 0.65, 0.96, 1.0)
-    result.syntaxTokenColors[nimkit.stcIdentifier] = nimkit.color(0.54, 0.71, 0.98, 1.0)
-    result.syntaxTokenColors[nimkit.stcString] = nimkit.color(0.65, 0.89, 0.63, 1.0)
-    result.syntaxTokenColors[nimkit.stcNumber] = nimkit.color(0.98, 0.70, 0.53, 1.0)
-    result.syntaxTokenColors[nimkit.stcComment] = result.mutedColor
-    result.syntaxTokenColors[nimkit.stcOperator] = nimkit.color(0.54, 0.71, 0.98, 1.0)
-    result.syntaxTokenColors[nimkit.stcPunctuation] =
-      nimkit.color(0.58, 0.60, 0.70, 1.0)
-    result.syntaxTokenColors[nimkit.stcPreprocessor] =
-      nimkit.color(0.80, 0.65, 0.96, 1.0)
+    result.applyDarkMarkdownSyntaxColors()
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -649,7 +650,34 @@ proc pollPointerHover(view: KosmoEditorView) =
       view.hoverText = response.text
       let window = view.window()
       if view.hoverText.len > 0 and window of nimkit.Window:
-        nimkit.Window(window).showToolTipAtPoint(view, view.hoverPoint)
+        let tooltip = view.effectiveAppearance().resolveTooltipStyle()
+        var richText: nimkit.TextStorage
+        if response.markdown:
+          var style = nimkit.initMarkdownStyle()
+          style.textColor = tooltip.text.color
+          style.headingColor = tooltip.text.color
+          style.strongColor = tooltip.text.color
+          style.emphasisColor = tooltip.text.color
+          style.codeColor = tooltip.text.color
+          style.quoteColor = tooltip.text.color
+          style.mutedColor = tooltip.text.color
+          style.bodyFontSize = tooltip.text.fontSize
+          style.documentInsets = nimkit.insets(0.0)
+          if view.effectiveAppearance().markdownColorMode() == kmcmDark:
+            style.applyDarkMarkdownSyntaxColors()
+          style.syntaxTokenColors[nimkit.stcOther] = tooltip.text.color
+          richText = nimkit.markdownTextStorage(view.hoverText, style)
+        else:
+          richText = nimkit.newTextStorage(
+            view.hoverText,
+            nimkit.defaultTextAttributes(
+              color = tooltip.text.color,
+              fontSize = tooltip.text.fontSize,
+              fontName = tooltip.text.fontName,
+              fontFace = tooltip.text.fontFace,
+            ),
+          )
+        nimkit.Window(window).showToolTipAtPoint(view, view.hoverPoint, richText)
 
 protocol KosmoEditorHoverEvents of nimkit.ResponderEventProtocol:
   method mouseMoved(view: KosmoEditorView, event: nimkit.MouseEvent): bool =

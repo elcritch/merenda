@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Display multiline, styled language-server hover information in editor tooltips.
+
 - Show language-server hover information in editor tooltips without moving the cursor.
 
 - Configure and connect Nimdex from Kosmo Settings.
