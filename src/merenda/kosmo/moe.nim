@@ -27,7 +27,6 @@ import moepkg/buffer/edit as moeEdit
 from moepkg/buffer/undo import beginTransaction, commitTransaction, rollbackTransaction
 import moepkg/[editor_window_layout, visible_rows]
 import moepkg/buffer/highlight as moeBufferHighlight
-import moepkg/buffer/core as moeBufferCore
 import moepkg/command_completion as moeCommandCompletion
 import moepkg/command_handlers/config_ops as moeConfigOps
 import moepkg/command_handlers/handler_result as moeHandlerResult
@@ -51,8 +50,8 @@ import moepkg/help_viewer as moeHelpViewer
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
-from moepkg/command_handlers/visual_commands import visualDelete
-from moepkg/registers import setYankedRegister
+from moepkg/command_handlers/visual_commands import visualDelete, operandArea
+from moepkg/registers import storeYanked
 from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import
@@ -107,7 +106,18 @@ type
 
   MatterSyntaxFallbackState = ref object
     highlightVersions: Table[BufferId, int]
-    remappers: Table[BufferId, bool]
+    snapshots: Table[BufferId, tuple[version: int, text: string]]
+
+  MatterRemapKind = enum
+    rrekClear
+    rrekSingleLine
+    rrekMultiLine
+
+  MatterRemapEvent = object
+    kind: MatterRemapKind
+    row, colDelta, lineCharLenAfter, editCol: int
+    firstAffectedRow, lastAffectedRowBefore, lastAffectedRowAfter: int
+    preservesFirstRow: bool
 
   SearchLocation = object
     bufferId: BufferId
@@ -877,6 +887,7 @@ proc newKosmoEditor*(
   config.standard.statusLine = false
   config.standard.colorMode = cm24bit
   config.tabLine.enable = false
+  config.autocomplete.lspOnlyAfterDot = true
   # Kosmo presents editor notifications in its own status bar.
   config.notification.popupNotifications = false
   config.notification.lspForcePopup = false
@@ -920,7 +931,7 @@ proc newKosmoEditor*(
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
     matterSyntaxFallback: MatterSyntaxFallbackState(
       highlightVersions: initTable[BufferId, int](),
-      remappers: initTable[BufferId, bool](),
+      snapshots: initTable[BufferId, tuple[version: int, text: string]](),
     ),
     matterLineStateVersions: initTable[BufferId, int](),
   )
@@ -1093,7 +1104,7 @@ proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   editor.matterLineStateVersions.clear()
   if not editor.matterSyntaxFallback.isNil:
     editor.matterSyntaxFallback.highlightVersions.clear()
-    editor.matterSyntaxFallback.remappers.clear()
+    editor.matterSyntaxFallback.snapshots.clear()
   for buffer in editor.editor.buffers:
     buffer.highlightNeedsUpdate = true
 
@@ -1105,7 +1116,7 @@ proc close*(editor: KosmoEditor) =
   editor.matterHighlighting = nil
   if not editor.matterSyntaxFallback.isNil:
     editor.matterSyntaxFallback.highlightVersions.clear()
-    editor.matterSyntaxFallback.remappers.clear()
+    editor.matterSyntaxFallback.snapshots.clear()
   if not editor.editor.isNil:
     editor.editor.hostCommandFilter = nil
     editor.editor.hostResultFilter = nil
@@ -1449,6 +1460,7 @@ proc closeTab*(
   editor.matterRequests.del(id.toMoeBufferId)
   editor.matterLineStateVersions.del(id.toMoeBufferId)
   editor.matterSyntaxFallback.highlightVersions.del(id.toMoeBufferId)
+  editor.matterSyntaxFallback.snapshots.del(id.toMoeBufferId)
   KosmoTabCloseResult(closed: true)
 
 proc save*(editor: KosmoEditor): KosmoSaveResult =
@@ -1622,14 +1634,15 @@ proc copySelection*(editor: KosmoEditor): string =
     return
   result = editor.selectedText()
   let isLine = editor.currentSelection().get.kind == KosmoSelectionKind.Line
-  editor.editor.state.registers.setYankedRegister(result, isLine)
+  editor.editor.state.registers.storeYanked(none(char), result, isLine)
 
 proc cutSelection*(editor: KosmoEditor): string =
   ## Delete the active selection as one Moe undo transaction.
   if editor.isNil or editor.editor.isNil or editor.currentSelection().isNone:
     return
   result = editor.selectedText()
-  visualDelete(editor.editor.activeBuffer, editor.editor.state)
+  let (selection, area) = editor.editor.activeBuffer.operandArea(editor.editor.state)
+  discard visualDelete(editor.editor.activeBuffer, editor.editor.state, selection, area)
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
 
@@ -2265,7 +2278,7 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
     preferredColumn: window.preferredColumn,
     viewportTopLine: window.viewport.topLine,
     viewportTopWrapOffset: window.viewport.topWrapOffset,
-    viewportLeftColumn: window.viewport.leftColumn,
+    viewportLeftColumn: window.viewport.leftCell,
     viewportDetachedFromCursor: window.viewport.detachedFromCursor,
     scrollAnimation: editor.editor.state.windowDisplay.scrollAnimation,
     visualSelection:
@@ -2337,7 +2350,7 @@ proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   window.viewport.topLine =
     state.viewportTopLine.clamp(0, max(window.buffer.len - 1, 0))
   window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
-  window.viewport.leftColumn = max(state.viewportLeftColumn, 0)
+  window.viewport.leftCell = max(state.viewportLeftColumn, 0)
   window.viewport.detachedFromCursor = state.viewportDetachedFromCursor
   editor.editor.state.windowDisplay.scrollAnimation = state.scrollAnimation
   editor.editor.syncActiveWindow()
@@ -2459,7 +2472,7 @@ proc replaceMatterFallbackRows(
 proc remapMatterFallbackSingleLine(
     buffer: TextBuffer,
     segments: sink seq[moeHighlight.ColorSegment],
-    event: moeBufferCore.RowColRemapEvent,
+    event: MatterRemapEvent,
 ): seq[moeHighlight.ColorSegment] =
   ## Preserve Matter colours on the unchanged side of a same-line edit.
   ##
@@ -2511,9 +2524,7 @@ proc remapMatterFallbackSingleLine(
       event.row, editColumn, editColumn + event.colDelta - 1
     )
 
-proc remapMatterMarkdownFallback(
-    buffer: TextBuffer, event: moeBufferCore.RowColRemapEvent
-) =
+proc remapMatterMarkdownFallback(buffer: TextBuffer, event: MatterRemapEvent) =
   ## Retain fenced backgrounds alongside the remapped token colours. These
   ## states are a presentation fallback until the new Matter batches arrive.
   let cache = buffer.incrementalHighlight
@@ -2523,11 +2534,11 @@ proc remapMatterMarkdownFallback(
     cache.lineStates.states
 
   case event.kind
-  of moeBufferCore.rrekClear:
+  of rrekClear:
     buffer.incrementalHighlight = nil
-  of moeBufferCore.rrekSingleLine:
+  of rrekSingleLine:
     cache.parsedUpTo = min(cache.parsedUpTo, event.row - 1)
-  of moeBufferCore.rrekMultiLine:
+  of rrekMultiLine:
     let
       delta = event.lastAffectedRowAfter - event.lastAffectedRowBefore
       row = event.firstAffectedRow + ord(event.preservesFirstRow)
@@ -2552,9 +2563,7 @@ proc remapMatterMarkdownFallback(
       states().setLen(oldLength - removed)
 
 proc remapMatterSyntaxFallback(
-    state: MatterSyntaxFallbackState,
-    buffer: TextBuffer,
-    event: moeBufferCore.RowColRemapEvent,
+    state: MatterSyntaxFallbackState, buffer: TextBuffer, event: MatterRemapEvent
 ) =
   ## Keep the previous Matter projection aligned with edits until its replacement arrives.
   if state.isNil or not state.highlightVersions.hasKey(buffer.id) or
@@ -2562,13 +2571,13 @@ proc remapMatterSyntaxFallback(
     return
   buffer.remapMatterMarkdownFallback(event)
   case event.kind
-  of moeBufferCore.rrekClear:
+  of rrekClear:
     state.highlightVersions.del(buffer.id)
-  of moeBufferCore.rrekSingleLine:
+  of rrekSingleLine:
     var segments = move buffer.highlight.colorSegments
     buffer.highlight.colorSegments =
       buffer.remapMatterFallbackSingleLine(move segments, event)
-  of moeBufferCore.rrekMultiLine:
+  of rrekMultiLine:
     let
       delta = event.lastAffectedRowAfter - event.lastAffectedRowBefore
       firstRow = event.firstAffectedRow
@@ -2615,16 +2624,72 @@ proc remapMatterSyntaxFallback(
     buffer.highlight.colorSegments =
       buffer.replaceMatterFallbackRows(move shifted, replacementFirst, replacementLast)
 
-proc installMatterSyntaxFallbackRemapper(editor: KosmoEditor, buffer: TextBuffer) =
-  let state = editor.matterSyntaxFallback
-  if state.isNil or state.remappers.hasKey(buffer.id):
+proc refreshMatterFallbackSnapshot(
+    state: MatterSyntaxFallbackState, buffer: TextBuffer, text: string
+) =
+  ## Align retained colors with edits since the last requested snapshot.
+  if state.isNil:
     return
-  state.remappers[buffer.id] = true
-  moeBufferCore.registerRowColRemapCallback(
-    buffer,
-    proc(changed: TextBuffer, event: moeBufferCore.RowColRemapEvent) =
-      state.remapMatterSyntaxFallback(changed, event),
-  )
+  if state.snapshots.hasKey(buffer.id):
+    let previous = state.snapshots[buffer.id]
+    if previous.version != buffer.contentVersion and previous.text != text and
+        state.highlightVersions.hasKey(buffer.id):
+      let
+        oldLines = previous.text.split('\n')
+        newLines = text.split('\n')
+      var first = 0
+      while first < oldLines.len and first < newLines.len and
+          oldLines[first] == newLines[first]:
+        inc first
+      var suffix = 0
+      while suffix < oldLines.len - first and suffix < newLines.len - first and
+          oldLines[oldLines.high - suffix] == newLines[newLines.high - suffix]:
+        inc suffix
+      let
+        oldCount = oldLines.len - first - suffix
+        newCount = newLines.len - first - suffix
+      if oldCount == 1 and newCount == 1:
+        let
+          oldRunes = oldLines[first].toRunes()
+          newRunes = newLines[first].toRunes()
+        var column = 0
+        while column < oldRunes.len and column < newRunes.len and
+            oldRunes[column] == newRunes[column]:
+          inc column
+        var trailing = 0
+        while trailing < oldRunes.len - column and trailing < newRunes.len - column and
+            oldRunes[oldRunes.high - trailing] == newRunes[newRunes.high - trailing]:
+          inc trailing
+        # A replacement or several edits cannot be represented as a single
+        # insertion/deletion; clear the row until its new colors arrive.
+        let replaced =
+          oldRunes.len - column - trailing > 0 and newRunes.len - column - trailing > 0
+        state.remapMatterSyntaxFallback(
+          buffer,
+          MatterRemapEvent(
+            kind: rrekSingleLine,
+            row: first,
+            editCol: column,
+            colDelta:
+              if replaced:
+                0
+              else:
+                newRunes.len - oldRunes.len,
+            lineCharLenAfter: newRunes.len,
+          ),
+        )
+      else:
+        state.remapMatterSyntaxFallback(
+          buffer,
+          MatterRemapEvent(
+            kind: rrekMultiLine,
+            firstAffectedRow: first,
+            lastAffectedRowBefore: first + oldCount - 1,
+            lastAffectedRowAfter: first + newCount - 1,
+            preservesFirstRow: oldCount > 0 and newCount > 0,
+          ),
+        )
+  state.snapshots[buffer.id] = (version: buffer.contentVersion, text: text)
 
 proc replaceMatterBatch(
     segments: var seq[moeHighlight.ColorSegment],
@@ -2688,7 +2753,6 @@ proc applyMatterHighlightResult(
   current.highlight.colorSegments.replaceMatterBatch(
     completed.firstRow, completed.endRow, move completed.segments
   )
-  editor.installMatterSyntaxFallbackRemapper(current)
   editor.matterSyntaxFallback.highlightVersions[current.id] = completed.contentVersion
   if current.language == moeHighlight.SourceLanguage.langMarkdown:
     if not retainingProjection or current.incrementalHighlight.isNil:
@@ -2794,14 +2858,17 @@ proc renderSearchHighlights(editor: KosmoEditor, target: var RenderBuffer) =
               if e.lineWrap:
                 layout.segmentStartColumn(visible.line, visible.skipSegments + row)
               else:
-                viewport.leftColumn
+                layout.cellToColumn(visible.line, 0, 0, viewport.leftCell)
             let (_, rowWidth) =
               displayWidthSubstrWithTabs(line, startColumn, width, e.tabStop)
             var x = 0
             while x < min(width, rowWidth):
               let cell = target.buffer.getCell(left + x, y)
               let column =
-                startColumn + screenXToCharIndex(line, startColumn, x, e.tabStop)
+                if e.lineWrap:
+                  startColumn + screenXToCharIndex(line, startColumn, x, e.tabStop)
+                else:
+                  layout.cellToColumn(visible.line, 0, x, viewport.leftCell)
               var highlighted = false
               for span in ranges:
                 if column >= span.first and column < span.last:
@@ -2870,6 +2937,7 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
     editor.matterRequests.del(id)
     editor.matterLineStateVersions.del(id)
     editor.matterSyntaxFallback.highlightVersions.del(id)
+    editor.matterSyntaxFallback.snapshots.del(id)
   for buffer in editor.editor.buffers:
     if editor.matterLineStateVersions.hasKey(buffer.id) and (
       editor.matterLineStateVersions[buffer.id] != buffer.contentVersion or
@@ -2883,6 +2951,7 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
       editor.matterHighlighting.cancelMatterHighlight(int(buffer.id))
       editor.matterRequests.del(buffer.id)
       editor.matterSyntaxFallback.highlightVersions.del(buffer.id)
+      editor.matterSyntaxFallback.snapshots.del(buffer.id)
       continue
     discard editor.matterHighlightingController()
     if buffer.highlightBackend != hbBuiltin:
@@ -2891,10 +2960,12 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
         editor.matterRequests[buffer.id].contentVersion == buffer.contentVersion and
         not buffer.highlightNeedsUpdate:
       continue
+    let text = buffer.getTextString()
+    editor.matterSyntaxFallback.refreshMatterFallbackSnapshot(buffer, text)
     let requestId = editor.matterHighlighting.requestMatterHighlight(
       int(buffer.id),
       buffer.contentVersion,
-      buffer.getTextString(),
+      text,
       buffer.language,
       if buffer.filePath.isSome: buffer.filePath.get else: "",
     )

@@ -50,8 +50,8 @@ proc readHostClipboard(editor: KosmoEditor) =
       # Preserve linewise metadata when reading back our own write. An empty
       # external clipboard must clear the cached register as well.
       if some(text) != editor.clipboardValues[selection]:
-        registers.setClipboardRegister(
-          selection.clipboardRegister, text, text.endsWith("\n")
+        registers.storeYanked(
+          some(selection.clipboardRegister), text, text.endsWith("\n")
         )
       editor.clipboardValues[selection] = some(text)
     except CatchableError as error:
