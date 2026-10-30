@@ -36,6 +36,7 @@ type
     editorView: WeakRef[KosmoEditorView]
     xColorMode: KosmoMarkdownColorMode
     xThemeColorMode: KosmoMarkdownColorMode
+    xColorModeOverride: bool
     xFontSize: float32
 
   KosmoEditorView* = ref object of nimkit.MonoTextView
@@ -147,6 +148,8 @@ type
     findButton: KosmoStatusIconButton
     keyModeChoice: nimkit.PopupMenuButton
     indexProgress: nimkit.ProgressIndicator
+    indexSpinner: nimkit.ProgressIndicator
+    indexSpinnerAnimation: nimkit.Animation
     indexProgressLabel: nimkit.Label
     indexEntryLabel: nimkit.Label
     observedWindow: WeakRef[nimkit.Window]
@@ -220,6 +223,7 @@ type
     xTerminalInputPolicy: KosmoTerminalInputPolicy
     xTerminalPalette: nimkit.TerminalPalette
     xTerminalTheme: string
+    xRichTextThemes: array[KosmoThemeTarget, KosmoMoeTheme]
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string

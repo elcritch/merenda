@@ -391,3 +391,50 @@ suite "Kosmo configuration":
 
     check frontend.setMoeTheme(KosmoMoeDefaultThemeIdentifier)
     check loadKosmoConfig(path).moeTheme == KosmoMoeDefaultThemeIdentifier
+
+  test "restores separate rich text theme selections":
+    let
+      root = createTempDir("merenda-kosmo-rich-themes-", "")
+      path = root / "config.json"
+      app = newApplication("Rich Text Theme Restore Test")
+      initial = newKosmoApplication(app, monitorsGitStatus = false)
+      themes = initial.editorView.editor.availableMoeThemes()
+    require themes.len >= 3
+    let config = KosmoConfig(
+      markdownTheme: themes[0].identifier,
+      gitDiffTheme: themes[1].identifier,
+      gitHubTheme: themes[2].identifier,
+    )
+    initial.close()
+    require config.saveKosmoConfig(path)
+    let
+      manager = newKosmoWindowManager(app, configPath = path)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    let controls = frontend.editorPane.markdownControls
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown).backgroundColor ==
+      color(
+        themes[0].preview.background.red.float32 / 255,
+        themes[0].preview.background.green.float32 / 255,
+        themes[0].preview.background.blue.float32 / 255,
+        1.0,
+      )
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff).backgroundColor ==
+      color(
+        themes[1].preview.background.red.float32 / 255,
+        themes[1].preview.background.green.float32 / 255,
+        themes[1].preview.background.blue.float32 / 255,
+        1.0,
+      )
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub).backgroundColor ==
+      color(
+        themes[2].preview.background.red.float32 / 255,
+        themes[2].preview.background.green.float32 / 255,
+        themes[2].preview.background.blue.float32 / 255,
+        1.0,
+      )
+    check loadKosmoConfig(path).markdownTheme == config.markdownTheme
+    check loadKosmoConfig(path).gitDiffTheme == config.gitDiffTheme
+    check loadKosmoConfig(path).gitHubTheme == config.gitHubTheme

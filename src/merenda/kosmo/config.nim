@@ -9,6 +9,9 @@ const DefaultKosmoFileTreeIndentation* = 10.0'f32
 type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
   terminalTheme*: string
+  markdownTheme*: string
+  gitDiffTheme*: string
+  gitHubTheme*: string
   nimLspCommand*: string
   nimdexStopped*: bool
   merendaTheme*: string

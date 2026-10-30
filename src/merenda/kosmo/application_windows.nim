@@ -310,6 +310,40 @@ proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
         discard manager.config.saveKosmoConfig(manager.configPath)
       return true
 
+proc applyRichTextTheme(
+    frontend: KosmoApplication, theme: KosmoMoeTheme, target: KosmoThemeTarget
+) =
+  for item in [
+    KosmoThemeTarget.Markdown, KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub
+  ]:
+    if target.themeTargetIncludes(item):
+      frontend.xRichTextThemes[item] = theme
+  for group in frontend.dockController.groups:
+    group.pane.markdownControls.xColorModeOverride = false
+    group.editorView.refresh()
+
+proc setRichTextTheme(
+    frontend: KosmoApplication, identifier: string, target: KosmoThemeTarget
+): bool =
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  for theme in frontend.dockController.editor.availableMoeThemes():
+    if theme.identifier == identifier and theme.validMoeTheme():
+      frontend.applyRichTextTheme(theme, target)
+      if not frontend.xWindowManager.isNil:
+        let manager = frontend.xWindowManager[]
+        if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
+          manager.config.markdownTheme = identifier
+        if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
+          manager.config.gitDiffTheme = identifier
+        if target.themeTargetIncludes(KosmoThemeTarget.GitHub):
+          manager.config.gitHubTheme = identifier
+        for other in manager.frontends:
+          if other != frontend and not other.xClosed:
+            other.applyRichTextTheme(theme, target)
+        discard manager.config.saveKosmoConfig(manager.configPath)
+      return true
+
 proc setTheme(
     frontend: KosmoApplication, identifier: string, target: KosmoThemeTarget
 ): bool =
@@ -318,6 +352,12 @@ proc setTheme(
       return
   if target in {KosmoThemeTarget.All, KosmoThemeTarget.Terminal}:
     if not frontend.setTerminalTheme(identifier):
+      return
+  if target in {
+    KosmoThemeTarget.All, KosmoThemeTarget.RichText, KosmoThemeTarget.Markdown,
+    KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub,
+  }:
+    if not frontend.setRichTextTheme(identifier, target):
       return
   result = true
 
@@ -519,6 +559,12 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       moeThemes = moeThemeSettings,
       selectedMoeThemeIdentifier = selectedMoeThemeIdentifier,
       selectedTerminalThemeIdentifier = frontend.xTerminalTheme,
+      selectedMarkdownThemeIdentifier =
+        frontend.xRichTextThemes[KosmoThemeTarget.Markdown].identifier,
+      selectedGitDiffThemeIdentifier =
+        frontend.xRichTextThemes[KosmoThemeTarget.GitDiff].identifier,
+      selectedGitHubThemeIdentifier =
+        frontend.xRichTextThemes[KosmoThemeTarget.GitHub].identifier,
       moeThemeHandler = proc(identifier: string, target: KosmoThemeTarget): bool =
         if not weakFrontend.isNil:
           return weakFrontend[].setTheme(identifier, target)
@@ -536,7 +582,12 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.terminalInputPolicy = frontend.xTerminalInputPolicy
     frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
-      moeThemeSettings, selectedMoeThemeIdentifier, frontend.xTerminalTheme
+      moeThemeSettings,
+      selectedMoeThemeIdentifier,
+      frontend.xTerminalTheme,
+      frontend.xRichTextThemes[KosmoThemeTarget.Markdown].identifier,
+      frontend.xRichTextThemes[KosmoThemeTarget.GitDiff].identifier,
+      frontend.xRichTextThemes[KosmoThemeTarget.GitHub].identifier,
     )
     frontend.xSettingsWindow.textMateGrammars = textMateGrammars
   result = not frontend.application.showWindow(
@@ -600,12 +651,17 @@ proc showGitDiffSnapshot(
       if refreshesRepository:
         newKosmoGitDiffPanel(
           snapshot.rootPath,
-          group.pane.markdownControls.markdownPresentationStyle(),
+          group.pane.markdownControls.markdownPresentationStyle(
+            KosmoThemeTarget.GitDiff
+          ),
           snapshot.scopePath,
         )
       else:
         newKosmoGitDiffPanel(
-          snapshot, group.pane.markdownControls.markdownPresentationStyle()
+          snapshot,
+          group.pane.markdownControls.markdownPresentationStyle(
+            KosmoThemeTarget.GitDiff
+          ),
         )
     weakFrontend = frontend.unsafeWeakRef()
     weakPanel = panel.unsafeWeakRef()
@@ -616,8 +672,8 @@ proc showGitDiffSnapshot(
       preferredFirstResponder = panel.markdownView.textView(),
       tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
       onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
-        panel.markdownStyle =
-          KosmoEditorPane(pane).markdownControls.markdownPresentationStyle(),
+        panel.markdownStyle = KosmoEditorPane(pane).markdownControls
+          .markdownPresentationStyle(KosmoThemeTarget.GitDiff),
       onClose = proc(document: KosmoPaneDocument): bool =
         discard document
         panel.close()
@@ -738,8 +794,9 @@ proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
   let group = controller.activePaneGroup()
   if group.isNil:
     return
-  let panel =
-    newKosmoGitHubPanel(root, group.pane.markdownControls.markdownPresentationStyle())
+  let panel = newKosmoGitHubPanel(
+    root, group.pane.markdownControls.markdownPresentationStyle(KosmoThemeTarget.GitHub)
+  )
   let weakFrontend = frontend.unsafeWeakRef()
   let weakPanel = panel.unsafeWeakRef()
   let document = newKosmoPaneDocument(
@@ -749,8 +806,8 @@ proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
     preferredFirstResponder = panel.markdownView.textView(),
     tooltip = root,
     onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
-      panel.markdownStyle =
-        KosmoEditorPane(pane).markdownControls.markdownPresentationStyle(),
+      panel.markdownStyle = KosmoEditorPane(pane).markdownControls
+        .markdownPresentationStyle(KosmoThemeTarget.GitHub),
     onClose = proc(document: KosmoPaneDocument): bool =
       panel.close()
       if not weakFrontend.isNil and weakFrontend[].gitHubPanel == panel:
@@ -1552,6 +1609,13 @@ proc newKosmoApplication*(
     discard result.setMoeTheme(manager.config.moeTheme)
   if manager.config.terminalTheme.len > 0:
     discard result.setTerminalTheme(manager.config.terminalTheme)
+  for (item, identifier) in [
+    (KosmoThemeTarget.Markdown, manager.config.markdownTheme),
+    (KosmoThemeTarget.GitDiff, manager.config.gitDiffTheme),
+    (KosmoThemeTarget.GitHub, manager.config.gitHubTheme),
+  ]:
+    if identifier.len > 0:
+      discard result.setRichTextTheme(identifier, item)
   when not defined(merendaTests):
     if editorView.editor.recoveryEntries().len > 0:
       discard editorView.openRecoveryDocument()

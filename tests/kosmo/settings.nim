@@ -130,6 +130,11 @@ suite "Kosmo settings":
     let progress = frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress")
     let percentage =
       frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.percentage")
+    let spinner =
+      frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.spinner")
+    require spinner of ProgressIndicator
+    check spinner.hidden
+    check ProgressIndicator(spinner).progressIndicatorStyle == pisSpinning
     require progress of ProgressIndicator
     require percentage of Label
     check progress.hidden
@@ -472,24 +477,11 @@ suite "Kosmo settings":
     let table = TableView(
       settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
     )
-    let allButton = Button(
-      settingsPanel.contentView().viewWithIdentifier(
-        KosmoThemeTargetIdentifier & ".All"
-      )
+    let target = ComboBox(
+      settingsPanel.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier)
     )
-    let moeButton = Button(
-      settingsPanel.contentView().viewWithIdentifier(
-        KosmoThemeTargetIdentifier & ".Moe"
-      )
-    )
-    let terminalButton = Button(
-      settingsPanel.contentView().viewWithIdentifier(
-        KosmoThemeTargetIdentifier & ".Terminal"
-      )
-    )
-    check allButton.state == bsOn
-    check moeButton.state == bsOff
-    check terminalButton.state == bsOff
+    require not target.isNil
+    check target.selectedIndex == KosmoThemeTarget.All.ord
     let themes = frontend.editorView.editor.availableMoeThemes()
     require themes.len >= 3
     proc selectTheme(identifier: string) =
@@ -503,23 +495,44 @@ suite "Kosmo settings":
       require settingsPanel.mouseDownAt(point)
       require settingsPanel.mouseUpAt(point)
 
-    require terminalButton.sendAction()
-    check terminalButton.state == bsOn
+    target.activateItemAtIndex(KosmoThemeTarget.Terminal.ord)
     selectTheme(themes[1].identifier)
     check frontend.editorView.editor.activeMoeThemeIdentifier() == initialEditorTheme
     check terminal.palette != initialPalette
     let terminalPalette = terminal.palette
-    require moeButton.sendAction()
+    target.activateItemAtIndex(KosmoThemeTarget.Moe.ord)
     selectTheme(themes[2].identifier)
     check frontend.editorView.editor.activeMoeThemeIdentifier() == themes[2].identifier
     check terminal.palette == terminalPalette
-    require allButton.sendAction()
+    target.activateItemAtIndex(KosmoThemeTarget.All.ord)
     check table.selectedIndex == -1
     selectTheme(themes[1].identifier)
     check frontend.editorView.editor.activeMoeThemeIdentifier() == themes[1].identifier
     check terminal.palette == terminalPalette
-    require terminalButton.sendAction()
+    target.activateItemAtIndex(KosmoThemeTarget.Terminal.ord)
     check table.tableRowIdentifier(table.selectedIndex) == themes[1].identifier
+
+    let controls = frontend.editorPane.markdownControls
+    let allStyle = controls.markdownPresentationStyle(KosmoThemeTarget.Markdown)
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == allStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub) == allStyle
+    target.activateItemAtIndex(KosmoThemeTarget.GitDiff.ord)
+    selectTheme(themes[2].identifier)
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) == allStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) != allStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub) == allStyle
+    target.activateItemAtIndex(KosmoThemeTarget.RichText.ord)
+    check table.selectedIndex == -1
+    selectTheme(themes[2].identifier)
+    let richStyle = controls.markdownPresentationStyle(KosmoThemeTarget.Markdown)
+    check richStyle != allStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == richStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub) == richStyle
+    target.activateItemAtIndex(KosmoThemeTarget.GitHub.ord)
+    selectTheme(themes[1].identifier)
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub) == allStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == richStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) == richStyle
 
   test "grammar settings list built-in and newly added languages":
     require settingsTabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)

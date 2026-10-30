@@ -176,7 +176,14 @@ proc applyDarkMarkdownSyntaxColors(style: var nimkit.MarkdownStyle) =
   style.syntaxTokenColors[nimkit.stcPunctuation] = nimkit.color(0.58, 0.60, 0.70, 1.0)
   style.syntaxTokenColors[nimkit.stcPreprocessor] = nimkit.color(0.80, 0.65, 0.96, 1.0)
 
-proc markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
+func richTextColor(value: KosmoMoeThemeColor): nimkit.Color =
+  nimkit.color(
+    value.red.float32 / 255, value.green.float32 / 255, value.blue.float32 / 255, 1.0
+  )
+
+proc markdownPresentationStyle*(
+    controls: KosmoMarkdownControls, target = KosmoThemeTarget.Markdown
+): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
   if not controls.isNil and controls.xColorMode == kmcmDark:
     result.backgroundColor = nimkit.color(0.055, 0.065, 0.085, 1.0)
@@ -192,6 +199,40 @@ proc markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.Markdow
     result.codeBlockStyle.backgroundColor = nimkit.color(0.08, 0.10, 0.14, 1.0)
     result.codeBlockStyle.outlineColor = nimkit.color(0.28, 0.33, 0.42, 1.0)
     result.applyDarkMarkdownSyntaxColors()
+
+  if not controls.isNil and not controls.xColorModeOverride and
+      not controls.editorView.isNil:
+    let view = controls.editorView[]
+    if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
+      let controller = view.tabsDelegate.dockController[]
+      if not controller.frontend.isNil:
+        let theme = controller.frontend[].xRichTextThemes[target]
+        if theme.identifier.len > 0:
+          let preview = theme.preview
+          result.backgroundColor = preview.background.richTextColor()
+          result.textColor = preview.foreground.richTextColor()
+          result.headingColor = preview.functionName.richTextColor()
+          result.strongColor = preview.foreground.richTextColor()
+          result.emphasisColor = preview.keyword.richTextColor()
+          result.linkColor = preview.cyan.richTextColor()
+          result.codeColor = preview.stringLiteral.richTextColor()
+          result.quoteColor = preview.comment.richTextColor()
+          result.mutedColor = preview.comment.richTextColor()
+          result.ruleColor = preview.comment.richTextColor()
+          result.codeBlockStyle.backgroundColor = preview.background.richTextColor()
+          result.codeBlockStyle.outlineColor = preview.comment.richTextColor()
+          for tokenClass in nimkit.SyntaxTokenClass:
+            result.syntaxTokenColors[tokenClass] = result.textColor
+          result.syntaxTokenColors[nimkit.stcKeyword] = preview.keyword.richTextColor()
+          result.syntaxTokenColors[nimkit.stcIdentifier] =
+            preview.functionName.richTextColor()
+          result.syntaxTokenColors[nimkit.stcString] =
+            preview.stringLiteral.richTextColor()
+          result.syntaxTokenColors[nimkit.stcNumber] = preview.yellow.richTextColor()
+          result.syntaxTokenColors[nimkit.stcComment] = preview.comment.richTextColor()
+          result.syntaxTokenColors[nimkit.stcOperator] = preview.cyan.richTextColor()
+          result.syntaxTokenColors[nimkit.stcPreprocessor] =
+            preview.keyword.richTextColor()
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -768,7 +809,29 @@ proc syncIndexProgress(
 ) =
   if bar.indexProgress.hidden != not progress.active:
     bar.indexProgress.hidden = not progress.active
+    bar.indexSpinner.hidden = not progress.active
     bar.indexProgressLabel.hidden = not progress.active
+    if progress.active:
+      bar.indexSpinner.startAnimation()
+      let animation = nimkit.newPropertyAnimation[float32](
+        nimkit.DynamicAgent(bar.indexSpinner),
+        nimkit.`animationPhase=`(),
+        0.0'f32,
+        1.0'f32,
+        duration = initDuration(milliseconds = 1000),
+      )
+      animation.loopCount = -1
+      bar.indexSpinnerAnimation = animation
+      if bar.window() of nimkit.Window:
+        discard nimkit.Window(bar.window()).startAnimation(animation)
+    else:
+      bar.indexSpinner.stopAnimation()
+      if not bar.indexSpinnerAnimation.isNil:
+        if bar.window() of nimkit.Window:
+          discard nimkit.Window(bar.window()).stopAnimation(bar.indexSpinnerAnimation)
+        else:
+          bar.indexSpinnerAnimation.stop()
+        bar.indexSpinnerAnimation = nil
     bar.setNeedsLayout()
   let entryHidden = not progress.active or progress.entryPoint.len == 0
   if bar.indexEntryLabel.hidden != entryHidden:
@@ -2379,6 +2442,7 @@ proc toggleSelectedMarkdownMode(controls: KosmoMarkdownControls) =
 proc toggleMarkdownColorMode(controls: KosmoMarkdownControls) =
   if controls.isNil:
     return
+  controls.xColorModeOverride = true
   controls.xColorMode = if controls.xColorMode == kmcmLight: kmcmDark else: kmcmLight
   if not controls.editorView.isNil:
     controls.editorView[].refresh()
@@ -2819,12 +2883,12 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
       if bar.indexEntryLabel.hidden:
         0.0'f32
       else:
-        min(140.0'f32, max(choiceX - 146.0'f32, 0.0'f32))
+        min(140.0'f32, max(choiceX - 166.0'f32, 0.0'f32))
     let progressWidth =
       if bar.indexProgress.hidden:
         0.0'f32
       else:
-        min(146.0'f32 + entryWidth, choiceX)
+        min(166.0'f32 + entryWidth, choiceX)
     let progressX = max(choiceX - progressWidth, 0.0'f32)
     bar.label.setFrameFromLayout(
       nimkit.rect(0, 0, max(progressX - 4.0'f32, 0.0'f32), bounds.size.height)
@@ -2832,11 +2896,14 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     bar.indexEntryLabel.setFrameFromLayout(
       nimkit.rect(progressX, 0, entryWidth, bounds.size.height)
     )
+    bar.indexSpinner.setFrameFromLayout(
+      nimkit.rect(progressX + entryWidth, choiceY + 2, 16, 16)
+    )
     bar.indexProgress.setFrameFromLayout(
       nimkit.rect(
-        progressX + entryWidth,
+        progressX + entryWidth + 20,
         choiceY + 5,
-        max(progressWidth - entryWidth - 56, 0.0'f32),
+        max(progressWidth - entryWidth - 76, 0.0'f32),
         10,
       )
     )
@@ -2922,6 +2989,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     menu = nimkit.newMenu("Editor keymode")
     choice = nimkit.newPopupMenuButton(KosmoKeyModes[0].title, menu)
     indexProgress = nimkit.newProgressIndicator()
+    indexSpinner = nimkit.newProgressIndicator()
     indexProgressLabel = nimkit.newStatusLabel("")
     indexEntryLabel = nimkit.newStatusLabel("")
   indexProgress.identifier = "kosmo.nimdex.progress"
@@ -2929,10 +2997,17 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   indexProgress.toolTip = "Nimdex: estimated progress for the current entry point"
   indexProgress.maxValue = 100
   indexProgress.hidden = true
+  indexSpinner.identifier = "kosmo.nimdex.progress.spinner"
+  indexSpinner.accessibilityLabel = "Nimdex indexing activity"
+  indexSpinner.progressIndicatorStyle = nimkit.pisSpinning
+  indexSpinner.indeterminate = true
+  indexSpinner.displayedWhenStopped = false
+  indexSpinner.hidden = true
   indexProgressLabel.identifier = "kosmo.nimdex.progress.percentage"
   indexProgressLabel.hidden = true
   indexEntryLabel.identifier = "kosmo.nimdex.progress.entrypoint"
   indexEntryLabel.hidden = true
+  indexEntryLabel.alignment = nimkit.taRight
   choice.identifier = KosmoKeyModeSelectorIdentifier
   choice.styleId = KosmoKeyModeSelectorIdentifier
   choice.accessibilityLabel = "Editor keymode"
@@ -2946,6 +3021,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     label: label,
     keyModeChoice: choice,
     indexProgress: indexProgress,
+    indexSpinner: indexSpinner,
     indexProgressLabel: indexProgressLabel,
     indexEntryLabel: indexEntryLabel,
   )
@@ -2953,6 +3029,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   result.addSubview(label)
   result.addSubview(choice)
   result.addSubview(indexProgress)
+  result.addSubview(indexSpinner)
   result.addSubview(indexProgressLabel)
   result.addSubview(indexEntryLabel)
   if withSidebarButtons:
