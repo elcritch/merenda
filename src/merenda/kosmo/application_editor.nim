@@ -1066,6 +1066,10 @@ proc renderGrid(view: KosmoEditorView) =
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   view.editor.render(view.renderBuffer, view.editor.captureViewState())
+  let visibleRows =
+    max(int(floor(bounds.size.height / metrics.lineHeight + view.scrollOffsetRows)), 1)
+  if view.editor.fitCursorToVisibleRows(visibleRows):
+    view.editor.render(view.renderBuffer, view.editor.captureViewState())
   view.saveViewState()
   let provider: nimkit.MonoTextRowProvider = proc(
       row: int, builder: var nimkit.MonoTextRowBuilder

@@ -838,6 +838,31 @@ suite "Kosmo":
     check view.clipsToBounds
     editor.close()
 
+  test "cursor movement keeps the last line fully visible above the pane edge":
+    var lines: seq[string]
+    for index in 0 ..< 30:
+      lines.add "line " & $index
+    let
+      editor = newKosmoEditor(text = lines.join("\n"))
+      view = newKosmoEditorView(editor)
+      metrics = view.monoTextMetrics()
+    defer:
+      editor.close()
+    view.frame = rect(0, 0, metrics.cellWidth * 20, metrics.lineHeight * 3.5'f32)
+    view.refresh()
+    for height in [3.0'f32, 3.5'f32]:
+      view.frame = rect(0, 0, metrics.cellWidth * 20, metrics.lineHeight * height)
+      require editor.revealLocation(lines.high - 1, 0)
+      view.refresh()
+      require editor.handleKey("Esc")
+      require editor.handleKey("j")
+      view.refresh()
+      check editor.bufferCursor().line == lines.high
+      check editor.cursor().visible
+      check (editor.cursor().row + 1).float32 * metrics.lineHeight <=
+        view.bounds().size.height
+      check "line 29" in view.displayedText()
+
   test "editor view follows Moe's rendered cursor position":
     let
       editor = newKosmoEditor(text = "hello")

@@ -7,6 +7,15 @@ import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
 import fixtures/ui
 
+type MeasuringQuickOpenCell = ref object of TextFieldCell
+  widthAtFocus: float32
+
+protocol MeasuringQuickOpenCellEditing of CellEditingProtocol:
+  method fieldEditorForView(
+      cell: MeasuringQuickOpenCell, controlView: View
+  ): FieldEditor =
+    cell.widthAtFocus = controlView.bounds().size.width
+
 proc renderedText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
     result.add node.textLayout.displayRune(glyphIndex)
@@ -165,6 +174,40 @@ suite "Kosmo quick open":
       if node.kind == nkDrawable and node.drawOps.len > 0:
         visibleIndicator = true
     check visibleIndicator
+
+  test "quick open query editor follows the field width after presentation and resize":
+    let frontend = newKosmoApplication(newApplication("Quick Open Field Width Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    let cell = MeasuringQuickOpenCell()
+    cell.initTextFieldCellFields()
+    discard cell.withProtocol(MeasuringQuickOpenCellEditing)
+    frontend.quickOpenPanel.queryField.setCell(cell)
+    frontend.window.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.quickOpenPanel.queryField.frame = rect(0, 0, 40, 30)
+    frontend.quickOpenPanel.needsLayout = true
+    require frontend.showQuickOpen()
+    check cell.widthAtFocus > 200.0'f32
+    for width in [1000.0'f32, 640.0'f32, 1100.0'f32]:
+      frontend.window.frame = rect(0, 0, width, 700)
+      frontend.contentView.frame = rect(0, 0, width, 700)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      let
+        field = frontend.quickOpenPanel.queryField
+        editor = field.currentEditor()
+      require not editor.isNil
+      check field.frame().size.width > 200.0'f32
+      check field.frame().size.width >=
+        frontend.quickOpenPanel.contentView().bounds().size.width - 45.0'f32
+      check editor.frame().size.width >= field.bounds().size.width - 30.0'f32
+      require frontend.window.dispatchTextInput("x")
+      frontend.contentView.layoutSubtreeIfNeeded()
+      discard buildRenders(frontend.contentView)
+      check field.frame().size.width >=
+        frontend.quickOpenPanel.contentView().bounds().size.width - 45.0'f32
 
   test "platform primary P filters, selects, opens, and dismisses the file popup":
     let

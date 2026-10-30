@@ -1525,6 +1525,34 @@ proc cursor*(editor: KosmoEditor): KosmoCursor =
     row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
 
+proc fitCursorToVisibleRows*(editor: KosmoEditor, visibleRows: int): bool =
+  ## Keep a following cursor inside the host's fully visible rows, excluding overscan.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let
+    engine = editor.editor
+    window = engine.activeWindow()
+    viewport = window.viewport
+  if viewport.detachedFromCursor or
+      window.modeState.kind != moeTypes.ModeStateKind.mskNone:
+    return
+  let
+    previousLine = viewport.topLine
+    previousWrapOffset = viewport.topWrapOffset
+    tabOffset = if engine.showTabLine: 1 else: 0
+    rows = max(visibleRows - viewport.y - tabOffset, 1)
+    layout = engine.rowLayoutFor(
+      window.buffer,
+      viewport.width,
+      engine.viewportOffsetFor(window),
+      window.wrapCountCache,
+    )
+  layout.scrollViewportToCursor(
+    viewport, window.cursor.line, window.cursor.column, rows
+  )
+  result =
+    viewport.topLine != previousLine or viewport.topWrapOffset != previousWrapOffset
+
 proc bufferCursor*(editor: KosmoEditor): KosmoBufferCursor =
   ## Return the logical cursor position in the active text buffer.
   if editor.isNil or editor.editor.isNil:

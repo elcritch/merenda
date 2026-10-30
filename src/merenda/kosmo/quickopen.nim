@@ -602,6 +602,8 @@ proc newKosmoQuickOpenPanel*(
   discard cell.withProtocol(KosmoQuickOpenFieldCellEditing)
   result.queryField = nimkit.newTextField()
   result.queryField.setCell(cell)
+  # Preserve the panel-assigned frame when descendant constraints are solved.
+  result.queryField.autoresizingMaskConstraints = true
   result.queryField.styleId = QuickOpenFieldStyleId
   result.queryField.accessibilityLabel = "Open file by name"
   result.expressionButton = newExpressionButton()
@@ -816,6 +818,11 @@ proc present*(
   panel.hidden = false
   panel.beginProjectFileLoad(rootPaths)
   panel.needsDisplay = true
+  # Focus creates the field editor immediately; lay out the newly shown panel
+  # first so the editor and focus ring start at the query field's full width.
+  let parent = panel.superview()
+  if not parent.isNil:
+    parent.layoutSubtreeIfNeeded()
   let weakPanel = panel.unsafeWeakRef()
   window.beginTransientSession(
     owner = nimkit.Responder(panel),
