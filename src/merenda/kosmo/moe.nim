@@ -975,19 +975,17 @@ proc newKosmoEditor*(
         forceClose: "force" in command.flags,
         bufferId: some(KosmoBufferId(int(e.activeBuffer.id))),
       )
-      # Parsed-command interception does not advance Moe's replay counter.
-      # Queue a harmless result through its public hook so mappings stop here.
+      # Intercept the handled result after command dispatch so Moe's replay
+      # loop observes the host request and stops the remaining mapping keys.
       host[].hostReplayBarrier = true
-      discard e.interceptHostResult(
-        moeHandlerResult.HandlerResult(kind: moeHandlerResult.hrHandled)
-      )
-      host[].hostReplayBarrier = false
       return true
   result.editor.hostResultFilter = proc(
       e: Editor, r: moeHandlerResult.HandlerResult
   ): bool =
     if host[].hostReplayBarrier:
-      return true
+      host[].hostReplayBarrier = false
+      if r.kind == moeHandlerResult.hrHandled:
+        return true
     let request = r.hostCommand()
     if request.isSome:
       var command = request.get

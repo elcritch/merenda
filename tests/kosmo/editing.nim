@@ -935,7 +935,7 @@ suite "Kosmo":
     let lineSelection = editor.currentSelection()
     require lineSelection.isSome
     check lineSelection.get.kind == KosmoSelectionKind.Line
-    check editor.selectedText() == "second line"
+    check editor.selectedText() == "second line\n"
 
     let caret = view.pointForBufferPosition(0, 2)
     check frontend.window.mouseDownAt(caret.point, clickCount = 1)
