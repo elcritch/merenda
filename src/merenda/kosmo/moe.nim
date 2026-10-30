@@ -37,6 +37,7 @@ import moepkg/editor_reload as moeReload
 import moepkg/editor_hooks as moeHooks
 import moepkg/lsp_integration as moeLspIntegration
 import moepkg/lsp_service as moeLspService
+import moepkg/lsp/protocol/enums as moeLspEnums
 import moepkg/editor_lsp as moeLsp
 import moepkg/editor_file_jobs as moeJobs
 import moepkg/editor_mode as moeMode
@@ -126,6 +127,8 @@ type
     editor: Editor
     nimLspCommand: string
     nimLspRequested: bool
+    hostMessage: string
+    hostMessageDeadline: Option[MonoTime]
     temporaryBufferIds: Table[string, BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
@@ -825,6 +828,45 @@ proc configureNimdexService(editor: Editor, command: string) =
     config.args = args[1 .. ^1]
   service.setConfig("nim", config)
 
+proc setHostMessage(editor: KosmoEditor, message: string, warning = false) =
+  if editor.isNil or message.len == 0:
+    return
+  editor.hostMessage = strutils.splitWhitespace(message).join(" ")
+  editor.hostMessageDeadline =
+    some(getMonoTime() + initDuration(seconds = (if warning: 15 else: 6)))
+
+proc revealLocation*(
+  editor: KosmoEditor, line, column: int, centered = false
+): bool {.discardable.}
+
+proc routeMoeMessages(editor: KosmoEditor): bool =
+  if editor.isNil or editor.editor.isNil:
+    return
+  let state = editor.editor.state
+  let message = state.statusMessage
+  if message.len > 0:
+    # Moe reports a successful definition jump after setting the target cursor.
+    # Center before the pane captures its new buffer and viewport state.
+    if message.startsWith("Definition at line ") or message.startsWith("Definition in "):
+      let cursor = editor.editor.activeWindow().cursor
+      discard editor.revealLocation(cursor.line, cursor.column, centered = true)
+    let normalized = message.toLowerAscii()
+    editor.setHostMessage(
+      message,
+      warning =
+        "error" in normalized or "failed" in normalized or "warning" in normalized,
+    )
+    editor.editor.state.setStatusQuiet("")
+    result = true
+  if not state.notificationPopup.isNil and state.notificationPopup.queue.len > 0:
+    for notification in state.notificationPopup.queue:
+      editor.setHostMessage(
+        notification.message,
+        warning = notification.level in {moeTypes.nlError, moeTypes.nlWarning},
+      )
+    state.notificationPopup.queue.setLen(0)
+    result = true
+
 proc newKosmoEditor*(
     text = "", workingDirectory = "", nimLspCommand = ""
 ): KosmoEditor =
@@ -835,6 +877,10 @@ proc newKosmoEditor*(
   config.standard.statusLine = false
   config.standard.colorMode = cm24bit
   config.tabLine.enable = false
+  # Kosmo presents editor notifications in its own status bar.
+  config.notification.popupNotifications = false
+  config.notification.lspForcePopup = false
+  config.notification.lspScreenNotify = false
   if nimLspCommand.len > 0:
     config.lsp.enable = true
     if nimLspCommand.startsWith("tcp://"):
@@ -886,6 +932,28 @@ proc newKosmoEditor*(
     result.editor.configureNimdexService(nimLspCommand)
   result.editor.hostPopupMenus = true
   let host = result.unsafeWeakRef()
+  let service = result.editor.lsp.service
+  let originalLogMessage = service.onLogMessage
+  service.onLogMessage = proc(
+      langId: string, msgType: moeLspEnums.MessageType, message: string
+  ) {.gcsafe.} =
+    originalLogMessage(langId, msgType, message)
+    if msgType != moeLspEnums.mtLog:
+      {.cast(gcsafe).}:
+        let level =
+          case msgType
+          of moeLspEnums.mtError: "error"
+          of moeLspEnums.mtWarning: "warning"
+          else: "info"
+        host[].setHostMessage(
+          "LSP " & langId & " " & level & ": " & message,
+          msgType in {moeLspEnums.mtError, moeLspEnums.mtWarning},
+        )
+  let originalRestart = service.onServerRestart
+  service.onServerRestart = proc(langId: string) {.gcsafe.} =
+    originalRestart(langId)
+    {.cast(gcsafe).}:
+      discard host[].routeMoeMessages()
   result.editor.hostCommandFilter = proc(e: Editor, command: ParsedCommand): bool =
     # Kosmo owns buffer visibility across panes, so it must perform :q's
     # safe-close check before Moe validates against its internal windows.
@@ -1435,7 +1503,13 @@ proc status*(editor: KosmoEditor): KosmoStatus =
   let snapshot = editor.editor.frontendStatus()
   KosmoStatus(
     modeLabel: snapshot.modeLabel,
-    message: snapshot.message,
+    message: (
+      if editor.hostMessageDeadline.isSome and
+          getMonoTime() < editor.hostMessageDeadline.get:
+        editor.hostMessage
+      else:
+        snapshot.message
+    ),
     gitBranch: snapshot.git.branch,
     gitAdded: snapshot.git.added,
     gitModified: snapshot.git.modified,
@@ -2740,7 +2814,15 @@ proc renderMatterFrame(editor: KosmoEditor, buffer: var RenderBuffer) =
         current.incrementalHighlight.parsedUpTo = current.len - 1
       current.uriScanParsedUpTo = current.len - 1
   try:
-    editor.editor.render(buffer.buffer)
+    let previousBuffer = editor.activeBufferId()
+    discard editor.routeMoeMessages()
+    # Moe polls for messages inside render; redraw after moving new ones out.
+    for _ in 0 .. 2:
+      editor.editor.render(buffer.buffer)
+      if not editor.routeMoeMessages():
+        break
+    if editor.activeBufferId() != previousBuffer:
+      editor.frontendBufferChange = some(editor.captureViewState())
     editor.renderSearchHighlights(buffer)
   finally:
     for item in suspended:

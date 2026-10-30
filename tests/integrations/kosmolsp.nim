@@ -12,7 +12,7 @@ from moepkg/lsp/worker import pathToFileUri
 
 type
   TcpLspSession = object
-    rootUri, documentUri, text: string
+    rootUri, documentUri, targetUri, text: string
 
   TcpLspFixture = object
     listener: SocketHandle
@@ -86,6 +86,7 @@ proc serveLsp(state: ptr TcpLspFixture) {.thread.} =
                   "result": {
                     "capabilities": {
                       "textDocumentSync": {"openClose": true, "change": 1, "save": true},
+                      "definitionProvider": true,
                       "positionEncoding": "utf-16",
                       "experimental": {"padding": repeat('x', 32768)},
                     },
@@ -96,35 +97,66 @@ proc serveLsp(state: ptr TcpLspFixture) {.thread.} =
               of "textDocument/didOpen":
                 let document = message["params"]["textDocument"]
                 let expected = state.sessions[session]
-                if document["uri"].getStr() != expected.documentUri or
-                    document["text"].getStr() != expected.text:
-                  raise newException(
-                    ValueError,
-                    "TCP LSP didOpen mismatch: URI " & document["uri"].getStr() &
-                      " expected " & expected.documentUri & "; text length " &
-                      $document["text"].getStr().len & " expected " & $expected.text.len,
-                  )
-                client.send(
-                  frameJsonRpcMessage(
-                    $(
-                      %*{
-                        "jsonrpc": "2.0",
-                        "method": "$/progress",
-                        "params": {
-                          "token": "index",
-                          "value": {
-                            "kind": "begin",
-                            "title": "Nimdex indexing",
-                            "percentage": 42,
-                            "message":
-                              "12.34% kosmo.nim: 25 project files encountered (of 200)",
+                if document["uri"].getStr() == expected.documentUri:
+                  if document["text"].getStr() != expected.text:
+                    raise newException(
+                      ValueError,
+                      "TCP LSP didOpen mismatch: URI " & document["uri"].getStr() &
+                        " expected " & expected.documentUri & "; text length " &
+                        $document["text"].getStr().len & " expected " &
+                        $expected.text.len,
+                    )
+                  client.send(
+                    frameJsonRpcMessage(
+                      $(
+                        %*{
+                          "jsonrpc": "2.0",
+                          "method": "$/progress",
+                          "params": {
+                            "token": "index",
+                            "value": {
+                              "kind": "begin",
+                              "title": "Nimdex indexing",
+                              "percentage": 42,
+                              "message":
+                                "12.34% kosmo.nim: 25 project files encountered (of 200)",
+                            },
                           },
-                        },
-                      }
+                        }
+                      )
                     )
                   )
-                )
-                state.opened.store(session + 1)
+                  client.send(
+                    frameJsonRpcMessage(
+                      $(
+                        %*{
+                          "jsonrpc": "2.0",
+                          "method": "window/showMessage",
+                          "params":
+                            {"type": 1, "message": "test server notification marker"},
+                        }
+                      )
+                    )
+                  )
+                  state.opened.store(session + 1)
+              of "textDocument/definition":
+                let position = message["params"]["position"]["line"].getInt()
+                let uri =
+                  if position == 0:
+                    state.sessions[session].documentUri
+                  else:
+                    state.sessions[session].targetUri
+                response = %*{
+                  "jsonrpc": "2.0",
+                  "id": message["id"],
+                  "result": {
+                    "uri": uri,
+                    "range": {
+                      "start": {"line": 40, "character": 0},
+                      "end": {"line": 40, "character": 1},
+                    },
+                  },
+                }
               of "shutdown":
                 response = %*{"jsonrpc": "2.0", "id": message["id"], "result": nil}
               else:
@@ -184,11 +216,17 @@ suite "Kosmo TCP LSP integration":
       let
         directory = root / $session
         path = directory / "main.nim"
-        text = "const answer" & $session & "* = 42\n# " & repeat('a', 32768)
+        text =
+          "const answer" & $session & "* = 42\n" & repeat("# line\n", 100) & "# " &
+          repeat('a', 32768)
       createDir(directory)
       writeFile(path, text)
+      writeFile(directory / "target.nim", repeat("# target\n", 100))
       state.sessions.add TcpLspSession(
-        rootUri: pathToFileUri(directory), documentUri: pathToFileUri(path), text: text
+        rootUri: pathToFileUri(directory),
+        documentUri: pathToFileUri(path),
+        targetUri: pathToFileUri(directory / "target.nim"),
+        text: text,
       )
     var serverThread: Thread[ptr TcpLspFixture]
     var serverJoined: bool
@@ -234,6 +272,29 @@ suite "Kosmo TCP LSP integration":
       check editor.nimdexProgress().percentage == 42
       check editor.nimdexProgress().hundredths == 1234
       check editor.nimdexProgress().entryPoint == "kosmo.nim"
+      while "test server notification marker" notin editor.status().message and
+          getMonoTime() < deadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        editor.render(render)
+        sleep(5)
+      check "test server notification marker" in editor.status().message
+      var rendered = ""
+      for row in 0 ..< render.height:
+        for column in 0 ..< render.width:
+          rendered.add(render.cell(column, row).symbol)
+        rendered.add('\n')
+      check "test server notification marker" notin rendered
+      for expectedMessage in ["Definition at line 41", "Definition in "]:
+        require editor.handleKey("g")
+        require editor.handleKey("d")
+        while not editor.status().message.startsWith(expectedMessage) and
+            getMonoTime() < deadline:
+          discard getCurrentSigilThread().pollAll(NonBlocking)
+          editor.render(render)
+          sleep(5)
+        require editor.status().message.startsWith(expectedMessage)
+        check editor.bufferCursor().line == 40
+        check abs(editor.cursor().row - render.height div 2) <= 1
       state.finishProgress.store(session + 1)
       while editor.nimdexProgress().active and getMonoTime() < deadline:
         discard getCurrentSigilThread().pollAll(NonBlocking)

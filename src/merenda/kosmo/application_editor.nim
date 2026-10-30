@@ -320,6 +320,8 @@ proc statusText(
 ): string =
   var parts: seq[string]
   var activeFilePath: Option[string]
+  if status.message.len > 0:
+    parts.add status.message
   if status.modeLabel.len > 0:
     parts.add status.modeLabel
   for tab in tabs:
@@ -327,8 +329,6 @@ proc statusText(
       parts.add tab.title
       activeFilePath = tab.filePath
       break
-  if status.message.len > 0:
-    parts.add status.message
   if status.gitBranch.len > 0:
     var git = "Git: " & status.gitBranch
     if status.gitAdded != 0:
@@ -803,9 +803,11 @@ proc syncChrome(view: KosmoEditorView) =
     if not controller.frontend.isNil and not controller.frontend[].xSettingsWindow.isNil:
       controller.frontend[].xSettingsWindow.refreshNimdexStatus()
   if not view.statusLabel.isNil and view.isActiveEditorGroup():
-    let text = view.editor.status().statusText(tabs, view.editor.workingDirectory())
+    let status = view.editor.status()
+    let text = status.statusText(tabs, view.editor.workingDirectory())
     if view.statusLabel.text != text:
       view.statusLabel.text = text
+    view.statusLabel.toolTip = status.message
   if view.isActiveEditorGroup() and not view.tabsDelegate.isNil and
       not view.tabsDelegate.dockController.isNil:
     view.tabsDelegate.dockController[].syncKeyModeChoices()

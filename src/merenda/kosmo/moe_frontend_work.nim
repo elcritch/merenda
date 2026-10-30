@@ -131,6 +131,7 @@ proc jobsText*(editor: KosmoEditor, stop = false): string =
 proc visibleFrontendFingerprint(editor: KosmoEditor): Hash =
   let engine = editor.editor
   result = hash($engine.frontendStatus())
+  result = result !& hash(editor.status().message)
   result = result !& hash(engine.frontendGitStatusRevision())
   result = result !& hash(engine.state.ui.lspProgressText)
   result = result !& hash($editor.popupMenu())
@@ -368,6 +369,7 @@ proc pollFrontendWork*(editor: KosmoEditor): bool =
     moeAsync.asyncSpawn editor.editor.handlePendingAsyncOperations(FrontendHooks())
     nonblockingAsyncStep()
     editor.editor.tick()
+    discard editor.routeMoeMessages()
   editor.takeEngineOutput()
   if editor.activeBufferId() != previousBuffer:
     editor.frontendBufferChange = some(editor.captureViewState())
