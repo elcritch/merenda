@@ -116,6 +116,8 @@ proc serveLsp(state: ptr TcpLspFixture) {.thread.} =
                             "kind": "begin",
                             "title": "Nimdex indexing",
                             "percentage": 42,
+                            "message":
+                              "12.34% kosmo.nim: 25 project files encountered (of 200)",
                           },
                         },
                       }
@@ -230,6 +232,8 @@ suite "Kosmo TCP LSP integration":
         sleep(5)
       require editor.nimdexProgress().active
       check editor.nimdexProgress().percentage == 42
+      check editor.nimdexProgress().hundredths == 1234
+      check editor.nimdexProgress().entryPoint == "kosmo.nim"
       state.finishProgress.store(session + 1)
       while editor.nimdexProgress().active and getMonoTime() < deadline:
         discard getCurrentSigilThread().pollAll(NonBlocking)

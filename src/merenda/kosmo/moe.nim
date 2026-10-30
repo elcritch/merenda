@@ -978,7 +978,7 @@ proc connectNimdex*(editor: KosmoEditor, command: string): string =
 
 proc nimdexProgress*(
     editor: KosmoEditor
-): tuple[active: bool, percentage: int, hundredths: int] =
+): tuple[active: bool, percentage: int, hundredths: int, entryPoint: string] =
   ## Return the current Nimdex indexing progress, if any.
   if editor.isNil or editor.editor.isNil or editor.editor.lsp.isNil:
     return
@@ -997,6 +997,10 @@ proc nimdexProgress*(
               result.hundredths = int(value * 100.0 + 0.5).clamp(0, 10000)
           except ValueError:
             discard
+          let startName = endPercent + 1
+          let endName = message.find(": ", startName)
+          if endName > startName:
+            result.entryPoint = message[startName ..< endName].strip()
       return
 
 proc nimLspConfiguration*(editor: KosmoEditor): tuple[enabled: bool, command: string] =

@@ -148,6 +148,7 @@ type
     keyModeChoice: nimkit.PopupMenuButton
     indexProgress: nimkit.ProgressIndicator
     indexProgressLabel: nimkit.Label
+    indexEntryLabel: nimkit.Label
     observedWindow: WeakRef[nimkit.Window]
 
   KosmoKeyMode = object
