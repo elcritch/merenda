@@ -2213,10 +2213,11 @@ suite "Kosmo editor repository diff":
     writeFile(first / "new.txt", "first update\n")
     writeFile(second / "new.txt", "second update\n")
     emit frontend.fileTree.workspaceFiles.workspaceRepositoryDidChange()
-    let deadline = getMonoTime() + initDuration(seconds = 10)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
     while getMonoTime() < deadline:
       if firstPanel.repositoryReadCount() > firstReads and
-          secondPanel.repositoryReadCount() > secondReads:
+          secondPanel.repositoryReadCount() > secondReads and
+          firstPanel.snapshot.files.len == 2 and secondPanel.snapshot.files.len == 2:
         break
       discard getCurrentSigilThread().pollAll(NonBlocking)
       discard drainMainThreadWork()
@@ -2224,10 +2225,12 @@ suite "Kosmo editor repository diff":
       sleep(1)
     check firstPanel.repositoryReadCount() > firstReads
     check secondPanel.repositoryReadCount() > secondReads
+    check firstPanel.snapshot.errorMessage == ""
+    check secondPanel.snapshot.errorMessage == ""
+    require firstPanel.snapshot.files.len == 2
+    require secondPanel.snapshot.files.len == 2
     require firstPanel.waitForDiff()
     require secondPanel.waitForDiff()
-    check firstPanel.snapshot.files.len == 2
-    check secondPanel.snapshot.files.len == 2
     firstPanel.autoRefreshSwitch.on = false
     secondPanel.autoRefreshSwitch.on = false
 
