@@ -2046,6 +2046,34 @@ proc completionPopupVisible*(editor: KosmoEditor): bool =
 
 proc handleKey*(editor: KosmoEditor, key: string): bool {.discardable.}
 
+proc completionAnchor(editor: Editor, menu: CompletionMenu): tuple[row, column: int] =
+  let
+    cursor = editor.state.screenCursor
+    window = editor.activeWindow()
+    position = window.cursor
+  result = (cursor.y, cursor.x)
+  if menu.triggerLine != position.line or menu.triggerCol < 0 or
+      menu.triggerCol > position.column or position.line notin 0 ..< window.buffer.len:
+    return
+  let line = window.buffer.getLine(position.line).toRunes()
+  var anchorColumn = min(menu.triggerCol, line.len)
+  if anchorColumn > 0 and line[anchorColumn - 1] == Rune('.'.ord):
+    dec anchorColumn
+  let
+    viewport = window.viewport
+    layout = editor.rowLayoutFor(
+      window.buffer,
+      viewport.width,
+      editor.viewportOffsetFor(window),
+      window.wrapCountCache,
+    )
+    anchor = layout.cursorCell(position.line, anchorColumn, viewport.leftCell)
+    current = layout.cursorCell(
+      position.line, position.column, viewport.leftCell, window.cursorOnTabEnd
+    )
+  result.row = max(0, cursor.y + anchor.wrapSeg - current.wrapSeg)
+  result.column = max(0, cursor.x + anchor.cellX - current.cellX)
+
 proc popupMenu*(editor: KosmoEditor): Option[KosmoPopupMenu] =
   ## Return the menu-like popup Moe currently asks its host to present.
   if editor.isNil or editor.editor.isNil:
@@ -2067,15 +2095,15 @@ proc popupMenu*(editor: KosmoEditor): Option[KosmoPopupMenu] =
 
   let completionMenu = moeEditor.handlerManager.insertHandler.completionManager
   if completionMenu.isActive() and completionMenu.menu.entries.len > 0:
-    let cursor = moeEditor.state.screenCursor
+    let anchor = moeEditor.completionAnchor(completionMenu.menu)
     var menu = KosmoPopupMenu(
       kind: KosmoPopupMenuKind.Completion,
       selectedIndex:
         if completionMenu.menu.hasSelection: completionMenu.menu.selectedIndex else: -1,
       firstIndex: completionMenu.menu.scrollOffset,
       maxVisibleItems: completionMenu.menu.maxVisible,
-      anchorRow: cursor.y,
-      anchorColumn: cursor.x,
+      anchorRow: anchor.row,
+      anchorColumn: anchor.column,
     )
     for entry in completionMenu.menu.entries:
       menu.items.add KosmoPopupMenuItem(

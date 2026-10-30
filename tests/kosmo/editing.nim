@@ -1,4 +1,4 @@
-import std/[sequtils, options, os, strutils, tempfiles, times, unittest]
+import std/[sequtils, options, os, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import sigils/threads
@@ -426,6 +426,39 @@ suite "Kosmo":
     check frontend.editorView.editor.bufferText(activeTab.id) == some("one\ntwo\nthree")
     check frontend.editorView.editor.bufferCursor() ==
       KosmoBufferCursor(line: 2, column: 5)
+
+  test "completion popup remains anchored at the member dot while cycling":
+    for (prefix, anchorColumn, width) in [
+      ("context.", 7, 80),
+      ("context.splitV", 7, 80),
+      ("\t界context.splitV", 9, 80),
+      ("abcdefghijkl.context.splitV", 20, 24),
+      ("splitV", 0, 80),
+    ]:
+      let editor = newKosmoEditor(text = "splitView splitVisible splitWidth\n" & prefix)
+      defer:
+        editor.close()
+      var grid = newRenderBuffer(width, 12)
+      require editor.revealLocation(1, anchorColumn)
+      editor.render(grid)
+      let expected = editor.cursor()
+      require editor.revealLocation(1, prefix.runeLen - 1)
+      require editor.handleKey("a")
+      editor.render(grid)
+      require editor.handleKey("C-p")
+      editor.render(grid)
+      require editor.popupMenu().isSome
+      let initial = editor.popupMenu().get
+      check initial.kind == KosmoPopupMenuKind.Completion
+      check initial.anchorRow == expected.row
+      check initial.anchorColumn == expected.column
+      for key in ["C-n", "C-n", "C-p"]:
+        require editor.handleKey(key)
+        editor.render(grid)
+        require editor.popupMenu().isSome
+        let popup = editor.popupMenu().get
+        check popup.anchorRow == expected.row
+        check popup.anchorColumn == expected.column
 
   test "command completion cycles with Tab and Shift-Tab in the host popup":
     let frontend =
