@@ -731,6 +731,22 @@ proc updateToolTip(window: Window, target: View, contentPoint: Point) =
   window.xToolTipPoint = contentPoint
   window.scheduleToolTip()
 
+proc showToolTipAtPoint*(window: Window, target: View, point: Point) =
+  ## Present asynchronously obtained tooltip text for the currently hovered view.
+  if window.isNil or target.isNil or window.xContentView.isNil or
+      window.xMouseHoverView != target or not window.xContentView.containsView(target):
+    return
+  let contentPoint = target.pointToView(point, window.xContentView)
+  window.updateToolTip(target, contentPoint)
+  if window.xToolTipTarget == target:
+    window.stopToolTipDelay()
+    window.finishToolTipDelay()
+
+proc hideToolTipForView*(window: Window, target: View) =
+  ## Dismiss a tooltip only when it belongs to this view.
+  if not window.isNil and window.xToolTipTarget == target:
+    window.clearToolTip()
+
 proc prepareToolTipForDisplay(window: Window) =
   let
     target = window.xToolTipTarget

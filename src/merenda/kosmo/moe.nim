@@ -156,6 +156,11 @@ type
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
 
+  KosmoHoverTarget* = object
+    bufferId*: KosmoBufferId
+    version*: int
+    line*, column*: int
+
   KosmoTab* = object
     ## Frontend-neutral information for one tab in the active editor window.
     id*: KosmoBufferId
@@ -2866,6 +2871,99 @@ proc handleScrollInput*(editor: KosmoEditor, input: ScrollInput): ScrollOutcome 
     appliedRows: outcome.appliedRows,
     viewportPhysicalRowsMoved: outcome.viewportPhysicalRowsMoved,
   )
+
+proc hoverTargetAt*(
+    editor: KosmoEditor,
+    state: KosmoEditorViewState,
+    render: RenderBuffer,
+    row, column: int,
+): Option[KosmoHoverTarget] =
+  ## Map a pane's grid cell through Moe's row layout without changing focus.
+  if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
+    return
+  let found = editor.editor.bufferById(state.bufferId.get.toMoeBufferId)
+  if found.isNone:
+    return
+  let buffer = found.get
+  let engine = editor.editor
+  let viewport = moeTypes.ViewPort(
+    width: render.buffer.area.width, height: render.buffer.area.height
+  )
+  let window = moeTypes.EditorWindow(
+    viewBuffer: buffer, viewport: viewport, mode: state.selectionMode
+  )
+  let tabOffset = if engine.showTabLine: 1 else: 0
+  let textRow = row - tabOffset
+  let textColumn = column - engine.gutterWidth(window)
+  if textRow < 0 or textRow >= viewport.height - steadyBottomAreaHeight() - tabOffset or
+      textColumn < 0 or textColumn >= engine.textAreaWidth(window):
+    return
+  let tabStop =
+    if buffer.editorConfig.isSome and buffer.editorConfig.get.tabStop.isSome:
+      buffer.editorConfig.get.tabStop.get
+    else:
+      engine.config.standard.tabStop
+  let layout =
+    initRowLayout(buffer, nil, engine.lineWrap, engine.wrapWidth(window), tabStop)
+  let hit = layout.rowAt(state.viewportTopLine, state.viewportTopWrapOffset, textRow)
+  if hit.isNone or hit.get.fold.isSome:
+    return
+  let line = hit.get.line
+  let targetColumn =
+    layout.cellToColumn(line, hit.get.wrapSeg, textColumn, state.viewportLeftColumn)
+  let text = buffer.getLine(line)
+  if text.runeLen == 0:
+    return
+  let start = layout.cursorCell(line, targetColumn, state.viewportLeftColumn)
+  let finish = layout.cursorCell(line, targetColumn + 1, state.viewportLeftColumn)
+  let endCell = if finish.wrapSeg != start.wrapSeg: layout.maxWidth else: finish.cellX
+  if start.wrapSeg != hit.get.wrapSeg or textColumn < start.cellX or
+      textColumn >= endCell:
+    return
+  some(
+    KosmoHoverTarget(
+      bufferId: state.bufferId.get,
+      version: buffer.contentVersion,
+      line: line,
+      column: targetColumn,
+    )
+  )
+
+proc startPointerHover*(editor: KosmoEditor, target: KosmoHoverTarget): int =
+  ## Start a tracked hover request without moving Moe's cursor.
+  if editor.isNil or editor.editor.isNil or not editor.editor.lsp.enabled:
+    return -1
+  let found = editor.editor.bufferById(target.bufferId.toMoeBufferId)
+  if found.isNone or found.get.contentVersion != target.version:
+    return -1
+  let buffer = found.get
+  if not editor.editor.lsp.hasHoverSupport(buffer) or
+      editor.editor.lsp.requestSyncGate(buffer, moeTypes.lrfHover).isSome:
+    return -1
+  let request = editor.editor.lsp.startHoverRequest(buffer, target.line, target.column)
+  if request.isOk: request.get else: -1
+
+proc cancelPointerHover*(editor: KosmoEditor, requestId: int) =
+  if not editor.isNil and not editor.editor.isNil and requestId >= 0:
+    editor.editor.lsp.cancelRequest(requestId)
+
+proc pollPointerHover*(
+    editor: KosmoEditor, target: KosmoHoverTarget, requestId: int
+): tuple[done: bool, text: string] =
+  if editor.isNil or editor.editor.isNil or requestId < 0:
+    return (true, "")
+  let found = editor.editor.bufferById(target.bufferId.toMoeBufferId)
+  if found.isNone or found.get.contentVersion != target.version:
+    editor.cancelPointerHover(requestId)
+    return (true, "")
+  let response = editor.editor.lsp.checkResponse(requestId)
+  if response.status == moeLspService.lrsPending:
+    return
+  result.done = true
+  if response.status == moeLspService.lrsSuccess and response.result.isSome:
+    let hover = moeLspService.parseHoverResponse(response.result.get)
+    if hover.isSome:
+      result.text = moeLspIntegration.getHoverText(hover.get)
 
 func requestsTabClose(commandText: string): bool =
   let parts = strutils.splitWhitespace(commandText.strip().toLowerAscii())

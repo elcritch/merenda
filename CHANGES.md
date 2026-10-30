@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show language-server hover information in editor tooltips without moving the cursor.
+
 - Configure and connect Nimdex from Kosmo Settings.
 
 - Show Nimdex indexing progress beside the editor input mode selector.

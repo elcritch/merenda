@@ -512,6 +512,9 @@ at a time. The status bar shows estimated progress for the current entry point w
 refreshes its compiler cache. The percentage is approximate, particularly on an
 incremental rebuild.
 
+Hover the mouse over a symbol in an editor pane to see available LSP hover
+information in a tooltip. Hovering does not move the text cursor or focus the pane.
+
 Show Git Diff keeps a separate viewer for each repository. Detach their tabs to
 compare projects in separate windows; invoking the shortcut again returns to that
 project's viewer.

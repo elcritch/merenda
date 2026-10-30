@@ -586,6 +586,93 @@ proc isActiveEditorGroup(view: KosmoEditorView): bool =
   let controller = view.tabsDelegate.dockController[]
   controller.activeGroup.isNil or controller.activeGroup.editorView == view
 
+proc clearPointerHover(view: KosmoEditorView) =
+  if view.hoverRequestId >= 0:
+    view.editor.cancelPointerHover(view.hoverRequestId)
+    view.hoverRequestId = -1
+  view.hoverDeadline = none(MonoTime)
+  view.hoverTarget = none(KosmoHoverTarget)
+  view.hoverText.setLen(0)
+  let window = view.window()
+  if window of nimkit.Window:
+    nimkit.Window(window).hideToolTipForView(view)
+
+proc pointerHoverTarget(
+    view: KosmoEditorView, point: nimkit.Point
+): Option[KosmoHoverTarget] =
+  if view.selectedBufferId.isNone:
+    return
+  var state: KosmoEditorViewState
+  let controller =
+    if view.tabsDelegate.isNil:
+      default(WeakRef[KosmoDockController])
+    else:
+      view.tabsDelegate.dockController
+  if controller.isNil or (
+    not controller[].projectedEditorView.isNil and
+    controller[].projectedEditorView[] == view
+  ):
+    state = view.editor.captureViewState()
+  else:
+    let index = view.viewStateIndex(view.selectedBufferId.get)
+    if index < 0:
+      return
+    state = view.viewStates[index]
+  if state.bufferId != view.selectedBufferId:
+    return
+  let position = view.rowColumnAtPoint(point)
+  view.editor.hoverTargetAt(state, view.renderBuffer, position.row, position.column)
+
+proc updatePointerHover(view: KosmoEditorView, point: nimkit.Point) =
+  let target = view.pointerHoverTarget(point)
+  if target != view.hoverTarget:
+    view.clearPointerHover()
+    view.hoverTarget = target
+    if target.isSome:
+      view.hoverDeadline = some(getMonoTime() + initDuration(milliseconds = 500))
+  view.hoverPoint = point
+
+proc pollPointerHover(view: KosmoEditorView) =
+  if view.hoverTarget.isNone:
+    return
+  if view.pointerHoverTarget(view.hoverPoint) != view.hoverTarget:
+    view.clearPointerHover()
+    return
+  if view.hoverDeadline.isSome and getMonoTime() >= view.hoverDeadline.get:
+    view.hoverDeadline = none(MonoTime)
+    view.hoverRequestId = view.editor.startPointerHover(view.hoverTarget.get)
+  if view.hoverRequestId >= 0:
+    let response =
+      view.editor.pollPointerHover(view.hoverTarget.get, view.hoverRequestId)
+    if response.done:
+      view.hoverRequestId = -1
+      view.hoverText = response.text
+      let window = view.window()
+      if view.hoverText.len > 0 and window of nimkit.Window:
+        nimkit.Window(window).showToolTipAtPoint(view, view.hoverPoint)
+
+protocol KosmoEditorHoverEvents of nimkit.ResponderEventProtocol:
+  method mouseMoved(view: KosmoEditorView, event: nimkit.MouseEvent): bool =
+    view.updatePointerHover(event.location)
+    false
+
+  method mouseExited(view: KosmoEditorView, event: nimkit.MouseEvent): bool =
+    discard event
+    view.clearPointerHover()
+    false
+
+protocol KosmoEditorHoverToolTip of nimkit.ViewProtocol:
+  method toolTipAtPoint(view: KosmoEditorView, point: nimkit.Point): string =
+    if view.hoverTarget.isSome and view.pointerHoverTarget(point) == view.hoverTarget:
+      return view.hoverText
+
+protocol KosmoEditorHoverLifecycle of nimkit.ViewLifecycleProtocol:
+  proc hoverViewWillMoveToWindow(
+      view: KosmoEditorView, window: nimkit.Responder
+  ) {.slotFor: viewWillMoveToWindow.} =
+    discard window
+    view.clearPointerHover()
+
 proc refresh*(view: KosmoEditorView)
 proc syncPopupMenu(pane: KosmoEditorPane)
 proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch)
@@ -1391,6 +1478,7 @@ proc handleHostHelpKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
   true
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
+  view.clearPointerHover()
   if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
     view.tabsDelegate.dockController[].activateGroup(view)
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
@@ -2050,6 +2138,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
     documentTabs: nimkit.newDocumentTabs(),
     renderBuffer: newRenderBuffer(80, 24),
     matterRefreshActive: true,
+    hoverRequestId: -1,
   )
   result.initMonoTextViewFields(editable = true)
   result.clipsToBounds = true
@@ -2068,6 +2157,9 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
   discard result.withProtocol(KosmoEditorKeyViewParticipation)
+  discard result.withProtocol(KosmoEditorHoverEvents)
+  discard result.withProtocol(KosmoEditorHoverToolTip)
+  discard result.withProtocol(KosmoEditorHoverLifecycle)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =

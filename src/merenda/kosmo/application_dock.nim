@@ -1313,6 +1313,8 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
       for group in groups:
         if group != controller.activeGroup:
           group.editorView.refresh()
+    for group in controller.groups:
+      group.editorView.pollPointerHover()
 
 proc setTerminalEnvironment(
     options: var nimkit.TerminexSpawnOptions, name, value: string

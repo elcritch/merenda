@@ -21,6 +21,27 @@ proc command(
     frontend.window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
 
 suite "Kosmo Moe frontend bridges":
+  test "hover hit testing uses the saved pane without moving the active cursor":
+    let editor = newKosmoEditor("alpha beta\nsecond")
+    defer:
+      editor.close()
+    var grid = newRenderBuffer(48, 12)
+    discard editor.revealLocation(0, 1)
+    editor.render(grid)
+    let cursor = editor.cursor()
+    let state = editor.captureViewState()
+    let target = editor.hoverTargetAt(state, grid, cursor.row, cursor.column)
+    require target.isSome
+    check target.get.line == 0
+    check target.get.column == 1
+    check editor.hoverTargetAt(state, grid, grid.height - 2, cursor.column).isNone
+    require editor.newEmptyBuffer().isSome
+    let active = editor.captureViewState().bufferId
+    let inactiveTarget = editor.hoverTargetAt(state, grid, cursor.row, cursor.column)
+    require inactiveTarget.isSome
+    check inactiveTarget.get.bufferId == target.get.bufferId
+    check editor.captureViewState().bufferId == active
+
   test "native history commits typing and resumes ordinary or forced Input":
     for forced in [false, true]:
       let editor = newKosmoEditor()

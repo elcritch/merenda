@@ -62,6 +62,11 @@ type
     matterRefreshPending: bool
     matterRefreshActive: bool
     inactiveRefreshDeferred: bool
+    hoverPoint: nimkit.Point
+    hoverTarget: Option[KosmoHoverTarget]
+    hoverDeadline: Option[MonoTime]
+    hoverRequestId: int
+    hoverText: string
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]

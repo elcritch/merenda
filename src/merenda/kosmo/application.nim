@@ -9,7 +9,7 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 """
   .}
 
-import std/[math, options, os, strutils, unicode]
+import std/[math, monotimes, options, os, strutils, times, unicode]
 
 from figdraw import len, `[]`
 
