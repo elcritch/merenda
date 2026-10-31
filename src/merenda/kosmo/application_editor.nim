@@ -2904,24 +2904,23 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
       else:
         min(progressBaseWidth + entryWidth + KosmoStatusIconWidth, choiceX)
     let progressX = max(choiceX - progressWidth, 0.0'f32)
-    let progressContentX = min(progressX + KosmoStatusIconWidth, choiceX)
+    let buttonWidth = min(KosmoStatusIconWidth, progressWidth)
+    let buttonX = choiceX - buttonWidth
     bar.label.setFrameFromLayout(
       nimkit.rect(0, 0, max(progressX - 4.0'f32, 0.0'f32), bounds.size.height)
     )
     bar.indexEntryLabel.setFrameFromLayout(
-      nimkit.rect(progressContentX, 0, entryWidth, bounds.size.height)
+      nimkit.rect(progressX, 0, entryWidth, bounds.size.height)
     )
     bar.nimdexButton.setFrameFromLayout(
-      nimkit.rect(
-        progressX, 0, min(KosmoStatusIconWidth, progressWidth), bounds.size.height
-      )
+      nimkit.rect(buttonX, 0, buttonWidth, bounds.size.height)
     )
     bar.indexSpinner.setFrameFromLayout(
-      nimkit.rect(progressContentX + entryWidth, choiceY + 2, 16, 16)
+      nimkit.rect(progressX + entryWidth, choiceY + 2, 16, 16)
     )
     bar.indexProgress.setFrameFromLayout(
       nimkit.rect(
-        progressContentX + entryWidth + 20,
+        progressX + entryWidth + 20,
         choiceY + 5,
         max(
           progressWidth - KosmoStatusIconWidth - entryWidth - percentageWidth - 24,
@@ -2932,9 +2931,9 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     )
     bar.indexProgressLabel.setFrameFromLayout(
       nimkit.rect(
-        max(choiceX - percentageWidth, progressContentX),
+        max(buttonX - percentageWidth, progressX),
         0,
-        min(percentageWidth, max(progressWidth - KosmoStatusIconWidth, 0.0'f32)),
+        min(percentageWidth, max(buttonX - progressX, 0.0'f32)),
         bounds.size.height,
       )
     )

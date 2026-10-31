@@ -142,11 +142,13 @@ suite "Kosmo settings":
       frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.percentage")
     let spinner =
       frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.spinner")
+    let nimdexButton = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")
     require spinner of ProgressIndicator
     check spinner.hidden
     check ProgressIndicator(spinner).progressIndicatorStyle == pisSpinning
     require progress of ProgressIndicator
     require percentage of Label
+    require nimdexButton of Button
     check progress.hidden
     check percentage.hidden
     percentage.hidden = false
@@ -157,6 +159,8 @@ suite "Kosmo settings":
     frontend.contentView.layoutSubtreeIfNeeded()
     check percentage.frame().size.width >= Label(percentage).sizeThatFits().width
     check progress.frame().maxX <= percentage.frame().minX
+    check percentage.frame().maxX <= nimdexButton.frame().minX
+    check nimdexButton.frame().maxX <= choiceView.frame().minX
     percentage.hidden = true
     progress.hidden = true
     let choice = PopupMenuButton(choiceView)
