@@ -530,10 +530,18 @@ jobs:
       shell: pwsh
       run: |
         $env:FIGDRAW_FORCE_OPENGL = '0'
-        nim c -r --cc:gcc -d:figdrawTestVulkanInitFailure tests/nimkit/backend.nim
+        nim c --cc:gcc --stackTrace:on --lineTrace:on -d:figdrawTestVulkanInitFailure tests/nimkit/backend.nim
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        nim c -r --cc:gcc -d:figdrawTestVulkanInitFailure -d:merendaTestGpuFailure tests/nimkit/backend.nim
+        & .\tests\nimkit\backend.exe
+        $testExit = $LASTEXITCODE
+        Write-Host "Vulkan to OpenGL test exit code: $testExit"
+        if ($testExit -ne 0) { exit $testExit }
+        nim c --cc:gcc --stackTrace:on --lineTrace:on -d:figdrawTestVulkanInitFailure -d:merendaTestGpuFailure tests/nimkit/backend.nim
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & .\tests\nimkit\backend.exe
+        $testExit = $LASTEXITCODE
+        Write-Host "GPU to software test exit code: $testExit"
+        if ($testExit -ne 0) { exit $testExit }
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh

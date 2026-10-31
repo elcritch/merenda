@@ -151,12 +151,15 @@ suite "Kosmo settings":
     require nimdexButton of Button
     check progress.hidden
     check percentage.hidden
+    frontend.contentView.layoutSubtreeIfNeeded()
     percentage.hidden = false
     progress.hidden = false
     Label(percentage).text = "100.00%"
-    frontend.contentView.layoutSubtreeIfNeeded()
-    percentage.superview().setNeedsLayout()
-    frontend.contentView.layoutSubtreeIfNeeded()
+    let statusBar = percentage.superview()
+    statusBar.setNeedsLayout()
+    statusBar.layoutSubtreeIfNeeded()
+    require not progress.hidden
+    require not percentage.hidden
     check percentage.frame().size.width >= Label(percentage).sizeThatFits().width
     check progress.frame().maxX <= percentage.frame().minX
     check percentage.frame().maxX <= nimdexButton.frame().minX
