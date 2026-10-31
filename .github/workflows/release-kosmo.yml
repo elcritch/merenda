@@ -770,9 +770,16 @@ jobs:
         run: security delete-keychain "$KOSMO_SIGNING_KEYCHAIN"
 
   build-windows:
+    name: build-windows (${{ matrix.renderer }})
     runs-on: windows-2022
     # Optimizing Kosmo's large C translation units can exceed 45 minutes.
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [standard, software]
+    env:
+      KOSMO_WINDOWS_RENDERER: ${{ matrix.renderer }}
     steps:
       - uses: actions/checkout@v5
 
@@ -826,6 +833,10 @@ jobs:
           windres kosmo.rc -O coff -o ../build/kosmo.res
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
+          $rendererFlags = @()
+          if ($env:KOSMO_WINDOWS_RENDERER -eq 'software') {
+            $rendererFlags += '-d:merenda.softwareRenderer'
+          }
           nim c `
             --cc:gcc `
             --opt:size `
@@ -841,6 +852,7 @@ jobs:
             "-d:harfbuzzyFribidiDynlib=$($fribidiDll.Name)" `
             "-d:KosmoVersion=$version" `
             "-d:KosmoGitHashOverride=$revision" `
+            @rendererFlags `
             --passL:build/kosmo.res `
             --out:dist/kosmo.exe `
             src/merenda/kosmo/kosmo.nim
@@ -912,16 +924,21 @@ jobs:
         run: |
           Copy-Item data/FONT-LICENSES.md dist/FONT-LICENSES.md
           Copy-Item -Recurse data/font-licenses dist/font-licenses
+          $archive = if ($env:KOSMO_WINDOWS_RENDERER -eq 'software') {
+            'dist/kosmo-windows-amd64-software.zip'
+          } else {
+            'dist/kosmo-windows-amd64.zip'
+          }
           Compress-Archive `
             -Path dist/kosmo.exe, dist/*.dll, dist/FONT-LICENSES.md, dist/font-licenses, dist/text-library-licenses `
-            -DestinationPath dist/kosmo-windows-amd64.zip `
+            -DestinationPath $archive `
             -Force
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
-          name: kosmo-windows-amd64
-          path: dist/kosmo-windows-amd64.zip
+          name: ${{ matrix.renderer == 'software' && 'kosmo-windows-amd64-software' || 'kosmo-windows-amd64' }}
+          path: ${{ matrix.renderer == 'software' && 'dist/kosmo-windows-amd64-software.zip' || 'dist/kosmo-windows-amd64.zip' }}
           if-no-files-found: error
 
   publish-release-assets:
@@ -991,8 +1008,9 @@ jobs:
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
-          name: kosmo-windows-amd64
+          pattern: kosmo-windows-amd64*
           path: dist
+          merge-multiple: true
 
       - name: Upload Windows release assets
         working-directory: dist
@@ -1002,10 +1020,11 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
           gh release download "$RELEASE_TAG" --pattern SHA256SUMS.txt
-          awk '$2 != "kosmo-windows-amd64.zip"' SHA256SUMS.txt > SHA256SUMS.updated.txt
-          sha256sum kosmo-windows-amd64.zip >> SHA256SUMS.updated.txt
+          awk '$2 != "kosmo-windows-amd64.zip" && $2 != "kosmo-windows-amd64-software.zip"' SHA256SUMS.txt > SHA256SUMS.updated.txt
+          sha256sum kosmo-windows-amd64.zip kosmo-windows-amd64-software.zip >> SHA256SUMS.updated.txt
           mv SHA256SUMS.updated.txt SHA256SUMS.txt
           gh release upload "$RELEASE_TAG" \
             kosmo-windows-amd64.zip \
+            kosmo-windows-amd64-software.zip \
             SHA256SUMS.txt \
             --clobber

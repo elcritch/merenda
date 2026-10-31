@@ -508,7 +508,8 @@ To try FigDraw's experimental CPU renderer, compile with
 windows and renders on the window thread without a GPU context. Wayland layer
 surfaces are not supported by this switch, and FigDraw skips backdrop blur in
 its software renderer. On Windows, Kosmo also tries software rendering automatically
-if Vulkan and OpenGL cannot initialize.
+if Vulkan and OpenGL cannot initialize. Windows releases include a separate
+`kosmo-windows-amd64-software.zip` build that always uses software rendering.
 
 On a Windows machine with a working Vulkan driver, test Vulkan presentation on
 the dedicated renderer thread with:

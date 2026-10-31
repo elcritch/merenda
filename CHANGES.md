@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add an experimental FigDraw software renderer switch for Siwin windows.
+- Publish a separate Windows software-rendered Kosmo build.
 - On Windows, probe Vulkan before transferring rendering to a worker and fall back
   to OpenGL or software rendering when graphics initialization fails.
 
