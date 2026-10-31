@@ -1904,21 +1904,29 @@ proc installEventHandlers(host: HostWindow) =
 
 when defined(merenda.softwareRenderer) or defined(windows):
   proc initSoftwareRenderer(host: HostWindow) =
+    when defined(windows) and defined(figdrawTestVulkanInitFailure):
+      echo "Windows software renderer: begin"
     when defined(windows):
       if host.xNativeWindow of siwinWinapi.WindowWinapiSoftwareRendering:
         siwinWinapi
           .WindowWinapiSoftwareRendering(host.xNativeWindow)
           .setSoftwarePresentEnabled(true)
     host.xRenderer = nil
+    when defined(windows) and defined(figdrawTestVulkanInitFailure):
+      echo "Windows software renderer: prior renderer released"
     host.xRenderer = figrender.newFigRenderer(
       softwareSiwin.newSiwinSoftwareContext(host.xNativeWindow),
       siwinshim.SiwinRenderBackend(window: host.xNativeWindow),
     )
     host.xSoftwareRendering = true
+    when defined(windows) and defined(figdrawTestVulkanInitFailure):
+      echo "Windows software renderer: ready"
 
 when defined(windows) and figrender.UseVulkanBackend:
   proc initWindowsRenderer(host: HostWindow) =
     try:
+      when defined(merendaTestGpuFailure):
+        raise newException(ValueError, "Injected graphics initialization failure")
       host.xRenderer = figrender.newFigRenderer(
         atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
       )
@@ -1935,15 +1943,21 @@ when defined(windows) and figrender.UseVulkanBackend:
     if host.xSoftwareRendering:
       return
     try:
-      when defined(merendaTestGpuFailure):
-        raise newException(ValueError, "Injected GPU presentation failure")
       var probe = figrender.newRenders()
+      when defined(figdrawTestVulkanInitFailure):
+        echo "Windows renderer: beginning probe frame"
       host.xRenderer.beginFrame()
+      when defined(figdrawTestVulkanInitFailure):
+        echo "Windows renderer: rendering probe frame"
       host.xRenderer.renderFrame(
         probe, vec2(max(logicalSize.width, 1), max(logicalSize.height, 1))
       )
       host.xRenderer.endFrame()
+      when defined(figdrawTestVulkanInitFailure):
+        echo "Windows renderer: waiting for probe frame"
       host.xRenderer.finishPendingFrames()
+      when defined(figdrawTestVulkanInitFailure):
+        echo "Windows renderer: probe complete"
     except CatchableError as error:
       warn "Graphics presentation failed; using software rendering", reason = error.msg
       host.initSoftwareRenderer()

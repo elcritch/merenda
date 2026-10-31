@@ -51,6 +51,8 @@ suite "nimkit backend":
       let callbacks = nimkitBackend.HostWindowCallbacks(
         onRender: proc() =
           if not host.isNil:
+            when defined(windows):
+              echo "Windows software test: rendering frame"
             host.render(renders, nimkitTypes.initSize(80, 60))
             if host.renderCount() > 0:
               screenshot = host.rendererOrNil().takeOneFrameScreenshot()
@@ -63,6 +65,8 @@ suite "nimkit backend":
       )
       defer:
         host.close()
+      when defined(windows):
+        echo "Windows software test: host created"
       check host.rendererOrNil().backendKind() == rbSoftware
       when defined(merenda.softwareRenderer):
         check not nimkitBackend.dedicatedRendererSupported()
@@ -87,6 +91,7 @@ suite "nimkit backend":
       )
       defer:
         host.close()
+      echo "Windows OpenGL test: host created"
       check host.rendererOrNil().backendKind() == rbOpenGL
 
   when defined(windows) and defined(merendaTestVulkanBackend):
