@@ -533,15 +533,15 @@ jobs:
         nim c --cc:gcc --stackTrace:on --lineTrace:on -d:figdrawTestVulkanInitFailure tests/nimkit/backend.nim
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & .\tests\nimkit\backend.exe
-        $testExit = $LASTEXITCODE
-        Write-Host "Vulkan to OpenGL test exit code: $testExit"
-        if ($testExit -ne 0) { exit $testExit }
+        $openGlExit = $LASTEXITCODE
+        Write-Host "Vulkan to OpenGL test exit code: $openGlExit"
         nim c --cc:gcc --stackTrace:on --lineTrace:on -d:figdrawTestVulkanInitFailure -d:merendaTestGpuFailure tests/nimkit/backend.nim
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & .\tests\nimkit\backend.exe
         $testExit = $LASTEXITCODE
         Write-Host "GPU to software test exit code: $testExit"
         if ($testExit -ne 0) { exit $testExit }
+        if ($openGlExit -ne 0) { exit $openGlExit }
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh

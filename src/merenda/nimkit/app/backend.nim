@@ -1923,6 +1923,8 @@ when defined(windows) and figrender.UseVulkanBackend:
         atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
       )
       host.xRenderer.setupBackend(host.xNativeWindow)
+      when defined(figdrawTestVulkanInitFailure):
+        echo "Windows renderer: setup completed"
       host.xPresentationTarget = host.xRenderer.presentationTarget()
     except CatchableError as error:
       warn "Graphics initialization failed; using software rendering",
@@ -1994,6 +1996,8 @@ proc createHostWindow*(
     result.xRenderer.setupBackend(result.xNativeWindow)
     result.xPresentationTarget = result.xRenderer.presentationTarget()
   result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
+  when defined(windows) and defined(figdrawTestVulkanInitFailure):
+    echo "Windows renderer: position configured"
   result.configureHostUiScale(scaleOverride)
   if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
     result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
@@ -2001,6 +2005,8 @@ proc createHostWindow*(
   result.registerHost()
   result.installNativeClipboardBridge()
   result.installEventHandlers()
+  when defined(windows) and defined(figdrawTestVulkanInitFailure):
+    echo "Windows renderer: event handlers installed"
 
   when defined(macosx):
     # Cocoa's visible first step raises existing windows in creation order.
@@ -2011,6 +2017,8 @@ proc createHostWindow*(
     result.xNativeWindow.firstStep()
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
+  when defined(windows) and defined(figdrawTestVulkanInitFailure):
+    echo "Windows renderer: first step completed"
   when defined(windows) and figrender.UseVulkanBackend and
       not defined(merenda.softwareRenderer):
     result.probeWindowsRenderer(frame.size)
