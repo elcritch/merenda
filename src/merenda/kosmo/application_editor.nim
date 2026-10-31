@@ -845,6 +845,14 @@ proc syncIndexProgress(
       $(progress.hundredths div 100) & "." &
       align($(progress.hundredths mod 100), 2, '0') & "%"
 
+proc syncNimdexButton(bar: KosmoStatusBar, running: bool) =
+  let title = if running: "Stop Nimdex" else: "Start Nimdex"
+  if bar.nimdexButton.toolTip != title:
+    bar.nimdexButton.icon = if running: bar.nimdexStopIcon else: bar.nimdexPlayIcon
+    bar.nimdexButton.toolTip = title
+    bar.nimdexButton.accessibilityLabel = title
+    bar.nimdexButton.needsDisplay = true
+
 proc syncIndexProgress(view: KosmoEditorView) =
   if not view.isActiveEditorGroup():
     return
@@ -852,9 +860,13 @@ proc syncIndexProgress(view: KosmoEditorView) =
   if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
     for host in view.tabsDelegate.dockController[].hosts:
       if not host.statusLabel.isNil and host.statusLabel.superview() of KosmoStatusBar:
-        KosmoStatusBar(host.statusLabel.superview()).syncIndexProgress(progress)
+        let bar = KosmoStatusBar(host.statusLabel.superview())
+        bar.syncIndexProgress(progress)
+        bar.syncNimdexButton(view.editor.nimdexRequested())
   elif not view.statusLabel.isNil and view.statusLabel.superview() of KosmoStatusBar:
-    KosmoStatusBar(view.statusLabel.superview()).syncIndexProgress(progress)
+    let bar = KosmoStatusBar(view.statusLabel.superview())
+    bar.syncIndexProgress(progress)
+    bar.syncNimdexButton(view.editor.nimdexRequested())
 
 proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
@@ -2873,6 +2885,8 @@ const KosmoKeyModes = [
 
 protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(bar: KosmoStatusBar) =
+    const percentageWidth = 100.0'f32
+    const progressBaseWidth = 114.0'f32 + percentageWidth
     let bounds = bar.bounds()
     let
       choiceWidth = min(100.0'f32, max(bounds.size.width - 8.0'f32, 0.0'f32))
@@ -2883,35 +2897,44 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
       if bar.indexEntryLabel.hidden:
         0.0'f32
       else:
-        min(140.0'f32, max(choiceX - 166.0'f32, 0.0'f32))
+        min(140.0'f32, max(choiceX - progressBaseWidth - KosmoStatusIconWidth, 0.0'f32))
     let progressWidth =
       if bar.indexProgress.hidden:
-        0.0'f32
+        min(KosmoStatusIconWidth, choiceX)
       else:
-        min(166.0'f32 + entryWidth, choiceX)
+        min(progressBaseWidth + entryWidth + KosmoStatusIconWidth, choiceX)
     let progressX = max(choiceX - progressWidth, 0.0'f32)
+    let progressContentX = min(progressX + KosmoStatusIconWidth, choiceX)
     bar.label.setFrameFromLayout(
       nimkit.rect(0, 0, max(progressX - 4.0'f32, 0.0'f32), bounds.size.height)
     )
     bar.indexEntryLabel.setFrameFromLayout(
-      nimkit.rect(progressX, 0, entryWidth, bounds.size.height)
+      nimkit.rect(progressContentX, 0, entryWidth, bounds.size.height)
+    )
+    bar.nimdexButton.setFrameFromLayout(
+      nimkit.rect(
+        progressX, 0, min(KosmoStatusIconWidth, progressWidth), bounds.size.height
+      )
     )
     bar.indexSpinner.setFrameFromLayout(
-      nimkit.rect(progressX + entryWidth, choiceY + 2, 16, 16)
+      nimkit.rect(progressContentX + entryWidth, choiceY + 2, 16, 16)
     )
     bar.indexProgress.setFrameFromLayout(
       nimkit.rect(
-        progressX + entryWidth + 20,
+        progressContentX + entryWidth + 20,
         choiceY + 5,
-        max(progressWidth - entryWidth - 76, 0.0'f32),
+        max(
+          progressWidth - KosmoStatusIconWidth - entryWidth - percentageWidth - 24,
+          0.0'f32,
+        ),
         10,
       )
     )
     bar.indexProgressLabel.setFrameFromLayout(
       nimkit.rect(
-        max(choiceX - 52, progressX),
+        max(choiceX - percentageWidth, progressContentX),
         0,
-        min(52.0'f32, progressWidth),
+        min(percentageWidth, max(progressWidth - KosmoStatusIconWidth, 0.0'f32)),
         bounds.size.height,
       )
     )
@@ -2992,6 +3015,10 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     indexSpinner = nimkit.newProgressIndicator()
     indexProgressLabel = nimkit.newStatusLabel("")
     indexEntryLabel = nimkit.newStatusLabel("")
+    playIcon = nimkit.newSvgMtsdfResource(KosmoPlayIconSvg, "kosmo-nimdex-play")
+    stopIcon = nimkit.newSvgMtsdfResource(KosmoStopIconSvg, "kosmo-nimdex-stop")
+    nimdexButton = newKosmoStatusIconButton(playIcon, "Start Nimdex")
+  nimdexButton.identifier = "kosmo.nimdex.toggle"
   indexProgress.identifier = "kosmo.nimdex.progress"
   indexProgress.accessibilityLabel = "Nimdex indexing"
   indexProgress.toolTip = "Nimdex: estimated progress for the current entry point"
@@ -3024,6 +3051,9 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     indexSpinner: indexSpinner,
     indexProgressLabel: indexProgressLabel,
     indexEntryLabel: indexEntryLabel,
+    nimdexButton: nimdexButton,
+    nimdexPlayIcon: playIcon,
+    nimdexStopIcon: stopIcon,
   )
   result.initViewFields()
   result.addSubview(label)
@@ -3032,6 +3062,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   result.addSubview(indexSpinner)
   result.addSubview(indexProgressLabel)
   result.addSubview(indexEntryLabel)
+  result.addSubview(nimdexButton)
   if withSidebarButtons:
     result.fileButton = newKosmoStatusIconButton(
       nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-status-files"), "Files"
@@ -3084,6 +3115,57 @@ proc configureKeyModeChoice(bar: KosmoStatusBar, controller: KosmoDockController
     item.action = nimkit.actionSelector("kosmo.selectKeyMode")
     item.target = controller.newKeyModeTarget(mode)
   controller.syncKeyModeChoices()
+
+proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController) =
+  let weakController = controller.unsafeWeakRef()
+  let weakBar = bar.unsafeWeakRef()
+  bar.syncNimdexButton(controller.editor.nimdexRequested())
+  bar.nimdexButton.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.toggleNimdex")
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if weakController.isNil or weakBar.isNil:
+      return
+    let controller = weakController[]
+    let editor = controller.editor
+    if controller.frontend.isNil:
+      return
+    let frontend = controller.frontend[]
+    let running = editor.nimdexRequested()
+    if running:
+      editor.disconnectNimdex()
+    else:
+      var command = editor.nimLspConfiguration().command
+      if not frontend.xWindowManager.isNil:
+        command = frontend.xWindowManager[].config.nimLspCommand
+      if command.len == 0:
+        if frontend.showSettings() and not frontend.xSettingsWindow.isNil:
+          let tabs = frontend.xSettingsWindow.contentView().viewWithIdentifier(
+              KosmoSettingsTabsIdentifier
+            )
+          if tabs of nimkit.TabView:
+            let tabView = nimkit.TabView(tabs)
+            for index in 0 ..< tabView.len:
+              if tabView[index].identifier() == KosmoNimdexSettingsTabIdentifier:
+                tabView.selectedIndex = index
+                break
+        return
+      let error = editor.connectNimdex(command)
+      if error.len > 0:
+        weakBar[].label.text = error
+        weakBar[].label.toolTip = error
+        return
+    if not frontend.xWindowManager.isNil:
+      let manager = frontend.xWindowManager[]
+      manager.config.nimdexStopped = running
+      discard manager.config.saveKosmoConfig(manager.configPath)
+    weakBar[].syncNimdexButton(editor.nimdexRequested())
+    for host in controller.hosts:
+      if not host.statusLabel.isNil and host.statusLabel.superview() of KosmoStatusBar:
+        KosmoStatusBar(host.statusLabel.superview()).syncNimdexButton(
+          editor.nimdexRequested()
+        )
+  bar.nimdexButton.action = nimkit.actionSelector("kosmo.toggleNimdex")
 
 proc syncSidebarButtons(frontend: KosmoApplication) =
   if frontend.isNil or frontend.documentView.isNil:

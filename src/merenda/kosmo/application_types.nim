@@ -146,6 +146,8 @@ type
     label: nimkit.Label
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
+    nimdexButton: KosmoStatusIconButton
+    nimdexPlayIcon, nimdexStopIcon: nimkit.SvgMtsdfResource
     keyModeChoice: nimkit.PopupMenuButton
     indexProgress: nimkit.ProgressIndicator
     indexSpinner: nimkit.ProgressIndicator

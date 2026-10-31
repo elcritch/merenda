@@ -164,10 +164,13 @@ proc waitForRenderedFrame(
 
 suite "NimKit threading":
   test "dedicated renderer support follows the active FigDraw build":
-    check nimkitBackend.dedicatedRendererSupported() == (
-      not runtimeForceOpenGlRequested() and
-      figdrawSiwin.backendSupportsDedicatedRenderThread(PreferredBackendKind)
-    )
+    when defined(merenda.softwareRenderer):
+      check not nimkitBackend.dedicatedRendererSupported()
+    else:
+      check nimkitBackend.dedicatedRendererSupported() == (
+        not runtimeForceOpenGlRequested() and
+        figdrawSiwin.backendSupportsDedicatedRenderThread(PreferredBackendKind)
+      )
 
   test "forced OpenGL keeps automatic rendering on the main thread":
     when UseOpenGlFallback:

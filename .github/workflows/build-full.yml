@@ -517,6 +517,24 @@ jobs:
     - name: Install Deps
       run: bash .github/scripts/install-deps.sh -t --update --features:nifDemo
 
+    - name: Install Mesa OpenGL for Windows renderer tests
+      if: runner.os == 'Windows'
+      uses: ssciwr/setup-mesa-dist-win@v3.0.0
+      with:
+        version: '26.0.3'
+        build-type: 'release-mingw'
+        deployment-choice: '1'
+
+    - name: Test Windows renderer fallbacks
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $env:FIGDRAW_FORCE_OPENGL = '0'
+        nim c -r --cc:gcc -d:figdrawTestVulkanInitFailure tests/nimkit/backend.nim
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        nim c -r --cc:gcc -d:figdrawTestVulkanInitFailure -d:merendaTestGpuFailure tests/nimkit/backend.nim
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
 

@@ -182,6 +182,13 @@ suite "Kosmo configuration":
     let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
     check frontend.editorView.editor.nimLspConfiguration() ==
       (enabled: true, command: command)
+    let toggle = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")
+    require toggle of Button
+    check Button(toggle).toolTip == "Stop Nimdex"
+    require Button(toggle).tryToPerform(performClick(), DynamicAgent(toggle))
+    check not frontend.editorView.editor.nimdexRequested()
+    check Button(toggle).toolTip == "Start Nimdex"
+    check loadKosmoConfig(path).nimdexStopped
 
   test "passes a persisted TCP endpoint through the standalone LSP launcher":
     let

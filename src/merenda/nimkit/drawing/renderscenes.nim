@@ -1165,9 +1165,18 @@ proc renderFrame*[BackendState](
   ## Renders the retained fragment graph without creating a monolithic snapshot.
   if scene.isNil:
     raise newException(ValueError, "cannot render a nil render scene")
-  renderer.renderFrame(
-    scene.tree, frameSize, clearMain = clearMain, clearColor = clearFrameColor
-  )
+  when defined(merenda.softwareRenderer) or defined(windows):
+    renderer.renderFrame(
+      scene.tree,
+      frameSize,
+      clearMain = clearMain,
+      clearColor = clearFrameColor,
+      allowOpenGlFallback = renderer.backendKind() != rbSoftware,
+    )
+  else:
+    renderer.renderFrame(
+      scene.tree, frameSize, clearMain = clearMain, clearColor = clearFrameColor
+    )
 
 proc frameGeneration*(scene: RenderScene): uint64 =
   if not scene.isNil:

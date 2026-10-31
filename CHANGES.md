@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add an experimental FigDraw software renderer switch for Siwin windows.
+- On Windows, probe Vulkan before transferring rendering to a worker and fall back
+  to OpenGL or software rendering when graphics initialization fails.
+
 - Display multiline, styled language-server hover information in editor tooltips.
 
 - Show language-server hover information in editor tooltips without moving the cursor.

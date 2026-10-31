@@ -4,6 +4,16 @@ import figdraw/windowing/siwinshim as figdrawSiwin
 import merenda/nimkit/app/backend as nimkitBackend
 import merenda/nimkit/foundation/events
 
+when defined(merenda.softwareRenderer) or (
+  defined(windows) and (
+    defined(merendaTestGpuFailure) or defined(figdrawTestVulkanInitFailure) or
+    defined(merendaTestVulkanBackend)
+  )
+):
+  import std/[monotimes, times]
+  import figdraw
+  import merenda/nimkit/foundation/types as nimkitTypes
+
 type EnvSnapshot = object
   name: string
   existed: bool
@@ -25,6 +35,94 @@ proc withCleanUiScaleEnv(body: proc() {.closure.}) =
         delEnv(item.name)
 
 suite "nimkit backend":
+  when defined(merenda.softwareRenderer) or
+      (defined(windows) and defined(merendaTestGpuFailure)):
+    test "software renderer presents a native window frame":
+      var host: nimkitBackend.HostWindow
+      var screenshot: Image
+      var renders = newRenders()
+      discard renders.addRoot(
+        Fig(
+          kind: nkRectangle,
+          screenBox: figdraw.rect(0, 0, 20, 20),
+          fill: rgba(255, 0, 0, 255),
+        )
+      )
+      let callbacks = nimkitBackend.HostWindowCallbacks(
+        onRender: proc() =
+          if not host.isNil:
+            host.render(renders, nimkitTypes.initSize(80, 60))
+            if host.renderCount() > 0:
+              screenshot = host.rendererOrNil().takeOneFrameScreenshot()
+      )
+      host = nimkitBackend.createHostWindow(
+        nimkitTypes.rect(20, 20, 80, 60),
+        "Software renderer test",
+        callbacks,
+        uiScaleOverride = some(1.25'f32),
+      )
+      defer:
+        host.close()
+      check host.rendererOrNil().backendKind() == rbSoftware
+      when defined(merenda.softwareRenderer):
+        check not nimkitBackend.dedicatedRendererSupported()
+      host.requestRender()
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while screenshot.isNil and getMonoTime() < deadline:
+        discard nimkitBackend.pollNativeEvents()
+        host.pump()
+        sleep(5)
+      require not screenshot.isNil
+      check screenshot.width > 0 and screenshot.height > 0
+      let pixel = screenshot[5, 5]
+      check pixel.r > 200 and pixel.g < 30 and pixel.b < 30 and pixel.a == 255
+
+  when defined(windows) and defined(figdrawTestVulkanInitFailure) and
+      not defined(merendaTestGpuFailure):
+    test "Windows Vulkan initialization failure falls back to OpenGL":
+      let host = nimkitBackend.createHostWindow(
+        nimkitTypes.rect(20, 20, 80, 60),
+        "Vulkan fallback test",
+        nimkitBackend.HostWindowCallbacks(),
+      )
+      defer:
+        host.close()
+      check host.rendererOrNil().backendKind() == rbOpenGL
+
+  when defined(windows) and defined(merendaTestVulkanBackend):
+    test "Windows Vulkan presents frames on the dedicated renderer":
+      var runtime = nimkitBackend.newThreadRendererRuntime()
+      let host = nimkitBackend.createHostWindow(
+        nimkitTypes.rect(20, 20, 80, 60),
+        "Vulkan presentation test",
+        nimkitBackend.HostWindowCallbacks(),
+      )
+      defer:
+        runtime.stop()
+        runtime.join()
+        host.close()
+      require host.rendererOrNil().backendKind() == rbVulkan
+      runtime.start()
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while not runtime.client.isRunning() and getMonoTime() < deadline:
+        discard nimkitBackend.pollNativeEvents()
+        sleep(5)
+      require runtime.client.isRunning()
+      let client =
+        host.attachThreadRenderer(runtime.client, nimkitTypes.initSize(80, 60))
+      require not client.isNil
+      require client.submitRenders(newRenders(), nimkitTypes.initSize(80, 60))
+      var rendered = false
+      while not rendered and getMonoTime() < deadline:
+        discard nimkitBackend.pollNativeEvents()
+        host.pump()
+        var event: nimkitBackend.ThreadHostEvent
+        while client.pollEvent(event):
+          if event.kind == nimkitBackend.theRendered:
+            rendered = true
+        sleep(5)
+      check rendered
+
   test "layer surface APIs are limited to Wayland platforms":
     when defined(linux) or defined(bsd):
       check declared(nimkitBackend.LayerSurfaceConfig)

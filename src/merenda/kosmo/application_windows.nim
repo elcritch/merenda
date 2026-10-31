@@ -1412,6 +1412,7 @@ proc newKosmoApplication*(
   sidebarPane.observeWindow(result.window)
   documentView.statusBar.observeWindow(result.window)
   documentView.statusBar.configureKeyModeChoice(controller)
+  documentView.statusBar.configureNimdexButton(controller)
   let weakFrontend = result.unsafeWeakRef()
   if hasFileBrowser:
     documentView.statusBar.fileButton.target = nimkit.newActionTarget(

@@ -1009,6 +1009,10 @@ proc newKosmoEditor*(
     discard result.editor.handleKeyCombo(moeKeys.toSpecialKeyCombo(moeKeys.skEscape))
   discard forwardMoeMessages()
 
+proc nimdexRequested*(editor: KosmoEditor): bool =
+  ## Return whether a Nimdex connection has been requested.
+  not editor.isNil and editor.nimLspRequested
+
 proc nimdexConnectionStatus*(editor: KosmoEditor): string =
   ## Describe the actual Nim language server connection state.
   if editor.isNil or editor.editor.isNil or not editor.nimLspRequested:

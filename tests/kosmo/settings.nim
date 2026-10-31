@@ -122,6 +122,16 @@ suite "Kosmo settings":
     require stop.tryToPerform(performClick(), DynamicAgent(stop))
     check not connected
 
+  test "Nimdex status button opens settings when no command is configured":
+    let toggle = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")
+    require toggle of Button
+    check Button(toggle).toolTip == "Start Nimdex"
+    require settingsTabs.selectPage(KosmoTerminalSettingsTabIdentifier)
+    require Button(toggle).tryToPerform(performClick(), DynamicAgent(toggle))
+    check settingsTabs.selectedTabViewItem().identifier() ==
+      KosmoNimdexSettingsTabIdentifier
+    check not frontend.editorView.editor.nimdexRequested()
+
   test "status bar keymode popup switches editing and follows settings":
     frontend.window.setContentView(frontend.contentView)
     let choiceView =
@@ -139,6 +149,16 @@ suite "Kosmo settings":
     require percentage of Label
     check progress.hidden
     check percentage.hidden
+    percentage.hidden = false
+    progress.hidden = false
+    Label(percentage).text = "100.00%"
+    frontend.contentView.layoutSubtreeIfNeeded()
+    percentage.superview().setNeedsLayout()
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check percentage.frame().size.width >= Label(percentage).sizeThatFits().width
+    check progress.frame().maxX <= percentage.frame().minX
+    percentage.hidden = true
+    progress.hidden = true
     let choice = PopupMenuButton(choiceView)
     check choice.menu().len == 2
     check choice.menu()[0].title == "moe (vim)"

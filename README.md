@@ -502,6 +502,21 @@ include light and dark variants of popular Neovim palettes; [palette sources and
 licenses](data/moe/themes/SOURCES.md) are listed alongside them.
 Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
+To try FigDraw's experimental CPU renderer, compile with
+`-d:merenda.softwareRenderer`, for example
+`nim ic -d:merenda.softwareRenderer src/merenda/kosmo/kosmo.nim`. It uses Siwin software
+windows and renders on the window thread without a GPU context. Wayland layer
+surfaces are not supported by this switch, and FigDraw skips backdrop blur in
+its software renderer. On Windows, Kosmo also tries software rendering automatically
+if Vulkan and OpenGL cannot initialize.
+
+On a Windows machine with a working Vulkan driver, test Vulkan presentation on
+the dedicated renderer thread with:
+
+```sh
+nim ic -r -d:merendaTestVulkanBackend tests/nimkit/backend.nim
+```
+
 To use Nimdex for Nim language features, open **Kosmo Settings → Nimdex**.
 Choose **Launch locally** and enter a Nimdex executable or command, or choose
 **Connect to daemon** and enter an address such as `tcp://127.0.0.1:9257`.

@@ -75,6 +75,10 @@ const
     """<svg width="24" height="24" viewBox="0 0 24 24"><path fill="#000" d="M2 5h8l2 2h10v13H2z"/></svg>"""
   KosmoFindIconSvg =
     """<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="#000" stroke-width="2.4"/><path fill="#000" d="M14.2 13l7 7-1.7 1.7-7-7z"/></svg>"""
+  KosmoPlayIconSvg =
+    """<svg width="24" height="24" viewBox="0 0 24 24"><path fill="#000" d="M6 3l15 9L6 21z"/></svg>"""
+  KosmoStopIconSvg =
+    """<svg width="24" height="24" viewBox="0 0 24 24"><path fill="#000" d="M5 5h14v14H5z"/></svg>"""
 
 # Shared type declarations remain in the facade's lexical scope so implementation
 # fragments can keep private fields private and avoid artificial module cycles.

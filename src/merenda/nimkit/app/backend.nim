@@ -11,6 +11,11 @@ when not compileOption("threads") and not defined(nimdoc):
 import figdraw as figrender
 from figdraw import clearColor, figUiScale, setFigUiScale, Renders, encodePng
 import figdraw/windowing as siwinshim
+when defined(merenda.softwareRenderer) or defined(windows):
+  import figdraw/software/siwin as softwareSiwin
+when defined(windows):
+  import pkg/chronicles
+  import siwin/platforms/winapi/window as siwinWinapi
 
 type
   SiwinWindow = siwinshim.Window
@@ -236,6 +241,7 @@ type
     xHasUiScaleOverride: bool
     xUiScaleOverride: float32
     xTransparent: bool
+    xSoftwareRendering: bool
     xResources: RenderResourceManager
     when defined(merenda.devControl):
       captureNextFrame: uint64
@@ -1563,25 +1569,60 @@ when defined(merenda.devControl):
   proc takeCapturedFrame*(host: HostWindow): RenderCapture =
     result = move host.capturedFrame
 
+when defined(merenda.softwareRenderer) or defined(windows):
+  proc softwareFrameSize(host: HostWindow): Vec2 =
+    let buffer = host.xNativeWindow.pixelBuffer()
+    if buffer.data.isNil or buffer.size.x <= 0 or buffer.size.y <= 0:
+      return
+    let scale = figUiScale()
+    result = vec2(buffer.size.x.float32, buffer.size.y.float32) / scale
+    for axis in 0 ..< 2:
+      let pixels = if axis == 0: buffer.size.x else: buffer.size.y
+      if ceil(result[axis] * scale).int > pixels:
+        result[axis] = cast[float32](cast[uint32](result[axis]) - 1'u32)
+
 proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
     return
   host.xRenderRequested = false
   host.refreshContentScale()
   host.xResources.prepare(host.xRenderer)
-  let size = vec2(logicalSize.width, logicalSize.height)
-  host.xRenderer.beginFrame()
-  if host.xTransparent:
-    host.xRenderer.renderFrame(renders, size, clearColor = clearColor)
+  var size = vec2(logicalSize.width, logicalSize.height)
+  when defined(merenda.softwareRenderer) or defined(windows):
+    if host.xSoftwareRendering:
+      size = host.softwareFrameSize()
+  if size.x <= 0 or size.y <= 0:
+    return
+  if not host.xSoftwareRendering:
+    host.xRenderer.beginFrame()
+  when defined(merenda.softwareRenderer) or defined(windows):
+    if host.xSoftwareRendering and host.xTransparent:
+      figrender.renderFrame(
+        host.xRenderer,
+        renders,
+        size,
+        clearColor = clearColor,
+        allowOpenGlFallback = false,
+      )
+    elif host.xSoftwareRendering:
+      figrender.renderFrame(host.xRenderer, renders, size, allowOpenGlFallback = false)
+    elif host.xTransparent:
+      host.xRenderer.renderFrame(renders, size, clearColor = clearColor)
+    else:
+      host.xRenderer.renderFrame(renders, size)
   else:
-    host.xRenderer.renderFrame(renders, size)
+    if host.xTransparent:
+      host.xRenderer.renderFrame(renders, size, clearColor = clearColor)
+    else:
+      host.xRenderer.renderFrame(renders, size)
   when defined(merenda.devControl):
     if host.captureNextFrame != 0:
       host.capturedFrame = captureFrame(
         host.xRenderer, host.captureNextFrame, host.xRenderCount.uint64 + 1, logicalSize
       )
       host.captureNextFrame = 0
-  host.xRenderer.endFrame()
+  if not host.xSoftwareRendering:
+    host.xRenderer.endFrame()
   inc host.xRenderCount
 
 proc render*(host: HostWindow, scene: RenderScene, logicalSize: Size) =
@@ -1591,11 +1632,17 @@ proc render*(host: HostWindow, scene: RenderScene, logicalSize: Size) =
   host.xRenderRequested = false
   host.refreshContentScale()
   host.xResources.prepare(host.xRenderer, scene.renderResources())
-  let size = vec2(logicalSize.width, logicalSize.height)
+  var size = vec2(logicalSize.width, logicalSize.height)
+  when defined(merenda.softwareRenderer) or defined(windows):
+    if host.xSoftwareRendering:
+      size = host.softwareFrameSize()
+  if size.x <= 0 or size.y <= 0:
+    return
   recordTerminalTrace(
     "render-prepared", cast[uint64](host), host.xRenderCount.uint64 + 1
   )
-  host.xRenderer.beginFrame()
+  if not host.xSoftwareRendering:
+    host.xRenderer.beginFrame()
   recordTerminalTrace("render-begun", cast[uint64](host), host.xRenderCount.uint64 + 1)
   if host.xTransparent:
     scene.renderFrame(host.xRenderer, size, clearFrameColor = clearColor)
@@ -1608,14 +1655,16 @@ proc render*(host: HostWindow, scene: RenderScene, logicalSize: Size) =
         host.xRenderer, host.captureNextFrame, host.xRenderCount.uint64 + 1, logicalSize
       )
       host.captureNextFrame = 0
-  host.xRenderer.endFrame()
+  if not host.xSoftwareRendering:
+    host.xRenderer.endFrame()
   inc host.xRenderCount
   recordTerminalTrace("present", cast[uint64](host), host.xRenderCount.uint64)
 
 proc dedicatedRendererSupported*(): bool =
   # Renderer commands retire source-thread ORC registrations before transfer.
-  not figrender.runtimeForceOpenGlRequested() and
-    siwinshim.backendSupportsDedicatedRenderThread(figrender.PreferredBackendKind)
+  when not defined(merenda.softwareRenderer):
+    not figrender.runtimeForceOpenGlRequested() and
+      siwinshim.backendSupportsDedicatedRenderThread(figrender.PreferredBackendKind)
 
 proc updatePresentationTarget*(host: HostWindow) =
   if not host.isNil and not host.xNativeWindow.isNil:
@@ -1853,6 +1902,50 @@ proc installEventHandlers(host: HostWindow) =
     ,
   )
 
+when defined(merenda.softwareRenderer) or defined(windows):
+  proc initSoftwareRenderer(host: HostWindow) =
+    when defined(windows):
+      if host.xNativeWindow of siwinWinapi.WindowWinapiSoftwareRendering:
+        siwinWinapi
+          .WindowWinapiSoftwareRendering(host.xNativeWindow)
+          .setSoftwarePresentEnabled(true)
+    host.xRenderer = nil
+    host.xRenderer = figrender.newFigRenderer(
+      softwareSiwin.newSiwinSoftwareContext(host.xNativeWindow),
+      siwinshim.SiwinRenderBackend(window: host.xNativeWindow),
+    )
+    host.xSoftwareRendering = true
+
+when defined(windows) and figrender.UseVulkanBackend:
+  proc initWindowsRenderer(host: HostWindow) =
+    try:
+      host.xRenderer = figrender.newFigRenderer(
+        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+      )
+      host.xRenderer.setupBackend(host.xNativeWindow)
+      host.xPresentationTarget = host.xRenderer.presentationTarget()
+    except CatchableError as error:
+      warn "Graphics initialization failed; using software rendering",
+        reason = error.msg
+      host.initSoftwareRenderer()
+
+  proc probeWindowsRenderer(host: HostWindow, logicalSize: Size) =
+    if host.xSoftwareRendering:
+      return
+    try:
+      when defined(merendaTestGpuFailure):
+        raise newException(ValueError, "Injected GPU presentation failure")
+      var probe = figrender.newRenders()
+      host.xRenderer.beginFrame()
+      host.xRenderer.renderFrame(
+        probe, vec2(max(logicalSize.width, 1), max(logicalSize.height, 1))
+      )
+      host.xRenderer.endFrame()
+      host.xRenderer.finishPendingFrames()
+    except CatchableError as error:
+      warn "Graphics presentation failed; using software rendering", reason = error.msg
+      host.initSoftwareRenderer()
+
 proc createHostWindow*(
     frame: Rect,
     title: string,
@@ -1875,18 +1968,31 @@ proc createHostWindow*(
   when defined(merenda.devControl):
     if backgroundLaunchRequested():
       putEnv("SIWIN_NO_ACTIVATE", "1")
-  result.xNativeWindow = siwinshim.newSiwinWindow(
-    size = size,
-    title = title,
-    vsync = true,
-    resizable = true,
-    transparent = transparent,
-  )
-  result.xRenderer = figrender.newFigRenderer(
-    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-  )
-  result.xRenderer.setupBackend(result.xNativeWindow)
-  result.xPresentationTarget = result.xRenderer.presentationTarget()
+  when defined(merenda.softwareRenderer):
+    result.xNativeWindow = siwinshim.sharedSiwinGlobals().newSoftwareRenderingWindow(
+        size = size, title = title, resizable = true, transparent = transparent
+      )
+    result.initSoftwareRenderer()
+  elif defined(windows) and figrender.UseVulkanBackend:
+    # Vulkan and its OpenGL fallback can both present through this native
+    # window; retain its pixel buffer if neither GPU backend initializes.
+    result.xNativeWindow = siwinshim.sharedSiwinGlobals().newSoftwareRenderingWindow(
+        size = size, title = title, resizable = true, transparent = transparent
+      )
+    result.initWindowsRenderer()
+  else:
+    result.xNativeWindow = siwinshim.newSiwinWindow(
+      size = size,
+      title = title,
+      vsync = true,
+      resizable = true,
+      transparent = transparent,
+    )
+    result.xRenderer = figrender.newFigRenderer(
+      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
+    result.xRenderer.setupBackend(result.xNativeWindow)
+    result.xPresentationTarget = result.xRenderer.presentationTarget()
   result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
   result.configureHostUiScale(scaleOverride)
   if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
@@ -1905,6 +2011,9 @@ proc createHostWindow*(
     result.xNativeWindow.firstStep()
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
+  when defined(windows) and figrender.UseVulkanBackend and
+      not defined(merenda.softwareRenderer):
+    result.probeWindowsRenderer(frame.size)
 
 when defined(linux) or defined(bsd):
   proc createLayerSurfaceHostWindow*(
@@ -1915,6 +2024,9 @@ when defined(linux) or defined(bsd):
       transparent = false,
       uiScaleOverride: Option[float32] = none(float32),
   ): HostWindow =
+    when defined(merenda.softwareRenderer):
+      raise
+        newException(ValueError, "Software rendering does not support layer surfaces")
     let
       scaleOverride =
         if uiScaleOverride.isSome:
@@ -1988,11 +2100,19 @@ proc createPopupHostWindow*(
       owner.xNativeWindow, placement, transparent = true, grab = true
     )
   result.configureHostUiScale(scaleOverride)
-  result.xRenderer = figrender.newFigRenderer(
-    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-  )
-  result.xRenderer.setupBackend(result.xNativeWindow)
-  result.xPresentationTarget = result.xRenderer.presentationTarget()
+  when defined(merenda.softwareRenderer):
+    result.initSoftwareRenderer()
+  elif defined(windows) and figrender.UseVulkanBackend:
+    if owner.xSoftwareRendering:
+      result.initSoftwareRenderer()
+    else:
+      result.initWindowsRenderer()
+  else:
+    result.xRenderer = figrender.newFigRenderer(
+      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
+    result.xRenderer.setupBackend(result.xNativeWindow)
+    result.xPresentationTarget = result.xRenderer.presentationTarget()
   result.configureTransparentPresentation()
   result.registerHost()
   result.installEventHandlers()
@@ -2006,6 +2126,9 @@ proc createPopupHostWindow*(
   result.xNativeWindow.reposition(placement)
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
+  when defined(windows) and figrender.UseVulkanBackend and
+      not defined(merenda.softwareRenderer):
+    result.probeWindowsRenderer(result.logicalSize(initSize(1, 1)))
 
 proc pump*(host: HostWindow) =
   if not host.isReady:
