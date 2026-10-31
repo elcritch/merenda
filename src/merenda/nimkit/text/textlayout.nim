@@ -2316,6 +2316,8 @@ func sameSourceRange(a, b: GlyphSourceRange): bool =
   a.byteStart == b.byteStart and a.byteEnd == b.byteEnd and a.runeStart == b.runeStart and
     a.runeEnd == b.runeEnd
 
+const CaretHitTieScale = 1.0e-4'f32
+
 func clusterAppearsRtl(
     layout: GlyphArrangement, firstGlyph, lastGlyph, lineStart, lineStop: int
 ): bool =
@@ -2351,8 +2353,15 @@ proc lineBoundedIndexAtPoint(
 
   template considerCaret(index: int, caretX: float32) =
     if index >= selectableStart and index <= selectableStop:
-      let distance = abs(point.x - caretX)
-      if distance < closestDistance:
+      let
+        distance = abs(point.x - caretX)
+        # Adjacent glyph edges come from independently rounded float32 paths, so a
+        # point centered on a glyph lands within float noise of an exact tie
+        # between the carets on both sides. Treat near-equal distances as a tie
+        # and keep the lower index so the glyph containing the point wins.
+        tieEpsilon = max(abs(point.x), abs(caretX)) * CaretHitTieScale
+      if distance < closestDistance - tieEpsilon or
+          (distance <= closestDistance + tieEpsilon and index < closestIndex):
         closestDistance = distance
         closestIndex = index
 

@@ -1529,7 +1529,14 @@ proc setVisible*(host: HostWindow, visible: bool) =
     return
   if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused() and
       getEnv("SIWIN_NO_ACTIVATE") != "1":
+    # Raising an already mapped window needs the unmap+remap below to make the
+    # window manager focus it. Remapping applies the window manager's placement
+    # again, so re-assert the window's actual position afterwards.
+    let savedPos = host.xNativeWindow.pos
     host.xNativeWindow.visible = false
+    host.xNativeWindow.visible = true
+    host.xNativeWindow.pos = savedPos
+    return
   host.xNativeWindow.visible = visible
 
 when defined(merenda.devControl):
@@ -2012,6 +2019,10 @@ proc createHostWindow*(
     result.xNativeWindow.visible = true
   else:
     result.xNativeWindow.firstStep()
+  # Re-assert the requested frame origin after mapping: the window manager
+  # applies its own placement when a window is mapped and ignores the position
+  # an app set before the window became visible.
+  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
   when defined(windows) and figrender.UseVulkanBackend and

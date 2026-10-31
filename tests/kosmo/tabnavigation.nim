@@ -545,3 +545,137 @@ suite "Kosmo editor pane tab navigation":
     check frontend.window.firstResponder() != Responder(left.editorView)
     check frontend.window.firstResponder() != Responder(rightTop.editorView)
     check frontend.window.firstResponder() != Responder(rightBottom.editorView)
+
+  test "<right> and <left> move between etabs inside a split pane with several etabs":
+    let
+      root = createTempDir("merenda-kosmo-tabnav-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Navigation Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+
+    # Split the pane to the right so two panes sit side by side, then open a
+    # second file into the active pane so it holds several etabs.
+    check frontend.editorView.tryToPerform(actionSelector(KosmoSplitVerticalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(secondPath)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let panes = frontend.contentView.sortedEditorPanes()
+    require panes.len == 2
+    let
+      left = panes[0]
+      right = panes[1]
+
+    let models = right.documentTabs.documentTabModels()
+    require models.len == 2
+
+    # <right> from the first etab selects the next etab and keeps the focus on
+    # the strip instead of moving to the left pane.
+    check right.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    check frontend.window.makeFirstResponder(right.documentTabs)
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)
+    check right.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+
+    # <left> moves back to the previous etab on the same strip.
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)
+    check right.documentTabs.selectedDocumentTabIdentifier == models[0].identifier
+
+    # <left> at the first etab navigates the split panes: the pane to the left.
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(left.documentTabs)
+
+    # <right> from the single-etab left pane still moves to the right pane.
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)
+
+    # <right> at the last etab of the rightmost pane leaves the pane area.
+    check right.documentTabs.selectDocumentTabWithIdentifier(models[1].identifier)
+    check frontend.window.makeFirstResponder(right.documentTabs)
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, text: "")
+    )
+    check frontend.window.firstResponder() != Responder(left.documentTabs)
+    check frontend.window.firstResponder() != Responder(right.documentTabs)
+    check frontend.window.firstResponder() != Responder(right.editorView)
+
+  test "editor normal mode <tab> returns to the pane's own strip in a split":
+    let
+      root = createTempDir("merenda-kosmo-tabnav-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Navigation Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+
+    # Split the pane to the right, then open a second file into the active
+    # pane so its strip holds several etabs.
+    check frontend.editorView.tryToPerform(actionSelector(KosmoSplitVerticalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(secondPath)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let panes = frontend.contentView.sortedEditorPanes()
+    require panes.len == 2
+    let
+      left = panes[0]
+      right = panes[1]
+    require right.documentTabs.documentTabModels().len == 2
+
+    # <tab> in the editor's normal mode returns to the pane's own etab strip,
+    # not the next split's strip.
+    check frontend.window.makeFirstResponder(right.editorView)
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)
+
+    # The next <tab> cycles the etab selection on that strip.
+    let models = right.documentTabs.documentTabModels()
+    check right.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    check frontend.window.makeFirstResponder(right.documentTabs)
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)
+    check right.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+
+    # <shift><tab> from the editor returns to the same pane's strip as well.
+    check frontend.window.makeFirstResponder(right.editorView)
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "", modifiers: {kmShift})
+    )
+    check frontend.window.firstResponder() == Responder(right.documentTabs)

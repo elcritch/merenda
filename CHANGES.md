@@ -15,6 +15,18 @@
 
 - Show Nimdex indexing progress beside the editor input mode selector.
 
+- Keep Kosmo's main window where it is when the open file dialog closes: raising
+  an already mapped window forces the window manager to focus it by unmapping
+  and remapping it, which applied the window manager's placement again. The
+  window's actual position is re-asserted after the remap.
+
+- Navigate the etabs of a pane with several editor tabs using the arrow keys:
+  `<left>` and `<right>` on a focused etab strip select the previous or next
+  etab and only navigate the split panes at the first or last etab, keeping
+  the spatial navigation between splits intact. In the editor's normal mode
+  `<tab>` and `<shift>-<tab>` return to the pane's own etab strip instead of
+  jumping to the next split's strip or another ui element.
+
 - Bundle dark and light Moe themes from ten popular Neovim theme families, plus Solarized.
 
 - Choose themes for Moe, terminals, or both from Kosmo settings, with separate saved choices.

@@ -1684,6 +1684,15 @@ proc openPath*(manager: KosmoWindowManager, path: string): bool {.discardable.} 
   elif fileExists(path):
     result = not manager.openFileWindow(path).isNil
 
+proc centerWindowOnWindow(panel, window: nimkit.Window) =
+  ## Center the panel on the window so dialogs appear where the user works.
+  let
+    frame = window.frame()
+    size = panel.frame().size
+    x = max(frame.origin.x + (frame.size.width - size.width) / 2, 0)
+    y = max(frame.origin.y + (frame.size.height - size.height) / 2, 0)
+  panel.frame = nimkit.rect(nimkit.initPoint(x, y), size)
+
 proc chooseFile(frontend: KosmoApplication) =
   if frontend.isNil:
     return
@@ -1693,6 +1702,7 @@ proc chooseFile(frontend: KosmoApplication) =
   panel.message = "Open a file or add a folder to this window."
   panel.canChooseDirectories = true
   panel.directoryUrl = frontend.fileTree.rootPath
+  centerWindowOnWindow(panel.window, frontend.window)
   if frontend.application.runModal(panel) == nimkit.PanelResponseOk:
     discard frontend.openPath(nimkit.filePathFromUrl(panel.selectedUrl()))
 

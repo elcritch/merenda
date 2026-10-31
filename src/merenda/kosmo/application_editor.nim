@@ -1929,7 +1929,9 @@ proc handleDocumentTabsKeyEquivalent(
   ## Tab cycles the etab selection on the focused strip, Return enters the
   ## editor, and arrows navigate the split panes by row and column; every
   ## other key keeps the standard widget handling. At the first or last etab
-  ## Tab falls through to the window key view traversal.
+  ## Tab falls through to the window key view traversal. Left and Right move
+  ## between the etabs of a pane holding several etabs and only navigate the
+  ## split panes at the strip edges.
   if view.isNil or view.tabsDelegate.isNil:
     return
   if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {}:
@@ -1964,7 +1966,18 @@ proc handleDocumentTabsKeyEquivalent(
         of nimkit.keyArrowRight: kpcFocusRight
         of nimkit.keyArrowUp: kpcFocusAbove
         else: kpcFocusBelow
-      neighbor = controller.spatialNeighborGroup(view.dockGroup[], direction)
+    # Left and Right move between the etabs of a pane holding several etabs
+    # before they leave it: only at the first or last etab do they navigate the
+    # split panes, so the spatial navigation between splits stays intact.
+    if direction in {kpcFocusLeft, kpcFocusRight}:
+      let next =
+        tabs.selectedIndex() + (if direction == kpcFocusRight: 1 else: -1)
+      if next >= 0 and next < tabs.len():
+        view.tabsDelegate.keyboardTabbing = true
+        tabs.selectDocumentTabAtIndex(next)
+        view.tabsDelegate.keyboardTabbing = false
+        return true
+    let neighbor = controller.spatialNeighborGroup(view.dockGroup[], direction)
     if not neighbor.isNil:
       discard controller.focusPaneTabStrip(neighbor)
       return true
@@ -2075,6 +2088,19 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoRedoAction:
       discard view.editor.redo()
       view.refresh()
+    of "insertTab", "insertBacktab":
+      # Normal mode Tab and Shift-Tab return to the pane's own etab strip so
+      # the tab navigation continues within the pane instead of jumping to the
+      # next split's strip or another ui element; Return enters the editor
+      # again. Search controls keep the standard widget handling.
+      let owner = view.window()
+      if owner of nimkit.Window and nimkit.Window(owner).firstResponder() == view and
+          not view.documentTabs.isNil:
+        discard nimkit.Window(owner).makeFirstResponder(
+            nimkit.Responder(view.documentTabs)
+          )
+        return true
+      return false
     else:
       return false
     true
