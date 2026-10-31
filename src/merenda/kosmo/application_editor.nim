@@ -92,6 +92,13 @@ proc splitCurrentPaneTab(
   position: nimkit.DockPosition,
 ): bool
 
+proc duplicatePaneTab(
+  controller: KosmoDockController,
+  source: KosmoEditorGroup,
+  identifier: string,
+  position: nimkit.DockPosition,
+): bool
+
 proc performPaneCommand(
   controller: KosmoDockController, source: KosmoEditorGroup, command: KosmoPaneCommand
 ): bool
@@ -1478,9 +1485,13 @@ proc closeTabWithConfirmation(
     view: KosmoEditorView,
     group: KosmoEditorGroup,
     id: KosmoBufferId,
+    afterClose: proc() {.closure.} = nil,
 ): bool =
   if not controller.bufferHasUnsavedData(id):
-    return view.closeTab(id).closed
+    result = view.closeTab(id).closed
+    if result and not afterClose.isNil:
+      afterClose()
+    return
   discard controller.presentUnsavedChangesConfirmation(
     group.window,
     proc() =
@@ -1490,6 +1501,8 @@ proc closeTabWithConfirmation(
         # tab strip has not performed its normal removal and selection step.
         discard view.documentTabs.removeDocumentTabWithIdentifier(id.tabIdentifier)
         controller.finishTabClose(view)
+        if not afterClose.isNil:
+          afterClose()
     ,
   )
 
@@ -2083,6 +2096,188 @@ proc targetView(handler: KosmoEditorTabsHandler): KosmoEditorView =
   if not handler.editorView.isNil:
     return handler.editorView[]
 
+proc contextPaneTabs(
+    handler: KosmoEditorTabsHandler, view: KosmoEditorView
+): seq[nimkit.DocumentTabs] =
+  ## Tab strips the etab context menu acts on: every pane's strip of the dock
+  ## setup, or only the clicked strip without one.
+  if not handler.dockController.isNil:
+    for group in handler.dockController[].groups:
+      if not group.isNil and not group.editorView.isNil and
+          not group.editorView.documentTabs.isNil:
+        result.add group.editorView.documentTabs
+    return
+  if not view.documentTabs.isNil:
+    result.add view.documentTabs
+
+proc otherEditorTabsRemain(
+    handler: KosmoEditorTabsHandler, view: KosmoEditorView, keepIdentifier: string
+): bool =
+  ## True when a pane still shows an etab other than the clicked one.
+  for tabs in contextPaneTabs(handler, view):
+    for identifier in tabs.documentTabIdentifiers():
+      if tabs != view.documentTabs or identifier != keepIdentifier:
+        return true
+
+proc groupForTabStrip(
+    controller: KosmoDockController, tabs: nimkit.DocumentTabs
+): KosmoEditorGroup =
+  for group in controller.groups:
+    if not group.isNil and not group.editorView.isNil and
+        group.editorView.documentTabs == tabs:
+      return group
+
+proc closeTabBatch(
+    handler: KosmoEditorTabsHandler,
+    pending: seq[tuple[tabs: nimkit.DocumentTabs, identifier: string]],
+) =
+  ## Close the given editor tabs in order. A dirty tab defers to the unsaved
+  ## changes confirmation; accepting it closes the tab and resumes the
+  ## remaining tabs, while cancelling keeps them open.
+  if handler.isNil:
+    return
+  let controller = handler.dockController
+  for index, entry in pending:
+    block route:
+      if not controller.isNil:
+        var id: KosmoBufferId
+        if entry.identifier.parseTabIdentifier(id):
+          let
+            group = controller[].groupForTabStrip(entry.tabs)
+            item = entry.tabs.documentTabItemWithIdentifier(entry.identifier)
+          if not group.isNil and not group.editorView.isNil and
+              not group.editorView.syncingTabs and entry.tabs.canCloseDocumentTab(item) and
+              not controller[].bufferIsVisibleOutside(group, id) and
+              controller[].bufferHasUnsavedData(id):
+            # The close defers to the unsaved changes confirmation. Accepting
+            # it closes this tab and resumes the remaining tabs, cancelling
+            # keeps them open.
+            let
+              remaining = pending[index + 1 .. ^1]
+              weakHandler = handler.unsafeWeakRef()
+            discard controller[].closeTabWithConfirmation(
+              group.editorView,
+              group,
+              id,
+              proc() =
+                if not weakHandler.isNil:
+                  closeTabBatch(weakHandler[], remaining)
+              ,
+            )
+            return
+      if not entry.tabs.closeDocumentTabWithIdentifier(entry.identifier):
+        return
+
+proc closeTabsExcept(
+    handler: KosmoEditorTabsHandler, view: KosmoEditorView, keepIdentifier: string
+) =
+  ## Close every other editor tab of every pane, pausing at a deferred
+  ## unsaved-changes confirmation and stopping when the standard close flow
+  ## rejects a tab, for example a cancelled save confirmation.
+  var pending: seq[tuple[tabs: nimkit.DocumentTabs, identifier: string]]
+  for tabs in contextPaneTabs(handler, view):
+    for identifier in tabs.documentTabIdentifiers():
+      if tabs == view.documentTabs and identifier == keepIdentifier:
+        continue
+      pending.add (tabs, identifier)
+  closeTabBatch(handler, pending)
+
+proc duplicateTabTo(
+    handler: KosmoEditorTabsHandler,
+    view: KosmoEditorView,
+    identifier: string,
+    position: nimkit.DockPosition,
+) =
+  ## Duplicate the etab with the identifier into a new pane at the position.
+  if handler.dockController.isNil or view.dockGroup.isNil:
+    return
+  discard
+    handler.dockController[].duplicatePaneTab(view.dockGroup[], identifier, position)
+
+proc dismissActionPopup(sender: nimkit.DynamicAgent) =
+  ## End the context menu session before an action that can present a modal
+  ## sheet. The popup teardown closes the owner's auxiliary windows, which
+  ## would otherwise dismiss the sheet before it can be answered.
+  if sender of nimkit.PopupMenuButton:
+    nimkit.PopupMenuButton(sender).closePopup()
+
+proc tabContextMenu(
+    handler: KosmoEditorTabsHandler, item: nimkit.DocumentTabItem
+): nimkit.Menu =
+  ## Build actions for the clicked etab, retaining its identifier while the
+  ## menu is open.
+  if item.isNil or item.identifier().len == 0:
+    return
+  let view = handler.targetView()
+  if view.isNil:
+    return
+  let
+    weakHandler = handler.unsafeWeakRef()
+    identifier = item.identifier()
+  result = nimkit.newMenu("Tab Actions")
+  block:
+    let
+      closeSelector = nimkit.actionSelector("kosmo.editorTabs.close")
+      closeItem = nimkit.newMenuItem("Close", closeSelector)
+    closeItem.validates = false
+    closeItem.enabled = view.documentTabs.canCloseDocumentTab(item)
+    closeItem.target = nimkit.newActionTarget(closeSelector) do(
+      sender: nimkit.DynamicAgent
+    ):
+      dismissActionPopup(sender)
+      if not weakHandler.isNil:
+        let view = weakHandler[].targetView()
+        if not view.isNil:
+          discard view.documentTabs.closeDocumentTabWithIdentifier(identifier)
+    discard result.addItem(closeItem)
+  block:
+    let
+      closeOthersSelector = nimkit.actionSelector("kosmo.editorTabs.closeOthers")
+      closeOthersItem = nimkit.newMenuItem("Close others", closeOthersSelector)
+    closeOthersItem.validates = false
+    closeOthersItem.enabled = otherEditorTabsRemain(handler, view, identifier)
+    closeOthersItem.target = nimkit.newActionTarget(closeOthersSelector) do(
+      sender: nimkit.DynamicAgent
+    ):
+      dismissActionPopup(sender)
+      if not weakHandler.isNil:
+        let view = weakHandler[].targetView()
+        if not view.isNil:
+          closeTabsExcept(weakHandler[], view, identifier)
+    discard result.addItem(closeOthersItem)
+  let duplicatesEnabled = not handler.dockController.isNil and not view.dockGroup.isNil
+  discard result.addSeparator()
+  block:
+    let
+      rightSelector = nimkit.actionSelector("kosmo.editorTabs.duplicateRight")
+      rightItem = nimkit.newMenuItem("Duplicate right", rightSelector)
+    rightItem.validates = false
+    rightItem.enabled = duplicatesEnabled
+    rightItem.target = nimkit.newActionTarget(rightSelector) do(
+      sender: nimkit.DynamicAgent
+    ):
+      discard sender
+      if not weakHandler.isNil:
+        let view = weakHandler[].targetView()
+        if not view.isNil:
+          duplicateTabTo(weakHandler[], view, identifier, nimkit.dpRight)
+    discard result.addItem(rightItem)
+  block:
+    let
+      belowSelector = nimkit.actionSelector("kosmo.editorTabs.duplicateBelow")
+      belowItem = nimkit.newMenuItem("Duplicate below", belowSelector)
+    belowItem.validates = false
+    belowItem.enabled = duplicatesEnabled
+    belowItem.target = nimkit.newActionTarget(belowSelector) do(
+      sender: nimkit.DynamicAgent
+    ):
+      discard sender
+      if not weakHandler.isNil:
+        let view = weakHandler[].targetView()
+        if not view.isNil:
+          duplicateTabTo(weakHandler[], view, identifier, nimkit.dpBottom)
+    discard result.addItem(belowItem)
+
 protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
   method didSelectDocumentTab(
       handler: KosmoEditorTabsHandler,
@@ -2131,6 +2326,20 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       if tab.id == id and tab.temporary and tab.filePath.isSome:
         discard view.openFile(tab.filePath.get)
         return
+
+  method didRightClickDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+      event: nimkit.MouseEvent,
+  ): bool =
+    let view = handler.targetView()
+    if view.isNil or view.syncingTabs:
+      return false
+    let menu = tabContextMenu(handler, item)
+    if menu.isNil:
+      return false
+    not menu.popUpContextMenu(tabs, event).isNil
 
   method shouldCloseDocumentTab(
       handler: KosmoEditorTabsHandler,

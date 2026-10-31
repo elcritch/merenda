@@ -607,6 +607,51 @@ proc splitCurrentPaneTab(
   controller.finishPaneTabMove(source, target, identifier)
   true
 
+proc duplicatePaneTab(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    identifier: string,
+    position: nimkit.DockPosition,
+): bool =
+  ## Duplicate the etab holding the identifier into a new pane at the position,
+  ## keeping the original etab in its pane.
+  if controller.isNil or source.isNil or position == nimkit.dpCenter:
+    return false
+  var id: KosmoBufferId
+  if identifier.parseTabIdentifier(id):
+    let target = controller.newEditorGroup(source.workspace, source.window, [id])
+    if not source.workspace.splitPanel(source.panel, target.panel, position):
+      controller.removeGroup(target)
+      return false
+    controller.activatePaneTab(target, identifier)
+    return true
+  let document = source.documentForIdentifier(identifier)
+  if document.isNil:
+    return false
+  var duplicateDocument: KosmoPaneDocument
+  try:
+    duplicateDocument = document.duplicate()
+  except nimkit.TerminexSessionError as error:
+    if not source.editorView.statusLabel.isNil:
+      source.editorView.statusLabel.text = error.msg
+    return false
+  if duplicateDocument.isNil:
+    if not source.editorView.statusLabel.isNil:
+      source.editorView.statusLabel.text = "This tab cannot be duplicated"
+    return false
+  let target = controller.newEditorGroup(source.workspace, source.window, [])
+  if not source.workspace.splitPanel(source.panel, target.panel, position):
+    discard duplicateDocument.close()
+    controller.removeGroup(target)
+    return false
+  let opened = controller.openPaneDocument(target, duplicateDocument)
+  if opened and
+      target.documentForIdentifier(duplicateDocument.identifier) == duplicateDocument:
+    return true
+  discard duplicateDocument.close()
+  controller.removeGroup(target)
+  false
+
 proc splitCurrentBuffer(
     controller: KosmoDockController,
     source: KosmoEditorGroup,
