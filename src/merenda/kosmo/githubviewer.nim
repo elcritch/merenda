@@ -7,6 +7,9 @@ import ../nimkit as nimkit
 import ../nimkit/foundation/mainthreadwork
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
+import ./readerpresentation
+import ./themetargets
+
 import ./[github, searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 export github
@@ -348,6 +351,13 @@ proc newGitHubFilterItem(
       else:
         panel[].selectFilter(panel[].state, kinds)
 
+protocol GitHubReaderPresentation of KosmoReaderPresentationProtocol:
+  method readerThemeTarget(panel: KosmoGitHubPanel): Option[KosmoThemeTarget] =
+    some(KosmoThemeTarget.GitHub)
+
+  method applyReaderStyle(panel: KosmoGitHubPanel, style: nimkit.MarkdownStyle) =
+    panel.markdownStyle = style
+
 proc newKosmoGitHubPanel(
     snapshot: GitHubSnapshot,
     executable: string,
@@ -372,6 +382,7 @@ proc newKosmoGitHubPanel(
     refreshInterval: initDuration(milliseconds = refreshIntervalMilliseconds),
   )
   result.initViewFields()
+  discard result.withProtocol(GitHubReaderPresentation)
   result.markdownView.matterGrammarSources =
     installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true

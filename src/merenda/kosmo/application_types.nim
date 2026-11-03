@@ -9,6 +9,11 @@ type
     kmcmLight
     kmcmDark
 
+  KosmoReaderColorPreference = enum
+    krcFollowTheme
+    krcLight
+    krcDark
+
   KosmoEditorContentKind = enum
     keckOther
     keckSyntax
@@ -34,9 +39,7 @@ type
     decreaseFontButton*: nimkit.Button
     increaseFontButton*: nimkit.Button
     editorView: WeakRef[KosmoEditorView]
-    xColorMode: KosmoMarkdownColorMode
-    xThemeColorMode: KosmoMarkdownColorMode
-    xColorModeOverride: bool
+    xColorPreferences: array[KosmoThemeTarget, KosmoReaderColorPreference]
     xFontSize: float32
 
   KosmoEditorView* = ref object of nimkit.MonoTextView

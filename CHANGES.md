@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
+  context menus, keeping each rich-text theme choice independent.
+
 - Add a right click menu to Kosmo's editor tabs with Close, Close others, and
   Duplicate right and Duplicate below actions. Right clicking an etab pops a menu
   anchored at the tab; Close runs the standard close flow for the clicked tab,

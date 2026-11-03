@@ -3,6 +3,9 @@
 import std/[os, strutils]
 
 import ../nimkit as nimkit
+import ./themetargets
+export themetargets
+
 import ./moe
 import ./shortcuts
 import ./terminalinput
@@ -63,15 +66,6 @@ type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
   KosmoTerminalLinksHandler* = proc(enabled: bool) {.closure.}
   KosmoTerminalInputPolicyHandler* = proc(policy: KosmoTerminalInputPolicy) {.closure.}
-  KosmoThemeTarget* {.pure.} = enum
-    All
-    Moe
-    Terminal
-    RichText
-    Markdown
-    GitDiff
-    GitHub
-
   KosmoMoeThemeHandler* =
     proc(identifier: string, target: KosmoThemeTarget): bool {.closure.}
   KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
@@ -291,20 +285,6 @@ protocol KosmoMoeThemesTableDataSource of nimkit.TableViewDataSource:
       if theme.identifier == identifier:
         return row
     -1
-
-func themeTargetIncludes*(target, item: KosmoThemeTarget): bool =
-  ## Whether applying a theme to target includes the individual item.
-  case target
-  of KosmoThemeTarget.All:
-    item in {
-      KosmoThemeTarget.Moe, KosmoThemeTarget.Terminal, KosmoThemeTarget.Markdown,
-      KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub,
-    }
-  of KosmoThemeTarget.RichText:
-    item in
-      {KosmoThemeTarget.Markdown, KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub}
-  else:
-    item == target
 
 func targetIdentifier(source: KosmoMoeThemesTableSource): string =
   var first = true
