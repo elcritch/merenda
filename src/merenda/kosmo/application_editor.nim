@@ -127,9 +127,13 @@ func markdownMode*(view: KosmoEditorView, id: KosmoBufferId): KosmoMarkdownMode 
   ## Return the pane-local presentation mode for a Markdown buffer.
   if not view.isNil and id in view.markdownSyntaxBufferIds: kmmSyntax else: kmmPreview
 
-func markdownColorMode*(controls: KosmoMarkdownControls): KosmoMarkdownColorMode =
+proc readerColorMode(
+  controls: KosmoMarkdownControls, target: KosmoThemeTarget
+): KosmoMarkdownColorMode
+
+proc markdownColorMode*(controls: KosmoMarkdownControls): KosmoMarkdownColorMode =
   ## Return the pane-local Markdown preview color mode.
-  if controls.isNil: kmcmLight else: controls.xColorMode
+  controls.readerColorMode(KosmoThemeTarget.Markdown)
 
 func markdownFontSize*(controls: KosmoMarkdownControls): float32 =
   ## Return the pane-local Markdown preview base font size.
@@ -139,9 +143,9 @@ proc syncMarkdownColorButton(controls: KosmoMarkdownControls) =
   if controls.isNil or controls.colorModeButton.isNil:
     return
   controls.colorModeButton.title =
-    if controls.xColorMode == kmcmLight: "Dark" else: "Light"
+    if controls.markdownColorMode == kmcmLight: "Dark" else: "Light"
   controls.colorModeButton.accessibilityLabel =
-    if controls.xColorMode == kmcmLight:
+    if controls.markdownColorMode == kmcmLight:
       "Use dark Markdown preview"
     else:
       "Use light Markdown preview"
@@ -160,16 +164,46 @@ func markdownColorMode(appearance: nimkit.Appearance): KosmoMarkdownColorMode =
       0.2126'f32 * background.r + 0.7152'f32 * background.g + 0.0722'f32 * background.b
   if luminance < 0.5'f32: kmcmDark else: kmcmLight
 
-proc syncMarkdownColorMode(
-    controls: KosmoMarkdownControls, appearance: nimkit.Appearance
-) =
+proc configuredReaderTheme(
+    controls: KosmoMarkdownControls, target: KosmoThemeTarget
+): KosmoMoeTheme =
+  if not controls.isNil and not controls.editorView.isNil:
+    let view = controls.editorView[]
+    if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
+      let controller = view.tabsDelegate.dockController[]
+      if not controller.frontend.isNil:
+        result = controller.frontend[].xRichTextThemes[target]
+
+func readerColorMode(background: nimkit.Color): KosmoMarkdownColorMode =
+  let luminance =
+    0.2126'f32 * background.r + 0.7152'f32 * background.g + 0.0722'f32 * background.b
+  if luminance < 0.5'f32: kmcmDark else: kmcmLight
+
+func richTextColor(value: KosmoMoeThemeColor): nimkit.Color =
+  nimkit.rgb(value.red, value.green, value.blue).color()
+
+proc configuredReaderColorMode(
+    controls: KosmoMarkdownControls, target: KosmoThemeTarget
+): KosmoMarkdownColorMode =
   if controls.isNil:
-    return
-  let mode = appearance.markdownColorMode()
-  if controls.xColorMode == controls.xThemeColorMode:
-    controls.xColorMode = mode
-  controls.xThemeColorMode = mode
-  controls.syncMarkdownColorButton()
+    return kmcmLight
+  let theme = controls.configuredReaderTheme(target)
+  if theme.identifier.len > 0:
+    return theme.preview.background.richTextColor().readerColorMode()
+  controls.effectiveAppearance().markdownColorMode()
+
+proc readerColorMode(
+    controls: KosmoMarkdownControls, target: KosmoThemeTarget
+): KosmoMarkdownColorMode =
+  if controls.isNil:
+    return kmcmLight
+  case controls.xColorPreferences[target]
+  of krcFollowTheme:
+    controls.configuredReaderColorMode(target)
+  of krcLight:
+    kmcmLight
+  of krcDark:
+    kmcmDark
 
 proc applyDarkMarkdownSyntaxColors(style: var nimkit.MarkdownStyle) =
   for tokenClass in nimkit.SyntaxTokenClass:
@@ -183,16 +217,12 @@ proc applyDarkMarkdownSyntaxColors(style: var nimkit.MarkdownStyle) =
   style.syntaxTokenColors[nimkit.stcPunctuation] = nimkit.color(0.58, 0.60, 0.70, 1.0)
   style.syntaxTokenColors[nimkit.stcPreprocessor] = nimkit.color(0.80, 0.65, 0.96, 1.0)
 
-func richTextColor(value: KosmoMoeThemeColor): nimkit.Color =
-  nimkit.color(
-    value.red.float32 / 255, value.green.float32 / 255, value.blue.float32 / 255, 1.0
-  )
-
 proc markdownPresentationStyle*(
     controls: KosmoMarkdownControls, target = KosmoThemeTarget.Markdown
 ): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
-  if not controls.isNil and controls.xColorMode == kmcmDark:
+  let colorMode = controls.readerColorMode(target)
+  if colorMode == kmcmDark:
     result.backgroundColor = nimkit.color(0.055, 0.065, 0.085, 1.0)
     result.textColor = nimkit.color(0.84, 0.86, 0.90, 1.0)
     result.headingColor = nimkit.color(0.96, 0.97, 0.99, 1.0)
@@ -207,39 +237,32 @@ proc markdownPresentationStyle*(
     result.codeBlockStyle.outlineColor = nimkit.color(0.28, 0.33, 0.42, 1.0)
     result.applyDarkMarkdownSyntaxColors()
 
-  if not controls.isNil and not controls.xColorModeOverride and
-      not controls.editorView.isNil:
-    let view = controls.editorView[]
-    if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
-      let controller = view.tabsDelegate.dockController[]
-      if not controller.frontend.isNil:
-        let theme = controller.frontend[].xRichTextThemes[target]
-        if theme.identifier.len > 0:
-          let preview = theme.preview
-          result.backgroundColor = preview.background.richTextColor()
-          result.textColor = preview.foreground.richTextColor()
-          result.headingColor = preview.functionName.richTextColor()
-          result.strongColor = preview.foreground.richTextColor()
-          result.emphasisColor = preview.keyword.richTextColor()
-          result.linkColor = preview.cyan.richTextColor()
-          result.codeColor = preview.stringLiteral.richTextColor()
-          result.quoteColor = preview.comment.richTextColor()
-          result.mutedColor = preview.comment.richTextColor()
-          result.ruleColor = preview.comment.richTextColor()
-          result.codeBlockStyle.backgroundColor = preview.background.richTextColor()
-          result.codeBlockStyle.outlineColor = preview.comment.richTextColor()
-          for tokenClass in nimkit.SyntaxTokenClass:
-            result.syntaxTokenColors[tokenClass] = result.textColor
-          result.syntaxTokenColors[nimkit.stcKeyword] = preview.keyword.richTextColor()
-          result.syntaxTokenColors[nimkit.stcIdentifier] =
-            preview.functionName.richTextColor()
-          result.syntaxTokenColors[nimkit.stcString] =
-            preview.stringLiteral.richTextColor()
-          result.syntaxTokenColors[nimkit.stcNumber] = preview.yellow.richTextColor()
-          result.syntaxTokenColors[nimkit.stcComment] = preview.comment.richTextColor()
-          result.syntaxTokenColors[nimkit.stcOperator] = preview.cyan.richTextColor()
-          result.syntaxTokenColors[nimkit.stcPreprocessor] =
-            preview.keyword.richTextColor()
+  if not controls.isNil and controls.xColorPreferences[target] == krcFollowTheme:
+    let theme = controls.configuredReaderTheme(target)
+    if theme.identifier.len > 0:
+      let preview = theme.preview
+      result.backgroundColor = preview.background.richTextColor()
+      result.textColor = preview.foreground.richTextColor()
+      result.headingColor = preview.functionName.richTextColor()
+      result.strongColor = preview.foreground.richTextColor()
+      result.emphasisColor = preview.keyword.richTextColor()
+      result.linkColor = preview.cyan.richTextColor()
+      result.codeColor = preview.stringLiteral.richTextColor()
+      result.quoteColor = preview.comment.richTextColor()
+      result.mutedColor = preview.comment.richTextColor()
+      result.ruleColor = preview.comment.richTextColor()
+      result.codeBlockStyle.backgroundColor = preview.background.richTextColor()
+      result.codeBlockStyle.outlineColor = preview.comment.richTextColor()
+      for tokenClass in nimkit.SyntaxTokenClass:
+        result.syntaxTokenColors[tokenClass] = result.textColor
+      result.syntaxTokenColors[nimkit.stcKeyword] = preview.keyword.richTextColor()
+      result.syntaxTokenColors[nimkit.stcIdentifier] =
+        preview.functionName.richTextColor()
+      result.syntaxTokenColors[nimkit.stcString] = preview.stringLiteral.richTextColor()
+      result.syntaxTokenColors[nimkit.stcNumber] = preview.yellow.richTextColor()
+      result.syntaxTokenColors[nimkit.stcComment] = preview.comment.richTextColor()
+      result.syntaxTokenColors[nimkit.stcOperator] = preview.cyan.richTextColor()
+      result.syntaxTokenColors[nimkit.stcPreprocessor] = preview.keyword.richTextColor()
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -1028,8 +1051,8 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     if not pane.activeIndicator.isNil:
       pane.activeIndicator.appearance = appearance
     if not pane.markdownControls.isNil:
-      pane.markdownControls.syncMarkdownColorMode(base)
       pane.markdownControls.appearance = appearance
+      pane.markdownControls.syncMarkdownColorButton()
 
 protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
   proc didChangeEffectiveAppearance(
@@ -1105,6 +1128,12 @@ proc syncSelectedEditorContent(
     group.pane.syncMarkdownControls(false)
     let document = group.documentForIdentifier(group.selectedTabIdentifier)
     document.updatePresentation(group.pane)
+    if not document.isNil:
+      let target = document.contentView.readerTarget()
+      if target.isSome:
+        document.contentView.applyReaderStyle(
+          group.pane.markdownControls.markdownPresentationStyle(target.get)
+        )
     return keckOther
   for tab in tabs:
     if tab.id != selectedId:
@@ -2201,6 +2230,23 @@ proc dismissActionPopup(sender: nimkit.DynamicAgent) =
   if sender of nimkit.PopupMenuButton:
     nimkit.PopupMenuButton(sender).closePopup()
 
+proc toggleReaderColorMode(controls: KosmoMarkdownControls, target: KosmoThemeTarget)
+
+proc tabRichTextThemeTarget(
+    view: KosmoEditorView, identifier: string
+): Option[KosmoThemeTarget] =
+  if view.dockGroup.isNil:
+    return
+  var id: KosmoBufferId
+  if identifier.parseTabIdentifier(id):
+    for tab in view.editor.tabs():
+      if tab.id == id and tab.isMarkdownTab:
+        return some(KosmoThemeTarget.Markdown)
+  else:
+    let document = view.dockGroup[].documentForIdentifier(identifier)
+    if not document.isNil:
+      return document.contentView.readerTarget()
+
 proc tabContextMenu(
     handler: KosmoEditorTabsHandler, item: nimkit.DocumentTabItem
 ): nimkit.Menu =
@@ -2277,6 +2323,26 @@ proc tabContextMenu(
         if not view.isNil:
           duplicateTabTo(weakHandler[], view, identifier, nimkit.dpBottom)
     discard result.addItem(belowItem)
+  let target = view.tabRichTextThemeTarget(identifier)
+  if target.isSome and not view.dockGroup.isNil:
+    let
+      controls = view.dockGroup[].pane.markdownControls
+      selector = nimkit.actionSelector("kosmo.editorTabs.toggleReaderColorMode")
+      title =
+        if controls.readerColorMode(target.get) == kmcmLight:
+          "Use dark reader colors"
+        else:
+          "Use light reader colors"
+      colorItem = nimkit.newMenuItem(title, selector)
+    discard result.addSeparator()
+    colorItem.validates = false
+    colorItem.target = nimkit.newActionTarget(selector) do(sender: nimkit.DynamicAgent):
+      dismissActionPopup(sender)
+      if not weakHandler.isNil:
+        let view = weakHandler[].targetView()
+        if not view.isNil and not view.dockGroup.isNil:
+          view.dockGroup[].pane.markdownControls.toggleReaderColorMode(target.get)
+    discard result.addItem(colorItem)
 
 protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
   method didSelectDocumentTab(
@@ -2660,11 +2726,18 @@ proc toggleSelectedMarkdownMode(controls: KosmoMarkdownControls) =
   if controls.editorView[].toggleMarkdownMode(id.get):
     controls.focusMarkdownContent()
 
-proc toggleMarkdownColorMode(controls: KosmoMarkdownControls) =
+proc toggleReaderColorMode(controls: KosmoMarkdownControls, target: KosmoThemeTarget) =
   if controls.isNil:
     return
-  controls.xColorModeOverride = true
-  controls.xColorMode = if controls.xColorMode == kmcmLight: kmcmDark else: kmcmLight
+  let nextMode =
+    if controls.readerColorMode(target) == kmcmLight: kmcmDark else: kmcmLight
+  controls.xColorPreferences[target] =
+    if nextMode == controls.configuredReaderColorMode(target):
+      krcFollowTheme
+    elif nextMode == kmcmLight:
+      krcLight
+    else:
+      krcDark
   if not controls.editorView.isNil:
     controls.editorView[].refresh()
 
@@ -2696,8 +2769,6 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
     decreaseFontButton: decreaseFontButton,
     increaseFontButton: increaseFontButton,
     editorView: view.unsafeWeakRef(),
-    xColorMode: colorMode,
-    xThemeColorMode: colorMode,
     xFontSize: KosmoMarkdownDefaultFontSize,
   )
   result.initBoxFields()
@@ -2743,7 +2814,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
     proc(sender: nimkit.DynamicAgent) =
       discard sender
       if not weakControls.isNil:
-        weakControls[].toggleMarkdownColorMode()
+        weakControls[].toggleReaderColorMode(KosmoThemeTarget.Markdown)
     ,
   )
   colorModeButton.action = colorModeAction
@@ -3725,9 +3796,17 @@ proc markdownSearchDidLayout(
   discard snapshot
   view.revealPendingMarkdownSearch()
 
+protocol MarkdownReaderPresentation of KosmoReaderPresentationProtocol:
+  method readerThemeTarget(view: KosmoMarkdownView): Option[KosmoThemeTarget] =
+    some(KosmoThemeTarget.Markdown)
+
+  method applyReaderStyle(view: KosmoMarkdownView, style: nimkit.MarkdownStyle) =
+    view.markdownStyle = style
+
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  discard result.withProtocol(MarkdownReaderPresentation)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.editorView = editorView.unsafeWeakRef()
   let weakView = result.unsafeWeakRef()

@@ -313,13 +313,13 @@ proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
 proc applyRichTextTheme(
     frontend: KosmoApplication, theme: KosmoMoeTheme, target: KosmoThemeTarget
 ) =
-  for item in [
-    KosmoThemeTarget.Markdown, KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub
-  ]:
+  for item in KosmoRichTextTargets:
     if target.themeTargetIncludes(item):
       frontend.xRichTextThemes[item] = theme
   for group in frontend.dockController.groups:
-    group.pane.markdownControls.xColorModeOverride = false
+    for item in KosmoRichTextTargets:
+      if target.themeTargetIncludes(item):
+        group.pane.markdownControls.xColorPreferences[item] = krcFollowTheme
     group.editorView.refresh()
 
 proc setRichTextTheme(
@@ -671,9 +671,6 @@ proc showGitDiffSnapshot(
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
       tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
-      onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
-        panel.markdownStyle = KosmoEditorPane(pane).markdownControls
-          .markdownPresentationStyle(KosmoThemeTarget.GitDiff),
       onClose = proc(document: KosmoPaneDocument): bool =
         discard document
         panel.close()
@@ -805,9 +802,6 @@ proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
     panel,
     preferredFirstResponder = panel.markdownView.textView(),
     tooltip = root,
-    onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
-      panel.markdownStyle = KosmoEditorPane(pane).markdownControls
-        .markdownPresentationStyle(KosmoThemeTarget.GitHub),
     onClose = proc(document: KosmoPaneDocument): bool =
       panel.close()
       if not weakFrontend.isNil and weakFrontend[].gitHubPanel == panel:

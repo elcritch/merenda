@@ -13,6 +13,7 @@ import std/[math, monotimes, options, os, strutils, times, unicode]
 
 from figdraw import len, `[]`
 
+import ./readerpresentation
 import ../nimkit as nimkit
 from ../nimkit/text/textruneutils import utf8RunesForText
 from ../nimkit/foundation/mainthreadwork import scheduleMainThreadWork
