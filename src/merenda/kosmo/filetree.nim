@@ -1003,6 +1003,29 @@ proc dismissFilter*(panel: KosmoFileBrowserPanel) =
   if owner of nimkit.Window:
     discard nimkit.Window(owner).makeFirstResponder(panel.fileTree)
 
+proc toggleToolbarFocus*(panel: KosmoFileBrowserPanel, focused: nimkit.Responder): bool =
+  ## Toggle keyboard focus between the file tree and the panel's filter controls.
+  if panel.isNil:
+    return false
+  let owner = panel.window()
+  if not (owner of nimkit.Window):
+    return false
+  let window = nimkit.Window(owner)
+  for control in [
+    nimkit.Responder(panel.filterField),
+    nimkit.Responder(panel.scopeButton),
+    nimkit.Responder(panel.closeFilterButton),
+    nimkit.Responder(panel.expressionButton),
+  ]:
+    if not control.isNil and focused == control:
+      discard window.makeFirstResponder(panel.fileTree)
+      return true
+  if panel.filterField.hidden():
+    discard panel.showFilter()
+    return true
+  discard window.makeFirstResponder(panel.filterField)
+  return true
+
 proc closeFileFilter(panel: KosmoFileBrowserPanel, sender: nimkit.DynamicAgent) =
   discard sender
   panel.dismissFilter()

@@ -65,6 +65,23 @@ suite "Kosmo synthetic panel shortcuts":
     require frontend.window.dispatchKeyDown(shortcut)
     check frontend.window.firstResponderIs(terminal)
 
+  test "toolbar focus menu item stays without a key equivalent":
+    let
+      app = newApplication("Kosmo toolbar menu equivalent")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.presentSyntheticWindow(frontend)
+    # A menu key equivalent performs unconditionally through the window's menu
+    # and would consume F6 even for a focused terminal with no toolbar. The
+    # action must route only through the window's binding table.
+    let item = app.windowsMenu().menuItemWithIdentifier(KosmoFocusToolbarAction)
+    require not item.isNil
+    check not item.hasKeyEquivalent()
+    let tabItem = app.windowsMenu().menuItemWithIdentifier(KosmoPreviousTabAction)
+    require not tabItem.isNil
+    check tabItem.hasKeyEquivalent()
+
   for viewer in ["GitHub", "Git diff", "custom reader"]:
     test viewer & " background clicks focus its document from a terminal pane":
       let
@@ -149,6 +166,172 @@ suite "Kosmo synthetic panel shortcuts":
         KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers())
       )
       check text.selectedText() == text.stringValue()
+
+  test "toolbar focus shortcut toggles between the diff content and its toolbar":
+    let
+      app = newApplication("Kosmo toolbar focus")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      diff = newKosmoGitDiffPanel(
+        parseGitDiff("diff --git a/file.nim b/file.nim\n@@ -1 +1 @@\n-old\n+new\n")
+      )
+    defer:
+      frontend.close()
+      diff.close()
+    app.presentSyntheticWindow(frontend)
+    require frontend.openDocument(
+      newKosmoPaneDocument(
+        "focus.diff",
+        "Git diff",
+        diff,
+        preferredFirstResponder = diff.markdownView.textView(),
+      )
+    )
+    require diff.waitForDiff()
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.window.makeFirstResponder(diff.markdownView.textView())
+    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    # The snapshot-only diff has a disabled refresh button; focus falls back to
+    # the first enabled toolbar control (expand).
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(diff.expandButton)
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(diff.markdownView.textView())
+
+  test "toolbar focus shortcut toggles the markdown preview controls":
+    let
+      root = createTempDir("kosmo-markdown-toolbar-", "")
+      path = root / "preview.md"
+      app = newApplication("Kosmo markdown toolbar focus")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    writeFile(path, "# Preview\n\nSource text\n")
+    defer:
+      frontend.close()
+      removeDir(root)
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    let controls = frontend.editorPane.markdownControls
+    require not controls.hidden
+    require frontend.window.makeFirstResponder(
+      frontend.editorPane.markdownView.textView()
+    )
+    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(controls.modeButton)
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(frontend.editorPane.markdownView)
+
+  test "toolbar focus shortcut reaches the controls from markdown source mode":
+    let
+      root = createTempDir("kosmo-markdown-toolbar-source-", "")
+      path = root / "preview.md"
+      app = newApplication("Kosmo markdown toolbar source focus")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    writeFile(path, "# Preview\n\nSource text\n")
+    defer:
+      frontend.close()
+      removeDir(root)
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    let controls = frontend.editorPane.markdownControls
+    require not controls.hidden
+    # Switch to source editing so the pane hosts the moe editor, then focus it.
+    require frontend.window.dispatchKeyDown(primaryShiftKeyEvent(keyM))
+    require frontend.window.makeFirstResponder(frontend.editorPane.editorView)
+    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(controls.modeButton)
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(frontend.editorPane.editorView)
+
+  test "toolbar focus shortcut keeps a focused terminal unmapped":
+    let
+      app = newApplication("Kosmo toolbar focus terminal")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      terminal = newKosmoTerminalView()
+    defer:
+      frontend.close()
+      terminal.close()
+    app.presentSyntheticWindow(frontend)
+    require frontend.openDocument(
+      newKosmoPaneDocument("focus.terminal", "Terminal", terminal)
+    )
+    require frontend.window.firstResponderIs(terminal)
+    # F6 registers kosmo.focusToolbar, but a focused terminal has no toolbar.
+    # No responder claims the key and focus must not move; the integration
+    # suite verifies the key reaches a live terminal program's PTY.
+    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    check not frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(terminal)
+
+  test "markdown shortcut switches the selected tab between preview and source":
+    let
+      root = createTempDir("kosmo-markdown-source-", "")
+      path = root / "preview.md"
+      app = newApplication("Kosmo markdown source shortcut")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    writeFile(path, "# Preview\n\nSource text\n")
+    defer:
+      frontend.close()
+      removeDir(root)
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    let markdownId = frontend.editorView.editor.tabs()[0].id
+    check frontend.editorView.markdownMode(markdownId) == kmmPreview
+    let toggle = primaryShiftKeyEvent(keyM)
+    require frontend.window.dispatchKeyDown(toggle)
+    check frontend.editorView.markdownMode(markdownId) == kmmSyntax
+    require frontend.window.dispatchKeyDown(toggle)
+    check frontend.editorView.markdownMode(markdownId) == kmmPreview
+    check frontend.editorPane.contentView == View(frontend.editorPane.markdownView)
+
+  test "toolbar focus shortcut works from a detached markdown window":
+    let
+      root = createTempDir("kosmo-markdown-detached-toolbar-", "")
+      path = root / "preview.md"
+      app = newApplication("Kosmo markdown detached toolbar focus")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    writeFile(path, "# Preview\n\nSource text\n")
+    defer:
+      frontend.close()
+      removeDir(root)
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    # Detach the markdown tab into its own window.
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let
+      tabRect = frontend.documentTabs.documentTabRect(0)
+      start = frontend.documentTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = initPoint(
+        frontend.window.frame().size.width + 180.0'f32,
+        frontend.window.frame().size.height + 180.0'f32,
+      )
+    require frontend.window.mouseDownAt(start)
+    require frontend.window.mouseDraggedAt(drop)
+    require frontend.window.mouseUpAt(drop)
+    require frontend.detachedEditorWindows().len == 1
+    let
+      detachedWindow = frontend.detachedEditorWindows()[0]
+      detachedGroup = frontend.editorGroups()[^1]
+    detachedWindow.contentView().layoutSubtreeIfNeeded()
+    app.activateWindow(detachedWindow)
+    require detachedWindow.makeFirstResponder(detachedGroup.pane.contentView)
+    # The detached pane hosts the markdown preview; F6 toggles its controls.
+    let controls = detachedGroup.pane.markdownControls
+    require not controls.hidden
+    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    require detachedWindow.dispatchKeyDown(shortcut)
+    check detachedWindow.firstResponderIs(controls.modeButton)
+    require detachedWindow.dispatchKeyDown(shortcut)
+    check detachedWindow.firstResponderIs(detachedGroup.pane.contentView)
 
   test "Save makes an unchanged temporary tab permanent":
     let root = createTempDir("kosmo-save-preview-", "")

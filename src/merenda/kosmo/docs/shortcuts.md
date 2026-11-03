@@ -58,6 +58,8 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Shift-D` | Show Git diff tab | |
 | `primary-Shift-H` | Show GitHub issues and PRs | |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
+| `F6` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. |
+| `primary-Shift-M` | Toggle Markdown source | Switches the selected Markdown tab between preview and source editing. |
 
 The scoped Vim pane commands are described below. They are handled only by a
 focused Kosmo editor in the applicable Moe mode; they are not global window
@@ -436,6 +438,8 @@ the physical spelling shown by the active profile:
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |
+| Focus tool toolbar | `F6` |
+| Toggle Markdown source | `primary-Shift-M` |
 | Split below / right | `Ctrl-W s` / `Ctrl-W v` in Vim routing, with their control-key aliases; configurable GUI alternatives otherwise |
 
 **Show terminal** focuses an existing terminal tab, including a hidden tab or
@@ -447,6 +451,42 @@ The registry removes the former accidental difference between Save, Quick
 Open, tab navigation, and the File menu. It also makes Open, Settings, Close
 Window, and the native Edit actions first-class configurable commands rather
 than menu-only exceptions.
+
+### Focus tool toolbar
+
+`F6` toggles keyboard focus between the focused tool's *content* and that
+tool's own controls — the Git diff / GitHub toolbar, the Markdown preview
+controls, the file-browser filter, and the Find-in-Files controls. It never
+focuses Kosmo's own pane or window chrome. Which toolbar takes focus depends on
+the focused tool, so `F6` is consistent across viewers: first press puts focus
+in the toolbar, second press returns it to the content. On a Git diff or GitHub
+reader the first enabled toolbar control is chosen, so a snapshot-only diff
+(whose refresh button is disabled) still lands on an actionable control.
+
+`F6` only claims the key when the focused tool actually has toolbar controls. A
+focused terminal keeps `F6` for the running program, and a plain source tab
+keeps it available for a user `F6` mapping in Moe. From a Markdown tab in either
+preview or source mode, `F6` toggles the preview controls. The action works in
+detached windows too and is reachable from the Window menu. Because the menu
+would otherwise perform the action unconditionally, the menu item deliberately
+carries no key equivalent; `F6` dispatches only through the window's binding
+table, which declines when no toolbar applies. On macOS laptops the media-key
+row may require the standard-function-keys preference; if so, rebind the action
+(see below).
+
+### Toggle Markdown source
+
+`primary-Shift-M` (Command-Shift-M on macOS, Control-Shift-M elsewhere) switches
+the selected Markdown tab between the pretty preview and the editable source,
+mirroring the `</>` button. The chord is unused in the registry and by Moe's
+default Vim mappings, so it does not collide with editor input. It acts on the
+*selected* tab of the focused pane and leaves focus on the resulting content
+view.
+
+Both commands are ordinary registry actions, so Settings lists them and
+`keybindings.json` can override them, disable them with `null`, or supply
+alternatives as an array. For example one alternative next to F6 is
+`"kosmo.focusToolbar": ["f6", "primary-shift-g"]`.
 
 ## Implementation notes
 

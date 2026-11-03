@@ -268,6 +268,46 @@ suite "Kosmo terminal shortcut PTY input":
       # Only the two ordinary characters should reach the PTY: no l or λ.
       require terminal.waitForTerminalText("78 7a")
 
+    test "toolbar focus shortcut passes through to a focused terminal's PTY":
+      let
+        session = spawnTerminalViewSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf 'READY\\n'; dd bs=1 count=5 2>/dev/null | od -An -tx1"
+          ),
+          columns = 80,
+          rows = 4,
+        )
+        terminal = newKosmoTerminalView(session, frame = rect(0, 0, 800, 160))
+        app = newApplication("F6 Toolbar Passthrough")
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        window = frontend.window
+      defer:
+        frontend.close()
+        terminal.close()
+        session.waitForCommands()
+        window.close()
+      # Present the window through the application so menu accelerators join
+      # the responder chain, exactly like a running Kosmo frontend.
+      window.setContentView(frontend.contentView)
+      frontend.contentView.frame = rect(0, 0, 1000, 700)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      app.addWindow(window)
+      app.activateWindow(window)
+      require terminal.waitForTerminalText("READY")
+      require frontend.openDocument(
+        newKosmoPaneDocument("f6-terminal", "Terminal", terminal)
+      )
+      require window.makeFirstResponder(terminal)
+      # F6 registers kosmo.focusToolbar, but a focused terminal has no toolbar;
+      # the key must pass through to the running program as F6 input.
+      require window.firstResponder() == Responder(terminal)
+      require window.dispatchKeyDown(
+        KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+      )
+      check window.firstResponder() == Responder(terminal)
+      require terminal.waitForTerminalText("1b 5b 31 37 7e")
+
     test "quoted and raw shortcuts reach the PTY exactly once":
       let
         session = spawnTerminalViewSession(

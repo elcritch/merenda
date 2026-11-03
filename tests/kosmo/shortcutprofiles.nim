@@ -81,6 +81,60 @@ suite "Kosmo shortcut profiles":
     check bindings.bindingFor([keyEvent(keyL, {kmCommand, kmShift})]) ==
       actionSelector(KosmoRevealActiveFileAction)
 
+  test "toolbar and markdown defaults resolve on every platform":
+    for platform in KosmoShortcutPlatform:
+      let bindings = initKosmoKeyBindings(KosmoShortcutProfile.Platform, platform)
+      let expectedPlatformModifiers =
+        if platform == KosmoShortcutPlatform.MacOS:
+          {kmCommand}
+        else:
+          {kmControl}
+      check bindings.bindingFor([keyEvent(keyF6, {})]) ==
+        actionSelector(KosmoFocusToolbarAction)
+      check bindings.bindingFor([keyEvent(keyM, expectedPlatformModifiers + {kmShift})]) ==
+        actionSelector(KosmoToggleMarkdownModeAction)
+      let macosBindings = initKosmoKeyBindings(KosmoShortcutProfile.MacOS, platform)
+      check macosBindings.bindingFor([keyEvent(keyF6, {})]) ==
+        actionSelector(KosmoFocusToolbarAction)
+      check macosBindings.bindingFor([keyEvent(keyM, {kmCommand, kmShift})]) ==
+        actionSelector(KosmoToggleMarkdownModeAction)
+
+  test "toolbar and markdown commands are overridable through the binding JSON":
+    let loaded = applyKosmoShortcutConfigurationJson(
+      """{
+        "bindings": {
+          "kosmo.focusToolbar": "primary-shift-g",
+          "kosmo.toggleMarkdownMode": "f8"
+        }
+      }""",
+      platform = KosmoShortcutPlatform.LinuxBsd,
+    )
+
+    check loaded.errors.len == 0
+    check loaded.applied == 2
+    check loaded.configuration.bindings.bindingFor(
+      [keyEvent(keyG, {kmControl, kmShift})]
+    ) == actionSelector(KosmoFocusToolbarAction)
+    check loaded.configuration.bindings.bindingFor([keyEvent(keyF8, {})]) ==
+      actionSelector(KosmoToggleMarkdownModeAction)
+    check loaded.configuration.bindings.bindingFor([keyEvent(keyF6, {})]) ==
+      CommandSelector()
+
+  test "toolbar override colliding with another command is rejected":
+    let loaded = applyKosmoShortcutConfigurationJson(
+      """{
+        "bindings": {
+          "kosmo.focusToolbar": "primary-shift-t"
+        }
+      }""",
+      platform = KosmoShortcutPlatform.LinuxBsd,
+    )
+
+    check loaded.errors.len == 1
+    check loaded.applied == 0
+    check loaded.configuration.bindings.bindingFor([keyEvent(keyF6, {})]) ==
+      actionSelector(KosmoFocusToolbarAction)
+
   test "structured configuration resolves profile, editor mode, and symbolic bindings":
     let loaded = applyKosmoShortcutConfigurationJson(
       """{
