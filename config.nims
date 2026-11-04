@@ -28,7 +28,7 @@ when defined(windows) and defined(vcc):
   switch("lineTrace", "on")
 else:
   switch("define", "nimStackTraceOverride")
-  switch("import", "libbacktrace")
+  switch("import", "merenda/nativestacktraces")
 
 when defined(windows) and defined(gcc):
   # The C linker needs libstdc++ for libbacktrace's demangler. Select the
