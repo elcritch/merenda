@@ -7,7 +7,9 @@
 
 ## README Scope
 
-- Keep `README.md` a high-level introduction: what Merenda offers, how to try it, a small example, and links to further guides.
+- Keep `README.md` a high-level introduction: what Merenda offers, how to try it, illustrative code examples, and links to further guides.
+- Preserve the code examples, screenshots, and useful explanations that show how to build apps with Merenda. Several substantial examples belong in a high-level introduction; do not replace them with links or remove them just to shorten the README.
+- Make focused edits to remove distracting details. Do not impose a line-count target or broadly rewrite and compress useful content unless the user asks for that scope.
 - Do not add extraneous implementation details, dependency internals (such as OpenParser adapters), exhaustive API explanations, debugging procedures, or release history to the README. Put those in focused `docs/` guides, examples, or `CHANGES.md`, and link only when useful to someone getting started.
 - Feature additions do not automatically need a README paragraph; mention them only when they materially help users understand or try the project.
 
