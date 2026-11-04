@@ -10,6 +10,10 @@ The `release-kosmo` GitHub Actions workflow builds these artifacts:
 - `kosmo-windows-amd64.zip`
 - `SHA256SUMS.txt`
 
+Kosmo release builds and the local macOS installer use `--opt:speed`. Earlier
+binary-size comparisons made with `--opt:size` are not measurements of this
+configuration.
+
 Each executable archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.

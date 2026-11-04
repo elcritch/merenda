@@ -125,7 +125,7 @@ jobs:
           mkdir -p build dist
           nim c \
             "${arch_flags[@]}" \
-            --opt:size \
+            --opt:speed \
             --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
@@ -220,7 +220,7 @@ jobs:
           mkdir -p build dist
           nim c \
             --cpu:arm64 \
-            --opt:size \
+            --opt:speed \
             --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
@@ -378,7 +378,7 @@ jobs:
             --passL:"-static -lc++" \
             -d:harfbuzzyStatic \
             -d:harfbuzzyStaticCmakeArgs="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_C_COMPILER=$MUSL_CC -DCMAKE_CXX_COMPILER=$MUSL_CXX" \
-            --opt:size \
+            --opt:speed \
             --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
@@ -478,7 +478,7 @@ jobs:
             nim c \
               --os:freebsd \
               --cpu:amd64 \
-              --opt:size \
+              --opt:speed \
               --passL:-Wl,-rpath,/usr/local/lib \
               --debugger:native \
               --lineTrace:off \
@@ -653,7 +653,7 @@ jobs:
           bash packaging/macos/build-text-libraries.sh "$text_prefix"
           export PKG_CONFIG_PATH="$text_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           nim c \
-            --opt:size \
+            --opt:speed \
             --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
@@ -839,7 +839,7 @@ jobs:
           }
           nim c `
             --cc:gcc `
-            --opt:size `
+            --opt:speed `
             --debugger:native `
             --lineTrace:off `
             --stackTrace:off `

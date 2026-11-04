@@ -96,7 +96,7 @@ nim c \
   --forceBuild:on \
   --passC:-mmacosx-version-min=13.0 \
   --passL:-mmacosx-version-min=13.0 \
-  --opt:size \
+  --opt:speed \
   --debugger:native \
   --lineTrace:off \
   --stackTrace:off \
