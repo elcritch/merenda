@@ -7,6 +7,12 @@
 - On Windows, probe Vulkan before transferring rendering to a worker and fall back
   to OpenGL or software rendering when graphics initialization fails.
 
+- Keep caret hit testing exact at large layout coordinates: the tie tolerance
+  scales with the coordinate magnitude at the float32 noise floor instead of a
+  flat subpixel cap, so glyph-center clicks on very long unwrapped lines
+  resolve to the containing glyph instead of drifting to a neighbor, while
+  exact caret hits keep priority over every nonzero distance.
+
 - Display multiline, styled language-server hover information in editor tooltips.
 
 - Show language-server hover information in editor tooltips without moving the cursor.

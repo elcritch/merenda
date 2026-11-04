@@ -2316,7 +2316,7 @@ func sameSourceRange(a, b: GlyphSourceRange): bool =
   a.byteStart == b.byteStart and a.byteEnd == b.byteEnd and a.runeStart == b.runeStart and
     a.runeEnd == b.runeEnd
 
-const CaretHitTieScale = 1.0e-4'f32
+const CaretHitTieScale = 1.0e-6'f32
 
 func clusterAppearsRtl(
     layout: GlyphArrangement, firstGlyph, lastGlyph, lineStart, lineStop: int
@@ -2358,14 +2358,18 @@ proc lineBoundedIndexAtPoint(
         # Adjacent glyph edges come from independently rounded float32 paths, so a
         # point centered on a glyph lands within float noise of an exact tie
         # between the carets on both sides. Treat near-equal distances as a tie
-        # and keep the lower index so the glyph containing the point wins.
-        tieEpsilon = min(
-          max(abs(point.x), abs(caretX)) * CaretHitTieScale, 0.001'f32
+        # and keep the lower index so the glyph containing the point wins. The
+        # tie tolerance scales with the coordinate magnitude so it covers the
+        # float32 noise floor of a few ULP at every scale while staying far
+        # below real caret spacing, and exact hits keep priority over every
+        # nonzero distance.
+        tieEpsilon = max(abs(point.x), abs(caretX)) * CaretHitTieScale
+      if (distance == 0 and (closestDistance > 0 or index < closestIndex)) or (
+        distance > 0 and closestDistance > 0 and (
+          distance < closestDistance - tieEpsilon or
+          (abs(distance - closestDistance) <= tieEpsilon and index < closestIndex)
         )
-      if (distance == 0 and (closestDistance > 0 or index < closestIndex)) or
-          (distance > 0 and closestDistance > 0 and
-          (distance < closestDistance - tieEpsilon or
-          (abs(distance - closestDistance) <= tieEpsilon and index < closestIndex))):
+      ):
         closestDistance = distance
         closestIndex = index
 
