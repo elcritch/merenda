@@ -536,7 +536,7 @@ suite "Kosmo Matter highlighting":
         "README.md",
         source,
         [
-          "## How it looks", "desktop GUI toolkit", "## Install and run Merenda",
+          "## How it looks", "desktop GUI toolkit", "## Try Merenda",
           "## A few small apps", "### Hello, Merenda",
           "### A button that does something",
           "### A Markdown reader in a handful of lines",
