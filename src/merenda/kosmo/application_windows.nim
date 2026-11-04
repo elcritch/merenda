@@ -1686,6 +1686,10 @@ proc openPath*(manager: KosmoWindowManager, path: string): bool {.discardable.} 
 
 proc centerWindowOnWindow(panel, window: nimkit.Window) =
   ## Center the panel on the window so dialogs appear where the user works.
+  ## Desktop coordinates can be negative on monitors left of or above the
+  ## primary display, so the centered origin is deliberately not clamped:
+  ## clamping it to zero would drag the dialog away from its parent window on
+  ## multi-monitor systems.
   let
     frame = window.frame()
     size = panel.frame().size

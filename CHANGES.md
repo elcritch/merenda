@@ -13,6 +13,11 @@
   resolve to the containing glyph instead of drifting to a neighbor, while
   exact caret hits keep priority over every nonzero distance.
 
+- Center the open file dialog on its parent window even when the parent sits
+  on a monitor with negative desktop coordinates: monitors left of or above
+  the primary display have negative origins, so the centered frame is
+  deliberately not clamped to zero.
+
 - Display multiline, styled language-server hover information in editor tooltips.
 
 - Show language-server hover information in editor tooltips without moving the cursor.
