@@ -73,7 +73,7 @@ suite "Kosmo synthetic panel shortcuts":
       frontend.close()
     app.presentSyntheticWindow(frontend)
     # A menu key equivalent performs unconditionally through the window's menu
-    # and would consume F6 even for a focused terminal with no toolbar. The
+    # and would consume F5 even for a focused terminal with no toolbar. The
     # action must route only through the window's binding table.
     let item = app.windowsMenu().menuItemWithIdentifier(KosmoFocusToolbarAction)
     require not item.isNil
@@ -189,7 +189,7 @@ suite "Kosmo synthetic panel shortcuts":
     require diff.waitForDiff()
     frontend.contentView.layoutSubtreeIfNeeded()
     require frontend.window.makeFirstResponder(diff.markdownView.textView())
-    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    let shortcut = KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
     # The snapshot-only diff has a disabled refresh button; focus falls back to
     # the first enabled toolbar control (expand).
     require frontend.window.dispatchKeyDown(shortcut)
@@ -215,7 +215,7 @@ suite "Kosmo synthetic panel shortcuts":
     require frontend.window.makeFirstResponder(
       frontend.editorPane.markdownView.textView()
     )
-    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    let shortcut = KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
     require frontend.window.dispatchKeyDown(shortcut)
     check frontend.window.firstResponderIs(controls.modeButton)
     require frontend.window.dispatchKeyDown(shortcut)
@@ -239,7 +239,7 @@ suite "Kosmo synthetic panel shortcuts":
     # Switch to source editing so the pane hosts the moe editor, then focus it.
     require frontend.window.dispatchKeyDown(primaryShiftKeyEvent(keyM))
     require frontend.window.makeFirstResponder(frontend.editorPane.editorView)
-    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    let shortcut = KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
     require frontend.window.dispatchKeyDown(shortcut)
     check frontend.window.firstResponderIs(controls.modeButton)
     require frontend.window.dispatchKeyDown(shortcut)
@@ -258,10 +258,10 @@ suite "Kosmo synthetic panel shortcuts":
       newKosmoPaneDocument("focus.terminal", "Terminal", terminal)
     )
     require frontend.window.firstResponderIs(terminal)
-    # F6 registers kosmo.focusToolbar, but a focused terminal has no toolbar.
+    # F5 registers kosmo.focusToolbar, but a focused terminal has no toolbar.
     # No responder claims the key and focus must not move; the integration
     # suite verifies the key reaches a live terminal program's PTY.
-    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    let shortcut = KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
     check not frontend.window.dispatchKeyDown(shortcut)
     check frontend.window.firstResponderIs(terminal)
 
@@ -324,10 +324,10 @@ suite "Kosmo synthetic panel shortcuts":
     detachedWindow.contentView().layoutSubtreeIfNeeded()
     app.activateWindow(detachedWindow)
     require detachedWindow.makeFirstResponder(detachedGroup.pane.contentView)
-    # The detached pane hosts the markdown preview; F6 toggles its controls.
+    # The detached pane hosts the markdown preview; F5 toggles its controls.
     let controls = detachedGroup.pane.markdownControls
     require not controls.hidden
-    let shortcut = KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+    let shortcut = KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
     require detachedWindow.dispatchKeyDown(shortcut)
     check detachedWindow.firstResponderIs(controls.modeButton)
     require detachedWindow.dispatchKeyDown(shortcut)

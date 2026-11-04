@@ -58,7 +58,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Shift-D` | Show Git diff tab | |
 | `primary-Shift-H` | Show GitHub issues and PRs | |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
-| `F6` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. |
+| `F5` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. macOS also binds `Command-Control-T`, avoiding the fn-key row. |
 | `primary-Shift-M` | Toggle Markdown source | Switches the selected Markdown tab between preview and source editing. |
 
 The scoped Vim pane commands are described below. They are handled only by a
@@ -438,7 +438,7 @@ the physical spelling shown by the active profile:
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |
-| Focus tool toolbar | `F6` |
+| Focus tool toolbar | `F5`, plus `Command-Control-T` on macOS |
 | Toggle Markdown source | `primary-Shift-M` |
 | Split below / right | `Ctrl-W s` / `Ctrl-W v` in Vim routing, with their control-key aliases; configurable GUI alternatives otherwise |
 
@@ -454,25 +454,27 @@ than menu-only exceptions.
 
 ### Focus tool toolbar
 
-`F6` toggles keyboard focus between the focused tool's *content* and that
+`F5` toggles keyboard focus between the focused tool's *content* and that
 tool's own controls — the Git diff / GitHub toolbar, the Markdown preview
 controls, the file-browser filter, and the Find-in-Files controls. It never
 focuses Kosmo's own pane or window chrome. Which toolbar takes focus depends on
-the focused tool, so `F6` is consistent across viewers: first press puts focus
+the focused tool, so `F5` is consistent across viewers: first press puts focus
 in the toolbar, second press returns it to the content. On a Git diff or GitHub
 reader the first enabled toolbar control is chosen, so a snapshot-only diff
 (whose refresh button is disabled) still lands on an actionable control.
 
-`F6` only claims the key when the focused tool actually has toolbar controls. A
-focused terminal keeps `F6` for the running program, and a plain source tab
-keeps it available for a user `F6` mapping in Moe. From a Markdown tab in either
-preview or source mode, `F6` toggles the preview controls. The action works in
+`F5` only claims the key when the focused tool actually has toolbar controls. A
+focused terminal keeps `F5` for the running program, and a plain source tab
+keeps it available for a user `F5` mapping in Moe. From a Markdown tab in either
+preview or source mode, `F5` toggles the preview controls. The action works in
 detached windows too and is reachable from the Window menu. Because the menu
 would otherwise perform the action unconditionally, the menu item deliberately
-carries no key equivalent; `F6` dispatches only through the window's binding
-table, which declines when no toolbar applies. On macOS laptops the media-key
-row may require the standard-function-keys preference; if so, rebind the action
-(see below).
+carries no key equivalent; `F5` dispatches only through the window's binding
+table, which declines when no toolbar applies. On macOS the F-key row doubles
+as media keys, so `F5` may require the `fn` modifier or the
+standard-function-keys preference; macOS therefore also binds
+`Command-Control-T` to the action by default, which needs neither.
+`keybindings.json` can rebind or remove either spelling (see below).
 
 ### Toggle Markdown source
 
@@ -485,8 +487,8 @@ view.
 
 Both commands are ordinary registry actions, so Settings lists them and
 `keybindings.json` can override them, disable them with `null`, or supply
-alternatives as an array. For example one alternative next to F6 is
-`"kosmo.focusToolbar": ["f6", "primary-shift-g"]`.
+alternatives as an array. For example one alternative next to F5 is
+`"kosmo.focusToolbar": ["f5", "primary-shift-g"]`.
 
 ## Implementation notes
 

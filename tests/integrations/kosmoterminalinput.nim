@@ -279,7 +279,7 @@ suite "Kosmo terminal shortcut PTY input":
           rows = 4,
         )
         terminal = newKosmoTerminalView(session, frame = rect(0, 0, 800, 160))
-        app = newApplication("F6 Toolbar Passthrough")
+        app = newApplication("F5 Toolbar Passthrough")
         frontend = newKosmoApplication(app, monitorsGitStatus = false)
         window = frontend.window
       defer:
@@ -296,17 +296,17 @@ suite "Kosmo terminal shortcut PTY input":
       app.activateWindow(window)
       require terminal.waitForTerminalText("READY")
       require frontend.openDocument(
-        newKosmoPaneDocument("f6-terminal", "Terminal", terminal)
+        newKosmoPaneDocument("f5-terminal", "Terminal", terminal)
       )
       require window.makeFirstResponder(terminal)
-      # F6 registers kosmo.focusToolbar, but a focused terminal has no toolbar;
-      # the key must pass through to the running program as F6 input.
+      # F5 registers kosmo.focusToolbar, but a focused terminal has no toolbar;
+      # the key must pass through to the running program as F5 input.
       require window.firstResponder() == Responder(terminal)
       require window.dispatchKeyDown(
-        KeyEvent(key: keyF6, keyCode: keyF6.ord, modifiers: {})
+        KeyEvent(key: keyF5, keyCode: keyF5.ord, modifiers: {})
       )
       check window.firstResponder() == Responder(terminal)
-      require terminal.waitForTerminalText("1b 5b 31 37 7e")
+      require terminal.waitForTerminalText("1b 5b 31 35 7e")
 
     test "quoted and raw shortcuts reach the PTY exactly once":
       let

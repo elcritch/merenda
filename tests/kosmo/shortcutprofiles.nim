@@ -89,15 +89,24 @@ suite "Kosmo shortcut profiles":
           {kmCommand}
         else:
           {kmControl}
-      check bindings.bindingFor([keyEvent(keyF6, {})]) ==
+      check bindings.bindingFor([keyEvent(keyF5, {})]) ==
         actionSelector(KosmoFocusToolbarAction)
       check bindings.bindingFor([keyEvent(keyM, expectedPlatformModifiers + {kmShift})]) ==
         actionSelector(KosmoToggleMarkdownModeAction)
       let macosBindings = initKosmoKeyBindings(KosmoShortcutProfile.MacOS, platform)
-      check macosBindings.bindingFor([keyEvent(keyF6, {})]) ==
+      check macosBindings.bindingFor([keyEvent(keyF5, {})]) ==
         actionSelector(KosmoFocusToolbarAction)
       check macosBindings.bindingFor([keyEvent(keyM, {kmCommand, kmShift})]) ==
         actionSelector(KosmoToggleMarkdownModeAction)
+      let controlCommandT = keyEvent(keyT, {kmCommand, kmControl})
+      if platform == KosmoShortcutPlatform.MacOS:
+        check bindings.bindingFor([controlCommandT]) ==
+          actionSelector(KosmoFocusToolbarAction)
+        check macosBindings.bindingFor([controlCommandT]) ==
+          actionSelector(KosmoFocusToolbarAction)
+      else:
+        check bindings.bindingFor([controlCommandT]) == CommandSelector()
+        check macosBindings.bindingFor([controlCommandT]) == CommandSelector()
 
   test "toolbar and markdown commands are overridable through the binding JSON":
     let loaded = applyKosmoShortcutConfigurationJson(
@@ -117,7 +126,7 @@ suite "Kosmo shortcut profiles":
     ) == actionSelector(KosmoFocusToolbarAction)
     check loaded.configuration.bindings.bindingFor([keyEvent(keyF8, {})]) ==
       actionSelector(KosmoToggleMarkdownModeAction)
-    check loaded.configuration.bindings.bindingFor([keyEvent(keyF6, {})]) ==
+    check loaded.configuration.bindings.bindingFor([keyEvent(keyF5, {})]) ==
       CommandSelector()
 
   test "toolbar override colliding with another command is rejected":
@@ -132,7 +141,7 @@ suite "Kosmo shortcut profiles":
 
     check loaded.errors.len == 1
     check loaded.applied == 0
-    check loaded.configuration.bindings.bindingFor([keyEvent(keyF6, {})]) ==
+    check loaded.configuration.bindings.bindingFor([keyEvent(keyF5, {})]) ==
       actionSelector(KosmoFocusToolbarAction)
 
   test "structured configuration resolves profile, editor mode, and symbolic bindings":

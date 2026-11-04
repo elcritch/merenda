@@ -407,7 +407,12 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-c", KosmoCopyAction, profile, platform)
   result.addBinding("primary-v", KosmoPasteAction, profile, platform)
   result.addBinding("primary-a", KosmoSelectAllAction, profile, platform)
-  result.addBinding("f6", KosmoFocusToolbarAction, profile, platform)
+  result.addBinding("f5", KosmoFocusToolbarAction, profile, platform)
+  if platform == KosmoShortcutPlatform.MacOS:
+    # Mac keyboards dedicate the F-key row to media functions, so F5 needs the
+    # fn modifier unless the user changes the system preference. Offer
+    # Command-Control-T as a second default binding there.
+    result.addBinding("primary-control-t", KosmoFocusToolbarAction, profile, platform)
   result.addBinding("primary-shift-m", KosmoToggleMarkdownModeAction, profile, platform)
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.addBinding(

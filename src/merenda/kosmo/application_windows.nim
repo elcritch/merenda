@@ -378,7 +378,7 @@ proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuI
 func hasMenuKeyEquivalent(action: KosmoAction): bool =
   ## Toolbar focus is context dependent: it toggles only when the focused tool
   ## has a toolbar and must stay available to the focused content otherwise,
-  ## including terminal programs that use F6. A menu key equivalent performs
+  ## including terminal programs that use F5. A menu key equivalent performs
   ## through the window's menu unconditionally and would consume the key even
   ## when no toolbar applies, so this action routes only through the window's
   ## binding table and keeps its menu item without an accelerator.
