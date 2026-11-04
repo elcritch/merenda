@@ -1689,8 +1689,8 @@ proc centerWindowOnWindow(panel, window: nimkit.Window) =
   let
     frame = window.frame()
     size = panel.frame().size
-    x = max(frame.origin.x + (frame.size.width - size.width) / 2, 0)
-    y = max(frame.origin.y + (frame.size.height - size.height) / 2, 0)
+    x = frame.origin.x + (frame.size.width - size.width) / 2
+    y = frame.origin.y + (frame.size.height - size.height) / 2
   panel.frame = nimkit.rect(nimkit.initPoint(x, y), size)
 
 proc chooseFile(frontend: KosmoApplication) =
