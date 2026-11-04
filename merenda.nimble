@@ -16,7 +16,7 @@ requires "siwin#5827ee9dadb5e2597db85375e0e87b8a2272174b"
 # This revision loads Vulkan lazily so a missing driver can use OpenGL.
 requires "gh:elcritch/figdraw >= 0.46.4 [siwin]"
 requires "harfbuzzy >= 0.7.0 [runtime]"
-requires "sigils >= 0.32.1 [sigNameAsString, closures, siwin, chronos]"
+requires "sigils >= 0.33.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
 requires "cborious"

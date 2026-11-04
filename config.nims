@@ -1,3 +1,6 @@
+# Property discovery uses structured metadata; omit verbose protocol declarations.
+switch("define", "sigilsProtocolSignatures=false")
+
 --define:
   useMalloc
 --mm:
