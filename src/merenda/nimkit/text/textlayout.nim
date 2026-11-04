@@ -2359,9 +2359,13 @@ proc lineBoundedIndexAtPoint(
         # point centered on a glyph lands within float noise of an exact tie
         # between the carets on both sides. Treat near-equal distances as a tie
         # and keep the lower index so the glyph containing the point wins.
-        tieEpsilon = max(abs(point.x), abs(caretX)) * CaretHitTieScale
-      if distance < closestDistance - tieEpsilon or
-          (distance <= closestDistance + tieEpsilon and index < closestIndex):
+        tieEpsilon = min(
+          max(abs(point.x), abs(caretX)) * CaretHitTieScale, 0.001'f32
+        )
+      if (distance == 0 and (closestDistance > 0 or index < closestIndex)) or
+          (distance > 0 and closestDistance > 0 and
+          (distance < closestDistance - tieEpsilon or
+          (abs(distance - closestDistance) <= tieEpsilon and index < closestIndex))):
         closestDistance = distance
         closestIndex = index
 
