@@ -63,6 +63,7 @@ suite "caret click integration":
         require abs(first.origin.x - second.origin.x) > 1
         window.clickCaret(view, initPoint(first.origin.x, y), 3)
         window.clickCaret(view, initPoint(second.origin.x, y), 4)
+        window.clickCaret(view, initPoint(midpoint, y), 3)
         for index in [3, 4]:
           let x = midpoint + (if index == 3: -direction else: direction) * 0.25'f32
           # Establish that float rounding still leaves an unambiguous nearest caret.

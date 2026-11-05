@@ -2316,8 +2316,6 @@ func sameSourceRange(a, b: GlyphSourceRange): bool =
   a.byteStart == b.byteStart and a.byteEnd == b.byteEnd and a.runeStart == b.runeStart and
     a.runeEnd == b.runeEnd
 
-const CaretHitTieScale = 1.0e-6'f32
-
 func clusterAppearsRtl(
     layout: GlyphArrangement, firstGlyph, lastGlyph, lineStart, lineStop: int
 ): bool =
@@ -2349,28 +2347,26 @@ proc lineBoundedIndexAtPoint(
   var
     glyphIndex = lineStart
     closestIndex = int(fragment.textRange.location)
-    closestDistance = high(float32)
+    closestDistance = high(float64)
+    closestCaretX: float32
 
   template considerCaret(index: int, caretX: float32) =
     if index >= selectableStart and index <= selectableStop:
       let
-        distance = abs(point.x - caretX)
-        # Adjacent glyph edges come from independently rounded float32 paths, so a
-        # point centered on a glyph lands within float noise of an exact tie
-        # between the carets on both sides. Treat near-equal distances as a tie
-        # and keep the lower index so the glyph containing the point wins. The
-        # tie tolerance scales with the coordinate magnitude so it covers the
-        # float32 noise floor of a few ULP at every scale while staying far
-        # below real caret spacing, and exact hits keep priority over every
-        # nonzero distance.
-        tieEpsilon = max(abs(point.x), abs(caretX)) * CaretHitTieScale
+        distance = abs(point.x.float64 - caretX.float64)
+        # The representable float32 midpoint can be closer to one endpoint
+        # after rounding. Resolve that midpoint toward the lower index, without
+        # extending the tie to neighboring clicks as coordinates grow.
+        midpoint = ((closestCaretX.float64 + caretX.float64) * 0.5).float32
+        tied =
+          distance == closestDistance or
+          (closestDistance < high(float64) and point.x == midpoint)
       if (distance == 0 and (closestDistance > 0 or index < closestIndex)) or (
-        distance > 0 and closestDistance > 0 and (
-          distance < closestDistance - tieEpsilon or
-          (abs(distance - closestDistance) <= tieEpsilon and index < closestIndex)
-        )
+        distance > 0 and closestDistance > 0 and
+        ((not tied and distance < closestDistance) or (tied and index < closestIndex))
       ):
         closestDistance = distance
+        closestCaretX = caretX
         closestIndex = index
 
   while glyphIndex <= lineStop:

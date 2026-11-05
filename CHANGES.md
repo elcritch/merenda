@@ -7,11 +7,9 @@
 - On Windows, probe Vulkan before transferring rendering to a worker and fall back
   to OpenGL or software rendering when graphics initialization fails.
 
-- Keep caret hit testing exact at large layout coordinates: the tie tolerance
-  scales with the coordinate magnitude at the float32 noise floor instead of a
-  flat subpixel cap, so glyph-center clicks on very long unwrapped lines
-  resolve to the containing glyph instead of drifting to a neighbor, while
-  exact caret hits keep priority over every nonzero distance.
+- Keep caret clicks accurate at large layout coordinates: rounded midpoint
+  ties choose the lower text index, neighboring clicks choose the nearest
+  caret, and exact caret hits keep priority.
 
 - Center the open file dialog on its parent window even when the parent sits
   on a monitor with negative desktop coordinates: monitors left of or above
