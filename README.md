@@ -23,124 +23,34 @@ DarkBSD is the default.
 <img width="400" alt="Merenda with the Peachy theme" src="https://github.com/user-attachments/assets/04f6dea9-c695-481a-a53a-b7f3f0eb61a1" />
 <img width="400" alt="Merenda with the DarkBSD theme" src="https://github.com/user-attachments/assets/70674e38-e678-4fb6-8b0b-93da41d9f7fd" />
 
-## Install and run Merenda
+## Try Merenda
 
-You'll need Nim 2.2.6 or newer, a C compiler, Git, and
-[Atlas](https://github.com/nim-lang/atlas#installation) to install the Nim
-dependencies. Use a current Atlas release: the Atlas 0.14 bundled with Nim
-2.2.12 cannot read `merenda.nimble` or the `-u` flag used below; Atlas 0.16.3
-works. On Linux and FreeBSD, you'll also need the system libraries for your
-windowing and graphics backend; Merenda uses Siwin for windows and FigDraw for
-rendering.
+You'll need Nim 2.2.10 or newer, a C compiler, Git, and a recent
+[Atlas](https://github.com/nim-lang/atlas#installation) (0.16.3 or newer).
+On Linux and FreeBSD, you'll also need the system libraries for your windowing
+and graphics backend. On Windows, use MinGW-w64 GCC.
 
-To try the examples, clone the repository and run the controls showcase:
+Clone the repository and run the controls showcase:
 
 ```sh
 git clone https://github.com/elcritch/merenda.git
 cd merenda
 atlas install -tuk
-nim r examples/controls_showcase.nim
+nim ic -r examples/controls_showcase.nim
 ```
 
-The showcase lets you try the controls together in one window. To see another
-theme, run it with `NIMKIT_THEME` set (in a POSIX shell):
-
-```sh
-NIMKIT_THEME=macos nim r examples/controls_showcase.nim
-NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
-NIMKIT_THEME=punch nim r examples/controls_showcase.nim
-```
-
-The built-in themes are [embedded CSS stylesheets](src/merenda/nimkit/themes/stylesheets)
-with shared widget defaults. Application CSS can extend them, and typed Nim
-styling APIs remain available for programmatic overrides.
-
-The **Punch** theme ports [RUI2’s Punch (fat) theme](https://github.com/kobi2187/rui2):
-warm cream, orange accents, thick ink outlines, bold uppercase buttons and hard shadows.
-
-Use CSS for control colors, fonts, gradients, state styles, edge pinning and
-native layout constraints. Style StackView/GridView spacing and alignment and
-control-specific metrics through `-nimkit-*` properties. The [CSS preview](examples/css_theme_demo.nim)
-lays out its toolbar, sidebar and editor from a stylesheet and reloads it when
-you click **Reload CSS**:
-
-```sh
-nim r examples/css_theme_demo.nim
-```
-
-Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
-supported properties and appearance scope.
-
-You can also [describe native GUIs in lightweight markup](docs/resources.md#gui-markup),
-using HTML5 syntax and `data-*` attributes for native widget options:
-
-```html
-<nk-main>
-  <nk-window id="window" title="Hello" data-frame="100 100 400 240">
-    <nk-stack-view id="root" data-axis="vertical" data-padding="24" data-spacing="12">
-      <nk-label data-label-style="title">Hello from Merenda</nk-label>
-      <nk-text-field id="name" placeholder="Your name"/>
-      <button id="save" data-action="saveDocument">Save</button>
-    </nk-stack-view>
-  </nk-window>
-</nk-main>
-```
-
-`loadGuiResourceBundle` reads the interface and `instantiateResources` constructs
-its native controls. One document can define independent windows. Built-in elements
-use `nk-`; application widgets can use names such as `some-app-widget`. Use IDs to
-look up controls and connect behavior in Nim.
-
-Try the [GUI resource example](examples/html_ui_demo.nim) with
-`nim ic -r examples/html_ui_demo.nim`. It includes compact preferences controls,
-Preview and Reset actions, and a separate About window. The Appearance dropdown
-switches both windows between the custom stylesheet and the built-in CSS themes.
-
-The [NIF version](examples/nif_ui_demo.nim) duplicates this demo with
-[NIF GUI markup](examples/nif_ui_demo.nif) and a
-[NIF theme](examples/nif_ui_demo.css.nif). The theme uses tagged selectors,
-hex colors, numbers with units, bare keywords, and shared token references.
-Enable its optional dependency and run it with:
-
-```sh
-atlas install -tk --feature=nifDemo
-nim ic -r examples/nif_ui_demo.nim
-```
-
-It uses [OpenParser](https://github.com/openpeeps/openparser) 0.4.1 or newer
-with Nim 2.2.10 or newer. The demo-local adapter feeds the existing GUI and CSS
-loaders; see the [NIF demo format](docs/resources.md#nif-demo) for its vocabulary.
-The [shorthand version](examples/nif_shorthand_demo.nim) uses native widget
-property nodes and line-based `style` rules for the same preferences window.
+The showcase lets you try the controls together in one window.
 
 To use Merenda in your own project, add this dependency to your `.nimble` file
-and run `atlas install -tuk` from that project:
+and run `atlas install -tuk`:
 
 ```nim
-requires "merenda"
+requires "https://github.com/elcritch/merenda"
 ```
 
 Build your app with threads enabled and ARC or ORC, for example
-`nim r --threads:on --mm:arc main.nim`. The examples in this repository already
-have those settings.
-
-FigDraw is compiled into the application. Merenda's experimental
-`useNativeDynlib` mode and `build_dynlib` task have been removed; omit
-`-d:useNativeDynlib` from existing build commands.
-
-### Running with Dev Control Mode
-
-Compile Merenda apps with `-d:merenda.devControl` for optional local screenshots and input automation.
-Setting `MERENDA_DEV_CONTROL=1` then starts and control socket.
-`MERENDA_BACKGROUND=1` supports automated runs without activating the app.
-See [development control](docs/dev-control.md) for the PID/socket CLI and protocol.
-
-```sh
-MERENDA_DEV_CONTROL=1 MERENDA_BACKGROUND=1 ./examples/controls_showcase &
-app_pid=$!
-./deps/merenda-dev --pid "$app_pid" windows
-./deps/merenda-dev --pid "$app_pid" screenshot --window w1 --output /tmp/showcase.png
-```
+`nim ic -r --threads:on --mm:arc main.nim`. The examples in this repository
+already have those settings.
 
 ## A few small apps
 
@@ -167,7 +77,7 @@ app.runWindow(window, root)
 ```
 
 Save this as `examples/greeting.nim` in your checkout and run
-`nim r examples/greeting.nim`.
+`nim ic -r examples/greeting.nim`.
 
 ### A button that does something
 
@@ -214,7 +124,7 @@ app.runWindow(window, root)
 This is [examples/quick_start.nim](examples/quick_start.nim). Run it with:
 
 ```sh
-nim r examples/quick_start.nim
+nim ic -r examples/quick_start.nim
 ```
 
 ### A Markdown reader in a handful of lines
@@ -243,11 +153,11 @@ app.runWindow(window, root, viewer)
 ```
 
 Save it as `examples/reader.nim`, then run
-`nim r examples/reader.nim README.md`. It expects a readable file path.
+`nim ic -r examples/reader.nim README.md`. It expects a readable file path.
 For a version with a built-in sample document, run:
 
 ```sh
-nim r examples/markdown_viewer_demo.nim README.md
+nim ic -r examples/markdown_viewer_demo.nim README.md
 ```
 
 That is the kind of efficiency NimKit aims for: you write the app's behavior,
@@ -304,7 +214,7 @@ root.addSubview(doneButton)
 app.runWindow(window, root, table)
 ```
 
-Save this as `examples/tasks_mvp.nim` and run `nim r examples/tasks_mvp.nim`.
+Save this as `examples/tasks_mvp.nim` and run `nim ic -r examples/tasks_mvp.nim`.
 The table binding supplies the columns and row values, so you only write the
 action specific to your app. For a larger version, see the
 [table-based to-do app](examples/todo_table.nim) or the
@@ -362,7 +272,7 @@ app.runWindow(window, root)
 ```
 
 Save this as `examples/protocol_drawing.nim` and run
-`nim r examples/protocol_drawing.nim`.
+`nim ic -r examples/protocol_drawing.nim`.
 
 Both implementations are compiled Nim code with typed `View` and `DrawContext`
 arguments. NimKit calls the drawing protocol, and Sigils dispatches to the method
@@ -430,7 +340,7 @@ app.runWindow(window, root)
 ```
 
 Run [the carousel example](examples/carousel_demo.nim) with
-`nim r examples/carousel_demo.nim`. The viewport clips the panels as they move,
+`nim ic -r examples/carousel_demo.nim`. The viewport clips the panels as they move,
 and the animation's `finished` signal enables the button for the next transition.
 For more, see [property animations and sequences](examples/animation_demo.nim).
 
@@ -453,10 +363,9 @@ Set `backdropBlurRadius` to zero to restore the ordinary box fill.
 zero to one. This effect is rendered inside the application, independently of
 native window backdrop effects.
 
-## Reusable search controls
+### Reusable search controls
 
-NimKit apps can reuse the same controls through `SearchBar` or attach a
-`TextSearchController` to any host view:
+Add find controls to a text view with `TextSearchController`:
 
 ```nim
 let preview = newTextView("λcat and dog")
@@ -468,80 +377,49 @@ discard search.showSearch()
 ```
 
 Keep the controller alive while its controls are attached, and call `search.close()`
-before releasing it if the host remains alive. Custom `TextSearchAdapter` callbacks
-provide text snapshots, reveal matches, and clear selections for terminals,
-multiple documents, or other data sources. An optional `replace` callback adds
-collapsed replacement controls and receives a validated Reni pattern and capture
-template. The adapter owns edits, undo, and checking that source content is current.
-Hosts can route find shortcuts through `search.handleSearchKey(event)` and call
-`search.refreshSearch()` when their source changes.
+before releasing it if the host remains alive. Route find shortcuts through
+`search.handleSearchKey(event)` and call `search.refreshSearch()` when the text
+changes. For embedded controls, use a `SearchBar` in your own layout.
 
-`SearchBar` is a regular `Box` containing standard text fields and buttons, arranged
-with `StackView`. For embedded controls, add `newSearchBar(frame = ...)` to a
-container (or use layout constraints) and set `hidden = false`. The host chooses
-whether it floats; query, error, and replacement changes do not override an
-embedded frame. `TextSearchController` anchors the floating controls with ordinary
-layout constraints, allowing their height to follow their content.
+## Make it your own
+
+Choose a built-in theme with `NIMKIT_THEME` (in a POSIX shell):
+
+```sh
+NIMKIT_THEME=macos nim ic -r examples/controls_showcase.nim
+NIMKIT_THEME=aqua nim ic -r examples/controls_showcase.nim
+NIMKIT_THEME=punch nim ic -r examples/controls_showcase.nim
+```
+
+Use [CSS](docs/css-theming.md) to customize colors, fonts, spacing, and layout.
+The [CSS preview](examples/css_theme_demo.nim) lets you edit a stylesheet and
+reload it while the app is running.
+
+You can also describe interfaces in [lightweight markup](docs/resources.md#gui-markup):
+
+```html
+<nk-main>
+  <nk-window id="window" title="Hello" data-frame="100 100 400 240">
+    <nk-stack-view id="root" data-axis="vertical" data-padding="24" data-spacing="12">
+      <nk-label data-label-style="title">Hello from Merenda</nk-label>
+      <nk-text-field id="name" placeholder="Your name"/>
+      <button id="save" data-action="saveDocument">Save</button>
+    </nk-stack-view>
+  </nk-window>
+</nk-main>
+```
+
+Use IDs to look up controls and connect behavior in Nim. Try the
+[GUI resource example](examples/html_ui_demo.nim) with
+`nim ic -r examples/html_ui_demo.nim`, or build an interface visually with
+[Tekton](#tekton-interface-builder).
 
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
 It brings together a file browser, split panes, terminal tabs, Markdown previews,
-Git diffs, and GitHub issues and PRs. You can use it on its own or explore its
-source to see how a larger Merenda app fits together.
-
-In terminal tabs, Command-click a file path on macOS, or Control-click on Linux
-and Windows, to open it in Kosmo. Links such as `src/main.nim:12:5` jump to the
-given line and column (both start at 1). Relative paths use the terminal's reported
-current directory, or its starting directory when the shell does not report one.
-The terminal link setting controls both file links and web links. Kosmo Settings
-also provides a Themes page where you can select a theme for All, Moe, or
-Terminal; editor and terminal choices are saved separately. Terminal colors are
-derived from the selected Moe theme's editor and syntax colors. Bundled themes
-include light and dark variants of popular Neovim palettes; [palette sources and
-licenses](data/moe/themes/SOURCES.md) are listed alongside them.
-Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
-
-To try FigDraw's experimental CPU renderer, compile with
-`-d:merenda.softwareRenderer`, for example
-`nim ic -d:merenda.softwareRenderer src/merenda/kosmo/kosmo.nim`. It uses Siwin software
-windows and renders on the window thread without a GPU context. Wayland layer
-surfaces are not supported by this switch, and FigDraw skips backdrop blur in
-its software renderer. On Windows, Kosmo also tries software rendering automatically
-if Vulkan and OpenGL cannot initialize. Windows releases include a separate
-`kosmo-windows-amd64-software.zip` build that always uses software rendering.
-
-On a Windows machine with a working Vulkan driver, test Vulkan presentation on
-the dedicated renderer thread with:
-
-```sh
-nim ic -r -d:merendaTestVulkanBackend tests/nimkit/backend.nim
-```
-
-To use Nimdex for Nim language features, open **Kosmo Settings → Nimdex**.
-Choose **Launch locally** and enter a Nimdex executable or command, or choose
-**Connect to daemon** and enter an address such as `tcp://127.0.0.1:9257`.
-Start or connect from the same page; Stop / Disconnect closes this editor's
-session. An externally started daemon stays running. Kosmo supplies the
-workspace root when the editor starts; a TCP listener serves one editor session
-at a time. The status bar shows estimated progress for the current entry point while Nimdex
-refreshes its compiler cache. The percentage is approximate, particularly on an
-incremental rebuild.
-
-Hover the mouse over a symbol in an editor pane to see available LSP hover
-information in a multiline tooltip. Markdown hover responses use styled text;
-hovering does not move the text cursor or focus the pane.
-
-Show Git Diff keeps a separate viewer for each repository. Detach their tabs to
-compare projects in separate windows; invoking the shortcut again returns to that
-project's viewer.
-
-In the GitHub view, expand a pull request and choose **Open diff in Kosmo** to
-compare its base branch with its head. Kosmo fetches dedicated PR refs in the
-background, including for fork PRs, and leaves your working branch and files intact.
-Fetch failures appear in the diff viewer; Refresh retries the comparison.
-
-### Install and open a project
+Git diffs, and GitHub issues and PRs. Use it on its own or explore its source to
+see how a larger Merenda app fits together.
 
 You don't need Nim to use a prebuilt Kosmo release. Run the installer from a
 shell (Git Bash on Windows):
@@ -550,123 +428,51 @@ shell (Git Bash on Windows):
 curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | bash
 ```
 
-On macOS, it installs `Kosmo.app` in `~/Applications` and a `kosmo` command in
-`~/.local/bin`. On Linux, FreeBSD, and Windows, the command goes in
-`~/.local/bin`. Make sure that directory is on your `PATH`.
+The installer adds a `kosmo` command in `~/.local/bin`; make sure that directory
+is on your `PATH`. On macOS, it also installs `Kosmo.app` in `~/Applications`.
 
-Open the current folder or a file:
+Open a project or a file:
 
 ```sh
 kosmo .
 kosmo README.md
-kosmo src/main.nim:12:5
-kosmo 'src/main.nim(12, 5)'
 ```
 
-These commands reuse a running Kosmo instance.
-Use `kosmo --bg ./folder/` to start a new instance detached from your shell.
-Start a new instance with `kosmo --new ./folder/`.
-`kosmo -v` and `kosmo --version` print the version and exit.
-On macOS, you can also open `Kosmo.app` from Finder.
-
-```sh
-kosmo --add ../shared-library
-kosmo --bg ../shared-library
-```
-
-Run `kosmo --help` for command-line options. See the
-[keyboard shortcut guide](src/merenda/kosmo/docs/shortcuts.md) for navigation
-and Vim bindings, or [release and installer details](docs/releasing-kosmo.md)
-for supported builds, custom install locations, and the static Linux build.
-
-### Build from source
-
-FigDraw 0.46.3 discovers HarfBuzz 7 or newer and FriBidi at runtime. Kosmo uses
-them for complex-script shaping, ligatures, and automatic system-font fallback;
-if either library is unavailable, it uses Pixie for text layout and rasterization.
-The native text libraries are optional for building and running ordinary source
-builds. Install `harfbuzz` and `fribidi` with Homebrew on macOS, or `libharfbuzz0b`
-and `libfribidi0` on Debian/Ubuntu, to enable shaping.
-
-Use `-d:figdrawTextBackend=pixie` to build with Pixie only, or
-`-d:figdrawTextBackend=harfbuzzy` to require native shaping. Bundled static
-builds (`-d:harfbuzzyStatic`) retain the Harfbuzzy backend by default.
-
-From your Merenda checkout, install the extra Kosmo dependencies, then build
-and launch it:
+To build and run Kosmo from your Merenda checkout:
 
 ```sh
 atlas install -tuk --features:kosmo
-nim c -o:kosmo src/merenda/kosmo/kosmo.nim
+nim ic -o:kosmo src/merenda/kosmo/kosmo.nim
 ./kosmo .
 ```
 
-On Windows, use MinGW-w64 GCC. CI and releases use MSYS2's UCRT64 environment:
-
-```sh
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-harfbuzz mingw-w64-ucrt-x86_64-fribidi
-nim c --cc:gcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim
-./kosmo.exe .
-```
-
-Keep the UCRT64 `bin` directory on `PATH` for the compiler and optional text DLLs.
-Release archives bundle the text DLLs and their dependencies, and retain native
-debug information inside `kosmo.exe`.
-
-On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
-bundled notices, debug symbols, and local code signature:
-
-```sh
-brew install meson ninja pkg-config
-nim install_kosmo
-```
-
-This uses Atlas to resolve dependencies, replaces `~/Applications/Kosmo.app`,
-and updates the `~/.local/bin/kosmo` link. Restart Kosmo if it was already
-running. Set `KOSMO_INSTALL_DIR` or `KOSMO_BIN_DIR` to choose other locations.
-Like CI, this builds shared HarfBuzz and FriBidi libraries for macOS 13, bundles
-them in `Contents/Frameworks`, and loads them at runtime. The installed app does
-not require Homebrew at runtime.
-
-## Explore more
-
-The [examples directory](examples/) has complete apps you can run and change.
-These are good places to go once you've tried the basics:
-
-- Layouts: [stacks and constraints](examples/layout_showcase.nim),
-  [constraint playground](examples/constraint_playground_demo.nim), and the
-  [layout guide](docs/layout.md).
-- Tables and trees: [table example](examples/table_demo.nim),
-  [filter row](examples/filter_row.nim) (including date range pickers and token fields),
-  [outline example](examples/outline_demo.nim), and
-  [model controllers](examples/modelcontrollers_demo.nim).
-- App workflows: [documents and windows](examples/document_workspace_demo.nim),
-  [preferences](examples/preferences_demo.nim), and
-  [settings and themes](examples/merenda_settings_demo.nim).
-- Text and drawing: [Markdown viewer](examples/markdown_viewer_demo.nim),
-  [canvas](examples/canvas_demo.nim), and [terminal](examples/terminal_demo.nim).
-- Building UI from resources: [resource guide](docs/resources.md) and
-  [example](examples/resource_ui_demo.nim).
-- Development checks: [reliability and memory profiling](docs/reliability.md).
-- Windows on FreeBSD: [disposable bhyve test VM and GPU passthrough](tools/windows-bhyve/README.md).
-- Windows VirtualBox: [setup and FreeBSD GPU test results](tools/windows-virtualbox/README.md).
-- Under the hood: [NimKit design](docs/design.md),
-  [Kosmo workspace updates](docs/kosmo-workspace.md),
-  [FigDraw](https://github.com/elcritch/figdraw/),
-  [Siwin](https://github.com/levovix0/siwin), and
-  [Sigils](https://github.com/elcritch/sigils).
+See the [keyboard shortcut guide](src/merenda/kosmo/docs/shortcuts.md),
+run `kosmo --help` for command-line options, or read the
+[installation and release details](docs/releasing-kosmo.md).
 
 ## Tekton interface builder
 
-Build a resource document with Tekton's widget palette, property inspector, and live
-preview. Add layout guides and constraints, pin views to their parent, undo changes,
-and save the result for your Merenda app. Use **Interact** to try controls in the preview.
+Build an interface with Tekton's widget palette, property inspector, and live
+preview, then save it for your Merenda app.
 
 ```sh
-nim r src/merenda/tekton.nim
-# Or open an existing interface:
-nim r src/merenda/tekton.nim path/to/interface.cbor
+nim ic -r src/merenda/tekton.nim
 ```
 
-See [Tekton's authoring workflow](docs/resources.md#tekton-resource-editor) for supported
-resources and how to load the saved interface in your app.
+See [Tekton's authoring guide](docs/resources.md#tekton-resource-editor) to get started.
+
+## Explore more
+
+The [examples directory](examples/) has complete apps you can run and change:
+
+- Build a small app: [to-do list](examples/todo_basic.nim) or
+  [table-based to-do list](examples/todo_table.nim).
+- Arrange controls: [layout showcase](examples/layout_showcase.nim) and
+  [layout guide](docs/layout.md).
+- Work with text: [Markdown reader](examples/markdown_viewer_demo.nim),
+  [text editor](examples/texteditor_demo.nim), and [terminal](examples/terminal_demo.nim).
+- Add motion and drawing: [animations](examples/animation_demo.nim) and
+  [canvas](examples/canvas_demo.nim).
+- Build larger apps: [documents and windows](examples/document_workspace_demo.nim),
+  [preferences](examples/preferences_demo.nim), and
+  [model controllers](examples/modelcontrollers_demo.nim).

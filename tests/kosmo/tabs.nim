@@ -60,6 +60,39 @@ proc clickMarkdownImage(view: MarkdownView, url: string): bool =
         )
   doAssert false, "Markdown preview should contain image: " & url
 
+proc contextMenuIn(view: View): Menu =
+  ## Menu of a transient context popup added directly to the view, if any.
+  ## Menu bar buttons live one level deeper and never match.
+  for child in view.subviews():
+    if child of PopupMenuButton:
+      return PopupMenuButton(child).menu()
+
+proc contextPopupIn(view: View): PopupMenuButton =
+  ## Anchor button of a transient context popup added directly to the view.
+  for child in view.subviews():
+    if child of PopupMenuButton:
+      return PopupMenuButton(child)
+
+proc buttonWithTitle(view: View, title: string): Button =
+  if view of Button and Button(view).title == title:
+    return Button(view)
+  for child in view.subviews():
+    result = child.buttonWithTitle(title)
+    if not result.isNil:
+      return
+
+func rectCenter(rect: Rect): Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
+
+proc clickModalButton(window: Window, title: string): bool =
+  let button = window.contentView().buttonWithTitle(title)
+  if button.isNil:
+    return
+  window.clickAt(button.pointToWindow(button.bounds().rectCenter()))
+
 suite "Kosmo":
   test "recognizes conventional Markdown file extensions":
     for path in ["README.md", "guide.MARKDOWN", "notes.mkd", "manual.mdtext"]:
@@ -936,3 +969,440 @@ suite "Kosmo pane file ownership":
     check first.len == initialFirstCount + 2
     check second.len == 2
     check second.documentTabModels()[^1].title == "No Name"
+
+proc openContextTabs(frontend: KosmoApplication, paths: openArray[string]) =
+  frontend.window.setContentView(frontend.contentView)
+  frontend.contentView.frame = rect(0, 0, 640, 480)
+  frontend.contentView.layoutSubtreeIfNeeded()
+  for path in paths:
+    require frontend.openPath(path)
+
+suite "Kosmo tab context menu":
+  test "right clicking an etab opens a menu with close options":
+    let
+      root = createTempDir("kosmo-tab-context-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Test"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 2
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    check menu.title == "Tab Actions"
+    require menu.items().len == 5
+    check menu.items()[0].title == "Close"
+    check menu.items()[1].title == "Close others"
+    check menu.items()[2].isSeparatorItem()
+    check menu.items()[3].title == "Duplicate right"
+    check menu.items()[4].title == "Duplicate below"
+    for index in [0, 1, 3, 4]:
+      check menu.items()[index].enabled
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    check not frontend.window.hasActiveTransientSession()
+    check frontend.editorView.editor.tabs().len == 2
+
+  test "right clicking the strip outside an etab opens no menu":
+    let
+      root = createTempDir("kosmo-tab-context-empty-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Empty"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 2
+    let emptyPoint = tabs.pointToWindow(
+      initPoint(tabs.bounds().maxX - 4.0'f32, tabs.bounds().minY + 17.0'f32)
+    )
+    check not frontend.window.rightMouseDownAt(emptyPoint)
+    check frontend.contentView.contextMenuIn().isNil
+    check frontend.editorView.editor.tabs().len == 2
+
+  test "the close option closes the clicked etab, not the selection":
+    let
+      root = createTempDir("kosmo-tab-context-close-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Close"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 2
+    check tabs.selectedDocumentTabItem().title == "second.txt"
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    require menu.items()[0].perform(frontend.window)
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "second.txt"
+    check tabs.documentTabModels().len == 1
+    check tabs.selectedDocumentTabItem().title == "second.txt"
+    # A click outside the popup dismisses it after the close moved the focus.
+    discard frontend.window.clickAt(
+      tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+  test "the close-others option keeps the clicked etab":
+    let
+      root = createTempDir("kosmo-tab-context-others-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeFile(thirdPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Others"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath, thirdPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 3
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    let closeOthers = menu.menuItemForAction("kosmo.editorTabs.closeOthers")
+    require not closeOthers.isNil
+    require closeOthers.perform(frontend.window)
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "first.txt"
+    check tabs.documentTabModels().len == 1
+    check tabs.selectedDocumentTabItem().title == "first.txt"
+    check frontend.editorView.editor.tabs()[0].active
+    discard frontend.window.clickAt(
+      tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+  test "the close-others option closes tabs in other splits":
+    let
+      root = createTempDir("kosmo-tab-context-splits-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Splits"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath])
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.sendAction(actionSelector(KosmoSplitHorizontalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check groups[0].pane.documentTabs.documentTabModels()[0].title == "first.txt"
+    check groups[1].pane.documentTabs.documentTabModels()[0].title == "second.txt"
+
+    # The clicked pane has a single etab, but the other split still has one.
+    let tabs = groups[0].editorView.documentTabs
+    require tabs.len == 1
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    let closeOthers = menu.menuItemForAction("kosmo.editorTabs.closeOthers")
+    require not closeOthers.isNil
+    check closeOthers.enabled
+    require closeOthers.perform(frontend.window)
+    check frontend.editorGroups().len == 1
+    check groups[0].editorView.editor.tabs().len == 1
+    check groups[0].editorView.editor.tabs()[0].title == "first.txt"
+    check groups[0].editorView.editor.tabs()[0].active
+    # Performing the item leaves the popup open; a click outside dismisses it.
+    discard frontend.window.clickAt(
+      tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+    # With no other etab left anywhere, the option is no longer active.
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let nextMenu = frontend.contentView.contextMenuIn()
+    require not nextMenu.isNil
+    let nextCloseOthers = nextMenu.menuItemForAction("kosmo.editorTabs.closeOthers")
+    require not nextCloseOthers.isNil
+    check not nextCloseOthers.enabled
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+  test "the duplicate options create splits of the clicked etab":
+    let
+      root = createTempDir("kosmo-tab-context-duplicate-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Duplicate"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([firstPath, secondPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 2
+    check tabs.selectedDocumentTabItem().title == "second.txt"
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    let duplicateRight = menu.menuItemForAction("kosmo.editorTabs.duplicateRight")
+    let duplicateBelow = menu.menuItemForAction("kosmo.editorTabs.duplicateBelow")
+    require not duplicateRight.isNil
+    require not duplicateBelow.isNil
+    check duplicateRight.enabled
+    check duplicateBelow.enabled
+
+    # Duplicating the clicked etab opens it in a new split to the right and
+    # keeps the original pane's tabs.
+    require duplicateRight.perform(frontend.window)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    var groups = frontend.editorGroups()
+    require groups.len == 2
+    check groups[0].pane.documentTabs.documentTabModels().len == 2
+    check groups[1].pane.documentTabs.documentTabModels().len == 1
+    check groups[1].pane.documentTabs.documentTabModels()[0].title == "first.txt"
+    check groups[1].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
+    check groups[0].pane.documentTabs.selectedDocumentTabItem().title == "second.txt"
+
+    # Duplicating below opens another split of the same etab below its pane.
+    require duplicateBelow.perform(frontend.window)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    groups = frontend.editorGroups()
+    require groups.len == 3
+    check groups[0].pane.documentTabs.documentTabModels().len == 2
+    check groups[1].pane.documentTabs.documentTabModels()[0].title == "first.txt"
+    check groups[2].pane.documentTabs.documentTabModels()[0].title == "first.txt"
+    check groups[2].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
+    check frontend.editorView.editor.tabs().len == 2
+    discard frontend.window.clickAt(
+      tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+  test "close others resumes after an accepted unsaved changes confirmation":
+    let
+      root = createTempDir("kosmo-tab-context-confirm-", "")
+      keepPath = root / "keep.txt"
+      dirtyPath = root / "dirty.txt"
+      lastPath = root / "last.txt"
+    writeFile(keepPath, "keep")
+    writeFile(dirtyPath, "dirty")
+    writeFile(lastPath, "last")
+    defer:
+      removeFile(keepPath)
+      removeFile(dirtyPath)
+      removeFile(lastPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Confirm"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([keepPath, dirtyPath, lastPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 3
+    # Select the middle tab and modify it so its close defers to the
+    # confirmation.
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require tabs.selectDocumentTabAtIndex(1)
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("!")
+    require frontend.editorView.editor.handleKey("Esc")
+    check frontend.editorView.editor.tabs()[1].modified
+
+    # Close others on the first tab: the dirty tab defers to the sheet while
+    # the last tab waits for the batch to resume. Activate the item through
+    # the popup's own handling so the popup closes right after the action,
+    # exactly like a click on the item.
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let popupButton = frontend.contentView.contextPopupIn()
+    require not popupButton.isNil
+    let menu = frontend.contentView.contextMenuIn()
+    require not menu.isNil
+    let closeOthers = menu.menuItemForAction("kosmo.editorTabs.closeOthers")
+    require not closeOthers.isNil
+    let othersIndex = menu.items().find(closeOthers)
+    require othersIndex == 1
+    require popupButton.dispatchPopupKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    require popupButton.dispatchPopupKeyDown(
+      KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.contentView.contextPopupIn().isNil
+
+    # Accepting the confirmation closes the dirty tab and resumes the batch.
+    let session = frontend.application.modalSession()
+    require not session.isNil
+    check session.window.title == "Unsaved Changes"
+    require session.window.clickModalButton("Discard")
+    check frontend.application.modalSession().isNil
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "keep.txt"
+    check tabs.selectedDocumentTabItem().title == "keep.txt"
+    check frontend.editorView.editor.tabs()[0].active
+    # The menu stays open while the sheet was up; a click outside dismisses it.
+    discard frontend.window.clickAt(
+      tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
+    )
+    check not frontend.window.hasActiveTransientSession()
+
+    # Cancelling a confirmation stops the batch and keeps the tabs open.
+    require frontend.openPath(dirtyPath)
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("?")
+    require frontend.editorView.editor.handleKey("Esc")
+    check frontend.editorView.editor.tabs()[1].modified
+    require frontend.window.rightMouseDownAt(tabPoint)
+    let nextMenu = frontend.contentView.contextMenuIn()
+    require not nextMenu.isNil
+    let nextCloseOthers = nextMenu.menuItemForAction("kosmo.editorTabs.closeOthers")
+    require not nextCloseOthers.isNil
+    require nextCloseOthers.perform(frontend.window)
+    let cancelledSession = frontend.application.modalSession()
+    require not cancelledSession.isNil
+    require cancelledSession.window.clickModalButton("Cancel")
+    check frontend.application.modalSession().isNil
+    check frontend.editorView.editor.tabs().len == 2
+    check frontend.editorView.editor.tabs()[1].modified
+    check tabs.selectedDocumentTabItem().title == "dirty.txt"
+
+  test "close others keeps a dirty tab when closing is disabled":
+    let
+      root = createTempDir("kosmo-tab-context-eligibility-", "")
+      keepPath = root / "keep.txt"
+      dirtyPath = root / "dirty.txt"
+      lastPath = root / "last.txt"
+    writeFile(keepPath, "keep")
+    writeFile(dirtyPath, "dirty")
+    writeFile(lastPath, "last")
+    defer:
+      removeFile(keepPath)
+      removeFile(dirtyPath)
+      removeFile(lastPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Eligibility"))
+    defer:
+      frontend.close()
+    frontend.openContextTabs([keepPath, dirtyPath, lastPath])
+
+    let tabs = frontend.editorView.documentTabs
+    require tabs.len == 3
+    # Select the middle tab and modify it so a close would defer to the
+    # confirmation when the tab is eligible.
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require tabs.selectDocumentTabAtIndex(1)
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("!")
+    require frontend.editorView.editor.handleKey("Esc")
+    check frontend.editorView.editor.tabs()[1].modified
+    let dirtyIdentifier = tabs[1].identifier()
+    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+
+    # With closing disabled for the strip, the Close menu item is disabled and
+    # the popup initially highlights "Close others". Activating it neither
+    # prompts nor closes and the batch stops.
+    block stripClosingDisabled:
+      tabs.allowsClosing = false
+      require frontend.window.rightMouseDownAt(tabPoint)
+      let popupButton = frontend.contentView.contextPopupIn()
+      require not popupButton.isNil
+      # The Close menu item uses the same eligibility check as the close
+      # operation and is disabled while closing is unavailable.
+      let menu = frontend.contentView.contextMenuIn()
+      require not menu.isNil
+      let closeItem = menu.menuItemForAction("kosmo.editorTabs.close")
+      require not closeItem.isNil
+      check not closeItem.enabled
+      require popupButton.dispatchPopupKeyDown(
+        KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+      )
+      check frontend.application.modalSession().isNil
+      check tabs.len == 3
+      check tabs[1].identifier() == dirtyIdentifier
+      check frontend.editorView.editor.tabs()[1].modified
+      tabs.allowsClosing = true
+
+    # With the dirty tab item not closeable, the clicked etab is still
+    # closeable, so the Close menu item stays enabled; activating the
+    # highlighted "Close others" keeps every tab because the batch stops at
+    # the etab that is not closeable.
+    block dirtyTabNotCloseable:
+      let item = tabs.documentTabItemWithIdentifier(dirtyIdentifier)
+      require not item.isNil
+      item.closeable = false
+      require frontend.window.rightMouseDownAt(tabPoint)
+      let popupButton = frontend.contentView.contextPopupIn()
+      require not popupButton.isNil
+      # The same eligibility check keeps the Close menu item enabled for the
+      # clicked etab, which is closeable, even though the dirty etab is not.
+      let menu = frontend.contentView.contextMenuIn()
+      require not menu.isNil
+      let closeItem = menu.menuItemForAction("kosmo.editorTabs.close")
+      require not closeItem.isNil
+      check closeItem.enabled
+      require popupButton.dispatchPopupKeyDown(
+        KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+      )
+      require popupButton.dispatchPopupKeyDown(
+        KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+      )
+      check frontend.application.modalSession().isNil
+      check tabs.len == 3
+      check frontend.editorView.editor.tabs()[1].modified

@@ -561,6 +561,17 @@ suite "Kosmo settings":
     check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == richStyle
     check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) == richStyle
 
+    require controls.colorModeButton.sendAction()
+    let overrideStyle = controls.markdownPresentationStyle(KosmoThemeTarget.Markdown)
+    check overrideStyle != richStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == richStyle
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub) == allStyle
+    target.activateItemAtIndex(KosmoThemeTarget.GitDiff.ord)
+    selectTheme(themes[1].identifier)
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) == overrideStyle
+    require controls.colorModeButton.sendAction()
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) == richStyle
+
   test "grammar settings list built-in and newly added languages":
     require settingsTabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)
     discard settingsPanel.buildRenders()

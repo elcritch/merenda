@@ -9,6 +9,9 @@ import ../nimkit/foundation/gitprocesses
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
+import ./readerpresentation
+import ./themetargets
+
 import ./[searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 const
@@ -3364,6 +3367,13 @@ proc showSearch*(panel: KosmoGitDiffPanel): bool {.discardable.} =
   panel.loadSearchPatches()
   panel.search.showSearch()
 
+protocol GitDiffReaderPresentation of KosmoReaderPresentationProtocol:
+  method readerThemeTarget(panel: KosmoGitDiffPanel): Option[KosmoThemeTarget] =
+    some(KosmoThemeTarget.GitDiff)
+
+  method applyReaderStyle(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
+    panel.markdownStyle = style
+
 proc newKosmoGitDiffPanel(
     rootPath: string,
     markdownStyle: nimkit.MarkdownStyle,
@@ -3408,6 +3418,7 @@ proc newKosmoGitDiffPanel(
   result.comparisonButton = result.toRevisionButton
   result.matterGrammarSources = installedVscodeGrammars().viewerGrammarSources()
   result.initViewFields()
+  discard result.withProtocol(GitDiffReaderPresentation)
   let document = GitDiffDocumentView(panel: result.unsafeWeakRef())
   document.initViewFields()
   discard document.withProtocol(GitDiffDocumentDrawing)
@@ -3512,10 +3523,10 @@ proc newKosmoGitDiffPanel(
     nimkit.markdownDidFinishParsing, result, markdownParsingFinished
   )
   for view in [
-    nimkit.View(result.refreshButton), result.fromRevisionButton,
-    result.fromHistoryButton, result.revisionSeparator, result.toRevisionButton,
-    result.toHistoryButton, result.expandButton, result.collapseButton,
-    result.autoRefreshLabel, result.autoRefreshSwitch, result.scrollView,
+    nimkit.View(result.fromRevisionButton), result.fromHistoryButton,
+    result.revisionSeparator, result.toRevisionButton, result.toHistoryButton,
+    result.expandButton, result.collapseButton, result.autoRefreshLabel,
+    result.autoRefreshSwitch, result.refreshButton, result.scrollView,
   ]:
     result.addSubview(view)
   result.search.bar.removeFromSuperview()

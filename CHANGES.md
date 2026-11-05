@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
+  context menus, keeping each rich-text theme choice independent.
+
+- Add a right click menu to Kosmo's editor tabs with Close, Close others, and
+  Duplicate right and Duplicate below actions. Right clicking an etab pops a menu
+  anchored at the tab; Close runs the standard close flow for the clicked tab,
+  Close others closes every other eligible editor tab of every pane while keeping
+  the clicked one and resumes after an accepted unsaved-changes confirmation, and
+  the duplicate options split the clicked etab's editor and file into a new pane
+  to the right or below. Clicks outside a tab keep the standard dispatch.
 - Add an experimental FigDraw software renderer switch for Siwin windows.
 - Publish a separate Windows software-rendered Kosmo build.
 - On Windows, probe Vulkan before transferring rendering to a worker and fall back
@@ -39,6 +49,7 @@
 - Bundle dark and light Moe themes from ten popular Neovim theme families, plus Solarized.
 
 - Choose themes for Moe, terminals, or both from Kosmo settings, with separate saved choices.
+
 - Load Vulkan on demand so Kosmo can fall back to OpenGL when the driver is absent.
 
 - Link MinGW runtimes statically into Windows executables and verify the release
@@ -66,6 +77,7 @@
 
 - Prefer opening editor tabs in a pane not displaying a terminal, with a Kosmo
   Settings option to always use the active pane.
+
 - Open working-tree files directly from their Git diff headers in Kosmo.
 
 - Document that installing dependencies needs a newer Atlas than the one bundled
