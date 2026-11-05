@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Simplify TextMate grammar settings to an installed list with an Install more
+  button that opens a separate search and installation sheet.
+
 - Allow macOS Option characters in terminals by default; Option-as-Meta remains
   available in settings.
 - Group Moe themes by appearance and let users sort the theme list.

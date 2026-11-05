@@ -74,7 +74,7 @@ suite "Kosmo settings layout":
       (KosmoMoeThemesSettingsTabIdentifier, @["Themes"]),
       (
         KosmoTextMateGrammarsSettingsTabIdentifier,
-        @["Find a Language", "Available TextMate Grammars"],
+        @["Installed grammars", "Install more…"],
       ),
     ]
     for (identifier, pageText) in expectedPageText:
@@ -85,20 +85,13 @@ suite "Kosmo settings layout":
       settings.contentView().checkVisibleText(pageText)
 
     check tabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)
-    let
-      searchField = settings.contentView().viewWithIdentifier(
-          KosmoVscodeGrammarSearchFieldIdentifier
-        )
-      searchButton = settings.contentView().viewWithIdentifier(
-          KosmoVscodeGrammarSearchButtonIdentifier
-        )
-      resultsTable = settings.contentView().viewWithIdentifier(
-          KosmoVscodeGrammarSearchTableIdentifier
-        )
-    require searchField of TextField
-    require searchButton of Button
-    require resultsTable of TableView
-    resultsTable.checkVisibleIn(settings.contentView())
+    let installed =
+      settings.contentView().viewWithIdentifier(KosmoTextMateGrammarsTableIdentifier)
+    require installed of TableView
+    installed.checkVisibleIn(settings.contentView())
+    check settings
+      .contentView()
+      .viewWithIdentifier(KosmoVscodeGrammarSearchFieldIdentifier).isNil
     check not settings.vscodeGrammarCatalog().isBusy
 
     let largerSize = initSize(minimumSize.width + 100, minimumSize.height + 100)
@@ -190,43 +183,65 @@ suite "Kosmo settings layout":
       check connect.frame().size.height > 0
       check disconnect.frame().size.height > 0
 
-  test "TextMate search results and available grammars share a draggable divider":
+  test "Install more opens a reusable sheet and returns to installed grammars":
+    let app = newApplication("Grammar installer test")
     let settings = newKosmoSettingsWindow()
-    defer:
-      settings.window().close()
     let window = settings.window()
     window.setContentView(settings.contentView())
-    window.frame = rect(180, 160, 760, 650)
+    app.addWindow(window)
+    defer:
+      settings.close()
+      window.close()
     let tabs =
       TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
     require tabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)
     discard window.buildRenders()
-    let splitView =
-      settings.contentView().viewWithIdentifier(KosmoGrammarListsSplitIdentifier)
-    require splitView of SplitView
-    let split = SplitView(splitView)
-    let results =
-      settings.contentView().viewWithIdentifier(KosmoVscodeGrammarSearchTableIdentifier)
-    let available =
-      settings.contentView().viewWithIdentifier(KosmoTextMateGrammarsTableIdentifier)
-    require not results.isNil and not available.isNil
-    let
-      initialResultsHeight = results.frame().size.height
-      initialAvailableHeight = available.frame().size.height
-      divider = split.dividerRect(0)
-      start = split.pointToWindow(
-        initPoint(
-          divider.origin.x + divider.size.width * 0.5,
-          divider.origin.y + divider.size.height * 0.5,
-        )
+    let installMore = Button(
+      settings.contentView().viewWithIdentifier(KosmoInstallMoreGrammarsIdentifier)
+    )
+    require not installMore.isNil
+    require installMore.sendAction()
+    let sheet = window.attachedSheet()
+    require not sheet.isNil
+    check sheet.title == "Install grammars"
+    require not app.modalSession().isNil
+    check app.modalSession().parentWindow == window
+    let content = sheet.contentView()
+    let search =
+      TextField(content.viewWithIdentifier(KosmoVscodeGrammarSearchFieldIdentifier))
+    let install =
+      Button(content.viewWithIdentifier(KosmoVscodeGrammarInstallButtonIdentifier))
+    let done = Button(content.viewWithIdentifier(KosmoGrammarInstallerDoneIdentifier))
+    require not search.isNil and not install.isNil and not done.isNil
+    check sheet.fieldEditorClient() == search
+    check not install.enabled
+    check not settings.vscodeGrammarCatalog().isBusy
+    search.text = "nim"
+    for size in [initSize(560, 300), initSize(700, 420)]:
+      sheet.frame = rect(initPoint(180, 160), size)
+      discard sheet.buildRenders()
+      content.checkVisibleText(
+        ["Install grammars", "Search", "Install Selected", "Done"]
       )
-      stop = initPoint(start.x, start.y + 40.0'f32)
-    check window.mouseDownAt(start)
-    check window.mouseDraggedAt(stop)
-    discard window.buildRenders()
-    check results.frame().size.height > initialResultsHeight + 30.0'f32
-    check available.frame().size.height < initialAvailableHeight - 30.0'f32
-    check window.mouseUpAt(stop)
+      for identifier in [
+        KosmoVscodeGrammarSearchFieldIdentifier,
+        KosmoVscodeGrammarSearchTableIdentifier,
+        KosmoVscodeGrammarInstallButtonIdentifier, KosmoGrammarInstallerDoneIdentifier,
+      ]:
+        content.viewWithIdentifier(identifier).checkVisibleIn(content)
+    require done.sendAction()
+    check window.attachedSheet().isNil
+    check app.modalSession().isNil
+    require installMore.sendAction()
+    check window.attachedSheet() == sheet
+    check search.text == "nim"
+    sheet.close()
+    check window.attachedSheet().isNil
+    check app.modalSession().isNil
+    require installMore.sendAction()
+    window.close()
+    check sheet.isClosed
+    check app.modalSession().isNil
 
   test "TextMate grammar table follows its dragged column border":
     let settings = newKosmoSettingsWindow(
