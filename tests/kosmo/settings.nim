@@ -435,8 +435,8 @@ suite "Kosmo settings":
     var catppuccinRow = -1
     for expectedName in [
       "Catppuccin Latte", "Catppuccin Mocha", "Cyberdream Dark", "Cyberdream Light",
-      "Dayfox", "Dracula", "Everforest Dark", "Everforest Light", "GitHub Dark",
-      "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
+      "Dark Orchid", "Dayfox", "Dracula", "Everforest Dark", "Everforest Light",
+      "GitHub Dark", "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
       "Kanagawa Lotus", "Kanagawa Wave", "Nightfox", "One Dark", "One Light",
       "Rose Pine", "Rose Pine Dawn", "Shades of Purple", "Solarized Dark",
       "Solarized Light", "Tokyo Night Day", "Tokyo Night Moon",

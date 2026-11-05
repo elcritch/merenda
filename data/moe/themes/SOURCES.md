@@ -7,6 +7,7 @@ and dark variants. The upstream projects and their licenses are:
 | --- | --- | --- |
 | Catppuccin | [catppuccin/nvim](https://github.com/catppuccin/nvim) | [MIT](licenses/catppuccin.txt) |
 | Cyberdream | [scottmckendry/cyberdream.nvim](https://github.com/scottmckendry/cyberdream.nvim/tree/c75105a) | [MIT](licenses/cyberdream.txt) |
+| Dark Orchid | [dark-orchid/neovim](https://github.com/dark-orchid/neovim/tree/9034fdc4407d37c0e579f75f9438003084145db6) | [MIT](licenses/dark-orchid.txt) |
 | Dracula | [dracula/vim](https://github.com/dracula/vim/tree/c689958744a93851b870e17ede7e9cbd28bc7cf8) | [MIT](licenses/dracula.txt) |
 | Everforest | [sainnhe/everforest](https://github.com/sainnhe/everforest/tree/85a86eb) | [MIT](licenses/everforest.txt) |
 | GitHub | [projekt0n/github-nvim-theme](https://github.com/projekt0n/github-nvim-theme/tree/c106c94) | [MIT](licenses/github.txt) |
@@ -21,5 +22,7 @@ and dark variants. The upstream projects and their licenses are:
 
 The ten Neovim families were selected from [Dotfyle's install-based colorscheme
 ranking](https://dotfyle.com/neovim/colorscheme/top), consulted on 2026-10-29.
-Solarized, Dracula, and Shades of Purple were added separately. The license files are also installed
-alongside the embedded themes in Kosmo's asset cache.
+Solarized, Dracula, Shades of Purple, and Dark Orchid were added separately. The
+license files are also installed alongside the embedded themes in Kosmo's asset
+cache. Dark Orchid uses an opaque background from its palette because the
+original Neovim theme leaves its background transparent.

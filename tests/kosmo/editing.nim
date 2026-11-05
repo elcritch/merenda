@@ -225,8 +225,8 @@ suite "Kosmo":
     let themes = editor.availableMoeThemes()
     for expectedName in [
       "Catppuccin Latte", "Catppuccin Mocha", "Cyberdream Dark", "Cyberdream Light",
-      "Dayfox", "Dracula", "Everforest Dark", "Everforest Light", "GitHub Dark",
-      "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
+      "Dark Orchid", "Dayfox", "Dracula", "Everforest Dark", "Everforest Light",
+      "GitHub Dark", "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
       "Kanagawa Lotus", "Kanagawa Wave", "Nightfox", "One Dark", "One Light",
       "Rose Pine", "Rose Pine Dawn", "Shades of Purple", "Solarized Dark",
       "Solarized Light", "Tokyo Night Day", "Tokyo Night Moon",
@@ -247,6 +247,12 @@ suite "Kosmo":
         check preview.stringLiteral ==
           KosmoMoeThemeColor(red: 0xa5, green: 0xff, blue: 0x90)
         check preview.comment == KosmoMoeThemeColor(red: 0xb3, green: 0x62, blue: 0xff)
+      if expectedName == "Dark Orchid":
+        check preview.background ==
+          KosmoMoeThemeColor(red: 0x0c, green: 0x00, blue: 0x1a)
+        check preview.keyword == KosmoMoeThemeColor(red: 0xa7, green: 0x8b, blue: 0xfa)
+        check preview.stringLiteral ==
+          KosmoMoeThemeColor(red: 0x86, green: 0xef, blue: 0xac)
       let outcome = editor.applyMoeTheme(themes[matchingIndex])
       check outcome.applied
       check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier

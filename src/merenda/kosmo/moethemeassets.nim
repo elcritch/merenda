@@ -24,6 +24,7 @@ const EmbeddedMoeThemes = [
   embedTheme("catppuccin-mocha.toml"),
   embedTheme("cyberdream-dark.toml"),
   embedTheme("cyberdream-light.toml"),
+  embedTheme("dark-orchid.toml"),
   embedTheme("dayfox.toml"),
   embedTheme("dracula.toml"),
   embedTheme("everforest-dark.toml"),
@@ -49,6 +50,7 @@ const EmbeddedMoeThemes = [
 const EmbeddedMoeThemeLicenses = [
   embedLicense("catppuccin.txt"),
   embedLicense("cyberdream.txt"),
+  embedLicense("dark-orchid.txt"),
   embedLicense("dracula.txt"),
   embedLicense("everforest.txt"),
   embedLicense("github.txt"),
