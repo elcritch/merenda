@@ -1054,10 +1054,9 @@ func cliWindowId*(frontend: KosmoApplication): string =
 func projectWindowTitle(rootPaths: openArray[string]): string =
   result = "Kosmo"
   if rootPaths.len > 0:
-    result.add " (" & nimkit.fileBrowserDisplayName(rootPaths[0])
+    result.add " • " & nimkit.fileBrowserDisplayName(rootPaths[0])
     if rootPaths.len > 1:
       result.add " + " & $(rootPaths.len - 1)
-    result.add ")"
 
 proc updateProjectWindowTitle(frontend: KosmoApplication) =
   if not frontend.isNil and not frontend.window.isNil and not frontend.fileTree.isNil:
@@ -1372,7 +1371,7 @@ proc newKosmoApplication*(
     contentView: contentView,
     documentView: documentView,
     xPreferEditorPanes: manager.config.preferEditorPanes,
-    xTerminalOptionAsMeta: true,
+    xTerminalOptionAsMeta: nimkit.DefaultTerminalOptionAsMeta,
     xTerminalLinksEnabled: true,
     xTerminalInputPolicy: parseTerminalInputPolicy(manager.config.terminalInput),
     xWindowManager: manager.unsafeWeakRef(),

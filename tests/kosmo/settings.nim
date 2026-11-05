@@ -498,6 +498,32 @@ suite "Kosmo settings":
       KosmoMoeDefaultThemeIdentifier
     discard settingsPanel.buildRenders()
 
+  test "theme appearance sorting preserves the selected theme":
+    require settingsTabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    let table = TableView(
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    let appearance = table.columnWithIdentifier(KosmoMoeThemeAppearanceColumnIdentifier)
+    let name = table.columnWithIdentifier(KosmoMoeThemeNameColumnIdentifier)
+    require not appearance.isNil and not name.isNil
+    check table.tableCellText(0, appearance) == "Dark"
+    check table.tableCellText(table.rowCount - 1, appearance) == "Light"
+    table.selectedIndex = 0
+    let selected = table.tableRowIdentifier(table.selectedIndex)
+    require selected.len > 0
+    let applied = frontend.editorView.editor.activeMoeThemeIdentifier()
+    table.requestSort(appearance, tsdDescending)
+    check table.tableCellText(0, appearance) == "Light"
+    check table.tableCellText(table.rowCount - 1, appearance) == "Dark"
+    check table.tableRowIdentifier(table.selectedIndex) == selected
+    check frontend.editorView.editor.activeMoeThemeIdentifier() == applied
+    table.requestSort(name, tsdAscending)
+    for row in 1 ..< table.rowCount:
+      check cmpIgnoreCase(
+        table.tableCellText(row - 1, name), table.tableCellText(row, name)
+      ) <= 0
+    check table.tableRowIdentifier(table.selectedIndex) == selected
+
   test "theme targets keep editor and terminal choices independent":
     require settingsTabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
     let terminal = newKosmoTerminalView()
@@ -522,6 +548,8 @@ suite "Kosmo settings":
       discard settingsPanel.buildRenders()
       let row = table.tableRowIndexForIdentifier(identifier)
       require row >= 0
+      table.scrollItemToVisible(row)
+      discard settingsPanel.buildRenders()
       let bounds = table.rowItemRect(row)
       let point = table.pointToWindow(
         initPoint(bounds.origin.x + 20, bounds.origin.y + bounds.size.height / 2)
@@ -647,8 +675,8 @@ suite "Kosmo settings":
     require not terminalLinksView.isNil
     require terminalLinksView of Button
     let terminalLinksButton = Button(terminalLinksView)
-    check frontend.terminalOptionAsMeta
-    check optionButton.state == bsOn
+    check frontend.terminalOptionAsMeta == DefaultTerminalOptionAsMeta
+    check optionButton.state == (if DefaultTerminalOptionAsMeta: bsOn else: bsOff)
     check frontend.terminalLinksEnabled
     check terminalLinksButton.state == bsOn
 
@@ -656,12 +684,12 @@ suite "Kosmo settings":
     check frontend.openDocument(
       newKosmoPaneDocument("kosmo.test.terminal", "Terminal", terminalView)
     )
-    check terminalView.optionAsMeta
+    check terminalView.optionAsMeta == DefaultTerminalOptionAsMeta
     check terminalView.allowsLinkActivation
     check optionButton.tryToPerform(performClick(), DynamicAgent(optionButton))
-    check optionButton.state == bsOff
-    check not frontend.terminalOptionAsMeta
-    check not terminalView.optionAsMeta
+    check optionButton.state == (if DefaultTerminalOptionAsMeta: bsOff else: bsOn)
+    check frontend.terminalOptionAsMeta != DefaultTerminalOptionAsMeta
+    check terminalView.optionAsMeta != DefaultTerminalOptionAsMeta
     check terminalLinksButton.tryToPerform(
       performClick(), DynamicAgent(terminalLinksButton)
     )

@@ -213,6 +213,26 @@ suite "nimkit text views":
     check textView.stringValue == "abXYef"
     check textView.selectedRange == initTextRange(4, 0)
 
+  test "text views accept Option-generated and composed characters":
+    let
+      window = newWindow("International input", frame = rect(0, 0, 240, 120))
+      view = newTextView("", frame = rect(0, 0, 240, 120))
+    defer:
+      window.close()
+    window.setContentView(view)
+    require window.makeFirstResponder(view)
+    for (key, modifiers, text) in [
+      (key5, {kmOption}, "["),
+      (key6, {kmOption}, "]"),
+      (key8, {kmOption, kmShift}, "•"),
+    ]:
+      discard window.dispatchKeyDown(KeyEvent(key: key, modifiers: modifiers))
+      require window.dispatchTextInput(text)
+    discard window.dispatchKeyDown(KeyEvent(key: keyU, modifiers: {kmOption}))
+    discard window.dispatchKeyDown(KeyEvent(key: keyU))
+    require window.dispatchTextInput("ü")
+    check view.stringValue == "[]•ü"
+
   test "text view delete and movement commands update selection":
     let textView = newTextView("one two", frame = rect(0, 0, 160, 24))
 
@@ -327,8 +347,8 @@ suite "nimkit text views":
     check textView.send(textInputSelectedRange(), ()) == initTextRange(2, 0)
     check substring.stringValue() == "XY"
     check textView
-    .send(textInputAttributedSubstringForRange(), initTextRange(1, 2))
-    .stringValue() == "XY"
+      .send(textInputAttributedSubstringForRange(), initTextRange(1, 2))
+      .stringValue() == "XY"
     check substring.attributesAt(0).foregroundColor == accent.foregroundColor
     check "foregroundColor" in textView.validAttributesForMarkedText()
     check not firstRect.isEmpty

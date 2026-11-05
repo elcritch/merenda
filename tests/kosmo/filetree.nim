@@ -186,11 +186,10 @@ suite "Kosmo":
       GitStatusSnapshot(
         rootPath: root,
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: path, state: gfsModified),
-            GitStatusEntry(path: root / "changed-deleted.txt", state: gfsDeleted),
-          ],
+        entries: @[
+          GitStatusEntry(path: path, state: gfsModified),
+          GitStatusEntry(path: root / "changed-deleted.txt", state: gfsDeleted),
+        ],
       )
     )
     tree.applyGitStatus(
@@ -251,14 +250,13 @@ suite "Kosmo":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: nestedFile, state: gfsModified),
-            GitStatusEntry(path: untrackedFile, state: gfsUntracked),
-            GitStatusEntry(path: gitDirectory, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-          ],
+        entries: @[
+          GitStatusEntry(path: nestedFile, state: gfsModified),
+          GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+          GitStatusEntry(path: gitDirectory, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+        ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.AllFiles
@@ -420,18 +418,18 @@ suite "Kosmo":
       frontend = newKosmoApplication(newApplication("Kosmo Open Path Test"))
       initialRoot = frontend.fileTree.rootPath
       initialRootName = initialRoot.fileBrowserDisplayName()
-    check frontend.window.title == "Kosmo (" & initialRootName & ")"
+    check frontend.window.title == "Kosmo • " & initialRootName
     check frontend.openPath(filePath)
     check frontend.fileTree.rootPaths == @[initialRoot]
 
     check frontend.openPath(folder)
     check frontend.fileTree.rootPaths == @[initialRoot, absolutePath(folder)]
-    check frontend.window.title == "Kosmo (" & initialRootName & " + 1)"
+    check frontend.window.title == "Kosmo • " & initialRootName & " + 1"
 
     check frontend.openPath(secondFolder)
     check frontend.fileTree.rootPaths ==
       @[initialRoot, absolutePath(folder), absolutePath(secondFolder)]
-    check frontend.window.title == "Kosmo (" & initialRootName & " + 2)"
+    check frontend.window.title == "Kosmo • " & initialRootName & " + 2"
     frontend.close()
 
   test "opening a project creates a new window with its own file browser":
@@ -446,7 +444,7 @@ suite "Kosmo":
     require not frontend.isNil
     check frontend.hasFileBrowser()
     check frontend.fileTree.rootPaths == @[absolutePath(folder)]
-    check frontend.window.title == "Kosmo (" & folder.fileBrowserDisplayName() & ")"
+    check frontend.window.title == "Kosmo • " & folder.fileBrowserDisplayName()
     check not frontend.sidebarPane.isHidden
     check not frontend.fileTree.bounds().isEmpty
     check manager.managedWindows() == @[frontend]

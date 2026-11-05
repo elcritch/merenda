@@ -176,7 +176,7 @@ suite "Kosmo workspace roots":
       check readFile(root / "file.txt") == "needle"
       if root == second:
         check frontend.fileTree.rootPaths == @[first]
-        check frontend.window.title == "Kosmo (first)"
+        check frontend.window.title == "Kosmo • first"
         require frontend.showFindInFiles()
         require frontend.searchPanel.performSearch()
         require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 60_000)
@@ -192,7 +192,7 @@ suite "Kosmo workspace roots":
     check fileStillOpen
     require frontend.openPath(second)
     check frontend.fileTree.rootPaths == @[second]
-    check frontend.window.title == "Kosmo (second)"
+    check frontend.window.title == "Kosmo • second"
 
   test "quick open keeps duplicate names distinct and deduplicates overlapping roots":
     let

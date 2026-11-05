@@ -620,7 +620,7 @@ suite "Kosmo":
       frontend.contentView.layoutSubtreeIfNeeded()
       check frontend.window.makeFirstResponder(frontend.editorView)
 
-      check frontend.terminalOptionAsMeta
+      check frontend.terminalOptionAsMeta == DefaultTerminalOptionAsMeta
       check frontend.terminalLinksEnabled
       frontend.terminalOptionAsMeta = false
       frontend.terminalLinksEnabled = false

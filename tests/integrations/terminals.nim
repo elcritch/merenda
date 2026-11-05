@@ -824,9 +824,9 @@ suite "nimkit terminal views":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))
     check view.focusRingType == frtNone
     check view.allowsLinkActivation
-    check view.optionAsMeta
-    view.optionAsMeta = false
-    check not view.optionAsMeta
+    check view.optionAsMeta == DefaultTerminalOptionAsMeta
+    view.optionAsMeta = not DefaultTerminalOptionAsMeta
+    check view.optionAsMeta != DefaultTerminalOptionAsMeta
 
   test "window text and key dispatch reach an interactive child process":
     when defined(posix):
@@ -867,6 +867,7 @@ suite "nimkit terminal views":
         window = newWindow("Terminal keyboard", frame = rect(0, 0, 500, 120))
       defer:
         view.close()
+      view.optionAsMeta = true
       window.setContentView(view)
       check window.makeFirstResponder(view)
       check session.pollUntilText("ready")
@@ -991,6 +992,41 @@ suite "nimkit terminal views":
       check "61 62 0d 7f 0d 7f" in session.normalizedTerminalOutput()
 
   when defined(posix) and not defined(windows):
+    test "terminal accepts German Option brackets, symbols and composed text":
+      let
+        session = spawnTerminalViewSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty -echo; printf 'input-ready\\n'; IFS= read -r value; printf 'input-result:%s\\n' \"$value\""
+          ),
+          columns = 60,
+          rows = 8,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 600, 180))
+        window = newWindow("Option text input", frame = rect(0, 0, 600, 180))
+      defer:
+        view.close()
+        window.close()
+      when not (defined(macosx) or defined(macos)):
+        view.optionAsMeta = false
+      check not view.optionAsMeta
+      window.setContentView(view)
+      require window.makeFirstResponder(view)
+      require window.tickUntilNormalizedText(view, "input-ready")
+      for (key, modifiers, text) in [
+        (key5, {kmOption}, "["),
+        (key6, {kmOption}, "]"),
+        (key8, {kmOption, kmShift}, "•"),
+      ]:
+        discard window.dispatchKeyDown(KeyEvent(key: key, modifiers: modifiers))
+        require window.dispatchTextInput(text)
+      # Option-U is a dead key; macOS commits the composed character after U.
+      discard window.dispatchKeyDown(KeyEvent(key: keyU, modifiers: {kmOption}))
+      discard window.dispatchKeyDown(KeyEvent(key: keyU))
+      require window.dispatchTextInput("ü")
+      require window.dispatchKeyDown(KeyEvent(key: keyEnter, text: "\n"))
+      check window.tickUntilNormalizedText(view, "input-result:[]•ü")
+
     test "Bash receives every terminal input path exactly once":
       let bashPath = findExe("bash")
       if bashPath.len == 0:
@@ -1010,6 +1046,7 @@ suite "nimkit terminal views":
           window = newWindow("Bash terminal input", frame = rect(0, 0, 900, 180))
         defer:
           view.close()
+        view.optionAsMeta = true
         window.setContentView(view)
         check window.makeFirstResponder(view)
         check window.tickUntilCurrentLineContains(view, "bash-input$")
@@ -1169,6 +1206,7 @@ suite "nimkit terminal views":
           window = newWindow("Common Bash input", frame = rect(0, 0, 900, 220))
         defer:
           view.close()
+        view.optionAsMeta = true
         window.setContentView(view)
         check window.makeFirstResponder(view)
         check window.tickUntilCurrentLineContains(view, "bash-common$")
