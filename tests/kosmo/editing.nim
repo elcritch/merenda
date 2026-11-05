@@ -228,8 +228,8 @@ suite "Kosmo":
       "Dayfox", "Dracula", "Everforest Dark", "Everforest Light", "GitHub Dark",
       "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
       "Kanagawa Lotus", "Kanagawa Wave", "Nightfox", "One Dark", "One Light",
-      "Rose Pine", "Rose Pine Dawn", "Solarized Dark", "Solarized Light",
-      "Tokyo Night Day", "Tokyo Night Moon",
+      "Rose Pine", "Rose Pine Dawn", "Shades of Purple", "Solarized Dark",
+      "Solarized Light", "Tokyo Night Day", "Tokyo Night Moon",
     ]:
       var matchingIndex = -1
       for index, theme in themes:
@@ -240,6 +240,13 @@ suite "Kosmo":
       let preview = themes[matchingIndex].preview
       check preview.foreground != preview.background
       check preview.keyword != preview.foreground
+      if expectedName == "Shades of Purple":
+        check preview.background ==
+          KosmoMoeThemeColor(red: 0x2d, green: 0x2b, blue: 0x55)
+        check preview.keyword == KosmoMoeThemeColor(red: 0xff, green: 0x9d, blue: 0x00)
+        check preview.stringLiteral ==
+          KosmoMoeThemeColor(red: 0xa5, green: 0xff, blue: 0x90)
+        check preview.comment == KosmoMoeThemeColor(red: 0xb3, green: 0x62, blue: 0xff)
       let outcome = editor.applyMoeTheme(themes[matchingIndex])
       check outcome.applied
       check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier

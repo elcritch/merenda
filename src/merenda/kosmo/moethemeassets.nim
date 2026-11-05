@@ -39,6 +39,7 @@ const EmbeddedMoeThemes = [
   embedTheme("one-light.toml"),
   embedTheme("rose-pine-dawn.toml"),
   embedTheme("rose-pine.toml"),
+  embedTheme("shades-of-purple.toml"),
   embedTheme("solarized-dark.toml"),
   embedTheme("solarized-light.toml"),
   embedTheme("tokyo-night-day.toml"),
@@ -56,6 +57,7 @@ const EmbeddedMoeThemeLicenses = [
   embedLicense("nightfox.txt"),
   embedLicense("onedark.txt"),
   embedLicense("rose.txt"),
+  embedLicense("shades-of-purple.txt"),
   embedLicense("solarized.txt"),
   embedLicense("tokyo.txt"),
 ]

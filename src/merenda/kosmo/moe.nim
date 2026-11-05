@@ -445,6 +445,8 @@ proc configThemeIdentifier(path: string): string =
 
 func moeThemeName(path: string): string =
   let baseName = splitFile(path).name
+  if baseName == "shades-of-purple":
+    return "Shades of Purple"
   var capitalizeNext = true
   for character in baseName:
     if character in {'-', '_'}:

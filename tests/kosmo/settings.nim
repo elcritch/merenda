@@ -438,8 +438,8 @@ suite "Kosmo settings":
       "Dayfox", "Dracula", "Everforest Dark", "Everforest Light", "GitHub Dark",
       "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
       "Kanagawa Lotus", "Kanagawa Wave", "Nightfox", "One Dark", "One Light",
-      "Rose Pine", "Rose Pine Dawn", "Solarized Dark", "Solarized Light",
-      "Tokyo Night Day", "Tokyo Night Moon",
+      "Rose Pine", "Rose Pine Dawn", "Shades of Purple", "Solarized Dark",
+      "Solarized Light", "Tokyo Night Day", "Tokyo Night Moon",
     ]:
       var matchingRow = -1
       for row in 0 ..< moeThemesTable.rowCount:

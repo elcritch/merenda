@@ -15,10 +15,11 @@ and dark variants. The upstream projects and their licenses are:
 | Nightfox | [EdenEast/nightfox.nvim](https://github.com/EdenEast/nightfox.nvim/tree/4dacd3f) | [MIT](licenses/nightfox.txt) |
 | One Dark / One Light | [navarasu/onedark.nvim](https://github.com/navarasu/onedark.nvim/tree/df4792a) | [MIT](licenses/onedark.txt) |
 | Rosé Pine | [rose-pine/neovim](https://github.com/rose-pine/neovim/tree/ff48305) | [MIT](licenses/rose.txt) |
+| Shades of Purple | [Rigellute/shades-of-purple.vim](https://github.com/Rigellute/shades-of-purple.vim/tree/e806d38190a6a2e8b9244824c2953d6567f141f3) | [MIT notice](licenses/shades-of-purple.txt) |
 | Solarized | [altercation/solarized](https://github.com/altercation/solarized/tree/62f656a) | [MIT](licenses/solarized.txt) |
 | Tokyo Night | [folke/tokyonight.nvim](https://github.com/folke/tokyonight.nvim/tree/cdc07ac) | [Apache 2.0](licenses/tokyo.txt) |
 
 The ten Neovim families were selected from [Dotfyle's install-based colorscheme
 ranking](https://dotfyle.com/neovim/colorscheme/top), consulted on 2026-10-29.
-Solarized and Dracula were added separately. The license files are also installed
+Solarized, Dracula, and Shades of Purple were added separately. The license files are also installed
 alongside the embedded themes in Kosmo's asset cache.
