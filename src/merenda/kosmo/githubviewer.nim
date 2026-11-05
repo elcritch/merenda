@@ -251,6 +251,26 @@ proc `keyEquivalentHandler=`*(
 proc showSearch*(panel: KosmoGitHubPanel): bool {.discardable.} =
   panel.search.showSearch()
 
+proc toggleToolbarFocus*(panel: KosmoGitHubPanel, focused: nimkit.Responder): bool =
+  ## Toggle keyboard focus between the GitHub content and the panel toolbar.
+  ## The toolbar target is the first visible, enabled control.
+  if panel.isNil or panel.markdownView.isNil:
+    return false
+  let owner = panel.window()
+  if not (owner of nimkit.Window):
+    return false
+  let window = nimkit.Window(owner)
+  for control in [
+    nimkit.Control(panel.refreshButton), panel.kindButton, panel.stateButton,
+    panel.autoRefreshSwitch,
+  ]:
+    if not control.isNil and not control.hidden():
+      if focused == nimkit.Responder(control):
+        return window.makeFirstResponder(panel.markdownView.textView())
+      if control.enabled:
+        return window.makeFirstResponder(control)
+  false
+
 proc searchField*(panel: KosmoGitHubPanel): nimkit.TextField =
   panel.search.bar.queryField()
 

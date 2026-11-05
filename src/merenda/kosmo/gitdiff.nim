@@ -2335,6 +2335,28 @@ proc focusFirstDisclosure(panel: KosmoGitDiffPanel): bool =
         return nimkit.Window(owner).makeFirstResponder(button)
       return
 
+proc toggleToolbarFocus*(panel: KosmoGitDiffPanel, focused: nimkit.Responder): bool =
+  ## Toggle keyboard focus between the diff content and the panel toolbar.
+  ## The toolbar target is the first visible, enabled control so snapshot-only
+  ## diffs (whose refresh button is disabled) still reach a focusable control.
+  if panel.isNil or panel.markdownView.isNil:
+    return false
+  let owner = panel.window()
+  if not (owner of nimkit.Window):
+    return false
+  let window = nimkit.Window(owner)
+  for control in [
+    nimkit.Control(panel.refreshButton), panel.fromRevisionButton,
+    panel.toRevisionButton, panel.fromHistoryButton, panel.toHistoryButton,
+    panel.expandButton, panel.collapseButton, panel.autoRefreshSwitch,
+  ]:
+    if not control.isNil and not control.hidden():
+      if focused == nimkit.Responder(control):
+        return window.makeFirstResponder(panel.markdownView.textView())
+      if control.enabled:
+        return window.makeFirstResponder(control)
+  false
+
 proc `keyEquivalentHandler=`*(
     panel: KosmoGitDiffPanel, handler: GitDiffKeyEquivalentHandler
 ) =

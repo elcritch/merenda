@@ -32,6 +32,8 @@ const
   KosmoCopyAction* = "kosmo.copy"
   KosmoPasteAction* = "kosmo.paste"
   KosmoSelectAllAction* = "kosmo.selectAll"
+  KosmoToggleMarkdownModeAction* = "kosmo.toggleMarkdownMode"
+  KosmoFocusToolbarAction* = "kosmo.focusToolbar"
   KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
   KosmoMaxFocusPanelShortcut* = 8
 
@@ -276,6 +278,18 @@ func kosmoActions*(): seq[KosmoAction] =
       description: "Select all text in the focused view.",
       kind: KosmoActionKind.Editing,
     ),
+    KosmoAction(
+      identifier: KosmoToggleMarkdownModeAction,
+      title: "Toggle Markdown Source",
+      description:
+        "Switch the selected Markdown tab between preview and source editing.",
+    ),
+    KosmoAction(
+      identifier: KosmoFocusToolbarAction,
+      title: "Focus Tool Toolbar",
+      description:
+        "Toggle focus between the focused tool's content and its toolbar controls.",
+    ),
   ]
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.add KosmoAction(
@@ -393,6 +407,13 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-c", KosmoCopyAction, profile, platform)
   result.addBinding("primary-v", KosmoPasteAction, profile, platform)
   result.addBinding("primary-a", KosmoSelectAllAction, profile, platform)
+  result.addBinding("f5", KosmoFocusToolbarAction, profile, platform)
+  if platform == KosmoShortcutPlatform.MacOS:
+    # Mac keyboards dedicate the F-key row to media functions, so F5 needs the
+    # fn modifier unless the user changes the system preference. Offer
+    # Command-Control-T as a second default binding there.
+    result.addBinding("primary-control-t", KosmoFocusToolbarAction, profile, platform)
+  result.addBinding("primary-shift-m", KosmoToggleMarkdownModeAction, profile, platform)
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.addBinding(
       "primary-" & $panelNumber, panelNumber.focusPanelAction(), profile, platform

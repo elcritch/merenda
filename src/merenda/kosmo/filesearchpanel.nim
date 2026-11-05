@@ -671,6 +671,26 @@ proc focusQuery*(panel: KosmoFileSearchPanel): bool {.discardable.} =
     return
   result = nimkit.Window(panel.window()).makeFirstResponder(panel.queryField)
 
+proc toggleToolbarFocus*(panel: KosmoFileSearchPanel, focused: nimkit.Responder): bool =
+  ## Toggle keyboard focus between the search results and the query controls.
+  if panel.isNil:
+    return false
+  let owner = panel.window()
+  if not (owner of nimkit.Window):
+    return false
+  let window = nimkit.Window(owner)
+  for control in [
+    nimkit.Responder(panel.queryField),
+    nimkit.Responder(panel.replacementField),
+    nimkit.Responder(panel.disclosureButton),
+    nimkit.Responder(panel.expressionButton),
+    nimkit.Responder(panel.replaceButton),
+    nimkit.Responder(panel.replaceAllButton),
+  ]:
+    if not control.isNil and focused == control:
+      return window.makeFirstResponder(panel.resultsView)
+  focusQuery(panel)
+
 func replacementVisible*(panel: KosmoFileSearchPanel): bool =
   panel.xReplacementVisible
 

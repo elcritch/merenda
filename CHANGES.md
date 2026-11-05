@@ -15,6 +15,18 @@
 - Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
   context menus, keeping each rich-text theme choice independent.
 
+- Add a `Focus Tool Toolbar` shortcut (`F5`, plus `Command-Control-T` on macOS,
+  where the F-key row doubles as media keys) that toggles keyboard focus between
+  a Kosmo tool's content and its own toolbar controls (Git diff, GitHub,
+  Markdown preview, file browser, and Find in Files), falling back to the first
+  enabled control when a refresh button is unavailable, and leaving the key free
+  for terminal programs and source tabs without a toolbar. The action also works
+  from detached windows and appears in the Window menu, which deliberately gives
+  it no key equivalent so the menu never consumes F5 on behalf of a focused
+  terminal program.
+- Add a `Toggle Markdown Source` shortcut (`Command-Shift-M` on macOS,
+  `Control-Shift-M` elsewhere) that switches the selected Markdown tab between
+  the pretty preview and the editable source, matching the existing `</>` button.
 - Add a right click menu to Kosmo's editor tabs with Close, Close others, and
   Duplicate right and Duplicate below actions. Right clicking an etab pops a menu
   anchored at the tab; Close runs the standard close flow for the clicked tab,

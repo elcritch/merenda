@@ -35,6 +35,10 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       if content.onQuickOpen.isNil:
         return false
       content.onQuickOpen()
+    of KosmoFocusToolbarAction:
+      if content.onFocusToolbar.isNil:
+        return false
+      return content.onFocusToolbar()
     else:
       return false
     true
@@ -371,6 +375,15 @@ proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuI
     if not nested.isNil:
       return nested
 
+func hasMenuKeyEquivalent(action: KosmoAction): bool =
+  ## Toolbar focus is context dependent: it toggles only when the focused tool
+  ## has a toolbar and must stay available to the focused content otherwise,
+  ## including terminal programs that use F5. A menu key equivalent performs
+  ## through the window's menu unconditionally and would consume the key even
+  ## when no toolbar applies, so this action routes only through the window's
+  ## binding table and keeps its menu item without an accelerator.
+  action.identifier != KosmoFocusToolbarAction
+
 proc synchronizeKosmoMenuBindings(frontend: KosmoApplication) =
   if frontend.isNil or frontend.dockController.isNil:
     return
@@ -378,6 +391,9 @@ proc synchronizeKosmoMenuBindings(frontend: KosmoApplication) =
   for action in kosmoActions():
     let item = menu.menuItemWithIdentifier(action.identifier)
     if item.isNil:
+      continue
+    if not action.hasMenuKeyEquivalent():
+      item.setKeyEquivalent("")
       continue
     var found = false
     for binding in frontend.dockController.shortcutBindings.bindings:
@@ -1166,6 +1182,8 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
       of KosmoFindInFilesAction, KosmoReplaceInFilesAction:
         discard
           active.showFindInFiles(replacing = identifier == KosmoReplaceInFilesAction)
+      of KosmoFocusToolbarAction:
+        discard controller.focusToolToolbar()
       else:
         if identifier.startsWith(KosmoFocusPanelActionPrefix):
           discard
@@ -1208,6 +1226,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
         discard active.dockController.focusPanel(panelNumber)
     discard focusMenu.addItem(item)
   discard windowMenu.addItem(focusMenuItem)
+  addAction("Focus Tool Toolbar", KosmoFocusToolbarAction)
 
 proc newKosmoApplication*(
     manager: KosmoWindowManager,
@@ -1450,6 +1469,8 @@ proc newKosmoApplication*(
       discard controller.frontend[].showTerminal()
   documentView.onFocusPanel = proc(panelNumber: int) =
     discard controller.focusPanel(panelNumber)
+  documentView.onFocusToolbar = proc(): bool =
+    result = controller.focusToolToolbar()
   controller.hosts.add mainHost
   controller.installShortcutBindings(result.window)
   discard controller.newEditorGroup(

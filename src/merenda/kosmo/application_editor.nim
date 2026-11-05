@@ -57,6 +57,7 @@ proc setForceInputMode*(frontend: KosmoApplication, enabled: bool)
 proc syncKeyModeChoices(controller: KosmoDockController)
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
+proc focusToolToolbar(controller: KosmoDockController): bool
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc focusFromSidebar(controller: KosmoDockController): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
@@ -1265,6 +1266,17 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     view.refresh()
     return true
 
+proc selectedMarkdownTabId(view: KosmoEditorView): Option[KosmoBufferId] =
+  ## Return the selected tab's buffer id when it is a Markdown document.
+  if view.dockGroup.isNil or view.editor.isNil:
+    return
+  var id: KosmoBufferId
+  if not view.dockGroup[].selectedTabIdentifier.parseTabIdentifier(id):
+    return
+  for tab in view.editor.tabs():
+    if tab.id == id and tab.isMarkdownTab:
+      return some(id)
+
 proc previewScope(view: KosmoEditorView): string =
   if not view.dockGroup.isNil: view.dockGroup[].identifier else: ""
 
@@ -2115,6 +2127,18 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoShowSettingsAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showSettings()
+    of KosmoToggleMarkdownModeAction:
+      let markdownId = view.selectedMarkdownTabId()
+      if markdownId.isNone:
+        return false
+      if view.toggleMarkdownMode(markdownId.get):
+        if not view.dockGroup.isNil and not view.dockGroup[].pane.isNil:
+          let group = view.dockGroup[]
+          if not group.window.isNil:
+            discard
+              group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
+      else:
+        return false
     of KosmoCopyAction:
       view.editorCopy()
     of KosmoCutAction:
@@ -2751,6 +2775,57 @@ proc toggleSelectedMarkdownMode(controls: KosmoMarkdownControls) =
     return
   if controls.editorView[].toggleMarkdownMode(id.get):
     controls.focusMarkdownContent()
+
+proc toggleToolbarFocus(view: KosmoMarkdownView, focused: nimkit.Responder): bool =
+  ## Toggle keyboard focus between the markdown preview and its preview controls.
+  if view.editorView.isNil:
+    return false
+  let editorView = view.editorView[]
+  if editorView.dockGroup.isNil or editorView.dockGroup[].pane.isNil:
+    return false
+  let controls = editorView.dockGroup[].pane.markdownControls
+  if controls.isNil or controls.hidden():
+    return false
+  let owner = view.window()
+  if not (owner of nimkit.Window):
+    return false
+  let window = nimkit.Window(owner)
+  for control in [
+    nimkit.Responder(controls.modeButton),
+    nimkit.Responder(controls.colorModeButton),
+    nimkit.Responder(controls.decreaseFontButton),
+    nimkit.Responder(controls.increaseFontButton),
+  ]:
+    if not control.isNil and focused == control:
+      focusMarkdownContent(controls)
+      return true
+  if not controls.modeButton.isNil:
+    return window.makeFirstResponder(controls.modeButton)
+
+proc toggleMarkdownControlsFocus(
+    pane: KosmoEditorPane, focused: nimkit.Responder
+): bool =
+  ## Toggle keyboard focus between a markdown pane's content and its controls.
+  ## Unlike the markdown-view toggle this also works in source mode, where the
+  ## preview is detached from the pane and has no window of its own.
+  if pane.isNil or pane.markdownControls.isNil or pane.markdownControls.hidden():
+    return false
+  let owner = pane.window()
+  if not (owner of nimkit.Window):
+    return false
+  let
+    window = nimkit.Window(owner)
+    controls = pane.markdownControls
+  for control in [
+    nimkit.Responder(controls.modeButton),
+    nimkit.Responder(controls.colorModeButton),
+    nimkit.Responder(controls.decreaseFontButton),
+    nimkit.Responder(controls.increaseFontButton),
+  ]:
+    if not control.isNil and focused == control:
+      return window.makeFirstResponder(nimkit.Responder(pane.contentView))
+  if not controls.modeButton.isNil:
+    return window.makeFirstResponder(controls.modeButton)
 
 proc toggleReaderColorMode(controls: KosmoMarkdownControls, target: KosmoThemeTarget) =
   if controls.isNil:
@@ -3689,6 +3764,19 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoShowSettingsAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showSettings()
+    of KosmoToggleMarkdownModeAction:
+      let markdownId = group.editorView.selectedMarkdownTabId()
+      if markdownId.isNone:
+        return false
+      if group.editorView.toggleMarkdownMode(markdownId.get):
+        if not group.window.isNil:
+          discard group.window.makeFirstResponder(nimkit.Responder(pane.contentView))
+      else:
+        return false
+    of KosmoFocusToolbarAction:
+      # Route through the pane as well as the content view so pane-hosted tools
+      # in detached windows can toggle focus to their toolbars.
+      return controller.focusToolToolbar()
     of KosmoCopyAction:
       group.editorView.editorCopy()
     of KosmoCutAction:

@@ -52,6 +52,37 @@ proc focusedEditorGroup(controller: KosmoDockController): KosmoEditorGroup =
         return group
     responder = responder.nextResponder()
 
+proc focusToolToolbar(controller: KosmoDockController): bool =
+  ## Toggle keyboard focus between the focused tool's content and its toolbar.
+  ## Tools without toolbar controls return false so the key stays unmapped.
+  if controller.isNil or controller.frontend.isNil:
+    return false
+  let window = controller.frontend[].application.keyWindow()
+  if window.isNil or window.isClosed():
+    return false
+  let focused = window.firstResponder()
+  var responder = focused
+  while not responder.isNil:
+    if responder of KosmoGitDiffPanel:
+      return toggleToolbarFocus(KosmoGitDiffPanel(responder), focused)
+    if responder of KosmoGitHubPanel:
+      return toggleToolbarFocus(KosmoGitHubPanel(responder), focused)
+    if responder of KosmoMarkdownView:
+      return toggleToolbarFocus(KosmoMarkdownView(responder), focused)
+    if responder of KosmoFileBrowserPanel:
+      return toggleToolbarFocus(KosmoFileBrowserPanel(responder), focused)
+    if responder of KosmoFileSearchPanel:
+      return toggleToolbarFocus(KosmoFileSearchPanel(responder), focused)
+    if responder of KosmoEditorPane:
+      let pane = KosmoEditorPane(responder)
+      # The pane hosts the markdown preview controls as siblings of both the
+      # preview and the moe editor. Toggle focus whenever the controls are
+      # visible, covering preview mode, source mode, and the controls themselves.
+      if not pane.markdownControls.isNil and not pane.markdownControls.hidden():
+        return toggleMarkdownControlsFocus(pane, focused)
+    responder = responder.nextResponder()
+  return false
+
 proc activePaneGroup(controller: KosmoDockController): KosmoEditorGroup =
   if controller.isNil or controller.frontend.isNil or controller.frontend[].xClosed:
     return

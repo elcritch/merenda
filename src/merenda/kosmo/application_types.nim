@@ -180,6 +180,7 @@ type
     onNewTerminal: proc() {.closure.}
     onShowTerminal: proc() {.closure.}
     onFocusPanel: proc(panelNumber: int) {.closure.}
+    onFocusToolbar: proc(): bool {.closure.}
     quickOpenPanel: KosmoQuickOpenPanel
 
   KosmoDetachedContentView = ref object of nimkit.View
