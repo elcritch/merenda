@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Let users resize the TextMate grammar search results and available grammar lists.
 - Add the Dracula Classic palette to Kosmo's bundled Moe themes.
 - Group Nimdex status controls and start Nimdex stopped for new configurations.
 - Check for Kosmo updates in the background and offer to install newer stable

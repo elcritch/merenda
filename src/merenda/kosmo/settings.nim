@@ -51,6 +51,7 @@ const
     "kosmo.settings.textMateGrammars.installButton"
   KosmoVscodeGrammarSearchTableIdentifier* =
     "kosmo.settings.textMateGrammars.searchResults"
+  KosmoGrammarListsSplitIdentifier* = "kosmo.settings.textMateGrammars.lists"
   KosmoVscodeGrammarStatusIdentifier* = "kosmo.settings.textMateGrammars.status"
   KosmoVscodeGrammarLanguageColumnIdentifier* = "language"
   KosmoVscodeGrammarExtensionsColumnIdentifier* = "extensions"
@@ -769,6 +770,8 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     textMateGrammarsPage = newSettingsPage()
+    grammarLists = nimkit.newSplitView(nimkit.laVertical)
+    availableGrammars = nimkit.newStackView(nimkit.laVertical)
     vscodeGrammarSearchControls = nimkit.newStackView(nimkit.laHorizontal)
     preferEditorPanesButton =
       nimkit.newCheckBox("Prefer panes not displaying terminals for editor tabs")
@@ -856,7 +859,7 @@ proc newKosmoSettingsWindow*(
     "VS Code language grammar search results"
   vscodeGrammarSearchTable.columnSizing = nimkit.tvcsFill
   vscodeGrammarSearchTable.selectionMode = nimkit.tsmSingle
-  vscodeGrammarSearchTable.visibleRows = 2
+  vscodeGrammarSearchTable.visibleRows = 3
   vscodeGrammarSearchTable.usesAlternatingRowBackgrounds = true
   vscodeGrammarSearchTable.showsRowSeparators = true
   vscodeGrammarSearchTable.addColumn(
@@ -1135,15 +1138,22 @@ proc newKosmoSettingsWindow*(
     vscodeGrammarSearchField, vscodeGrammarExpressionButton, vscodeGrammarSearchButton,
     vscodeGrammarInstallButton,
   )
+  grammarLists.identifier = KosmoGrammarListsSplitIdentifier
+  availableGrammars.spacing = 10.0
+  availableGrammars.alignment = nimkit.svaFill
+  availableGrammars.addArrangedSubview(
+    nimkit.newHeadingLabel("Available TextMate Grammars")
+  )
+  availableGrammars.fillAvailableSpace(textMateGrammarsTable)
+  grammarLists.addPane(vscodeGrammarSearchTable, minSize = 55.0)
+  grammarLists.addPane(availableGrammars, minSize = 85.0)
   textMateGrammarsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Find a Language"),
     nimkit.newLabel("Search built-in VS Code languages by name, extension, or scope."),
     vscodeGrammarSearchControls,
     vscodeGrammarSearchStatus,
-    vscodeGrammarSearchTable,
-    nimkit.newHeadingLabel("Available TextMate Grammars"),
   )
-  textMateGrammarsPage.stack.fillAvailableSpace(textMateGrammarsTable)
+  textMateGrammarsPage.stack.fillAvailableSpace(grammarLists)
 
   nimdexMode.identifier = "kosmo.settings.nimdex.mode"
   nimdexLocal.identifier = "kosmo.settings.nimdex.local"
