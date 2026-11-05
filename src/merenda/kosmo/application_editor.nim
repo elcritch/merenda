@@ -3189,18 +3189,19 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     bar.label.setFrameFromLayout(
       nimkit.rect(0, 0, max(progressX - 4.0'f32, 0.0'f32), bounds.size.height)
     )
+    bar.nimdexSection.setFrameFromLayout(
+      nimkit.rect(progressX, 0, progressWidth, bounds.size.height)
+    )
     bar.indexEntryLabel.setFrameFromLayout(
-      nimkit.rect(progressX, 0, entryWidth, bounds.size.height)
+      nimkit.rect(0, 0, entryWidth, bounds.size.height)
     )
     bar.nimdexButton.setFrameFromLayout(
-      nimkit.rect(buttonX, 0, buttonWidth, bounds.size.height)
+      nimkit.rect(buttonX - progressX, 0, buttonWidth, bounds.size.height)
     )
-    bar.indexSpinner.setFrameFromLayout(
-      nimkit.rect(progressX + entryWidth, choiceY + 2, 16, 16)
-    )
+    bar.indexSpinner.setFrameFromLayout(nimkit.rect(entryWidth, choiceY + 2, 16, 16))
     bar.indexProgress.setFrameFromLayout(
       nimkit.rect(
-        progressX + entryWidth + 20,
+        entryWidth + 20,
         choiceY + 5,
         max(
           progressWidth - KosmoStatusIconWidth - entryWidth - percentageWidth - 24,
@@ -3211,7 +3212,7 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     )
     bar.indexProgressLabel.setFrameFromLayout(
       nimkit.rect(
-        max(buttonX - percentageWidth, progressX),
+        max(buttonX - percentageWidth - progressX, 0.0'f32),
         0,
         min(percentageWidth, max(buttonX - progressX, 0.0'f32)),
         bounds.size.height,
@@ -3292,11 +3293,13 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     choice = nimkit.newPopupMenuButton(KosmoKeyModes[0].title, menu)
     indexProgress = nimkit.newProgressIndicator()
     indexSpinner = nimkit.newProgressIndicator()
-    indexProgressLabel = nimkit.newStatusLabel("")
-    indexEntryLabel = nimkit.newStatusLabel("")
+    indexProgressLabel = nimkit.newLabel("")
+    indexEntryLabel = nimkit.newLabel("")
     playIcon = nimkit.newSvgMtsdfResource(KosmoPlayIconSvg, "kosmo-nimdex-play")
     stopIcon = nimkit.newSvgMtsdfResource(KosmoStopIconSvg, "kosmo-nimdex-stop")
     nimdexButton = newKosmoStatusIconButton(playIcon, "Start Nimdex")
+    nimdexSection = nimkit.newBox()
+  nimdexSection.identifier = "kosmo.nimdex.section"
   nimdexButton.identifier = "kosmo.nimdex.toggle"
   indexProgress.identifier = "kosmo.nimdex.progress"
   indexProgress.accessibilityLabel = "Nimdex indexing"
@@ -3331,17 +3334,19 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     indexProgressLabel: indexProgressLabel,
     indexEntryLabel: indexEntryLabel,
     nimdexButton: nimdexButton,
+    nimdexSection: nimdexSection,
     nimdexPlayIcon: playIcon,
     nimdexStopIcon: stopIcon,
   )
   result.initViewFields()
   result.addSubview(label)
   result.addSubview(choice)
-  result.addSubview(indexProgress)
-  result.addSubview(indexSpinner)
-  result.addSubview(indexProgressLabel)
-  result.addSubview(indexEntryLabel)
-  result.addSubview(nimdexButton)
+  result.addSubview(nimdexSection)
+  nimdexSection.addSubview(indexProgress)
+  nimdexSection.addSubview(indexSpinner)
+  nimdexSection.addSubview(indexProgressLabel)
+  nimdexSection.addSubview(indexEntryLabel)
+  nimdexSection.addSubview(nimdexButton)
   if withSidebarButtons:
     result.fileButton = newKosmoStatusIconButton(
       nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-status-files"), "Files"

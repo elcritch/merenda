@@ -166,13 +166,31 @@ suite "Kosmo configuration":
       KosmoTerminalInputPolicy.Hybrid
     check parseTerminalInputPolicy("unrecognized") == KosmoTerminalInputPolicy.Hybrid
 
+  test "Nimdex starts stopped when no saved choice exists":
+    let
+      root = createTempDir("merenda-kosmo-nimdex-default-", "")
+      path = root / "config.json"
+      app = newApplication("Kosmo Nimdex Default Test")
+    defer:
+      removeDir(root)
+    writeFile(path, "{\"nimLspCommand\":\"nimdex daemon\"}")
+    check loadKosmoConfig(path).nimdexStopped
+    let manager = newKosmoWindowManager(app, configPath = path)
+    defer:
+      manager.close()
+    let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    let toggle = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")
+    require toggle of Button
+    check Button(toggle).toolTip == "Start Nimdex"
+    check not frontend.editorView.editor.nimdexRequested()
+
   test "passes the configured Nim server command to Moe":
     let
       root = createTempDir("merenda-kosmo-nim-lsp-", "")
       path = root / "config.json"
       app = newApplication("Kosmo Nim LSP Config Test")
       command = "custom-server --stdio"
-      config = KosmoConfig(nimLspCommand: command)
+      config = KosmoConfig(nimLspCommand: command, nimdexStopped: false)
     defer:
       removeDir(root)
     require config.saveKosmoConfig(path)
@@ -196,7 +214,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       app = newApplication("Kosmo TCP LSP Config Test")
       address = "tcp://127.0.0.1:49153"
-      config = KosmoConfig(nimLspCommand: address)
+      config = KosmoConfig(nimLspCommand: address, nimdexStopped: false)
       previousLauncher = kosmoLspLauncherExecutable
     kosmoLspLauncherExecutable = getAppFilename()
     defer:

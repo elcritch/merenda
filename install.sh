@@ -306,6 +306,24 @@ case "$platform" in
     ;;
 esac
 
+# Record the installation kind outside the signed app bundle. Kosmo uses this
+# marker to update only installations managed by this installer.
+case "$platform" in
+  macos)
+    printf 'macos\n%s\n' "$KOSMO_BIN_DIR" > "$KOSMO_INSTALL_DIR/.kosmo-update"
+    ;;
+  linux)
+    if [ "$KOSMO_STATIC" -eq 1 ]; then
+      printf 'linux-static\n\n' > "$KOSMO_INSTALL_DIR/.kosmo-update"
+    else
+      printf 'linux\n\n' > "$KOSMO_INSTALL_DIR/.kosmo-update"
+    fi
+    ;;
+  *)
+    printf '%s\n\n' "$platform" > "$KOSMO_INSTALL_DIR/.kosmo-update"
+    ;;
+esac
+
 if [ "$platform" = linux ] && [ "$KOSMO_STATIC" -eq 0 ]; then
   cat >&2 <<'EOF'
 install.sh: For complex text shaping and font fallback, install HarfBuzz 7 or

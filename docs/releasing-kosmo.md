@@ -66,6 +66,16 @@ running executable, so release stack traces retain file and line information.
 LLDB can load the same symbols explicitly with
 `target symbols add /path/to/Kosmo.app/Contents/MacOS/kosmo.dSYM`.
 
+Kosmo checks GitHub for newer stable releases in the background when started
+from an installer-managed release. When an update is available, it asks whether
+to install it after Kosmo exits. The update uses the installer embedded in the
+running release, downloads the chosen release archive and checksums, and verifies
+the SHA-256 checksum before installation. It preserves the installer-selected
+location and the Linux static-build choice. Source builds are not updated.
+The installer records ownership in a `.kosmo-update` marker beside the installed
+binary (or beside `Kosmo.app` on macOS); older installations acquire the marker
+when installed with the current installer. Bash and curl must be available.
+
 The root `install.sh` downloads the archive for the current operating system and
 architecture, verifies it against `SHA256SUMS.txt`, and installs it without root
 access. Its defaults are `~/.local/bin` on Linux and Windows, and

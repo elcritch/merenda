@@ -1,12 +1,13 @@
 # Bundled Moe themes
 
-Kosmo adapts these palettes to Moe's TOML color roles. Each family has light and
-dark variants. The upstream projects and their licenses are:
+Kosmo adapts these palettes to Moe's TOML color roles. Most families have light
+and dark variants. The upstream projects and their licenses are:
 
 | Theme family | Palette source | License |
 | --- | --- | --- |
 | Catppuccin | [catppuccin/nvim](https://github.com/catppuccin/nvim) | [MIT](licenses/catppuccin.txt) |
 | Cyberdream | [scottmckendry/cyberdream.nvim](https://github.com/scottmckendry/cyberdream.nvim/tree/c75105a) | [MIT](licenses/cyberdream.txt) |
+| Dracula | [dracula/vim](https://github.com/dracula/vim/tree/c689958744a93851b870e17ede7e9cbd28bc7cf8) | [MIT](licenses/dracula.txt) |
 | Everforest | [sainnhe/everforest](https://github.com/sainnhe/everforest/tree/85a86eb) | [MIT](licenses/everforest.txt) |
 | GitHub | [projekt0n/github-nvim-theme](https://github.com/projekt0n/github-nvim-theme/tree/c106c94) | [MIT](licenses/github.txt) |
 | Gruvbox Material | [sainnhe/gruvbox-material](https://github.com/sainnhe/gruvbox-material/tree/11d779b) | [MIT](licenses/gruvbox.txt) |
@@ -19,5 +20,5 @@ dark variants. The upstream projects and their licenses are:
 
 The ten Neovim families were selected from [Dotfyle's install-based colorscheme
 ranking](https://dotfyle.com/neovim/colorscheme/top), consulted on 2026-10-29.
-Solarized was added separately. The license files are also installed alongside
-the embedded themes in Kosmo's asset cache.
+Solarized and Dracula were added separately. The license files are also installed
+alongside the embedded themes in Kosmo's asset cache.

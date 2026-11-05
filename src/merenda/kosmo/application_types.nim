@@ -150,6 +150,7 @@ type
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
     nimdexButton: KosmoStatusIconButton
+    nimdexSection: nimkit.Box
     nimdexPlayIcon, nimdexStopIcon: nimkit.SvgMtsdfResource
     keyModeChoice: nimkit.PopupMenuButton
     indexProgress: nimkit.ProgressIndicator

@@ -1988,4 +1988,54 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
     let response = manager.openCliRequest(initialRequest.get())
     for message in response.errors:
       stderr.writeLine(message)
+
+  let installation = installedKosmo(getAppFilename())
+  var
+    approvedUpdate: string
+    updateChecker: KosmoUpdateChecker
+  if KosmoGitHashOverride.len > 0 and installation.directory.len > 0 and
+      canInstallKosmoUpdate():
+    let previousFailure = consumeKosmoUpdateFailure()
+    if previousFailure.len > 0:
+      scheduleMainThreadWork(
+        proc(): bool =
+          let alert = nimkit.newAlert(
+            "Kosmo could not update",
+            "See the update log for details: " & previousFailure,
+          )
+          defer:
+            alert.window.close()
+          discard app.runModal(alert)
+          false
+      )
+    updateChecker = startKosmoUpdateCheck(
+      KosmoVersion,
+      proc(version: string) =
+        if not app.isRunning():
+          return
+        let alert = nimkit.newAlert(
+          "Kosmo update available",
+          "Kosmo " & version & " is available. Install it after Kosmo closes?",
+          buttons = ["Install on Exit", "Later"],
+        )
+        defer:
+          alert.window.close()
+        let frontend = manager.activeFrontend()
+        if not frontend.isNil:
+          alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+        if app.runModal(alert) == nimkit.PanelResponseOk:
+          approvedUpdate = version
+      ,
+    )
+  defer:
+    updateChecker.close()
   app.run()
+  updateChecker.close()
+  if approvedUpdate.len > 0:
+    try:
+      launchKosmoUpdate(installation, approvedUpdate)
+    except CatchableError as error:
+      try:
+        recordKosmoUpdateFailure(error.msg)
+      except CatchableError:
+        stderr.writeLine("Could not start Kosmo update: " & error.msg)

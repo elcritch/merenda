@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add the Dracula Classic palette to Kosmo's bundled Moe themes.
+- Group Nimdex status controls and start Nimdex stopped for new configurations.
+- Check for Kosmo updates in the background and offer to install newer stable
+  releases after the application closes.
+
 - Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
   context menus, keeping each rich-text theme choice independent.
 

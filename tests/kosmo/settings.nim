@@ -155,7 +155,13 @@ suite "Kosmo settings":
     percentage.hidden = false
     progress.hidden = false
     Label(percentage).text = "100.00%"
-    let statusBar = percentage.superview()
+    let section = percentage.superview()
+    require section of Box
+    check progress.superview() == section
+    check spinner.superview() == section
+    check nimdexButton.superview() == section
+    let statusBar = section.superview()
+    require not statusBar.isNil
     statusBar.setNeedsLayout()
     statusBar.layoutSubtreeIfNeeded()
     require not progress.hidden
@@ -163,7 +169,8 @@ suite "Kosmo settings":
     check percentage.frame().size.width >= Label(percentage).sizeThatFits().width
     check progress.frame().maxX <= percentage.frame().minX
     check percentage.frame().maxX <= nimdexButton.frame().minX
-    check nimdexButton.frame().maxX <= choiceView.frame().minX
+    check nimdexButton.frame().maxX <= section.bounds().size.width
+    check section.frame().maxX <= choiceView.frame().minX
     percentage.hidden = true
     progress.hidden = true
     let choice = PopupMenuButton(choiceView)
@@ -428,11 +435,11 @@ suite "Kosmo settings":
     var catppuccinRow = -1
     for expectedName in [
       "Catppuccin Latte", "Catppuccin Mocha", "Cyberdream Dark", "Cyberdream Light",
-      "Dayfox", "Everforest Dark", "Everforest Light", "GitHub Dark", "GitHub Light",
-      "Gruvbox Material Dark", "Gruvbox Material Light", "Kanagawa Lotus",
-      "Kanagawa Wave", "Nightfox", "One Dark", "One Light", "Rose Pine",
-      "Rose Pine Dawn", "Solarized Dark", "Solarized Light", "Tokyo Night Day",
-      "Tokyo Night Moon",
+      "Dayfox", "Dracula", "Everforest Dark", "Everforest Light", "GitHub Dark",
+      "GitHub Light", "Gruvbox Material Dark", "Gruvbox Material Light",
+      "Kanagawa Lotus", "Kanagawa Wave", "Nightfox", "One Dark", "One Light",
+      "Rose Pine", "Rose Pine Dawn", "Solarized Dark", "Solarized Light",
+      "Tokyo Night Day", "Tokyo Night Moon",
     ]:
       var matchingRow = -1
       for row in 0 ..< moeThemesTable.rowCount:
