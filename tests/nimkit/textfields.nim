@@ -754,6 +754,28 @@ suite "nimkit text fields":
     check field.stringValue == "abcx"
     check field.selectedRange == initTextRange(4, 0)
 
+  test "text fields accept Option-generated and composed characters":
+    let
+      window = newWindow("International input", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 140, 24))
+    defer:
+      window.close()
+    root.addSubview(field)
+    window.setContentView(root)
+    require window.makeFirstResponder(field)
+    for (key, modifiers, text) in [
+      (key5, {kmOption}, "["),
+      (key6, {kmOption}, "]"),
+      (key8, {kmOption, kmShift}, "•"),
+    ]:
+      discard window.dispatchKeyDown(KeyEvent(key: key, modifiers: modifiers))
+      require window.dispatchTextInput(text)
+    discard window.dispatchKeyDown(KeyEvent(key: keyU, modifiers: {kmOption}))
+    discard window.dispatchKeyDown(KeyEvent(key: keyU))
+    require window.dispatchTextInput("ü")
+    check field.stringValue == "[]•ü"
+
   test "default edit commands move and delete text":
     let
       window = newWindow("Text commands", frame = rect(0, 0, 240, 120))

@@ -130,6 +130,44 @@ suite "Kosmo settings layout":
       check connect.frame().size.height > 0
       check disconnect.frame().size.height > 0
 
+  test "TextMate search results and available grammars share a draggable divider":
+    let settings = newKosmoSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    window.frame = rect(180, 160, 760, 650)
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)
+    discard window.buildRenders()
+    let splitView =
+      settings.contentView().viewWithIdentifier(KosmoGrammarListsSplitIdentifier)
+    require splitView of SplitView
+    let split = SplitView(splitView)
+    let results =
+      settings.contentView().viewWithIdentifier(KosmoVscodeGrammarSearchTableIdentifier)
+    let available =
+      settings.contentView().viewWithIdentifier(KosmoTextMateGrammarsTableIdentifier)
+    require not results.isNil and not available.isNil
+    let
+      initialResultsHeight = results.frame().size.height
+      initialAvailableHeight = available.frame().size.height
+      divider = split.dividerRect(0)
+      start = split.pointToWindow(
+        initPoint(
+          divider.origin.x + divider.size.width * 0.5,
+          divider.origin.y + divider.size.height * 0.5,
+        )
+      )
+      stop = initPoint(start.x, start.y + 40.0'f32)
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(stop)
+    discard window.buildRenders()
+    check results.frame().size.height > initialResultsHeight + 30.0'f32
+    check available.frame().size.height < initialAvailableHeight - 30.0'f32
+    check window.mouseUpAt(stop)
+
   test "TextMate grammar table follows its dragged column border":
     let settings = newKosmoSettingsWindow(
       textMateGrammars = [

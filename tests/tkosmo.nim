@@ -7,6 +7,7 @@ import kosmo/fixtures/ui
 import kosmo/cli
 import kosmo/cliopen
 import kosmo/config
+import kosmo/updater
 import kosmo/contextpanel
 import kosmo/editing
 import kosmo/editorsearch

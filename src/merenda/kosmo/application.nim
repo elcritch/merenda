@@ -25,7 +25,7 @@ import
     gitdiff, githubviewer, inputtranslation, matterworkers, moe, moehighlighting,
     panedocuments, panekeys, quickopen, recovery, searchbar, settings,
     shortcutpresentation, shortcuts, terminalsearch, textbackendlogging, viewersearch,
-    workspacefiles,
+    updater, workspacefiles,
   ]
 
 export

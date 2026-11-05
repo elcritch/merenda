@@ -33,7 +33,7 @@ const
     currentSourcePath().parentDir /
       "../../../data/JetBrainsMonoNerdFontMono-Regular.ttf.zip"
   )
-  KosmoVersion* = nimblePackageVersion(MerendaNimbleManifest)
+  KosmoVersion* {.strdefine.} = nimblePackageVersion(MerendaNimbleManifest)
   KosmoGitHashOverride* {.strdefine.} = ""
   KosmoGitHash* =
     when KosmoGitHashOverride.len > 0:

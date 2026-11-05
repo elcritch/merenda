@@ -13,7 +13,7 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   gitDiffTheme*: string
   gitHubTheme*: string
   nimLspCommand*: string
-  nimdexStopped*: bool
+  nimdexStopped*: bool = true
   merendaTheme*: string
   merendaFont*: string
   merendaMonoFont*: string

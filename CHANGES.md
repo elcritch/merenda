@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Allow macOS Option characters in terminals by default; Option-as-Meta remains
+  available in settings.
+- Group Moe themes by appearance and let users sort the theme list.
+- Separate the project name from Kosmo's window title with a bullet.
+- Let users resize the TextMate grammar search results and available grammar lists.
+- Add the Dracula Classic, Shades of Purple, and Dark Orchid Moe themes to Kosmo.
+- Group Nimdex status controls and start Nimdex stopped for new configurations.
+- Check for Kosmo updates in the background and offer to install newer stable
+  releases after the application closes.
+
 - Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
   context menus, keeping each rich-text theme choice independent.
 

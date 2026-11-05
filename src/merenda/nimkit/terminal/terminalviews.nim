@@ -21,6 +21,7 @@ export terminalfilelinks, terminalsessions
 const
   DefaultTerminalFontSize* = 14.0'f32
   DefaultTerminalPadding* = 4.0'f32
+  DefaultTerminalOptionAsMeta* = not (defined(macosx) or defined(macos))
   TerminalFrameInterval = initDuration(milliseconds = 8)
 
 type
@@ -1401,7 +1402,7 @@ proc initTerminalViewFields*(
   view.xPalette = palette
   view.xWorkingDirectory = getCurrentDir()
   view.xAllowsLinkActivation = true
-  view.xOptionAsMeta = true
+  view.xOptionAsMeta = DefaultTerminalOptionAsMeta
   view.xLastGeneration = high(uint64)
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
   view.xLastScrollbackLinesAdded = view.xSession.screenInfo().scrollbackLinesAdded

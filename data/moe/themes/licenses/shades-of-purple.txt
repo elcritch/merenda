@@ -1,0 +1,6 @@
+Shades of Purple for Vim
+Author: Alexander Keliris
+License: MIT (as stated in the upstream theme file)
+Source: https://github.com/Rigellute/shades-of-purple.vim/blob/e806d38190a6a2e8b9244824c2953d6567f141f3/colors/shades_of_purple.vim
+
+The upstream repository does not include a separate license text.
