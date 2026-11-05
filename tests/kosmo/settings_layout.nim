@@ -107,6 +107,66 @@ suite "Kosmo settings layout":
     window.frame = rect(180, 160, minimumSize.width - 20, minimumSize.height - 20)
     check window.frame().size == minimumSize
 
+  test "theme selection preserves rejected targets and refreshes current choices":
+    var applied: seq[KosmoThemeTarget]
+    let themes = [
+      KosmoMoeThemeSetting(identifier: "first", name: "First"),
+      KosmoMoeThemeSetting(identifier: "second", name: "Second"),
+    ]
+    let settings = newKosmoSettingsWindow(
+      moeThemes = themes,
+      selectedMoeThemeIdentifier = "first",
+      selectedTerminalThemeIdentifier = "first",
+      selectedMarkdownThemeIdentifier = "first",
+      selectedGitDiffThemeIdentifier = "first",
+      selectedGitHubThemeIdentifier = "first",
+      moeThemeHandler = proc(identifier: string, target: KosmoThemeTarget): bool =
+        applied.add target
+        target != KosmoThemeTarget.Terminal,
+    )
+    defer:
+      settings.window().close()
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    let targets =
+      TableView(settings.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier))
+    let choices = TableView(
+      settings.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    require not targets.isNil and not choices.isNil
+    targets.selectedIndexes = @[0, 1]
+    check applied.len == 0
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("second")
+    check applied == @[KosmoThemeTarget.Moe, KosmoThemeTarget.Terminal]
+    let current = targets.columnWithIdentifier("theme")
+    check targets.tableCellText(0, current) == "Second"
+    check targets.tableCellText(1, current) == "First"
+    check targets.tableCellText(2, current) == "First"
+    check choices.selectedIndex == -1
+    settings.updateMoeThemes(themes, "second", "second", "first", "first", "first")
+    check applied.len == 2
+    check targets.selectedIndexes == @[0, 1]
+    check choices.tableRowIdentifier(choices.selectedIndex) == "second"
+
+  test "theme tables and selection shortcuts remain usable when resized":
+    let settings = newKosmoSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    for height in [KosmoSettingsMinimumHeight, 420.0'f32, 700.0'f32]:
+      window.frame = rect(180, 160, KosmoSettingsMinimumWidth, height)
+      settings.contentView().layoutSubtreeIfNeeded()
+      for identifier in [KosmoThemeTargetIdentifier, KosmoMoeThemesTableIdentifier]:
+        let table = TableView(settings.contentView().viewWithIdentifier(identifier))
+        table.checkVisibleIn(settings.contentView())
+        check table.frame().size.height >= 55
+      settings.contentView().checkVisibleText(["Select all", "Select rich text"])
+
   test "Nimdex action buttons retain their control height when resized":
     let settings = newKosmoSettingsWindow()
     defer:

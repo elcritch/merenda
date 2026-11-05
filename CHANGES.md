@@ -11,6 +11,8 @@
 - Group Nimdex status controls and start Nimdex stopped for new configurations.
 - Check for Kosmo updates in the background and offer to install newer stable
   releases after the application closes.
+- Show each Kosmo theme destination and its current theme in a multi-select table,
+  with Select rich text and Select all shortcuts for applying themes together.
 
 - Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
   context menus, keeping each rich-text theme choice independent.
