@@ -861,6 +861,45 @@ suite "nimkit text layout":
     check firstHit.lineIndex.isSome
     check firstHit.textIndex.toInt >= 0
 
+  test "caret hit testing keeps exact hits and glyph ties at regular coordinates":
+    let
+      storage = newTextStorage("abcdef")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(240.0, 40.0), insets(0.0), wraps = false)
+      )
+      third = manager.caretRect(3)
+      fourth = manager.caretRect(4)
+      midY = third.origin.y + third.size.height * 0.5'f32
+
+    check manager.textIndexAtPoint(initPoint(third.origin.x, midY)) == 3
+    check manager.textIndexAtPoint(initPoint(fourth.origin.x, midY)) == 4
+    check manager.textIndexAtPoint(
+      initPoint((third.origin.x + fourth.origin.x) / 2'f32, midY)
+    ) == 3
+
+  test "caret hit testing keeps exact hits and glyph ties at large coordinates":
+    let
+      storage = newTextStorage("abcdef")
+      manager = newTextLayoutManager(
+        storage,
+        initTextContainer(
+          initSize(240.0, 40.0),
+          insets(0.0),
+          wraps = false,
+          origin = initPoint(100000.0, 0.0),
+        ),
+      )
+      third = manager.caretRect(3)
+      fourth = manager.caretRect(4)
+      midY = third.origin.y + third.size.height * 0.5'f32
+
+    check third.origin.x >= 100000.0'f32
+    check manager.textIndexAtPoint(initPoint(third.origin.x, midY)) == 3
+    check manager.textIndexAtPoint(initPoint(fourth.origin.x, midY)) == 4
+    check manager.textIndexAtPoint(
+      initPoint((third.origin.x + fourth.origin.x) / 2'f32, midY)
+    ) == 3
+
   test "layout client protocol supplies inputs and observes layout hooks":
     let
       client = newLayoutClientSpy(
