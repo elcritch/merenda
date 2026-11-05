@@ -232,15 +232,6 @@ func propertyNameForSetter(selectorName: string): string =
   result = localName[3 .. ^1]
   result[0] = result[0].toLowerAscii
 
-func propertyTypeFromSignature(signature: string): string =
-  const valueMarker = "(value: "
-  let
-    valueStart = signature.find(valueMarker)
-    valueStop = signature.rfind(')')
-  if valueStart < 0 or valueStop <= valueStart + valueMarker.high:
-    return
-  signature[valueStart + valueMarker.len ..< valueStop].strip()
-
 proc registerViewProtocolProperties*(
     registry: var ResourceRegistry, kind: string, protocol: SigilProtocol
 ) =
@@ -249,7 +240,7 @@ proc registerViewProtocolProperties*(
     let
       setterName = $requirement.selector
       propertyName = setterName.propertyNameForSetter()
-      valueType = requirement.signature.propertyTypeFromSignature()
+      valueType = requirement.valueType
     if propertyName.len > 0 and valueType.len > 0:
       let getterName = setterName.selectorPrefix() & propertyName
       if protocol.hasRequirement(toSigilName(getterName)):
