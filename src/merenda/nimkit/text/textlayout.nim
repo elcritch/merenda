@@ -2347,13 +2347,26 @@ proc lineBoundedIndexAtPoint(
   var
     glyphIndex = lineStart
     closestIndex = int(fragment.textRange.location)
-    closestDistance = high(float32)
+    closestDistance = high(float64)
+    closestCaretX: float32
 
   template considerCaret(index: int, caretX: float32) =
     if index >= selectableStart and index <= selectableStop:
-      let distance = abs(point.x - caretX)
-      if distance < closestDistance:
+      let
+        distance = abs(point.x.float64 - caretX.float64)
+        # The representable float32 midpoint can be closer to one endpoint
+        # after rounding. Resolve that midpoint toward the lower index, without
+        # extending the tie to neighboring clicks as coordinates grow.
+        midpoint = ((closestCaretX.float64 + caretX.float64) * 0.5).float32
+        tied =
+          distance == closestDistance or
+          (closestDistance < high(float64) and point.x == midpoint)
+      if (distance == 0 and (closestDistance > 0 or index < closestIndex)) or (
+        distance > 0 and closestDistance > 0 and
+        ((not tied and distance < closestDistance) or (tied and index < closestIndex))
+      ):
         closestDistance = distance
+        closestCaretX = caretX
         closestIndex = index
 
   while glyphIndex <= lineStop:

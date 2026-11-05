@@ -23,6 +23,15 @@
 - On Windows, probe Vulkan before transferring rendering to a worker and fall back
   to OpenGL or software rendering when graphics initialization fails.
 
+- Keep caret clicks accurate at large layout coordinates: rounded midpoint
+  ties choose the lower text index, neighboring clicks choose the nearest
+  caret, and exact caret hits keep priority.
+
+- Center the open file dialog on its parent window even when the parent sits
+  on a monitor with negative desktop coordinates: monitors left of or above
+  the primary display have negative origins, so the centered frame is
+  deliberately not clamped to zero.
+
 - Display multiline, styled language-server hover information in editor tooltips.
 
 - Show language-server hover information in editor tooltips without moving the cursor.
@@ -30,6 +39,18 @@
 - Configure and connect Nimdex from Kosmo Settings.
 
 - Show Nimdex indexing progress beside the editor input mode selector.
+
+- Keep Kosmo's main window where it is when the open file dialog closes: raising
+  an already mapped window forces the window manager to focus it by unmapping
+  and remapping it, which applied the window manager's placement again. The
+  window's actual position is re-asserted after the remap.
+
+- Navigate the etabs of a pane with several editor tabs using the arrow keys:
+  `<left>` and `<right>` on a focused etab strip select the previous or next
+  etab and only navigate the split panes at the first or last etab, keeping
+  the spatial navigation between splits intact. In the editor's normal mode
+  `<tab>` and `<shift>-<tab>` return to the pane's own etab strip instead of
+  jumping to the next split's strip or another ui element.
 
 - Bundle dark and light Moe themes from ten popular Neovim theme families, plus Solarized.
 

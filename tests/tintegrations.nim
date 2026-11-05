@@ -10,6 +10,7 @@ import integrations/atomicsaves
 import integrations/application_sigils
 import integrations/kosmolsp
 import integrations/kosmoupdater
+import integrations/carethittesting
 import integrations/figdraw_text_offsets
 import integrations/gitprocesslifecycle
 import integrations/githubviewer

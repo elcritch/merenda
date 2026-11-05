@@ -1339,14 +1339,19 @@ proc activateItem(button: PopupMenuButton, index: int) =
   if not item.submenu().isNil:
     button.openSubmenuPopup(index)
     return
-  discard item.perform(button.actionStartResponder(), DynamicAgent(button))
-  if not button.xMenu.isNil:
-    button.xMenu.notifyMenuItemDidActivate(item, DynamicAgent(button))
-  let root = button.rootPopup()
+  let
+    start = button.actionStartResponder()
+    root = button.rootPopup()
+  # Close the popup tree before performing the action so actions that open
+  # modal dialogs or windows (e.g. Open…) do not run while the menu is still
+  # on screen.
   if root.isNil:
     button.closePopup()
   else:
     root.closePopup()
+  discard item.perform(start, DynamicAgent(item))
+  if not button.xMenu.isNil:
+    button.xMenu.notifyMenuItemDidActivate(item, DynamicAgent(item))
 
 proc popupListData(button: PopupMenuButton): PopupListData =
   PopupListData(
