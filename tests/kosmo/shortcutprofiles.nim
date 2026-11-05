@@ -111,6 +111,7 @@ suite "Kosmo shortcut profiles":
   test "toolbar and markdown commands are overridable through the binding JSON":
     let loaded = applyKosmoShortcutConfigurationJson(
       """{
+        "profile": "platform",
         "bindings": {
           "kosmo.focusToolbar": "primary-shift-g",
           "kosmo.toggleMarkdownMode": "f8"
@@ -132,6 +133,7 @@ suite "Kosmo shortcut profiles":
   test "toolbar override colliding with another command is rejected":
     let loaded = applyKosmoShortcutConfigurationJson(
       """{
+        "profile": "platform",
         "bindings": {
           "kosmo.focusToolbar": "primary-shift-t"
         }
