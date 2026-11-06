@@ -336,19 +336,19 @@ proc matterColor(
   of moeMatter.mccProperty: moeHighlight.EditorColorPairIndex.property
   of moeMatter.mccDefault: moeHighlight.EditorColorPairIndex.default
 
-proc runeColumns(line: string): seq[int] =
-  result = newSeq[int](line.len + 1)
-  var
-    bytePos: int
-    column: int
-  while bytePos < line.len:
-    let size = max(runeLenAt(line, bytePos), 1)
-    let lastByte = min(bytePos + size, line.len)
-    for index in bytePos ..< lastByte:
-      result[index] = column
-    bytePos = lastByte
-    inc column
-  result[line.len] = column
+type RuneColumnCursor = object
+  bytePos, column: int
+
+proc columnAt(cursor: var RuneColumnCursor, line: string, target: int): int =
+  # Byte positions inside a rune map to its starting column, including
+  # truncated sequences. Targets are monotonic for a committed cursor.
+  while cursor.bytePos < target:
+    let next = min(cursor.bytePos + max(runeLenAt(line, cursor.bytePos), 1), line.len)
+    if next > target:
+      break
+    cursor.bytePos = next
+    inc cursor.column
+  cursor.column
 
 proc addSegment(
     segments: var seq[moeHighlight.ColorSegment],
@@ -379,7 +379,6 @@ proc addLineSegments(
     language: moeHighlight.SourceLanguage,
     spans: openArray[moeMatter.MatterSpan],
 ) =
-  let columns = line.runeColumns()
   if line.len == 0:
     segments.add moeHighlight.ColorSegment(
       firstRow: row,
@@ -391,16 +390,17 @@ proc addLineSegments(
     )
     return
 
-  var coveredByte: int
+  var
+    coveredByte: int
+    cursor: RuneColumnCursor
   for span in spans:
     let firstByte = clamp(span.firstByte, coveredByte, line.len)
     let lastByte = clamp(span.lastByte, firstByte, line.len)
+    var nextCursor = cursor
+    let firstColumn = nextCursor.columnAt(line, firstByte)
     if firstByte > coveredByte:
       segments.addSegment(
-        row,
-        columns[coveredByte],
-        columns[firstByte] - 1,
-        moeHighlight.EditorColorPairIndex.default,
+        row, cursor.column, firstColumn - 1, moeHighlight.EditorColorPairIndex.default
       )
     if lastByte > firstByte:
       let color =
@@ -413,15 +413,25 @@ proc addLineSegments(
           moeHighlight.EditorColorPairIndex.builtin
         else:
           span.category.matterColor
-      segments.addSegment(row, columns[firstByte], columns[lastByte] - 1, color)
+      let lastColumn = nextCursor.columnAt(line, lastByte)
+      segments.addSegment(row, firstColumn, lastColumn - 1, color)
       coveredByte = lastByte
+      cursor = nextCursor
   if coveredByte < line.len:
+    let
+      firstColumn = cursor.column
+      lastColumn = cursor.columnAt(line, line.len)
     segments.addSegment(
-      row,
-      columns[coveredByte],
-      columns[line.len] - 1,
-      moeHighlight.EditorColorPairIndex.default,
+      row, firstColumn, lastColumn - 1, moeHighlight.EditorColorPairIndex.default
     )
+
+when defined(merendaTests):
+  proc matterLineSegmentsForTest*(
+      line: string,
+      language: moeHighlight.SourceLanguage,
+      spans: openArray[moeMatter.MatterSpan],
+  ): seq[moeHighlight.ColorSegment] =
+    result.addLineSegments(0, line, language, spans)
 
 proc highlightMatterLine(
     job: var MatterHighlightJob,

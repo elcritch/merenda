@@ -244,9 +244,11 @@ continueMatterHighlight, runeColumns, and addLineSegments.
   stale work from publishing, but an enqueued cancelled request still owns its
   payload until consumed. Keep buffer/version checks and worker-local grammar
   state.
-- [ ] Convert sorted Matter span endpoints to rune columns with a cursor instead
-  of allocating runeColumns per line. This is lower priority than the
-  whole-document maps: parsing already has a 1,024-byte line limit and a deadline.
+- [x] Convert Matter byte endpoints to rune columns with a monotonic cursor
+  instead of allocating `runeColumns` per line. Preserve interior-byte,
+  truncated-sequence, empty-span and fallback behavior. The parser's 1,024-byte
+  limit did not bound the previous map: skipped oversized lines still allocated
+  eight bytes per source byte. All 36 focused Matter tests pass.
 
 Kosmo's main editor uses Moe buffers; NimKit TextStorage improvements do not
 automatically change this path. Keep any upstream buffer redesign separate.
@@ -414,6 +416,10 @@ details, and limitations:
 - [Gap-source cache control](tests/benchmarks/results/text-gap-source-memory-2026-11-06.json):
   an explicit precache mode reproduces a regression caught in the uncommitted
   worker prototype, not the original baseline. Both modes use the fixed binary.
+- [Matter fallback-line mapping](tests/benchmarks/results/matter-line-memory-2026-11-06.json):
+  three matched fresh-process pairs on an 8 MiB line. Median peak RSS falls
+  from 115.95 MiB to 51.78 MiB; post-completion live heap stays 16.15 MiB and
+  the final rune column is identical.
 
 Reproduce checkpoint captures using the tracked probes and driver described in
 [ALLOCATION-PROFILING.md](tests/benchmarks/ALLOCATION-PROFILING.md).

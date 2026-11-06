@@ -152,7 +152,7 @@ suite "Kosmo Matter highlighting":
       ]
       highlighting = newMatterHighlighting(sources, fileTypes)
       requestId = highlighting.requestMatterHighlight(
-        7, 1, "fizz value", moeHighlight.SourceLanguage.langNone,
+        7, 1, "α😀 fizz value", moeHighlight.SourceLanguage.langNone,
         "/work/example.toy.multi",
       )
       deadline = getMonoTime() + initDuration(seconds = 60)
@@ -171,7 +171,81 @@ suite "Kosmo Matter highlighting":
     for segment in completed[0].segments:
       if segment.color == moeHighlight.EditorColorPairIndex.keyword:
         keywordFound = true
+        check segment.firstColumn == 3
+        check segment.lastColumn == 6
     check keywordFound
+
+  when defined(merendaTests):
+    test "byte spans map to rune columns across malformed and empty ranges":
+      let
+        line = "aé😀z\xE2\x82"
+        spans = @[
+          moeMatter.MatterSpan(
+            firstByte: 2, lastByte: 6, category: moeMatter.mccKeyword
+          ),
+          moeMatter.MatterSpan(
+            firstByte: 7, lastByte: 10, category: moeMatter.mccString
+          ),
+        ]
+        result =
+          matterLineSegmentsForTest(line, moeHighlight.SourceLanguage.langNim, spans)
+      require result.len == 4
+      check (result[0].firstColumn, result[0].lastColumn) == (0, 0)
+      check result[0].color == moeHighlight.EditorColorPairIndex.default
+      check (result[1].firstColumn, result[1].lastColumn) == (1, 1)
+      check result[1].color == moeHighlight.EditorColorPairIndex.keyword
+      check (result[2].firstColumn, result[2].lastColumn) == (2, 2)
+      check result[2].color == moeHighlight.EditorColorPairIndex.default
+      check (result[3].firstColumn, result[3].lastColumn) == (3, 4)
+      check result[3].color == moeHighlight.EditorColorPairIndex.stringLit
+
+      let emptyThenEarlier = matterLineSegmentsForTest(
+        line,
+        moeHighlight.SourceLanguage.langNim,
+        [
+          moeMatter.MatterSpan(firstByte: 7, lastByte: 7),
+          moeMatter.MatterSpan(
+            firstByte: 1, lastByte: 3, category: moeMatter.mccKeyword
+          ),
+        ],
+      )
+      require emptyThenEarlier.len == 4
+      check (emptyThenEarlier[0].firstColumn, emptyThenEarlier[0].lastColumn) == (0, 2)
+      check (emptyThenEarlier[1].firstColumn, emptyThenEarlier[1].lastColumn) == (0, 0)
+      check (emptyThenEarlier[2].firstColumn, emptyThenEarlier[2].lastColumn) == (1, 1)
+      check (emptyThenEarlier[3].firstColumn, emptyThenEarlier[3].lastColumn) == (2, 4)
+
+  test "oversized malformed Unicode lines use bounded plain highlighting":
+    let
+      rootPath = "/kosmo/config/grammars/toy/syntaxes/plain.tmLanguage.json"
+      sources = @[
+        moeMatter.MatterGrammarSource(
+          path: rootPath, content: """{"scopeName":"source.toy","patterns":[]}"""
+        )
+      ]
+      fileTypes = @[
+        MatterGrammarFileType(
+          identifier: "toy:plain",
+          languageId: "toy",
+          rootPath: rootPath,
+          extensions: @[".toy"],
+        )
+      ]
+      highlighting = newMatterHighlighting(sources, fileTypes)
+    defer:
+      highlighting.close()
+    let
+      line = "é".repeat((KosmoMatterMaximumLineBytes div 2) + 1) & "\xE2\x82"
+      requestId = highlighting.requestMatterHighlight(
+        87, 1, line, moeHighlight.SourceLanguage.langNone, "large.toy"
+      )
+      batches = highlighting.collectMatterBatches(87, requestId)
+    require batches.len == 1
+    check batches[0].errorMessage == ""
+    require batches[0].segments.len == 1
+    check batches[0].segments[0].firstColumn == 0
+    check batches[0].segments[0].lastColumn == line.len div 2 - 1
+    check batches[0].segments[0].color == moeHighlight.EditorColorPairIndex.default
 
   when not defined(KosmoMatterMaximumLineBytes) or
       KosmoMatterMaximumLineBytes >= NimBindingMaximumLineBytes:
