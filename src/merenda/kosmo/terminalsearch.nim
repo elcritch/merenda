@@ -12,13 +12,23 @@ import ./terminalinput
 export terminalinput
 
 type
-  TerminalSearchGlyph = object
-    value: Rune
-    first, last: nimkit.TerminexPosition
+  TerminalSearchException = object
+    first, last: int # Half-open rune offsets within the row.
+    column, endColumn: int
+
+  TerminalSearchRow = object
+    first, last: int # Half-open rune offsets in the search text.
+    row, columns: int
+    hasNewline: bool
+    exceptions: seq[TerminalSearchException]
+
+  TerminalSearchSnapshot = object
+    text: string
+    rows: seq[TerminalSearchRow]
 
   KosmoTerminalView* = ref object of nimkit.TerminalView
     search: nimkit.TextSearchController
-    searchGlyphs: seq[TerminalSearchGlyph]
+    searchSnapshot: TerminalSearchSnapshot
     xInputPolicy: KosmoTerminalInputPolicy
     xShortcutState: TerminalShortcutState
     xPaneCommandHandler: proc(command: KosmoPaneCommand): bool {.closure.}
@@ -103,53 +113,81 @@ proc findNext*(view: KosmoTerminalView)
 func lineEndsAtRightMargin(line: nimkit.TerminexLine): bool =
   line.len > 0 and (line[^1].text.len > 0 or line[^1].continuation)
 
-proc addSearchGlyph(
-    glyphs: var seq[TerminalSearchGlyph], value: Rune, row, firstColumn, lastColumn: int
-) =
-  glyphs.add TerminalSearchGlyph(
-    value: value,
-    first: nimkit.initTerminalPosition(row, firstColumn),
-    last: nimkit.initTerminalPosition(row, lastColumn),
-  )
-
-proc terminalSearchGlyphs(
+proc terminalSearchSnapshot(
     session: nimkit.TerminalViewSession
-): seq[TerminalSearchGlyph] =
+): TerminalSearchSnapshot =
   let info = session.screenInfo()
+  var offset = 0
   for row in 0 ..< info.totalLineCount:
     let line = session.lineAtAbsolute(row)
+    var mapping = TerminalSearchRow(first: offset, row: row, columns: line.len)
+    var expectedColumn = 0
     for column, cell in line:
       if not cell.continuation:
+        var lastColumn = column + 1
+        while lastColumn < line.len and line[lastColumn].continuation:
+          inc lastColumn
+        let count = if cell.text.len == 0: 1 else: cell.text.runeLen
+        if count != 1 or lastColumn != column + 1 or column != expectedColumn:
+          mapping.exceptions.add TerminalSearchException(
+            first: offset - mapping.first,
+            last: offset - mapping.first + count,
+            column: column,
+            endColumn: lastColumn,
+          )
         if cell.text.len == 0:
-          result.addSearchGlyph(Rune(' '), row, column, column + 1)
+          result.text.add ' '
         else:
-          var lastColumn = column + 1
-          while lastColumn < line.len and line[lastColumn].continuation:
-            inc lastColumn
-          for value in cell.text.runes:
-            result.addSearchGlyph(value, row, column, lastColumn)
+          result.text.add cell.text
+        offset += count
+        expectedColumn = lastColumn
     if not line.lineEndsAtRightMargin():
-      result.addSearchGlyph(Rune('\n'), row, line.len, line.len)
+      result.text.add '\n'
+      mapping.hasNewline = true
+      inc offset
+    mapping.last = offset
+    if mapping.last > mapping.first:
+      result.rows.add move(mapping)
 
-proc searchText(glyphs: seq[TerminalSearchGlyph]): string =
-  result = newStringOfCap(glyphs.len)
-  for glyph in glyphs:
-    result.add glyph.value
+proc terminalPosition(
+    snapshot: TerminalSearchSnapshot, index: int, endPosition: bool
+): nimkit.TerminexPosition =
+  if snapshot.rows.len == 0:
+    return nimkit.initTerminalPosition(0, 0)
+  let target = min(index, snapshot.rows[^1].last - 1)
+  var low = 0
+  var high = snapshot.rows.len
+  while low < high:
+    let middle = (low + high) div 2
+    if snapshot.rows[middle].last <= target:
+      low = middle + 1
+    else:
+      high = middle
+  let row = snapshot.rows[low]
+  let local = target - row.first
+  if row.hasNewline and target == row.last - 1:
+    return nimkit.initTerminalPosition(row.row, row.columns)
+  var column = local
+  for exception in row.exceptions:
+    if local < exception.first:
+      break
+    if local < exception.last:
+      return nimkit.initTerminalPosition(
+        row.row,
+        if endPosition or index > target: exception.endColumn else: exception.column,
+      )
+    column = exception.endColumn + local - exception.last
+  if endPosition or index > target:
+    inc column
+  nimkit.initTerminalPosition(row.row, column)
 
 proc terminalSelection(
-    glyphs: seq[TerminalSearchGlyph], range: nimkit.TextRange
+    snapshot: TerminalSearchSnapshot, range: nimkit.TextRange
 ): nimkit.TerminalSelection =
-  let first = int(range.location)
-  let anchor =
-    if first < glyphs.len:
-      glyphs[first].first
-    elif glyphs.len > 0:
-      glyphs[^1].last
-    else:
-      nimkit.initTerminalPosition(0, 0)
+  let anchor = snapshot.terminalPosition(int(range.location), false)
   let extent =
     if range.length > 0:
-      glyphs[range.maxIndex - 1].last
+      snapshot.terminalPosition(range.maxIndex - 1, true)
     else:
       anchor
   nimkit.TerminalSelection(anchor: anchor, extent: extent)
@@ -160,10 +198,10 @@ proc terminalSearchMatches*(
   ## Search screen and scrollback with Reni, retaining terminal cell positions.
   ## Invalid expressions raise TextSearchError; empty queries have no matches.
   if not session.isNil and query.len > 0:
-    let glyphs = session.terminalSearchGlyphs()
+    let snapshot = session.terminalSearchSnapshot()
     let pattern = initTextSearchPattern(query, regularExpression, caseSensitive = false)
-    for range in pattern.searchRanges(glyphs.searchText()):
-      result.add glyphs.terminalSelection(range)
+    for range in pattern.searchRanges(snapshot.text):
+      result.add snapshot.terminalSelection(range)
 
 proc findPrevious*(view: KosmoTerminalView) =
   ## Select and reveal the previous terminal match, wrapping at the beginning.
@@ -257,19 +295,19 @@ proc newKosmoTerminalView*(
     nimkit.TextSearchAdapter(
       sources: proc(): seq[string] =
         if not terminal.isNil:
-          terminal[].searchGlyphs = terminal[].session().terminalSearchGlyphs()
-          result = @[terminal[].searchGlyphs.searchText()]
+          terminal[].searchSnapshot = terminal[].session().terminalSearchSnapshot()
+          result = @[terminal[].searchSnapshot.text]
       ,
       reveal: proc(match: nimkit.TextSearchLocation) =
         if not terminal.isNil:
           terminal[].selectTerminalRange(
-            terminal[].searchGlyphs.terminalSelection(match.range), centered = true
+            terminal[].searchSnapshot.terminalSelection(match.range), centered = true
           )
       ,
       clear: proc() =
         if not terminal.isNil:
           terminal[].clearSelection()
-          terminal[].searchGlyphs = @[]
+          terminal[].searchSnapshot = TerminalSearchSnapshot()
       ,
     ),
     backwardsSearch = true,
