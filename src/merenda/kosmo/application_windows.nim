@@ -327,22 +327,30 @@ proc setRichTextTheme(
 ): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
-  for theme in frontend.dockController.editor.availableMoeThemes():
-    if theme.identifier == identifier and theme.validMoeTheme():
-      frontend.applyRichTextTheme(theme, target)
-      if not frontend.xWindowManager.isNil:
-        let manager = frontend.xWindowManager[]
-        if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
-          manager.config.markdownTheme = identifier
-        if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
-          manager.config.gitDiffTheme = identifier
-        if target.themeTargetIncludes(KosmoThemeTarget.GitHub):
-          manager.config.gitHubTheme = identifier
-        for other in manager.frontends:
-          if other != frontend and not other.xClosed:
-            other.applyRichTextTheme(theme, target)
-        discard manager.config.saveKosmoConfig(manager.configPath)
-      return true
+  var selectedTheme: KosmoMoeTheme
+  if identifier.len > 0:
+    var found = false
+    for theme in frontend.dockController.editor.availableMoeThemes():
+      if theme.identifier == identifier and theme.validMoeTheme():
+        selectedTheme = theme
+        found = true
+        break
+    if not found:
+      return
+  frontend.applyRichTextTheme(selectedTheme, target)
+  if not frontend.xWindowManager.isNil:
+    let manager = frontend.xWindowManager[]
+    if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
+      manager.config.markdownTheme = identifier
+    if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
+      manager.config.gitDiffTheme = identifier
+    if target.themeTargetIncludes(KosmoThemeTarget.GitHub):
+      manager.config.gitHubTheme = identifier
+    for other in manager.frontends:
+      if other != frontend and not other.xClosed:
+        other.applyRichTextTheme(selectedTheme, target)
+    discard manager.config.saveKosmoConfig(manager.configPath)
+  true
 
 proc setTheme(
     frontend: KosmoApplication, identifier: string, target: KosmoThemeTarget

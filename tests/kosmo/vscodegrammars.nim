@@ -1,6 +1,7 @@
 ## VS Code TextMate grammar discovery metadata and safe local installation.
 import std/[json, os, strutils, tables, tempfiles, unittest]
 
+import zippy/ziparchives
 import merenda/kosmo/vscodegrammars
 import merenda/nimkit/foundation/textsearch
 
@@ -10,46 +11,44 @@ const
   FixtureGrammar = """{"scopeName":"source.toy","patterns":[]}"""
 
 proc fixtureTree(): VscodeGrammarTree =
-  let content =
-    %*{
-      "sha": FixtureCommit,
-      "truncated": false,
-      "tree": [
-        {"path": "extensions/toy/package.json", "type": "blob"},
-        {"path": "extensions/toy/" & FixtureGrammarPath, "type": "blob"},
-        {"path": "extensions/no-grammar/package.json", "type": "blob"},
-      ],
-    }
+  let content = %*{
+    "sha": FixtureCommit,
+    "truncated": false,
+    "tree": [
+      {"path": "extensions/toy/package.json", "type": "blob"},
+      {"path": "extensions/toy/" & FixtureGrammarPath, "type": "blob"},
+      {"path": "extensions/no-grammar/package.json", "type": "blob"},
+    ],
+  }
   parseVscodeGrammarTree(content.pretty())
 
 proc fixtureCandidate(): VscodeGrammarCandidate =
-  let manifest =
-    %*{
-      "contributes": {
-        "languages": [
-          {
-            "id": "toy",
-            "aliases": ["Toy Language"],
-            "extensions": [".toy", ".toy.src"],
-            "filenames": ["Toyfile"],
-          }
-        ],
-        "grammars": [
-          {
-            "language": "toy",
-            "scopeName": "source.toy",
-            "path": "./" & FixtureGrammarPath,
-          }
-        ],
-      }
+  let manifest = %*{
+    "contributes": {
+      "languages": [
+        {
+          "id": "toy",
+          "aliases": ["Toy Language"],
+          "extensions": [".toy", ".toy.src"],
+          "filenames": ["Toyfile"],
+        }
+      ],
+      "grammars": [
+        {
+          "language": "toy",
+          "scopeName": "source.toy",
+          "path": "./" & FixtureGrammarPath,
+        }
+      ],
     }
+  }
   let candidates =
     parseVscodeGrammarManifest("toy", FixtureCommit, manifest.pretty(), fixtureTree())
   doAssert candidates.len == 1
   candidates[0]
 
 suite "Kosmo VS Code TextMate grammars":
-  test "Reni searches grammar metadata and rejects invalid syntax before fetching":
+  test "Reni searches grammar metadata and empty registry queries do not fetch":
     let candidate = fixtureCandidate()
     check candidate.matchesVscodeGrammarQuery(
       r"(?<=source\.)toy$", regularExpression = true
@@ -65,8 +64,8 @@ suite "Kosmo VS Code TextMate grammars":
     let catalog = newKosmoVscodeGrammarCatalog()
     defer:
       catalog.close()
-    catalog.search("[", regularExpression = true)
-    check catalog.status().startsWith("Search error:")
+    catalog.search(" ")
+    check catalog.status().startsWith("Enter at least two characters")
     check not catalog.isBusy()
     check catalog.candidates().len == 0
 
@@ -113,18 +112,17 @@ suite "Kosmo VS Code TextMate grammars":
 
   test "rejects unsafe manifest paths and mismatched grammar scopes":
     let tree = fixtureTree()
-    let unsafeManifest =
-      %*{
-        "contributes": {
-          "grammars": [
-            {
-              "language": "toy",
-              "scopeName": "source.toy",
-              "path": "../outside.tmLanguage.json",
-            }
-          ]
-        }
+    let unsafeManifest = %*{
+      "contributes": {
+        "grammars": [
+          {
+            "language": "toy",
+            "scopeName": "source.toy",
+            "path": "../outside.tmLanguage.json",
+          }
+        ]
       }
+    }
     expect ValueError:
       discard
         parseVscodeGrammarManifest("toy", FixtureCommit, unsafeManifest.pretty(), tree)
@@ -140,3 +138,92 @@ suite "Kosmo VS Code TextMate grammars":
     contents[driveCandidate.rootPath] = FixtureGrammar
     expect ValueError:
       driveCandidate.validateVscodeGrammarFiles(contents)
+
+suite "Open VSX grammar packages":
+  test "search results pin package versions and reject foreign download hosts":
+    let response = %*{
+      "extensions": [
+        {
+          "namespace": "publisher",
+          "name": "toy",
+          "version": "1.2.3",
+          "files": {
+            "download":
+              "https://open-vsx.org/api/publisher/toy/1.2.3/file/publisher.toy-1.2.3.vsix"
+          },
+        },
+        {
+          "namespace": "publisher",
+          "name": "unsafe",
+          "version": "1.2.3",
+          "files": {
+            "download":
+              "https://example.com/api/publisher/unsafe/1.2.3/file/unsafe.vsix"
+          },
+        },
+      ]
+    }
+    let extensions = parseOpenVsxGrammarSearch($response)
+    require extensions.len == 1
+    check extensions[0].publisher == "publisher"
+    check extensions[0].version == "1.2.3"
+    check extensions[0].manifestUrl ==
+      "https://open-vsx.org/api/publisher/toy/1.2.3/file/package.json"
+
+  test "installs only contributed grammar data and preserves registry provenance":
+    let extension = OpenVsxGrammarExtension(
+      publisher: "publisher",
+      name: "toy",
+      version: "1.2.3",
+      archiveUrl:
+        "https://open-vsx.org/api/publisher/toy/1.2.3/file/publisher.toy-1.2.3.vsix",
+    )
+    let manifest = %*{
+      "publisher": "publisher",
+      "name": "toy",
+      "version": "1.2.3",
+      "main": "./extension.js",
+      "contributes": {
+        "languages": [{"id": "toy", "aliases": ["Toy"], "extensions": [".toy"]}],
+        "grammars": [
+          {
+            "language": "toy",
+            "scopeName": "source.toy",
+            "path": "./syntaxes/toy.tmLanguage.json",
+          }
+        ],
+      },
+    }
+    let candidates = parseOpenVsxGrammarManifest(extension, $manifest)
+    require candidates.len == 1
+    let candidate = candidates[0]
+    check candidate.id == "openvsx:publisher.toy:toy"
+    check candidate.sourceCommit == ""
+    check candidate.sourceVersion == "1.2.3"
+    let root = createTempDir("kosmo-openvsx-", "")
+    defer:
+      removeDir(root)
+    let archivePath = root / "extension.vsix"
+    var entries = initTable[string, string]()
+    entries["extension/package.json"] = $manifest
+    entries["extension/syntaxes/toy.tmLanguage.json"] = FixtureGrammar
+    entries["extension/extension.js"] = "throw new Error('must not execute');"
+    entries["extension/README.md"] = "Not grammar data"
+    writeFile(archivePath, createZipArchive(entries))
+    let contents = candidate.readOpenVsxGrammarArchive(archivePath)
+    check contents.len == 1
+    let installed = candidate.installVscodeGrammar(contents, root / "installed")
+    check not fileExists(installed / "extension.js")
+    check not fileExists(installed / "README.md")
+    let reloaded = installedVscodeGrammars(root / "installed")
+    require reloaded.len == 1
+    check reloaded[0].candidate.archiveUrl == extension.archiveUrl
+    check reloaded[0].candidate.sourceVersion == extension.version
+    check reloaded[0].sources.len == 1
+    manifest["version"] = %"9.9.9"
+    expect ValueError:
+      discard parseOpenVsxGrammarManifest(extension, $manifest)
+    manifest["version"] = %extension.version
+    manifest["contributes"]["grammars"][0]["path"] = %"../escape.json"
+    expect ValueError:
+      discard parseOpenVsxGrammarManifest(extension, $manifest)

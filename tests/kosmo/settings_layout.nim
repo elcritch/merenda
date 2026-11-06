@@ -142,6 +142,62 @@ suite "Kosmo settings layout":
     check targets.selectedIndexes == @[0, 1]
     check choices.tableRowIdentifier(choices.selectedIndex) == "second"
 
+  test "Reset restores opening themes only for selected items":
+    let themes = [
+      KosmoMoeThemeSetting(identifier: "first", name: "First"),
+      KosmoMoeThemeSetting(identifier: "second", name: "Second"),
+      KosmoMoeThemeSetting(identifier: "third", name: "Third"),
+    ]
+    let settings = newKosmoSettingsWindow(
+      moeThemes = themes,
+      selectedMoeThemeIdentifier = "first",
+      selectedTerminalThemeIdentifier = "second",
+    )
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    window.orderFront()
+    defer:
+      window.close()
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    let targets =
+      TableView(settings.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier))
+    let choices = TableView(
+      settings.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    let reset =
+      Button(settings.contentView().viewWithIdentifier(KosmoResetThemesIdentifier))
+    let current = targets.columnWithIdentifier("theme")
+    check not reset.enabled
+    targets.selectedIndexes = @[0, 1]
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("third")
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("second")
+    check reset.enabled
+    targets.selectedIndexes = @[1]
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("third")
+    targets.selectedIndexes = @[0]
+    require reset.sendAction()
+    check targets.tableCellText(0, current) == "First"
+    check targets.tableCellText(1, current) == "Third"
+    check not reset.enabled
+    targets.selectedIndexes = @[1]
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("third")
+    targets.selectedIndexes = @[]
+    check not reset.enabled
+    targets.selectedIndexes = @[1]
+    settings.updateMoeThemes(themes, "first", "third")
+    require reset.sendAction()
+    check targets.tableCellText(1, current) == "Second"
+    # A newly opened settings session captures a new baseline.
+    window.close()
+    settings.updateMoeThemes(themes, "third", "second")
+    window.orderFront()
+    targets.selectedIndexes = @[0]
+    choices.selectedIndex = choices.tableRowIndexForIdentifier("first")
+    require reset.sendAction()
+    check targets.tableCellText(0, current) == "Third"
+
   test "theme tables and selection shortcuts remain usable when resized":
     let settings = newKosmoSettingsWindow()
     defer:
@@ -158,7 +214,27 @@ suite "Kosmo settings layout":
         let table = TableView(settings.contentView().viewWithIdentifier(identifier))
         table.checkVisibleIn(settings.contentView())
         check table.frame().size.height >= 55
-      settings.contentView().checkVisibleText(["Select all", "Select rich text"])
+      let targets =
+        settings.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier)
+      let themes =
+        settings.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+      check targets.frame().size.width >= 200
+      check themes.frame().size.width >= 260
+      check targets.frame().maxX <= themes.frame().origin.x
+      check targets.frame().origin.y == themes.frame().origin.y
+      settings.contentView().checkVisibleText(
+        ["Select all", "Select rich text", "Reset"]
+      )
+    window.frame = rect(180, 160, 760, 420)
+    discard window.buildRenders()
+    let targets = settings.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier)
+    let themes = TableView(
+      settings.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    let totalWidth = targets.frame().size.width + themes.frame().size.width
+    check abs(targets.frame().size.width / totalWidth - 0.32) < 0.01
+    let preview = themes.columnWithIdentifier(KosmoMoeThemePreviewColumnIdentifier)
+    check themes.tableHeaderColumnRect(preview).maxX <= themes.bounds().size.width
 
   test "Nimdex action buttons retain their control height when resized":
     let settings = newKosmoSettingsWindow()

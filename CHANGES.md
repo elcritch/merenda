@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Start Kosmo theme selection on Moe, give the theme picker more horizontal space,
+  and add Reset to restore selected items to their themes when Settings opened.
+
+- Search Open VSX for community TextMate grammars instead of relying on GitHub's
+  rate-limited VS Code repository API. Install only declared grammar files from
+  versioned extension packages and retain existing grammar installations.
+
 - Simplify TextMate grammar settings to an installed list with an Install more
   button that opens a separate search and installation sheet.
 

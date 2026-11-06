@@ -9,7 +9,6 @@ export themetargets
 import ./moe
 import ./shortcuts
 import ./terminalinput
-import ./searchbuttons
 import ./vscodegrammars as vscodeGrammars
 
 export vscodeGrammars
@@ -32,6 +31,7 @@ const
   KosmoShortcutProfileIdentifier* = "kosmo.settings.shortcuts.profile"
   KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
   KosmoForceInputModeIdentifier* = "kosmo.settings.shortcuts.forceInputMode"
+  KosmoResetThemesIdentifier* = "kosmo.settings.themes.reset"
   KosmoSelectAllThemesIdentifier* = "kosmo.settings.themes.selectAll"
   KosmoSelectRichTextThemesIdentifier* = "kosmo.settings.themes.selectRichText"
   KosmoThemeItems = [
@@ -64,6 +64,7 @@ const
   KosmoVscodeGrammarStatusIdentifier* = "kosmo.settings.textMateGrammars.status"
   KosmoVscodeGrammarLanguageColumnIdentifier* = "language"
   KosmoVscodeGrammarExtensionsColumnIdentifier* = "extensions"
+  KosmoVscodeGrammarPublisherColumnIdentifier* = "publisher"
   KosmoVscodeGrammarScopeColumnIdentifier* = "scope"
   KosmoMoeThemePreviewText* = "let fn = \"text\" #"
   KosmoSettingsMinimumWidth* = 620.0'f32
@@ -104,7 +105,8 @@ type
     sortColumn: string
     sortDirection: nimkit.TableSortDirection
     selectedIdentifier: string
-    identifiers: array[KosmoThemeTarget, string]
+    identifiers, openingIdentifiers: array[KosmoThemeTarget, string]
+    resetButton: nimkit.Button
     targetsTable, themesTable: nimkit.TableView
     selectionStatus: nimkit.Label
     synchronizing: bool
@@ -153,7 +155,6 @@ type
     xVscodeGrammarInstalledHandler: KosmoVscodeGrammarInstalledHandler
     xVscodeGrammarSearchField: nimkit.TextField
     xVscodeGrammarSearchButton: nimkit.Button
-    xVscodeGrammarExpressionButton: nimkit.Button
     xVscodeGrammarInstallButton: nimkit.Button
     xVscodeGrammarSearchStatus: nimkit.Label
     xVscodeGrammarSearchTable: nimkit.TableView
@@ -402,6 +403,11 @@ proc themeTargetsDidChange(
   source.selectedIdentifier = source.targetIdentifier()
   source.themesTable.selectedIndex =
     source.themesTable.tableRowIndexForIdentifier(source.selectedIdentifier)
+  source.resetButton.enabled = false
+  for row in source.targetsTable.selectedIndexes:
+    let item = KosmoThemeItems[row]
+    if source.identifiers[item] != source.openingIdentifiers[item]:
+      source.resetButton.enabled = true
   let count = source.targetsTable.selectedIndexes.len
   source.selectionStatus.text =
     if count == 0:
@@ -410,6 +416,18 @@ proc themeTargetsDidChange(
       $count & " selected · Mixed themes"
     else:
       $count & " selected"
+
+proc resetSelectedThemes(source: KosmoMoeThemesTableSource) =
+  source.synchronizing = true
+  for row in source.targetsTable.selectedIndexes:
+    let item = KosmoThemeItems[row]
+    let identifier = source.openingIdentifiers[item]
+    if source.identifiers[item] != identifier:
+      if source.handler.isNil or source.handler(identifier, item):
+        source.identifiers[item] = identifier
+  source.targetsTable.reloadData()
+  source.synchronizing = false
+  source.themeTargetsDidChange(source.targetsTable)
 
 protocol KosmoMoeThemesTableDelegate of nimkit.TableViewDelegate:
   method sortDescriptorsDidChange(
@@ -553,6 +571,8 @@ protocol KosmoVscodeGrammarSearchTableDataSource of nimkit.TableViewDataSource:
       candidate.name
     of KosmoVscodeGrammarExtensionsColumnIdentifier:
       candidate.extensions.join(" ")
+    of KosmoVscodeGrammarPublisherColumnIdentifier:
+      candidate.extensionFolder
     of KosmoVscodeGrammarScopeColumnIdentifier:
       candidate.scopeName
     else:
@@ -639,10 +659,7 @@ proc searchVscodeGrammars(
 ) {.slot.} =
   discard sender
   if not settings.isNil and not settings.xVscodeGrammarCatalog.isNil:
-    settings.xVscodeGrammarCatalog.search(
-      settings.xVscodeGrammarSearchField.text,
-      regularExpression = settings.xVscodeGrammarExpressionButton.state == nimkit.bsOn,
-    )
+    settings.xVscodeGrammarCatalog.search(settings.xVscodeGrammarSearchField.text)
 
 proc installSelectedVscodeGrammar(
     settings: KosmoSettingsWindow, sender: nimkit.DynamicAgent
@@ -827,6 +844,8 @@ proc updateMoeThemes*(
   source.identifiers[KosmoThemeTarget.Markdown] = markdownIdentifier
   source.identifiers[KosmoThemeTarget.GitDiff] = gitDiffIdentifier
   source.identifiers[KosmoThemeTarget.GitHub] = gitHubIdentifier
+  if not settings.xWindow.isVisible():
+    source.openingIdentifiers = source.identifiers
   settings.xMoeThemesTable.reloadData()
   source.targetsTable.reloadData()
   source.synchronizing = false
@@ -937,17 +956,18 @@ proc newKosmoSettingsWindow*(
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     themeTargets = nimkit.newTableView()
-    themeLists = nimkit.newSplitView(nimkit.laVertical)
+    themeLists = nimkit.newSplitView(nimkit.laHorizontal)
     themeSelectionStatus = nimkit.newLabel("")
     selectAllThemes = nimkit.newButton("Select all")
     selectRichTextThemes = nimkit.newButton("Select rich text")
+    resetThemes = nimkit.newButton("Reset")
     themeButtons = nimkit.newStackView(nimkit.laHorizontal)
     textMateGrammarsTable = nimkit.newTableView()
     vscodeGrammarSearchField = nimkit.newTextField()
     vscodeGrammarSearchButton = nimkit.newButton("Search")
-    vscodeGrammarExpressionButton = newExpressionButton()
     vscodeGrammarInstallButton = nimkit.newButton("Install Selected")
-    vscodeGrammarSearchStatus = nimkit.newLabel("Search the VS Code source repository.")
+    vscodeGrammarSearchStatus =
+      nimkit.newLabel("Search Open VSX for a language or extension.")
     vscodeGrammarSearchTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
     terminalLinksChanged = nimkit.actionSelector("kosmo.terminalLinksChanged")
@@ -971,15 +991,14 @@ proc newKosmoSettingsWindow*(
   result.xTextMateGrammarsTable = textMateGrammarsTable
   result.xVscodeGrammarSearchField = vscodeGrammarSearchField
   result.xVscodeGrammarSearchButton = vscodeGrammarSearchButton
-  result.xVscodeGrammarExpressionButton = vscodeGrammarExpressionButton
   result.xVscodeGrammarInstallButton = vscodeGrammarInstallButton
   result.xVscodeGrammarSearchStatus = vscodeGrammarSearchStatus
   result.xVscodeGrammarSearchTable = vscodeGrammarSearchTable
 
   vscodeGrammarSearchField.identifier = KosmoVscodeGrammarSearchFieldIdentifier
-  vscodeGrammarSearchField.accessibilityLabel = "Search VS Code language grammars"
+  vscodeGrammarSearchField.accessibilityLabel = "Search Open VSX language grammars"
   vscodeGrammarSearchButton.identifier = KosmoVscodeGrammarSearchButtonIdentifier
-  vscodeGrammarSearchButton.accessibilityLabel = "Search the VS Code repository"
+  vscodeGrammarSearchButton.accessibilityLabel = "Search Open VSX"
   vscodeGrammarSearchButton.target = nimkit.newActionTarget(vscodeGrammarSearchAction) do(
     sender: nimkit.DynamicAgent
   ):
@@ -987,16 +1006,8 @@ proc newKosmoSettingsWindow*(
   vscodeGrammarSearchButton.action = vscodeGrammarSearchAction
   vscodeGrammarSearchField.target = vscodeGrammarSearchButton.target
   vscodeGrammarSearchField.action = vscodeGrammarSearchAction
-  vscodeGrammarExpressionButton.action =
-    nimkit.actionSelector("kosmo.grammarSearchExpressions")
-  vscodeGrammarExpressionButton.target = nimkit.newActionTarget(
-    vscodeGrammarExpressionButton.action
-  ) do(sender: nimkit.DynamicAgent):
-    if settings.xVscodeGrammarSearchField.text.len > 0:
-      settings.searchVscodeGrammars(sender)
-
   vscodeGrammarInstallButton.identifier = KosmoVscodeGrammarInstallButtonIdentifier
-  vscodeGrammarInstallButton.accessibilityLabel = "Install selected VS Code grammar"
+  vscodeGrammarInstallButton.accessibilityLabel = "Install selected Open VSX grammar"
   vscodeGrammarInstallButton.enabled = false
   vscodeGrammarInstallButton.target = nimkit.newActionTarget(vscodeGrammarInstallAction) do(
     sender: nimkit.DynamicAgent
@@ -1006,8 +1017,7 @@ proc newKosmoSettingsWindow*(
 
   vscodeGrammarSearchStatus.identifier = KosmoVscodeGrammarStatusIdentifier
   vscodeGrammarSearchTable.identifier = KosmoVscodeGrammarSearchTableIdentifier
-  vscodeGrammarSearchTable.accessibilityLabel =
-    "VS Code language grammar search results"
+  vscodeGrammarSearchTable.accessibilityLabel = "Open VSX grammar search results"
   vscodeGrammarSearchTable.columnSizing = nimkit.tvcsFill
   vscodeGrammarSearchTable.selectionMode = nimkit.tsmSingle
   vscodeGrammarSearchTable.visibleRows = 3
@@ -1037,6 +1047,15 @@ proc newKosmoSettingsWindow*(
       "TextMate Scope",
       width = 265.0,
       minWidth = 180.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  vscodeGrammarSearchTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoVscodeGrammarPublisherColumnIdentifier,
+      "Extension",
+      width = 180.0,
+      minWidth = 140.0,
       sizingPolicy = nimkit.tcspFlexible,
     )
   )
@@ -1210,34 +1229,51 @@ proc newKosmoSettingsWindow*(
   moeThemesTable.identifier = KosmoMoeThemesTableIdentifier
   moeThemesTable.accessibilityLabel = "Themes"
   moeThemesTable.selectionMode = nimkit.tsmSingle
+  moeThemesTable.columnSizing = nimkit.tvcsFill
   moeThemesTable.usesAlternatingRowBackgrounds = true
   moeThemesTable.showsRowSeparators = true
   moeThemesTable.addColumn(
-    nimkit.newTableColumn(KosmoMoeThemeNameColumnIdentifier, "Theme", width = 210.0)
-  )
-  moeThemesTable.addColumn(
     nimkit.newTableColumn(
-      KosmoMoeThemeAppearanceColumnIdentifier, "Appearance", width = 95.0
+      KosmoMoeThemeNameColumnIdentifier,
+      "Theme",
+      width = 140.0,
+      minWidth = 110.0,
+      sizingPolicy = nimkit.tcspFlexible,
     )
   )
   moeThemesTable.addColumn(
-    nimkit.newTableColumn(KosmoMoeThemePreviewColumnIdentifier, "Colors", width = 260.0)
+    nimkit.newTableColumn(
+      KosmoMoeThemeAppearanceColumnIdentifier,
+      "Appearance",
+      width = 100.0,
+      sizingPolicy = nimkit.tcspFixed,
+    )
+  )
+  moeThemesTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoMoeThemePreviewColumnIdentifier,
+      "Colors",
+      width = 190.0,
+      minWidth = 170.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
   )
   moeThemesTable.dataSource = moeThemesSource
   moeThemesTable.delegate = moeThemesSource
   moeThemesSource.targetsTable = themeTargets
   moeThemesSource.themesTable = moeThemesTable
   moeThemesSource.selectionStatus = themeSelectionStatus
+  moeThemesSource.resetButton = resetThemes
   themeTargets.identifier = KosmoThemeTargetIdentifier
   themeTargets.accessibilityLabel = "Items and current themes"
   themeTargets.selectionMode = nimkit.tsmMultiple
   themeTargets.visibleRows = 5
   themeTargets.columnSizing = nimkit.tvcsFill
   themeTargets.usesAlternatingRowBackgrounds = true
-  themeTargets.addColumn(nimkit.newTableColumn("item", "Item", width = 220.0))
+  themeTargets.addColumn(nimkit.newTableColumn("item", "Item", width = 80.0))
   themeTargets.addColumn(
     nimkit.newTableColumn(
-      "theme", "Current theme", width = 345.0, sizingPolicy = nimkit.tcspFlexible
+      "theme", "Current theme", width = 165.0, sizingPolicy = nimkit.tcspFlexible
     )
   )
   themeTargets.dataSource = settings.xThemeTargetsSource
@@ -1260,10 +1296,19 @@ proc newKosmoSettingsWindow*(
     discard sender
     themeTargets.selectedIndexes = @[2, 3, 4]
   selectRichTextThemes.action = selectRichTextAction
+  resetThemes.identifier = KosmoResetThemesIdentifier
+  resetThemes.accessibilityLabel =
+    "Restore selected items to their themes when Settings opened"
+  resetThemes.action = nimkit.actionSelector("kosmo.themes.reset")
+  resetThemes.target = nimkit.newActionTarget(resetThemes.action) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    moeThemesSource.resetSelectedThemes()
   themeButtons.spacing = 8
   themeButtons.alignment = nimkit.svaCenter
   themeButtons.addArrangedSubview(
-    selectAllThemes, selectRichTextThemes, themeSelectionStatus
+    selectAllThemes, selectRichTextThemes, resetThemes, themeSelectionStatus
   )
   settings.updateMoeThemes(
     moeThemes, selectedMoeThemeIdentifier, selectedTerminalThemeIdentifier,
@@ -1274,16 +1319,17 @@ proc newKosmoSettingsWindow*(
     moeThemesTable.columnWithIdentifier(KosmoMoeThemeAppearanceColumnIdentifier),
     nimkit.tsdAscending,
   )
-  themeTargets.selectedIndexes = @[0, 1, 2, 3, 4]
+  themeTargets.selectedIndexes = @[0]
   moeThemesPage.stack.spacing = 4
   moeThemesPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Themes"),
-    nimkit.newLabel("Click items to select them, then choose a theme below."),
+    nimkit.newLabel("Select items on the left, then choose a theme on the right."),
     themeButtons,
   )
   themeLists.identifier = "kosmo.settings.themes.lists"
-  themeLists.addPane(themeTargets, minSize = 55, maxSize = 160)
-  themeLists.addPane(moeThemesTable, minSize = 55)
+  themeLists.addPane(themeTargets, minSize = 200)
+  themeLists.addPane(moeThemesTable, minSize = 260)
+  themeLists.restoreState(nimkit.SplitViewState(fractions: @[0.32'f32, 0.68'f32]))
   moeThemesPage.stack.fillAvailableSpace(themeLists)
 
   textMateGrammarsTable.identifier = KosmoTextMateGrammarsTableIdentifier
@@ -1323,9 +1369,7 @@ proc newKosmoSettingsWindow*(
   vscodeGrammarSearchControls.spacing = 8.0
   vscodeGrammarSearchControls.alignment = nimkit.svaCenter
   vscodeGrammarSearchControls.fillAvailableWidth(vscodeGrammarSearchField)
-  vscodeGrammarSearchControls.addArrangedSubview(
-    vscodeGrammarExpressionButton, vscodeGrammarSearchButton
-  )
+  vscodeGrammarSearchControls.addArrangedSubview(vscodeGrammarSearchButton)
   grammarInstallerButtons.spacing = 8
   grammarInstallerButtons.alignment = nimkit.svaCenter
   grammarInstallerButtons.addFlexibleSpacer()
@@ -1334,7 +1378,7 @@ proc newKosmoSettingsWindow*(
   )
   grammarInstallerPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Install grammars"),
-    nimkit.newLabel("Find languages in the VS Code grammar collection."),
+    nimkit.newLabel("Find TextMate grammars on Open VSX."),
     vscodeGrammarSearchControls,
     vscodeGrammarSearchStatus,
   )

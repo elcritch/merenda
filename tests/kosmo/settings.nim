@@ -468,11 +468,8 @@ suite "Kosmo settings":
     check hasPreviewBackground
     check renderedPreview == KosmoMoeThemePreviewText
     let initialEditorTheme = frontend.editorView.editor.activeMoeThemeIdentifier()
-    if initialEditorTheme == KosmoMoeDefaultThemeIdentifier:
-      check moeThemesTable.tableRowIdentifier(moeThemesTable.selectedIndex) ==
-        initialEditorTheme
-    else:
-      check moeThemesTable.selectedIndex == -1
+    check moeThemesTable.tableRowIdentifier(moeThemesTable.selectedIndex) ==
+      initialEditorTheme
     discard settingsPanel.buildRenders()
     moeThemesTable.scrollItemToVisible(catppuccinRow)
     discard settingsPanel.buildRenders()
@@ -545,7 +542,8 @@ suite "Kosmo settings":
       settingsPanel.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier)
     )
     require not target.isNil
-    check target.selectedIndexes == @[0, 1, 2, 3, 4]
+    check target.selectedIndexes == @[0]
+    check target.tableRowIdentifier(target.selectedIndex) == $KosmoThemeTarget.Moe
     let currentTheme = target.columnWithIdentifier("theme")
     require not currentTheme.isNil
     check target.tableCellText(1, target.columnWithIdentifier("item")) == "Terminal"
@@ -638,6 +636,32 @@ suite "Kosmo settings":
     selectTheme(themes[1].identifier)
     check table.selectedIndex == -1
     check frontend.editorView.editor.activeMoeThemeIdentifier() == themes[2].identifier
+
+  test "Reset restores editor and rich text themes from opening settings":
+    require settingsTabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    let initialEditor = frontend.editorView.editor.activeMoeThemeIdentifier()
+    let controls = frontend.editorPane.markdownControls
+    let initialMarkdown = controls.markdownPresentationStyle(KosmoThemeTarget.Markdown)
+    let initialDiff = controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff)
+    let targets = TableView(
+      settingsPanel.contentView().viewWithIdentifier(KosmoThemeTargetIdentifier)
+    )
+    let choices = TableView(
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    let reset =
+      Button(settingsPanel.contentView().viewWithIdentifier(KosmoResetThemesIdentifier))
+    targets.selectedIndexes = @[0, 2, 3, 4]
+    require choices.rowCount >= 3
+    choices.selectedIndex = 1
+    choices.selectedIndex = 2
+    require reset.enabled
+    require reset.sendAction()
+    check frontend.editorView.editor.activeMoeThemeIdentifier() == initialEditor
+    check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown) ==
+      initialMarkdown
+    check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff) == initialDiff
+    check not reset.enabled
 
   test "grammar settings list built-in and newly added languages":
     require settingsTabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)
