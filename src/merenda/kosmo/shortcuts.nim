@@ -34,6 +34,11 @@ const
   KosmoSelectAllAction* = "kosmo.selectAll"
   KosmoToggleMarkdownModeAction* = "kosmo.toggleMarkdownMode"
   KosmoFocusToolbarAction* = "kosmo.focusToolbar"
+  KosmoHintOpenUrlAction* = "kosmo.hintOpenUrl"
+  KosmoHintOpenPathAction* = "kosmo.hintOpenPath"
+  KosmoHintCopyWordAction* = "kosmo.hintCopyWord"
+  KosmoHintCopyHashAction* = "kosmo.hintCopyHash"
+  KosmoHintInsertAction* = "kosmo.hintInsert"
   KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
   KosmoMaxFocusPanelShortcut* = 8
 
@@ -290,6 +295,36 @@ func kosmoActions*(): seq[KosmoAction] =
       description:
         "Toggle focus between the focused tool's content and its toolbar controls.",
     ),
+    KosmoAction(
+      identifier: KosmoHintOpenUrlAction,
+      title: "Open Link with Hints",
+      description:
+        "Overlay markers on visible links, then open the selected one in a browser.",
+    ),
+    KosmoAction(
+      identifier: KosmoHintOpenPathAction,
+      title: "Open File with Hints",
+      description:
+        "Overlay markers on visible file locations, then open the selected one in the editor.",
+    ),
+    KosmoAction(
+      identifier: KosmoHintCopyWordAction,
+      title: "Copy Word with Hints",
+      description:
+        "Overlay markers on visible words, then copy the selected one to the clipboard.",
+    ),
+    KosmoAction(
+      identifier: KosmoHintCopyHashAction,
+      title: "Copy Hash with Hints",
+      description:
+        "Overlay markers on visible hexadecimal hashes, then copy the selected one.",
+    ),
+    KosmoAction(
+      identifier: KosmoHintInsertAction,
+      title: "Insert into Terminal with Hints",
+      description:
+        "Overlay markers on visible file locations in a terminal, then type the selected one into it.",
+    ),
   ]
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.add KosmoAction(
@@ -413,6 +448,21 @@ proc initKosmoKeyBindings*(
     # fn modifier unless the user changes the system preference. Offer
     # Command-Control-T as a second default binding there.
     result.addBinding("primary-control-t", KosmoFocusToolbarAction, profile, platform)
+  # Hint mode follows the F5 toolbar-focus precedent: F-keys stay free for
+  # terminal programs and Vim chords, and macOS gets Command-Control variants.
+  result.addBinding("f6", KosmoHintOpenUrlAction, profile, platform)
+  result.addBinding("shift-f6", KosmoHintOpenPathAction, profile, platform)
+  result.addBinding("alt-f6", KosmoHintCopyWordAction, profile, platform)
+  result.addBinding("ctrl-f6", KosmoHintCopyHashAction, profile, platform)
+  result.addBinding("ctrl-shift-f6", KosmoHintInsertAction, profile, platform)
+  if platform == KosmoShortcutPlatform.MacOS:
+    result.addBinding("primary-control-e", KosmoHintOpenUrlAction, profile, platform)
+    result.addBinding(
+      "primary-control-shift-e", KosmoHintOpenPathAction, profile, platform
+    )
+    result.addBinding("primary-control-w", KosmoHintCopyWordAction, profile, platform)
+    result.addBinding("primary-control-h", KosmoHintCopyHashAction, profile, platform)
+    result.addBinding("primary-control-p", KosmoHintInsertAction, profile, platform)
   result.addBinding("primary-shift-m", KosmoToggleMarkdownModeAction, profile, platform)
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.addBinding(

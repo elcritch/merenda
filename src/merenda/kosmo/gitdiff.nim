@@ -12,7 +12,7 @@ import ../nimkit/foundation/mainthreadwork
 import ./readerpresentation
 import ./themetargets
 
-import ./[searchbar, viewerbuttons, viewersearch, vscodegrammars]
+import ./[hintsmode, searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
@@ -3376,6 +3376,40 @@ proc searchVisible*(panel: KosmoGitDiffPanel): bool =
 
 proc searchMatchCount*(panel: KosmoGitDiffPanel): int =
   panel.search.searchMatchCount()
+
+proc showHintMode*(
+    panel: KosmoGitDiffPanel,
+    kind: KosmoHintKind,
+    action: KosmoHintAction,
+    activation: KosmoHintActivation,
+): bool {.discardable.} =
+  ## Present hint markers over the Git diff summary and every materialized
+  ## file section, anchored to the panel's scrollable document.
+  if panel.isNil or panel.closed or panel.documentView.isNil:
+    return false
+  let workingDirectory =
+    if panel.repositoryRootPath.len > 0:
+      panel.repositoryRootPath
+    else:
+      getCurrentDir()
+  var hints: seq[KosmoHint]
+  if not panel.markdownView.isNil:
+    for hint in panel.markdownView.textView().collectTextViewHints(
+      kind, workingDirectory
+    ):
+      hints.add hint.kosmoHintInView(panel.markdownView.textView(), panel.documentView)
+  for file in panel.snapshot.files:
+    if not panel.sections.hasKey(file.path):
+      continue
+    let section = panel.sections[file.path]
+    if section.textView.isNil or not section.ready or section.pending:
+      continue
+    for hint in nimkit.TextView(section.textView).collectTextViewHints(
+      kind, workingDirectory
+    ):
+      hints.add hint.kosmoHintInView(section.textView, panel.documentView)
+  presentKosmoHints(panel.documentView, hints) do(hint: KosmoHint):
+    discard runKosmoHintAction(hint, action, activation)
 
 proc loadSearchPatches(panel: KosmoGitDiffPanel) =
   for file in panel.snapshot.files:
