@@ -291,6 +291,91 @@ suite "range-backed text storage":
     check empty.stringValue() == "new"
     check child.stringValue() == "item"
 
+  test "segmented storage preserves ordered shared source and local styles":
+    let
+      parent = newTextStorage("xαβ|😀\n|z!")
+      snapshot = parent.textSnapshot()
+      original = newTextStorage("αβ😀\nz")
+      pieces = @[initTextRange(1, 2), initTextRange(4, 2), initTextRange(7, 1)]
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 22
+    original.setAttributes(initTextRange(1, 3), emphasis)
+    let child = newTextSegmentStorage(snapshot, pieces, original)
+    check child.len == original.len
+    check child.substring(initTextRange(1, 3)) == "β😀\n"
+    check child.lineCount == original.lineCount
+    for line in 0 .. 2:
+      check child.lineRange(line) == original.lineRange(line)
+    for index in 0 .. original.len:
+      check child.paragraphRangeForRange(initTextRange(index, 0)) ==
+        original.paragraphRangeForRange(initTextRange(index, 0))
+    check child.attributeRuns == original.attributeRuns
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    let cached = child.textSnapshot()
+    check cached.bytes == "αβ😀\nz"
+    child.discardTextRangeStorageMaterialization()
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    check cached.bytes == "αβ😀\nz"
+    parent.stringValue = "changed"
+    original.setAttributes(initTextRange(1, 3), defaultTextAttributes())
+    check child.attributesAt(1).fontSize == 22
+    let copy = child.copyTextStorage()
+    child.replace(initTextRange(1, 2), "Q")
+    check child.stringValue == "αQ\nz"
+    check copy.stringValue == "αβ😀\nz"
+    when defined(merendaTests):
+      check not child.textRangeStorageStateForTest(snapshot).sharesSource
+      check copy.textRangeStorageStateForTest(snapshot).sharesSource
+
+  test "segmented storage supports reordered pieces and empty ranges":
+    let
+      parent = newTextStorage("xαβ|😀\n|z!")
+      snapshot = parent.textSnapshot()
+      styles = newTextStorage("zαβz")
+      child = newTextSegmentStorage(
+        snapshot,
+        [
+          initTextRange(7, 1),
+          initTextRange(0, 0),
+          initTextRange(1, 2),
+          initTextRange(7, 1),
+        ],
+        styles,
+      )
+    check child.stringValue == "zαβz"
+    check child.substring(initTextRange(1, 2)) == "αβ"
+    check child.substring(initTextRange(2, 2)) == "βz"
+    check estimatedTextSegmentMetadataBytes(1) == 0
+    check estimatedTextSegmentMetadataBytes(3) > 0
+    let empty = newTextSegmentStorage(snapshot, [], newTextStorage())
+    check empty.stringValue == ""
+    check empty.lineCount == 1
+
+  test "segment validation rejects unsafe joins, ranges and byte overflow":
+    let
+      parent = newTextStorage("x\xF0z")
+      snapshot = parent.textSnapshot()
+      malformed = newTextStorage("\xF0z")
+      single = newTextSegmentStorage(snapshot, [initTextRange(1, 1)], malformed)
+    check single.stringValue == "\xF0z"
+    expect ValueError:
+      discard newTextSegmentStorage(
+        snapshot, [initTextRange(1, 1), initTextRange(0, 1)], newTextStorage("xx")
+      )
+    expect ValueError:
+      discard newTextSegmentStorage(snapshot, [initTextRange(3, 0)], newTextStorage())
+    expect ValueError:
+      discard
+        newTextSegmentStorage(snapshot, [initTextRange(0, 1)], newTextStorage("ab"))
+    let large = newTextStorage("😀".repeat(262144)).textSnapshot()
+    var repeated = newSeq[TextRange](4097)
+    for item in repeated.mitems:
+      item = initTextRange(0, 262144)
+    expect ValueError:
+      discard newTextSegmentStorage(large, repeated, newTextStorage())
+
   test "invalid ranges and style lengths are rejected":
     let snapshot = newTextStorage("abc").textSnapshot()
     expect ValueError:
@@ -299,6 +384,59 @@ suite "range-backed text storage":
       discard newTextRangeStorage(snapshot, initTextRange(0, 2), newTextStorage("x"))
     expect ValueError:
       discard newTextRangeStorage(nil, initTextRange(0, 0), newTextStorage())
+
+suite "text payload accounting":
+  test "accounting does not materialize lazy, gap or range storage":
+    let
+      provider = newLazyStorageProvider("deferred")
+      lazy = newLazyTextStorage(provider)
+      gap = newGapTextStorage("gap é")
+      parent = newTextStorage("x".repeat(4096))
+      snapshot = parent.textSnapshot()
+      styles = newTextStorage("x".repeat(100))
+      child = newTextRangeStorage(snapshot, initTextRange(50, 100), styles)
+    var estimate: TextPayloadEstimate
+    estimate.addTextStoragePayload(lazy)
+    check not lazy.isMaterialized
+    check provider.stringRequests == 0
+    check provider.runRequests == 0
+    when defined(merendaTests):
+      check not gap.textStorageHasSnapshotForTest()
+    let beforeGap = estimate.bytes
+    estimate.addTextStoragePayload(gap)
+    check estimate.bytes >= beforeGap + uint64("gap é".len)
+    when defined(merendaTests):
+      check not gap.textStorageHasSnapshotForTest()
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    estimate.addTextStoragePayload(child)
+    let afterChild = estimate.bytes
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    estimate.addTextStoragePayload(child)
+    check estimate.bytes == afterChild
+    check estimate.incomplete
+    # The parent snapshot is shared with child and must not be charged twice.
+    estimate.addTextStoragePayload(parent)
+    check estimate.bytes - afterChild < 4096'u64
+
+  test "accounting counts an evictable child snapshot separately":
+    let
+      parent = newTextStorage("p".repeat(2048))
+      snapshot = parent.textSnapshot()
+      child = newTextRangeStorage(
+        snapshot, initTextRange(20, 512), newTextStorage("p".repeat(512))
+      )
+    var before: TextPayloadEstimate
+    before.addTextStoragePayload(child)
+    let materialized = child.textSnapshot()
+    var during: TextPayloadEstimate
+    during.addTextStoragePayload(child)
+    check during.bytes >= before.bytes + 512'u64
+    child.discardTextRangeStorageMaterialization()
+    var after: TextPayloadEstimate
+    after.addTextStoragePayload(child)
+    check after.bytes == before.bytes
+    check materialized.bytes.len == 512
 
 suite "nimkit text storage":
   test "text storage revisions advance once per committed editing batch":

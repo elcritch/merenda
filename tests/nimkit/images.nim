@@ -69,6 +69,20 @@ proc newRecoveryRenderer(): tuple[
   result.renderer = newFigRenderer(result.context)
 
 suite "nimkit image resources":
+  test "payload accounting reads existing pixels without decoding or copying":
+    let image =
+      newImageResource(testImage(5, 3), name = "payload", cachePolicy = icpNever)
+    let payload = image.imageResourcePayload()
+    check payload.descriptorBytes > "payload".len
+    check payload.pixelBytes == 5 * 3 * 4
+    check payload.pixelIdentity != nil
+    check payload.incomplete
+    check image.imageResourcePayload().pixelIdentity == payload.pixelIdentity
+    let absent = ImageResource(nil).imageResourcePayload()
+    check absent.pixelBytes == 0
+    check absent.pixelIdentity == nil
+    check not absent.incomplete
+
   test "image resources can be created from pixels data files and names":
     let
       source = testImage(4, 3)

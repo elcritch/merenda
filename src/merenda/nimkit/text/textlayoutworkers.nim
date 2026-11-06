@@ -21,6 +21,8 @@ type
     arrangement*: GlyphArrangement
     snapshot*: TextLayoutSnapshot
     snapshotThreadId*: int
+    failed*: bool
+    errorMessage*: string
 
   TextLayoutSnapshotBuilder* = proc(
     arrangement: var GlyphArrangement,
@@ -61,13 +63,19 @@ proc requestTextLayout(
     buildSnapshot: bool,
 ) {.slot.} =
   var layoutResult = TextLayoutWorkerResult(generation: generation)
-  let storage = newTextLayoutStorage(source[])
-  layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
-  if buildSnapshot and not worker.snapshotBuilder.isNil:
-    layoutResult.snapshot = worker.snapshotBuilder(
-      layoutResult.arrangement, storage, containers, style, alignment
-    )
-    layoutResult.snapshotThreadId = getThreadId()
+  try:
+    let storage = newTextLayoutStorage(source[])
+    layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
+    if buildSnapshot and not worker.snapshotBuilder.isNil:
+      layoutResult.snapshot = worker.snapshotBuilder(
+        layoutResult.arrangement, storage, containers, style, alignment
+      )
+      layoutResult.snapshotThreadId = getThreadId()
+  except CatchableError as error:
+    layoutResult.failed = true
+    layoutResult.errorMessage = error.msg
+    layoutResult.arrangement = GlyphArrangement()
+    layoutResult.snapshot = TextLayoutSnapshot()
   emit worker.textLayoutFinished(newSharedPtr(unsafeIsolate(move layoutResult)))
 
 proc newTextLayoutWorker*(

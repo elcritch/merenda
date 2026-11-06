@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add segmented immutable text-storage views and non-materializing logical
+  payload estimates; report terminal background-layout results and
+  request-specific retirement progress.
 - Avoid copying the entire glyph arrangement for each mixed-wrap paragraph.
 - Keep compact per-block Markdown highlight indices instead of retained
   source-string lookup keys, while deduplicating identical worker jobs.
