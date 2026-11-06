@@ -440,26 +440,11 @@ suite "Kosmo configuration":
       removeDir(root)
     let controls = frontend.editorPane.markdownControls
     check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown).backgroundColor ==
-      color(
-        themes[0].palette.background.red.float32 / 255,
-        themes[0].palette.background.green.float32 / 255,
-        themes[0].palette.background.blue.float32 / 255,
-        1.0,
-      )
+      themes[0].palette.background.toColor()
     check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff).backgroundColor ==
-      color(
-        themes[1].palette.background.red.float32 / 255,
-        themes[1].palette.background.green.float32 / 255,
-        themes[1].palette.background.blue.float32 / 255,
-        1.0,
-      )
+      themes[1].palette.background.toColor()
     check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub).backgroundColor ==
-      color(
-        themes[2].palette.background.red.float32 / 255,
-        themes[2].palette.background.green.float32 / 255,
-        themes[2].palette.background.blue.float32 / 255,
-        1.0,
-      )
+      themes[2].palette.background.toColor()
     check loadKosmoConfig(path).markdownTheme == config.markdownTheme
     check loadKosmoConfig(path).gitDiffTheme == config.gitDiffTheme
     check loadKosmoConfig(path).gitHubTheme == config.gitHubTheme
