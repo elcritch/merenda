@@ -235,10 +235,10 @@ proc `terminalLinksEnabled=`*(frontend: KosmoApplication, enabled: bool) =
       if document.contentView of nimkit.TerminalView:
         nimkit.TerminalView(document.contentView).allowsLinkActivation = enabled
 
-func moeThemeSettings(themes: openArray[KosmoMoeTheme]): seq[KosmoMoeThemeSetting] =
+func moeThemeSettings(themes: openArray[ContentTheme]): seq[KosmoMoeThemeSetting] =
   for theme in themes:
     result.add KosmoMoeThemeSetting(
-      identifier: theme.identifier, name: theme.name, preview: theme.preview
+      identifier: theme.identifier, name: theme.name, preview: theme.palette
     )
 
 proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
@@ -264,35 +264,13 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
       discard manager.config.saveKosmoConfig(manager.configPath)
     return outcome.applied
 
-func terminalThemeColor(value: KosmoMoeThemeColor): nimkit.Color =
-  nimkit.color(
-    value.red.float32 / 255, value.green.float32 / 255, value.blue.float32 / 255, 1.0
-  )
-
-func terminalPalette(theme: KosmoMoeTheme): nimkit.TerminalPalette =
-  result = nimkit.initTerminalPalette()
-  if theme.identifier == KosmoMoeDefaultThemeIdentifier:
-    return
-  let preview = theme.preview
-  result.background = preview.background.terminalThemeColor()
-  result.foreground = preview.foreground.terminalThemeColor()
-  result.cursor = result.foreground
-  result.selection = preview.selection.terminalThemeColor()
-  result.colors[0] = result.background
-  result.colors[1] = preview.red.terminalThemeColor()
-  result.colors[2] = preview.stringLiteral.terminalThemeColor()
-  result.colors[3] = preview.yellow.terminalThemeColor()
-  result.colors[4] = preview.functionName.terminalThemeColor()
-  result.colors[5] = preview.keyword.terminalThemeColor()
-  result.colors[6] = preview.cyan.terminalThemeColor()
-  result.colors[7] = result.foreground
-  result.colors[8] = preview.comment.terminalThemeColor()
-  for index in 1 .. 7:
-    result.colors[index + 8] = result.colors[index]
-
-proc applyTerminalTheme(frontend: KosmoApplication, theme: KosmoMoeTheme) =
+proc applyTerminalTheme(frontend: KosmoApplication, theme: ContentTheme) =
   frontend.xTerminalTheme = theme.identifier
-  frontend.xTerminalPalette = theme.terminalPalette()
+  frontend.xTerminalPalette =
+    if theme.kind == ctkDefault:
+      nimkit.initTerminalPalette()
+    else:
+      theme.toTerminalPalette()
   for group in frontend.dockController.groups:
     for document in group.documents:
       if document.contentView of nimkit.TerminalView:
@@ -303,7 +281,7 @@ proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
   for theme in frontend.dockController.editor.availableMoeThemes():
-    if theme.identifier == identifier and theme.validMoeTheme():
+    if theme.identifier == identifier and theme.validContentTheme():
       frontend.applyTerminalTheme(theme)
       if not frontend.xWindowManager.isNil:
         let manager = frontend.xWindowManager[]
@@ -315,7 +293,7 @@ proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
       return true
 
 proc applyRichTextTheme(
-    frontend: KosmoApplication, theme: KosmoMoeTheme, target: KosmoThemeTarget
+    frontend: KosmoApplication, theme: ContentTheme, target: KosmoThemeTarget
 ) =
   for item in KosmoRichTextTargets:
     if target.themeTargetIncludes(item):
@@ -331,22 +309,30 @@ proc setRichTextTheme(
 ): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
-  for theme in frontend.dockController.editor.availableMoeThemes():
-    if theme.identifier == identifier and theme.validMoeTheme():
-      frontend.applyRichTextTheme(theme, target)
-      if not frontend.xWindowManager.isNil:
-        let manager = frontend.xWindowManager[]
-        if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
-          manager.config.markdownTheme = identifier
-        if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
-          manager.config.gitDiffTheme = identifier
-        if target.themeTargetIncludes(KosmoThemeTarget.GitHub):
-          manager.config.gitHubTheme = identifier
-        for other in manager.frontends:
-          if other != frontend and not other.xClosed:
-            other.applyRichTextTheme(theme, target)
-        discard manager.config.saveKosmoConfig(manager.configPath)
-      return true
+  var selectedTheme: ContentTheme
+  if identifier.len > 0:
+    var found = false
+    for theme in frontend.dockController.editor.availableMoeThemes():
+      if theme.identifier == identifier and theme.validContentTheme():
+        selectedTheme = theme
+        found = true
+        break
+    if not found:
+      return
+  frontend.applyRichTextTheme(selectedTheme, target)
+  if not frontend.xWindowManager.isNil:
+    let manager = frontend.xWindowManager[]
+    if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
+      manager.config.markdownTheme = identifier
+    if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
+      manager.config.gitDiffTheme = identifier
+    if target.themeTargetIncludes(KosmoThemeTarget.GitHub):
+      manager.config.gitHubTheme = identifier
+    for other in manager.frontends:
+      if other != frontend and not other.xClosed:
+        other.applyRichTextTheme(selectedTheme, target)
+    discard manager.config.saveKosmoConfig(manager.configPath)
+  true
 
 proc setTheme(
     frontend: KosmoApplication, identifier: string, target: KosmoThemeTarget

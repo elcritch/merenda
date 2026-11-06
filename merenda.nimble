@@ -8,6 +8,7 @@ bin           = @["merenda/kosmo/kosmo"]
 # Dependencies
 requires "nim >= 2.2.10"
 requires "msgpack4nim"
+requires "parsetoml >= 0.7.2"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"

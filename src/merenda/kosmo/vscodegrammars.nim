@@ -1,9 +1,10 @@
-## Discovery, validation, and installation of built-in VS Code TextMate grammars.
+## Discovery through Open VSX and installation of VS Code TextMate grammar packages.
 
-import std/[algorithm, json, options, os, sets, strutils, tables, tempfiles]
+import std/[algorithm, json, options, os, sets, strutils, tables, tempfiles, times, uri]
 
 import crunchy/[common, sha256]
 import matter/rawgrammar
+import zippy/ziparchives
 import sigils/core
 import ../nimkit as nimkit
 import ../nimkit/foundation/textsearch
@@ -27,6 +28,8 @@ type
     scopeName*: string
     rootPath*: string
     sourceCommit*: string
+    sourceVersion*: string
+    archiveUrl*: string
     extensions*: seq[string]
     fileNames*: seq[string]
     grammarFiles*: seq[VscodeGrammarFile]
@@ -36,33 +39,29 @@ type
     directory*: string
     sources*: seq[tuple[path, content, scopeName, languageId: string]]
 
+  OpenVsxGrammarExtension* = object
+    publisher*, name*, version*: string
+    archiveUrl*, manifestUrl*: string
+
   VscodeGrammarAssetKind = enum
-    vgakTree
+    vgakSearch
     vgakManifest
-    vgakGrammar
+    vgakArchive
 
   VscodeGrammarAssetRequest = object
     kind: VscodeGrammarAssetKind
-    extensionFolder: string
-    path: string
+    generation: int
+    extension: OpenVsxGrammarExtension
 
   KosmoVscodeGrammarCatalog* = ref object of Agent
     loader: nimkit.UrlAssetLoader
     pending: Table[uint64, VscodeGrammarAssetRequest]
-    tree: VscodeGrammarTree
-    allCandidates: seq[VscodeGrammarCandidate]
     candidates: seq[VscodeGrammarCandidate]
-    query: string
-    pattern, compactPattern: Option[TextSearchPattern]
+    generation: int
     status: string
     catalogLoading: bool
-    catalogReady: bool
-    manifestsLoaded: int
-    manifestsTotal: int
-    failedManifests: int
+    manifestsLoaded, manifestsTotal, failedManifests: int
     installing: Option[VscodeGrammarCandidate]
-    installContents: Table[string, string]
-    installRemaining: int
     closed: bool
 
   VscodeGrammarTree* = object
@@ -182,12 +181,9 @@ proc parseVscodeGrammarTree*(content: string): VscodeGrammarTree =
       result.extensionFolders.add folder
   result.extensionFolders.sort()
 
-proc parseVscodeGrammarManifest*(
-    extensionFolder, sourceCommit, content: string, tree: VscodeGrammarTree
+proc parseGrammarManifest(
+    extensionFolder, content: string, paths: HashSet[string], prefix: string
 ): seq[VscodeGrammarCandidate] =
-  ## Return language roots declared by one validated VS Code extension manifest.
-  if not extensionFolder.validExtensionFolder() or not sourceCommit.validCommitSha():
-    raise newException(ValueError, "invalid VS Code extension identity")
   let package = parseJson(content)
   if not package.hasKey("contributes") or package["contributes"].kind != JObject:
     return
@@ -203,8 +199,8 @@ proc parseVscodeGrammarManifest*(
       scopeName = contribution.jsonString("scopeName")
     if scopeName.len == 0:
       continue
-    let fullPath = "extensions/" & extensionFolder & "/" & path
-    if fullPath notin tree.paths or path in seenPaths:
+    let fullPath = prefix & path
+    if fullPath notin paths or path in seenPaths:
       continue
     seenPaths.incl path
     grammarFiles.add VscodeGrammarFile(
@@ -248,11 +244,90 @@ proc parseVscodeGrammarManifest*(
       languageId: language.id,
       scopeName: roots[0].scopeName,
       rootPath: roots[0].path,
-      sourceCommit: sourceCommit,
       extensions: language.extensions,
       fileNames: language.fileNames,
       grammarFiles: grammarFiles,
     )
+
+proc parseVscodeGrammarManifest*(
+    extensionFolder, sourceCommit, content: string, tree: VscodeGrammarTree
+): seq[VscodeGrammarCandidate] =
+  ## Parse a grammar manifest from a pinned VS Code repository tree.
+  if not extensionFolder.validExtensionFolder() or not sourceCommit.validCommitSha():
+    raise newException(ValueError, "invalid VS Code extension identity")
+  result = parseGrammarManifest(
+    extensionFolder, content, tree.paths, "extensions/" & extensionFolder & "/"
+  )
+  for candidate in result.mitems:
+    candidate.sourceCommit = sourceCommit
+
+proc validRegistryVersion(value: string): bool =
+  value.validExtensionFolder() and value notin ["latest", "pre-release"]
+
+proc validArchiveUrl(value, version: string): bool =
+  let url = parseUri(value)
+  url.scheme == "https" and url.hostname == "open-vsx.org" and url.username.len == 0 and
+    url.password.len == 0 and url.port.len == 0 and url.query.len == 0 and
+    url.anchor.len == 0 and url.path.startsWith("/api/") and
+    ("/" & version & "/file/") in url.path and url.path.endsWith(".vsix") and
+    "/../" notin url.path
+
+proc validGrammarSource(candidate: VscodeGrammarCandidate): bool =
+  if candidate.archiveUrl.len > 0:
+    candidate.sourceVersion.validRegistryVersion() and
+      candidate.archiveUrl.validArchiveUrl(candidate.sourceVersion)
+  else:
+    candidate.sourceCommit.validCommitSha()
+
+proc parseOpenVsxGrammarSearch*(content: string): seq[OpenVsxGrammarExtension] =
+  ## Read pinned extension identities from an Open VSX search response.
+  let response = parseJson(content)
+  if response.kind != JObject or not response.hasKey("extensions") or
+      response["extensions"].kind != JArray:
+    raise newException(ValueError, "Open VSX returned no extension list")
+  var seen = initHashSet[string]()
+  for entry in response["extensions"]:
+    let publisher = entry.jsonString("namespace")
+    let name = entry.jsonString("name")
+    let version = entry.jsonString("version")
+    if publisher.validExtensionFolder() and name.validExtensionFolder() and
+        version.validRegistryVersion() and entry.hasKey("files"):
+      let archiveUrl = entry["files"].jsonString("download")
+      if archiveUrl.validArchiveUrl(version) and archiveUrl notin seen:
+        seen.incl archiveUrl
+        result.add OpenVsxGrammarExtension(
+          publisher: publisher,
+          name: name,
+          version: version,
+          archiveUrl: archiveUrl,
+          manifestUrl: archiveUrl[0 .. archiveUrl.rfind('/')] & "package.json",
+        )
+
+proc parseOpenVsxGrammarManifest*(
+    extension: OpenVsxGrammarExtension, content: string
+): seq[VscodeGrammarCandidate] =
+  ## Return only language grammars contributed by this registry extension.
+  let package = parseJson(content)
+  if package.jsonString("publisher") != extension.publisher or
+      package.jsonString("name") != extension.name or
+      package.jsonString("version") != extension.version or
+      not extension.publisher.validExtensionFolder() or
+      not extension.name.validExtensionFolder() or
+      not extension.version.validRegistryVersion() or
+      not extension.archiveUrl.validArchiveUrl(extension.version):
+    raise newException(ValueError, "Open VSX manifest does not match its extension")
+  var paths = initHashSet[string]()
+  if package.hasKey("contributes") and package["contributes"].kind == JObject:
+    let contributions = package["contributes"]
+    if contributions.hasKey("grammars") and contributions["grammars"].kind == JArray:
+      for grammar in contributions["grammars"]:
+        paths.incl grammar.jsonString("path").safeRelativeGrammarPath()
+  result =
+    parseGrammarManifest(extension.publisher & "." & extension.name, content, paths, "")
+  for candidate in result.mitems:
+    candidate.id = "openvsx:" & candidate.id
+    candidate.sourceVersion = extension.version
+    candidate.archiveUrl = extension.archiveUrl
 
 proc normalizedSearchText(value: string): string =
   for character in value.toLowerAscii():
@@ -322,6 +397,8 @@ proc metadataJson(candidate: VscodeGrammarCandidate): JsonNode =
   result["scopeName"] = %candidate.scopeName
   result["rootPath"] = %candidate.rootPath
   result["sourceCommit"] = %candidate.sourceCommit
+  result["sourceVersion"] = %candidate.sourceVersion
+  result["archiveUrl"] = %candidate.archiveUrl
   result["extensions"] = %candidate.extensions
   result["fileNames"] = %candidate.fileNames
   result["grammarFiles"] = newJArray()
@@ -342,6 +419,8 @@ proc parseCandidateMetadata(node: JsonNode): VscodeGrammarCandidate =
   result.scopeName = node.jsonString("scopeName")
   result.rootPath = node.jsonString("rootPath")
   result.sourceCommit = node.jsonString("sourceCommit")
+  result.sourceVersion = node.jsonString("sourceVersion")
+  result.archiveUrl = node.jsonString("archiveUrl")
   result.extensions = node.jsonStrings("extensions")
   result.fileNames = node.jsonStrings("fileNames")
   if not node.hasKey("grammarFiles") or node["grammarFiles"].kind != JArray:
@@ -354,7 +433,7 @@ proc parseCandidateMetadata(node: JsonNode): VscodeGrammarCandidate =
     )
   if result.id.len == 0 or result.name.len == 0 or result.scopeName.len == 0 or
       not result.extensionFolder.validExtensionFolder() or
-      not result.sourceCommit.validCommitSha() or
+      not result.validGrammarSource() or
       result.rootPath.safeRelativeGrammarPath() != result.rootPath:
     raise newException(ValueError, "installed grammar metadata is invalid")
 
@@ -390,6 +469,27 @@ proc validateVscodeGrammarFiles*(
   if not rootFound:
     raise newException(ValueError, "VS Code language root grammar was not found")
 
+proc readOpenVsxGrammarArchive*(
+    candidate: VscodeGrammarCandidate, archivePath: string
+): Table[string, string] =
+  ## Read declared grammar members only; extension code is never extracted.
+  if not candidate.validGrammarSource() or candidate.archiveUrl.len == 0:
+    raise newException(ValueError, "invalid Open VSX grammar package")
+  if candidate.grammarFiles.len == 0 or candidate.grammarFiles.len > 32:
+    raise newException(ValueError, "invalid number of grammar files")
+  let archive = openZipArchive(archivePath)
+  defer:
+    archive.close()
+  var totalBytes: int
+  for file in candidate.grammarFiles:
+    let path = file.path.safeRelativeGrammarPath()
+    let content = archive.extractFile("extension/" & path)
+    totalBytes += content.len
+    if content.len > KosmoVscodeGrammarMaximumBytes or totalBytes > 16 * 1024 * 1024:
+      raise newException(ValueError, "extension grammars exceed the size limit")
+    result[path] = content
+  candidate.validateVscodeGrammarFiles(result)
+
 proc installVscodeGrammar*(
     candidate: VscodeGrammarCandidate,
     contents: Table[string, string],
@@ -398,7 +498,7 @@ proc installVscodeGrammar*(
   ## Validate and atomically install one VS Code language package under Kosmo config.
   candidate.validateVscodeGrammarFiles(contents)
   if not candidate.extensionFolder.validExtensionFolder() or
-      not candidate.sourceCommit.validCommitSha():
+      not candidate.validGrammarSource():
     raise newException(ValueError, "invalid VS Code grammar package identity")
 
   createDir(grammarDirectory)
@@ -479,10 +579,9 @@ proc isVscodeGrammarInstalled*(
       discard
 
 const
-  VscodeRepositoryTreeUrl =
-    "https://api.github.com/repos/microsoft/vscode/git/trees/main?recursive=1"
-  VscodeRawContentBase = "https://raw.githubusercontent.com/microsoft/vscode/"
-  VscodeCatalogMaximumBytes = 32 * 1024 * 1024
+  OpenVsxSearchUrl = "https://open-vsx.org/api/-/search"
+  OpenVsxSearchPageSize = 40
+  OpenVsxMaximumPackageBytes = 128 * 1024 * 1024
 
 proc vscodeGrammarCatalogDidUpdate*(catalog: KosmoVscodeGrammarCatalog) {.signal.}
 proc vscodeGrammarDidInstall*(
@@ -492,7 +591,7 @@ proc vscodeGrammarDidInstall*(
 proc processAsset(
   catalog: KosmoVscodeGrammarCatalog,
   request: VscodeGrammarAssetRequest,
-  url, path: string,
+  path: string,
   errorMessage = "",
 )
 
@@ -501,249 +600,147 @@ proc requestAsset(
 ) =
   if catalog.closed or catalog.loader.isNil:
     return
-  let cachedPath = catalog.loader.cachedAssetPath(url)
-  if fileExists(cachedPath):
-    catalog.processAsset(request, url, cachedPath)
-    return
   let handle = catalog.loader.load(url)
   if handle.isFinished():
-    if handle.succeeded():
-      catalog.processAsset(request, url, handle.result().path)
-    else:
-      catalog.processAsset(request, url, "", handle.result().errorMessage)
+    catalog.processAsset(request, handle.result().path, handle.result().errorMessage)
   else:
     catalog.pending[handle.identifier()] = request
 
-proc grammarUrl(commit, extensionFolder, path: string): string =
-  VscodeRawContentBase & commit & "/extensions/" & extensionFolder & "/" & path
-
 proc finishCatalogSearch(catalog: KosmoVscodeGrammarCatalog) =
   catalog.catalogLoading = false
-  catalog.catalogReady = true
-  catalog.tree = default(VscodeGrammarTree)
-  catalog.candidates.setLen(0)
-  if catalog.pattern.isSome:
-    try:
-      for candidate in catalog.allCandidates:
-        if candidate.matchesVscodeGrammarQuery(
-          catalog.pattern.get, catalog.compactPattern
-        ):
-          catalog.candidates.add candidate
-    except TextSearchError as error:
-      catalog.candidates.setLen(0)
-      catalog.status = "Search error: " & error.msg
-      emit catalog.vscodeGrammarCatalogDidUpdate()
-      return
   catalog.candidates.sort do(left, right: VscodeGrammarCandidate) -> int:
     result = cmpIgnoreCase(left.name, right.name)
     if result == 0:
       result = cmp(left.id, right.id)
   catalog.status =
     if catalog.candidates.len == 0:
-      "No matching built-in VS Code grammars found."
+      "No TextMate grammars found. Try another language or extension name."
     else:
-      $catalog.candidates.len & " VS Code language grammars found."
+      $catalog.candidates.len & " grammars found on Open VSX."
+  if catalog.manifestsTotal == OpenVsxSearchPageSize:
+    catalog.status.add(" Showing the first 40 extensions; refine your search for more.")
   if catalog.failedManifests > 0:
     catalog.status.add(
       " " & $catalog.failedManifests & " extension manifests could not be read."
     )
   emit catalog.vscodeGrammarCatalogDidUpdate()
 
-proc finishGrammarInstall(catalog: KosmoVscodeGrammarCatalog) =
-  if catalog.installing.isNone:
-    return
-  let candidate = catalog.installing.get()
-  try:
-    let directory = installVscodeGrammar(candidate, catalog.installContents)
-    catalog.status = "Installed " & candidate.name & " (" & candidate.scopeName & ")."
-    catalog.installing = none(VscodeGrammarCandidate)
-    catalog.installContents.clear()
-    catalog.installRemaining = 0
-    emit catalog.vscodeGrammarDidInstall(directory)
-    emit catalog.vscodeGrammarCatalogDidUpdate()
-  except CatchableError as error:
-    catalog.status = "Could not install " & candidate.name & ": " & error.msg
-    catalog.installing = none(VscodeGrammarCandidate)
-    catalog.installContents.clear()
-    catalog.installRemaining = 0
-    emit catalog.vscodeGrammarCatalogDidUpdate()
-
 proc processAsset(
     catalog: KosmoVscodeGrammarCatalog,
     request: VscodeGrammarAssetRequest,
-    url, path, errorMessage: string,
+    path: string,
+    errorMessage: string,
 ) =
-  if catalog.closed:
+  if catalog.closed or
+      (request.kind != vgakArchive and request.generation != catalog.generation):
     return
-  if errorMessage.len > 0 or path.len == 0:
+  var failure = errorMessage
+  if failure.len == 0 and path.len == 0:
+    failure = "The download did not return a file."
+  try:
+    if failure.len > 0:
+      raise newException(IOError, failure)
     case request.kind
-    of vgakTree:
+    of vgakSearch:
+      let extensions = parseOpenVsxGrammarSearch(readFile(path))
+      catalog.manifestsTotal = extensions.len
+      catalog.manifestsLoaded = 0
+      catalog.failedManifests = 0
+      if extensions.len == 0:
+        catalog.finishCatalogSearch()
+      else:
+        catalog.status = "Checking Open VSX extensions for TextMate grammars."
+        emit catalog.vscodeGrammarCatalogDidUpdate()
+        for extension in extensions:
+          catalog.requestAsset(
+            extension.manifestUrl,
+            VscodeGrammarAssetRequest(
+              kind: vgakManifest, generation: request.generation, extension: extension
+            ),
+          )
+    of vgakManifest:
+      catalog.candidates.add parseOpenVsxGrammarManifest(
+        request.extension, readFile(path)
+      )
+    of vgakArchive:
+      if catalog.installing.isSome:
+        let candidate = catalog.installing.get()
+        let contents = candidate.readOpenVsxGrammarArchive(path)
+        let directory = installVscodeGrammar(candidate, contents)
+        catalog.installing = none(VscodeGrammarCandidate)
+        catalog.status =
+          "Installed " & candidate.name & " (" & candidate.scopeName & ")."
+        emit catalog.vscodeGrammarDidInstall(directory)
+        emit catalog.vscodeGrammarCatalogDidUpdate()
+  except CatchableError as error:
+    case request.kind
+    of vgakSearch:
       catalog.catalogLoading = false
-      catalog.status = "Could not load the VS Code language catalog: " & errorMessage
+      catalog.status = "Could not search Open VSX: " & error.msg
       emit catalog.vscodeGrammarCatalogDidUpdate()
     of vgakManifest:
-      inc catalog.manifestsLoaded
       inc catalog.failedManifests
-      if catalog.manifestsLoaded >= catalog.manifestsTotal:
-        catalog.finishCatalogSearch()
-      else:
-        catalog.status =
-          "Loading VS Code language metadata (" & $catalog.manifestsLoaded & " of " &
-          $catalog.manifestsTotal & ")."
-        emit catalog.vscodeGrammarCatalogDidUpdate()
-    of vgakGrammar:
-      catalog.status =
-        "Could not download grammar file: " & request.path &
-        (if errorMessage.len > 0: " (" & errorMessage & ")" else: "")
+    of vgakArchive:
       catalog.installing = none(VscodeGrammarCandidate)
-      catalog.installContents.clear()
-      catalog.installRemaining = 0
+      catalog.status = "Could not install the grammar: " & error.msg
       emit catalog.vscodeGrammarCatalogDidUpdate()
-    return
-
-  case request.kind
-  of vgakTree:
-    try:
-      catalog.tree = parseVscodeGrammarTree(readFile(path))
-      catalog.manifestsLoaded = 0
-      catalog.manifestsTotal = catalog.tree.extensionFolders.len
-      catalog.failedManifests = 0
-      catalog.status =
-        "Loading VS Code language metadata (0 of " & $catalog.manifestsTotal & ")."
-      emit catalog.vscodeGrammarCatalogDidUpdate()
-      if catalog.manifestsTotal == 0:
-        catalog.finishCatalogSearch()
-      else:
-        for folder in catalog.tree.extensionFolders:
-          catalog.requestAsset(
-            grammarUrl(catalog.tree.sha, folder, "package.json"),
-            VscodeGrammarAssetRequest(kind: vgakManifest, extensionFolder: folder),
-          )
-    except CatchableError as error:
-      catalog.catalogLoading = false
-      catalog.status = "Could not parse the VS Code language catalog: " & error.msg
-      emit catalog.vscodeGrammarCatalogDidUpdate()
-  of vgakManifest:
-    try:
-      let candidates = parseVscodeGrammarManifest(
-        request.extensionFolder, catalog.tree.sha, readFile(path), catalog.tree
-      )
-      catalog.allCandidates.add candidates
-    except CatchableError:
-      inc catalog.failedManifests
+  if request.kind == vgakManifest:
     inc catalog.manifestsLoaded
     if catalog.manifestsLoaded >= catalog.manifestsTotal:
       catalog.finishCatalogSearch()
-    else:
-      catalog.status =
-        "Loading VS Code language metadata (" & $catalog.manifestsLoaded & " of " &
-        $catalog.manifestsTotal & ")."
-      emit catalog.vscodeGrammarCatalogDidUpdate()
-  of vgakGrammar:
-    if catalog.installing.isNone:
-      return
-    try:
-      let content = readFile(path)
-      if content.len > KosmoVscodeGrammarMaximumBytes:
-        raise newException(ValueError, "grammar exceeds the 4 MiB safety limit")
-      catalog.installContents[request.path] = content
-      dec catalog.installRemaining
-      if catalog.installRemaining == 0:
-        catalog.finishGrammarInstall()
-      else:
-        catalog.status =
-          "Downloading " & catalog.installing.get().name & " grammars (" &
-          $catalog.installContents.len & " of " &
-          $catalog.installing.get().grammarFiles.len & ")."
-        emit catalog.vscodeGrammarCatalogDidUpdate()
-    except CatchableError as error:
-      catalog.processAsset(request, url, "", error.msg)
 
 proc receiveUrlAsset(
     catalog: KosmoVscodeGrammarCatalog, handle: nimkit.UrlAssetHandle
 ) {.slot.} =
-  if catalog.closed or handle.isNil:
+  if catalog.closed or handle.isNil or handle.identifier() notin catalog.pending:
     return
-  let identifier = handle.identifier()
-  if identifier notin catalog.pending:
-    return
-  let request = catalog.pending[identifier]
-  catalog.pending.del(identifier)
-  if handle.succeeded():
-    catalog.processAsset(request, handle.result().url, handle.result().path)
-  else:
-    catalog.processAsset(request, handle.result().url, "", handle.result().errorMessage)
+  let request = catalog.pending[handle.identifier()]
+  catalog.pending.del(handle.identifier())
+  catalog.processAsset(request, handle.result().path, handle.result().errorMessage)
 
 proc newKosmoVscodeGrammarCatalog*(): KosmoVscodeGrammarCatalog =
-  ## Create a lazy catalog controller; its network worker starts on first search.
-  KosmoVscodeGrammarCatalog(
-    pending: initTable[uint64, VscodeGrammarAssetRequest](),
-    installContents: initTable[string, string](),
-  )
+  ## Create a lazy Open VSX grammar search controller.
+  KosmoVscodeGrammarCatalog(pending: initTable[uint64, VscodeGrammarAssetRequest]())
 
-proc ensureLoader(catalog: KosmoVscodeGrammarCatalog) =
-  if not catalog.loader.isNil or catalog.closed:
-    return
-  catalog.loader = nimkit.newUrlAssetLoader(
-    "kosmo-vscode-grammars", maximumAssetBytes = VscodeCatalogMaximumBytes
-  )
-  catalog.loader.connect(
-    nimkit.urlAssetDidFinish, catalog, KosmoVscodeGrammarCatalog.receiveUrlAsset
-  )
-
-proc search*(
-    catalog: KosmoVscodeGrammarCatalog, query: string, regularExpression = false
-) =
-  ## Search the built-in VS Code repository's language grammars.
-  if catalog.isNil or catalog.closed:
-    return
-  catalog.query =
-    if regularExpression:
-      query
-    else:
-      query.strip()
-  catalog.candidates.setLen(0)
-  catalog.pattern = none(TextSearchPattern)
-  catalog.compactPattern = none(TextSearchPattern)
-  if catalog.query.len == 0 or
-      (not regularExpression and catalog.query.normalizedSearchText().len < 2):
-    catalog.status =
-      "Enter at least two characters to search built-in VS Code languages."
-    emit catalog.vscodeGrammarCatalogDidUpdate()
-    return
-  try:
-    catalog.pattern = some(
-      initTextSearchPattern(catalog.query, regularExpression, caseSensitive = false)
+proc initLoader(catalog: KosmoVscodeGrammarCatalog) =
+  if catalog.loader.isNil and not catalog.closed:
+    catalog.loader = nimkit.newUrlAssetLoader(
+      "kosmo-openvsx-grammars", maximumAssetBytes = OpenVsxMaximumPackageBytes
     )
-    if not regularExpression:
-      catalog.compactPattern = some(
-        initTextSearchPattern(
-          catalog.query.normalizedSearchText(), caseSensitive = false
-        )
-      )
-  except TextSearchError as error:
-    catalog.status = "Search error: " & error.msg
+    catalog.loader.connect(
+      nimkit.urlAssetDidFinish, catalog, KosmoVscodeGrammarCatalog.receiveUrlAsset
+    )
+
+proc search*(catalog: KosmoVscodeGrammarCatalog, query: string) =
+  ## Search Open VSX using plain language or extension names.
+  if catalog.isNil or catalog.closed or catalog.installing.isSome:
+    return
+  inc catalog.generation
+  catalog.catalogLoading = false
+  catalog.candidates.setLen(0)
+  let query = query.strip()
+  if query.len < 2:
+    catalog.status = "Enter at least two characters to search Open VSX."
     emit catalog.vscodeGrammarCatalogDidUpdate()
     return
-  if catalog.catalogReady:
-    catalog.finishCatalogSearch()
-    return
-  if catalog.catalogLoading:
-    catalog.status = "Loading the VS Code language catalog."
-    emit catalog.vscodeGrammarCatalogDidUpdate()
-    return
-  catalog.ensureLoader()
+  catalog.initLoader()
   catalog.catalogLoading = true
-  catalog.status = "Loading the VS Code language catalog."
+  catalog.status = "Searching Open VSX for language grammars."
   emit catalog.vscodeGrammarCatalogDidUpdate()
+  let url =
+    OpenVsxSearchUrl & "?query=" & encodeUrl(query) &
+    "&category=Programming%20Languages&size=" & $OpenVsxSearchPageSize
   try:
-    discard catalog.loader.removeCachedAsset(VscodeRepositoryTreeUrl)
+    let cached = catalog.loader.cachedAssetPath(url)
+    if fileExists(cached) and
+        getTime() - getLastModificationTime(cached) > initDuration(hours = 24):
+      discard catalog.loader.removeCachedAsset(url)
     catalog.requestAsset(
-      VscodeRepositoryTreeUrl, VscodeGrammarAssetRequest(kind: vgakTree)
+      url, VscodeGrammarAssetRequest(kind: vgakSearch, generation: catalog.generation)
     )
   except CatchableError as error:
     catalog.catalogLoading = false
-    catalog.status = "Could not request the VS Code language catalog: " & error.msg
+    catalog.status = "Could not search Open VSX: " & error.msg
     emit catalog.vscodeGrammarCatalogDidUpdate()
 
 proc candidates*(catalog: KosmoVscodeGrammarCatalog): seq[VscodeGrammarCandidate] =
@@ -758,32 +755,23 @@ func isBusy*(catalog: KosmoVscodeGrammarCatalog): bool =
   not catalog.isNil and (catalog.catalogLoading or catalog.installing.isSome)
 
 proc install*(catalog: KosmoVscodeGrammarCatalog, candidateId: string) =
-  ## Download, parse, and install the selected language's grammar sources.
-  if catalog.isNil or catalog.closed or catalog.installing.isSome:
+  ## Download a pinned extension and install only its declared TextMate grammars.
+  if catalog.isNil or catalog.closed or catalog.isBusy():
     return
   for candidate in catalog.candidates:
-    if candidate.id != candidateId:
-      continue
-    catalog.installing = some(candidate)
-    catalog.installContents.clear()
-    catalog.installRemaining = candidate.grammarFiles.len
-    catalog.status =
-      "Downloading " & candidate.name & " grammars (0 of " & $candidate.grammarFiles.len &
-      ")."
-    emit catalog.vscodeGrammarCatalogDidUpdate()
-    try:
-      for file in candidate.grammarFiles:
-        catalog.requestAsset(
-          grammarUrl(candidate.sourceCommit, candidate.extensionFolder, file.path),
-          VscodeGrammarAssetRequest(kind: vgakGrammar, path: file.path),
-        )
-    except CatchableError as error:
-      catalog.status = "Could not download " & candidate.name & ": " & error.msg
-      catalog.installing = none(VscodeGrammarCandidate)
-      catalog.installContents.clear()
-      catalog.installRemaining = 0
+    if candidate.id == candidateId:
+      catalog.installing = some(candidate)
+      catalog.status = "Downloading " & candidate.name & " from Open VSX."
       emit catalog.vscodeGrammarCatalogDidUpdate()
-    return
+      try:
+        catalog.requestAsset(
+          candidate.archiveUrl, VscodeGrammarAssetRequest(kind: vgakArchive)
+        )
+      except CatchableError as error:
+        catalog.installing = none(VscodeGrammarCandidate)
+        catalog.status = "Could not download the grammar: " & error.msg
+        emit catalog.vscodeGrammarCatalogDidUpdate()
+      return
 
 proc close*(catalog: KosmoVscodeGrammarCatalog) =
   if catalog.isNil or catalog.closed:
@@ -793,5 +781,4 @@ proc close*(catalog: KosmoVscodeGrammarCatalog) =
     catalog.loader.close()
     catalog.loader = nil
   catalog.pending.clear()
-  catalog.installContents.clear()
   catalog.installing = none(VscodeGrammarCandidate)

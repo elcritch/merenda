@@ -111,11 +111,11 @@ jobs:
 
     - name: Verify optional text library fallback
       run: |
-        atlas-run tests tests/nimkit/textbackends.nim -- \
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- \
           -d:harfbuzzDynlib=merenda-missing-harfbuzz \
           -d:merendaTestTextBackend=pixie \
           '-d:merendaTestTextDiagnostic=HarfBuzz could not be loaded'
-        atlas-run tests tests/nimkit/textbackends.nim -- \
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- \
           -d:harfbuzzyFribidiDynlib=merenda-missing-fribidi \
           -d:merendaTestTextBackend=pixie \
           '-d:merendaTestTextDiagnostic=FriBidi could not be loaded'
@@ -123,7 +123,7 @@ jobs:
     - name: Verify missing Vulkan loader is recoverable
       if: runner.os == 'Linux'
       run: |
-        atlas-run tests tests/nimkit/textbackends.nim -- \
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- \
           -d:figdrawTestMissingVulkan \
           -d:figdrawVulkanDynlib=merenda-missing-vulkan
 
@@ -132,7 +132,7 @@ jobs:
       run: |
         cc -shared -fPIC tests/integrations/fixtures/oldharfbuzz.c \
           -o "$RUNNER_TEMP/merenda-old-harfbuzz.so"
-        atlas-run tests tests/nimkit/textbackends.nim -- \
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- \
           -d:harfbuzzDynlib="$RUNNER_TEMP/merenda-old-harfbuzz.so" \
           -d:merendaTestTextBackend=pixie \
           '-d:merendaTestTextDiagnostic=HarfBuzz 6.0.0 is too old'
@@ -144,13 +144,13 @@ jobs:
 
     - name: Compile NimKit tests
       run: |
-        atlas-run tests --compile-only --compiler-output tnimkit.nim \
+        atlas-run tests --nimcache:deps/.nimcache/ --compile-only --compiler-output tnimkit.nim \
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run NimKit tests
       timeout-minutes: 5
       run: |
-        testExecutable=./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
+        testExecutable=./deps/.nimcache/tests/tnimkit/tnimkit
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
@@ -162,13 +162,13 @@ jobs:
 
     - name: Compile Tekton tests
       run: |
-        atlas-run tests --compile-only --compiler-output ttekton.nim \
+        atlas-run tests --nimcache:deps/.nimcache/ --compile-only --compiler-output ttekton.nim \
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Tekton tests
       timeout-minutes: 5
       run: |
-        testExecutable=./deps/.nimcache/atlas-run/tests/ttekton/ttekton
+        testExecutable=./deps/.nimcache/tests/ttekton/ttekton
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
@@ -181,17 +181,17 @@ jobs:
     - name: Compile integration tests
       run: |
         if [[ "$RUNNER_OS" == "macOS" ]]; then
-          atlas-run tests --compile-only --compiler-output tintegrations.nim \
+          atlas-run tests --nimcache:deps/.nimcache/ --compile-only --compiler-output tintegrations.nim \
             -- -d:merenda.devControl
         else
-          atlas-run tests --compile-only --compiler-output tintegrations.nim \
+          atlas-run tests --nimcache:deps/.nimcache/ --compile-only --compiler-output tintegrations.nim \
             $ATLAS_TEST_NIM_ARGS
         fi
 
     - name: Run integration tests
       timeout-minutes: 5
       run: |
-        testExecutable=./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
+        testExecutable=./deps/.nimcache/tests/tintegrations/tintegrations
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
@@ -330,14 +330,14 @@ jobs:
 
     - name: Compile Kosmo tests
       run: |
-        atlas-run tests --compile-only --compiler-output tkosmo.nim \
+        atlas-run tests --nimcache:deps/.nimcache/ --compile-only --compiler-output tkosmo.nim \
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
       # The expanded GUI suite takes over 15 minutes in the unoptimized Linux build.
       timeout-minutes: 20
       run: |
-        testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+        testExecutable=./deps/.nimcache/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
@@ -440,7 +440,7 @@ jobs:
         UBSAN_OPTIONS: halt_on_error=1
         LSAN_OPTIONS: suppressions=.github/lsan.supp
       run: |
-        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:arc \
+        xvfb-run -a atlas-run tests --nimcache:deps/.nimcache/ nimkit -- --cc:clang --mm:arc \
           -d:nimkitOwnershipTests -d:nimkitSanitizers
 
     - name: Check ORC ownership with sanitizers
@@ -449,7 +449,7 @@ jobs:
         UBSAN_OPTIONS: halt_on_error=1:suppressions=.github/ubsan.supp
         LSAN_OPTIONS: suppressions=.github/lsan.supp
       run: |
-        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:orc \
+        xvfb-run -a atlas-run tests --nimcache:deps/.nimcache/ nimkit -- --cc:clang --mm:orc \
           -d:nimkitOwnershipTests -d:nimkitSanitizers
 
   examples:
@@ -549,24 +549,24 @@ jobs:
     - name: Compile Examples
       if: runner.os != 'Windows'
       run: |
-        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
+        atlas-run tests --nimcache:deps/.nimcache/ --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
 
     - name: Compile Windows Examples with MinGW
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:gcc
+        atlas-run tests --nimcache:deps/.nimcache/ --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:gcc
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Verify Windows optional text backends
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:figdrawTestMissingVulkan" "-d:figdrawVulkanDynlib=merenda-missing-vulkan"
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- --cc:gcc "-d:figdrawTestMissingVulkan" "-d:figdrawVulkanDynlib=merenda-missing-vulkan"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:merendaTestTextBackend=harfbuzzy"
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- --cc:gcc "-d:merendaTestTextBackend=harfbuzzy"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzDynlib=merenda-missing-harfbuzz" "-d:merendaTestTextBackend=pixie"
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzDynlib=merenda-missing-harfbuzz" "-d:merendaTestTextBackend=pixie"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzyFribidiDynlib=merenda-missing-fribidi" "-d:merendaTestTextBackend=pixie"
+        atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzyFribidiDynlib=merenda-missing-fribidi" "-d:merendaTestTextBackend=pixie"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

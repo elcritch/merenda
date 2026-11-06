@@ -167,7 +167,7 @@ func markdownColorMode(appearance: nimkit.Appearance): KosmoMarkdownColorMode =
 
 proc configuredReaderTheme(
     controls: KosmoMarkdownControls, target: KosmoThemeTarget
-): KosmoMoeTheme =
+): ContentTheme =
   if not controls.isNil and not controls.editorView.isNil:
     let view = controls.editorView[]
     if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
@@ -180,9 +180,6 @@ func readerColorMode(background: nimkit.Color): KosmoMarkdownColorMode =
     0.2126'f32 * background.r + 0.7152'f32 * background.g + 0.0722'f32 * background.b
   if luminance < 0.5'f32: kmcmDark else: kmcmLight
 
-func richTextColor(value: KosmoMoeThemeColor): nimkit.Color =
-  nimkit.rgb(value.red, value.green, value.blue).color()
-
 proc configuredReaderColorMode(
     controls: KosmoMarkdownControls, target: KosmoThemeTarget
 ): KosmoMarkdownColorMode =
@@ -190,7 +187,7 @@ proc configuredReaderColorMode(
     return kmcmLight
   let theme = controls.configuredReaderTheme(target)
   if theme.identifier.len > 0:
-    return theme.preview.background.richTextColor().readerColorMode()
+    return theme.palette.background.toColor().readerColorMode()
   controls.effectiveAppearance().markdownColorMode()
 
 proc readerColorMode(
@@ -241,29 +238,7 @@ proc markdownPresentationStyle*(
   if not controls.isNil and controls.xColorPreferences[target] == krcFollowTheme:
     let theme = controls.configuredReaderTheme(target)
     if theme.identifier.len > 0:
-      let preview = theme.preview
-      result.backgroundColor = preview.background.richTextColor()
-      result.textColor = preview.foreground.richTextColor()
-      result.headingColor = preview.functionName.richTextColor()
-      result.strongColor = preview.foreground.richTextColor()
-      result.emphasisColor = preview.keyword.richTextColor()
-      result.linkColor = preview.cyan.richTextColor()
-      result.codeColor = preview.stringLiteral.richTextColor()
-      result.quoteColor = preview.comment.richTextColor()
-      result.mutedColor = preview.comment.richTextColor()
-      result.ruleColor = preview.comment.richTextColor()
-      result.codeBlockStyle.backgroundColor = preview.background.richTextColor()
-      result.codeBlockStyle.outlineColor = preview.comment.richTextColor()
-      for tokenClass in nimkit.SyntaxTokenClass:
-        result.syntaxTokenColors[tokenClass] = result.textColor
-      result.syntaxTokenColors[nimkit.stcKeyword] = preview.keyword.richTextColor()
-      result.syntaxTokenColors[nimkit.stcIdentifier] =
-        preview.functionName.richTextColor()
-      result.syntaxTokenColors[nimkit.stcString] = preview.stringLiteral.richTextColor()
-      result.syntaxTokenColors[nimkit.stcNumber] = preview.yellow.richTextColor()
-      result.syntaxTokenColors[nimkit.stcComment] = preview.comment.richTextColor()
-      result.syntaxTokenColors[nimkit.stcOperator] = preview.cyan.richTextColor()
-      result.syntaxTokenColors[nimkit.stcPreprocessor] = preview.keyword.richTextColor()
+      result.applyContentTheme(theme)
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -2024,8 +1999,7 @@ proc handleDocumentTabsKeyEquivalent(
     # before they leave it: only at the first or last etab do they navigate the
     # split panes, so the spatial navigation between splits stays intact.
     if direction in {kpcFocusLeft, kpcFocusRight}:
-      let next =
-        tabs.selectedIndex() + (if direction == kpcFocusRight: 1 else: -1)
+      let next = tabs.selectedIndex() + (if direction == kpcFocusRight: 1 else: -1)
       if next >= 0 and next < tabs.len():
         view.tabsDelegate.keyboardTabbing = true
         tabs.selectDocumentTabAtIndex(next)
@@ -2162,9 +2136,8 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       let owner = view.window()
       if owner of nimkit.Window and nimkit.Window(owner).firstResponder() == view and
           not view.documentTabs.isNil:
-        discard nimkit.Window(owner).makeFirstResponder(
-            nimkit.Responder(view.documentTabs)
-          )
+        discard
+          nimkit.Window(owner).makeFirstResponder(nimkit.Responder(view.documentTabs))
         return true
       return false
     else:
@@ -3296,8 +3269,14 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     bar.indexEntryLabel.setFrameFromLayout(
       nimkit.rect(0, 0, entryWidth, bounds.size.height)
     )
+    let buttonSize = min(buttonWidth, choiceHeight)
     bar.nimdexButton.setFrameFromLayout(
-      nimkit.rect(buttonX - progressX, 0, buttonWidth, bounds.size.height)
+      nimkit.rect(
+        buttonX - progressX + (buttonWidth - buttonSize) * 0.5'f32,
+        (bounds.size.height - buttonSize) * 0.5'f32,
+        buttonSize,
+        buttonSize,
+      )
     )
     bar.indexSpinner.setFrameFromLayout(nimkit.rect(entryWidth, choiceY + 2, 16, 16))
     bar.indexProgress.setFrameFromLayout(

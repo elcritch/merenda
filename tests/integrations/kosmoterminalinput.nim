@@ -38,13 +38,7 @@ suite "Kosmo terminal shortcut PTY input":
       require second.newTerminal()
       require second.editorGroups()[0].pane.contentView of KosmoTerminalView
       terminal = KosmoTerminalView(second.editorGroups()[0].pane.contentView)
-      check terminal.palette.background ==
-        color(
-          themes[1].preview.background.red.float32 / 255,
-          themes[1].preview.background.green.float32 / 255,
-          themes[1].preview.background.blue.float32 / 255,
-          1.0,
-        )
+      check terminal.palette.background == themes[1].palette.background.toColor()
       check terminal.palette != initTerminalPalette()
 
     test "terminal search edits stay in the focused field until it is dismissed":

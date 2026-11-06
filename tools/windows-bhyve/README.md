@@ -138,8 +138,8 @@ Bash, from a checkout inside the guest:
 
 ```sh
 atlas install -tuk
-atlas-run tests --backend:ic
-atlas-run tests --backend:ic --compile-only examples/all_compile.nim
+atlas-run tests --nimcache:deps/.nimcache/ --backend:ic
+atlas-run tests --nimcache:deps/.nimcache/ --backend:ic --compile-only examples/all_compile.nim
 nim ic -r examples/controls_showcase.nim
 ```
 

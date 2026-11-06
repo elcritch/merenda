@@ -84,6 +84,7 @@ import ./nimkit/text/texttypes
 import ./nimkit/text/textviewintegrations
 import ./nimkit/text/textviews
 import ./nimkit/themes
+import ./nimkit/contentthemes
 import ./nimkit/foundation/types
 import ./nimkit/foundation/undomanagers
 import ./nimkit/foundation/urls
@@ -184,6 +185,7 @@ export texttypes
 export textviewintegrations
 export textviews
 export themes
+export contentthemes
 export types
 export undomanagers
 export urls

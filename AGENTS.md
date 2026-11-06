@@ -15,10 +15,10 @@
 
 ## Build, Test, and Development
 - Install deps (atlas workspace): `atlas install -tuk` (ensure `atlas` is installed and configured for your environment). *Never* use Nimble - it's horrible. *Always* use Atlas and it's `deps/` folder and `nim.cfg` file to see paths. Don't use atlas lock files.
-- Prefer `nim ic` for local development builds and testing to reuse incremental compilation results. Use `-r` to run the compiled program, and use `--backend:ic` with `atlas-run build` or `atlas-run tests`. Leave CI's compiler backend unchanged.
+- Prefer `nim ic` for local development builds and testing to reuse incremental compilation results. Use `-r` to run the compiled program, and use `--backend:ic` with `atlas-run build` or `atlas-run tests --nimcache:deps/.nimcache/`. Leave CI's compiler backend unchanged.
 - Prefer `nim test` for the non-integration suites and `nim integration` for the full suite, including integration tests. Both tasks use `nim ic -r`.
-- For focused test selections, use `atlas-run tests --backend:ic [test-selections]`. Selectors match as `foo` -> `tests/tfoo*.nim`, `foo.nim` -> `tests/tfoo.nim`, and `examples/foo*.nim` -> `examples/foo*.nim`. Do not adjust the `--jobs` count or the `--nimcache`.
-- Compile the example bundle with `atlas-run tests --backend:ic --compile-only examples/all_compile.nim`; do not run `examples/all_compile.nim` as a test.
+- For focused test selections, use `atlas-run tests --nimcache:deps/.nimcache/ --backend:ic [test-selections]`. Selectors match as `foo` -> `tests/tfoo*.nim`, `foo.nim` -> `tests/tfoo.nim`, and `examples/foo*.nim` -> `examples/foo*.nim`. Use `--nimcache:deps/.nimcache/` by default. Do not adjust the `--jobs` count.
+- Compile the example bundle with `atlas-run tests --nimcache:deps/.nimcache/ --backend:ic --compile-only examples/all_compile.nim`; do not run `examples/all_compile.nim` as a test.
 - Development control (`-d:merenda.devControl`) provides live renderer screenshots, window inspection, input automation, and CSS reloads. Use `MERENDA_BACKGROUND=1` to start apps in the background without taking focus on macOS and Windows. Read [docs/dev-control.md](docs/dev-control.md) before capturing live screenshots from a running app.
 - Execute a single test locally using `nim ic`:
   - `nim ic -r tests/ttransfer.nim`
@@ -50,7 +50,7 @@
 - Event-driven and asynchronous tests must wait for an observable condition with an explicit monotonic deadline. Use a cap of about 60 seconds unless the behavior has a documented reason to need longer, and assert the condition after the deadline so timeouts fail visibly.
 - While waiting for GUI, Sigil, watcher, or worker results, pump the owning event loop non-blockingly and use only a short sleep between polls. Establish and assert required subscriptions or readiness before triggering the event. Do not use a fixed sleep as a substitute for readiness.
 - Keep process lifecycle coverage in focused integration tests. Do not start unrelated shells or other long-lived processes in shared component tests, and always terminate and reap child processes during teardown.
-- Requirements: CI (`atlas-run tests`) must pass; include tests for new behavior and update `README.md`/`CHANGES.md` as needed.
+- Requirements: CI (`atlas-run tests --nimcache:deps/.nimcache/`) must pass; include tests for new behavior and update `README.md`/`CHANGES.md` as needed.
 
 ## Security & Configuration Tips
 - GC: library requires ARC/ORC (`--mm:arc` or `--mm:orc` or `--mm:atomicArc`); enforced in `sigils.nim`.

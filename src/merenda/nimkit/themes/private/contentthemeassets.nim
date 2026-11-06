@@ -1,25 +1,26 @@
-## Embedded Moe themes installed as TOML files for Moe's theme loader.
+## Embedded content palettes and their upstream licenses.
 
 import std/[os, tempfiles]
 
-from ../nimkit/foundation/assetcache import nimkitAssetCacheDirectory
+from ../../foundation/assetcache import nimkitAssetCacheDirectory
 
 template embedTheme(name: string): untyped =
   (
     fileName: name,
-    contents:
-      staticRead(currentSourcePath().parentDir / "../../../data/moe/themes" / name),
+    contents: staticRead(
+      currentSourcePath().parentDir / "../../../../../data/contentthemes" / name
+    ),
   )
 
 template embedLicense(name: string): untyped =
   (
     fileName: name,
     contents: staticRead(
-      currentSourcePath().parentDir / "../../../data/moe/themes/licenses" / name
+      currentSourcePath().parentDir / "../../../../../data/contentthemes/licenses" / name
     ),
   )
 
-const EmbeddedMoeThemes = [
+const EmbeddedContentThemes = [
   embedTheme("catppuccin-latte.toml"),
   embedTheme("catppuccin-mocha.toml"),
   embedTheme("cyberdream-dark.toml"),
@@ -47,7 +48,7 @@ const EmbeddedMoeThemes = [
   embedTheme("tokyo-night-moon.toml"),
 ]
 
-const EmbeddedMoeThemeLicenses = [
+const EmbeddedContentThemeLicenses = [
   embedLicense("catppuccin.txt"),
   embedLicense("cyberdream.txt"),
   embedLicense("dark-orchid.txt"),
@@ -69,7 +70,7 @@ proc installTheme(directory, fileName, contents: string) =
   if fileExists(targetPath) and readFile(targetPath) == contents:
     return
 
-  let output = createTempFile(".kosmo-theme-", ".part", directory)
+  let output = createTempFile(".nimkit-theme-", ".part", directory)
   output.cfile.close()
   try:
     writeFile(output.path, contents)
@@ -77,23 +78,23 @@ proc installTheme(directory, fileName, contents: string) =
   finally:
     removeFile(output.path)
 
-proc installBundledMoeThemes*(cacheDirectory = ""): string =
-  ## Return the cache directory containing Kosmo's embedded Moe themes.
+proc installBundledContentThemes*(cacheDirectory = ""): string =
+  ## Return the cache directory containing NimKit's embedded content themes.
   ## Missing or altered cache files are restored from the embedded originals.
   ## An unwritable cache leaves existing files available for discovery.
   let cacheRoot =
     if cacheDirectory.len > 0:
       cacheDirectory
     else:
-      nimkitAssetCacheDirectory("kosmo")
-  result = cacheRoot / "moe" / "themes"
+      nimkitAssetCacheDirectory("nimkit") / "content"
+  result = cacheRoot / "themes"
   try:
     createDir(result)
-    for theme in EmbeddedMoeThemes:
+    for theme in EmbeddedContentThemes:
       installTheme(result, theme.fileName, theme.contents)
     let licenseDirectory = result / "licenses"
     createDir(licenseDirectory)
-    for license in EmbeddedMoeThemeLicenses:
+    for license in EmbeddedContentThemeLicenses:
       installTheme(licenseDirectory, license.fileName, license.contents)
   except OSError, IOError:
     discard

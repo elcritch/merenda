@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
+  and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
+  Moe engine integration and uses the shared module for content presentation.
+
+- Start Kosmo theme selection on Moe, give the theme picker more horizontal space,
+  and add Reset to restore selected items to their themes when Settings opened.
+
+- Search Open VSX for community TextMate grammars instead of relying on GitHub's
+  rate-limited VS Code repository API. Install only declared grammar files from
+  versioned extension packages and retain existing grammar installations.
+
+- Simplify TextMate grammar settings to an installed list with an Install more
+  button that opens a separate search and installation sheet.
+
 - Allow macOS Option characters in terminals by default; Option-as-Meta remains
   available in settings.
 - Group Moe themes by appearance and let users sort the theme list.
@@ -11,6 +25,8 @@
 - Group Nimdex status controls and start Nimdex stopped for new configurations.
 - Check for Kosmo updates in the background and offer to install newer stable
   releases after the application closes.
+- Show each Kosmo theme destination and its current theme in a multi-select table,
+  with Select rich text and Select all shortcuts for applying themes together.
 
 - Add light and dark reader controls to Markdown, Git diff, GitHub, and Help tab
   context menus, keeping each rich-text theme choice independent.

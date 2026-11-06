@@ -8,7 +8,7 @@ import moepkg/highlight as moeHighlight
 import moepkg/syntax/matter_backend as moeMatter
 import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
-import merenda/kosmo/moethemeassets
+import merenda/nimkit/contentthemes
 import merenda/nimkit
 from merenda/nimkit/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
@@ -373,7 +373,7 @@ suite "Kosmo Matter highlighting":
       editor.close()
       removeDir(root)
     require editor.openFile(path).loaded
-    let themes = discoverMoeThemes(installBundledMoeThemes(root / "cache"))
+    let themes = discoverContentThemes(installBundledContentThemes(root / "cache"))
     require themes.len == 26
     var buffer = newRenderBuffer(64, 8)
     for theme in themes:
