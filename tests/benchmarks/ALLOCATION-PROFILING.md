@@ -89,3 +89,11 @@ three paired untraced table-view samples are recorded in
 [markdown-layout-churn-2026-11-06.json](results/markdown-layout-churn-2026-11-06.json).
 Its allocation-request total is cumulative traffic, not retained memory; the
 live process also includes font, theme and layout caches.
+
+For compact code-highlight keys, compile `markdownkeymemory.nim` in matched
+checkouts, then run `capture_allocations.py keys /tmp/key-probe /tmp/key-graph
+16 8192`. This fixture polls only Sigils until parsed structure is applied;
+it asserts rendering is queued and no render chunks have run. The worker still
+owns pending code strings at that checkpoint. Traced and three-pair untraced
+measurements, source/binary hashes, and limits are in
+[markdown-code-keys-memory-2026-11-06.json](results/markdown-code-keys-memory-2026-11-06.json).

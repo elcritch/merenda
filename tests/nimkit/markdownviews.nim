@@ -1299,6 +1299,72 @@ fencedToken value
     check view.textStorage().attributesFor("let fresh").foregroundColor ==
       view.markdownStyle.codeColor
 
+  test "repeated nested code blocks retain correct colors across rerenders":
+    let source = """
+# First
+
+```nim
+let shared = 1
+```
+
+> ```nim
+> let shared = 1
+> ```
+
+- ```nim
+  let shared = 1
+  ```
+
+# Folded
+
+```go
+let shared = 1
+```
+"""
+    let view = newMarkdownView(source)
+    require view.waitForMarkdownParsing(60_000)
+
+    proc codeColors(): seq[Color] =
+      let rendered = view.textStorage().stringValue()
+      var offset = 0
+      while offset < rendered.runeLen:
+        let found = rendered.runeSubStr(offset).runeIndexOf("let shared")
+        if found < 0:
+          break
+        offset += found
+        result.add view.textStorage().attributesAt(offset).foregroundColor
+        offset += "let shared".runeLen
+
+    var style = view.markdownStyle()
+    let originalColors = codeColors()
+    require originalColors.len == 4
+    for index in 0 .. 2:
+      check originalColors[index] == style.syntaxTokenColors[stcKeyword]
+    check originalColors[3] != style.syntaxTokenColors[stcKeyword]
+
+    let folded = view.markdownHeadingDisclosure("Folded")
+    require not folded.isNil
+    require folded.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering(60_000)
+    check codeColors().len == 3
+    style.syntaxTokenColors[stcKeyword] = color(0.17, 0.62, 0.29, 1)
+    view.markdownStyle = style
+    require view.waitForMarkdownRendering(60_000)
+    require folded.accessibilityPerformAction(AccessibilityActionExpand)
+    require view.waitForMarkdownRendering(60_000)
+    let restoredColors = codeColors()
+    require restoredColors.len == 4
+    for index in 0 .. 2:
+      check restoredColors[index] == style.syntaxTokenColors[stcKeyword]
+    check restoredColors[3] != style.syntaxTokenColors[stcKeyword]
+
+    var calls: seq[string]
+    view.syntaxHighlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      calls.add language
+    require view.waitForMarkdownParsing(60_000)
+    check calls.count("nim") == 3
+    check calls.count("go") == 1
+
   test "Markdown viewer receives Matter colors from its parse worker":
     let view = newMarkdownView("```nim\nlet obsolete = 1\n```")
     view.markdown = "```go\nfunc main() {}\n```"

@@ -202,12 +202,18 @@ syncSelectedEditorContent and markdownViewForBuffer.
   transfers compact runs and a stable palette into storage; builder merges
   remap styles once, and range-only lookups do not copy attributes. The separate
   builder batch passes the shared NimKit runner and allocation verification.
-- [ ] Key code-block highlights by document generation and block ID/range,
-  with optional collision-checked content deduplication. Highlight results now
-  arrive in generation-checked batches indexed into `xMatterHighlights`, but
-  `xMatterCodeIndices` still retains complete `(source, language)` keys alongside
-  the AST, presentations, and rendered storages. Return borrowed spans when
-  their lifetime allows it.
+- [x] Key code-block highlights by generation-scoped AST block identity.
+  The parse worker deduplicates equal source/language pairs with full equality,
+  then sends compact per-block indices; the view retains token identities and
+  neutral spans rather than complete source/language keys. Worker-owned source
+  strings remain until their highlight job completes or is cancelled. In a
+  2,883,958-byte, 16-unique-block structure-only fixture, three untraced paired
+  runs had median live malloc heap 86,230,608 → 83,000,656 bytes. The traced
+  baseline retains 32 tuple-string copies / 3.00M under parse completion;
+  the new pointer-index table retains 2.00K. Rendering and highlighting were
+  deliberately still queued; this does not claim a whole-view saving or reduced
+  parser allocation traffic. See [key memory evidence](tests/benchmarks/results/markdown-code-keys-memory-2026-11-06.json).
+- [ ] Return borrowed highlight spans when their lifetime permits it.
 - [x] Lazily create embedded code/table views and their secondary layouts near
   the buffered viewport. Fitting code blocks reuse parent geometry without
   creating an embedded view. See `layoutMarkdownCodeBlocks`,

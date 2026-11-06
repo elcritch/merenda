@@ -8,6 +8,7 @@ Compile the tracked Nim probes with the project's Atlas configuration first:
   python3 tests/benchmarks/capture_allocations.py undo /tmp/undo /tmp/undo-graph 32 enabled edit plain
   python3 tests/benchmarks/capture_allocations.py preview /tmp/preview /tmp/preview-graph 20
   python3 tests/benchmarks/capture_allocations.py smart /tmp/smart /tmp/smart-graph small middle enabled
+  python3 tests/benchmarks/capture_allocations.py keys /tmp/keys /tmp/keys-graph 16 8192
 
 Run baseline and changed builds with identical settings, without other builds.
 The full-history graph can contain program memory; keep it in a safe location.
@@ -22,8 +23,8 @@ import time
 
 
 def main():
-    if len(sys.argv) < 4 or sys.argv[1] not in ("markdown", "synedit", "undo", "preview", "smart"):
-        raise SystemExit("usage: capture_allocations.py markdown|synedit|undo|preview|smart BINARY OUTPUT_PREFIX [arguments]")
+    if len(sys.argv) < 4 or sys.argv[1] not in ("markdown", "synedit", "undo", "preview", "smart", "keys"):
+        raise SystemExit("usage: capture_allocations.py markdown|synedit|undo|preview|smart|keys BINARY OUTPUT_PREFIX [arguments]")
     kind, binary, prefix = sys.argv[1:4]
     arguments = sys.argv[4:]
     if kind == "markdown" and (len(arguments) != 3 or arguments[1] not in ("storage", "view")):
@@ -36,7 +37,11 @@ def main():
         raise SystemExit("preview requires the number of unchanged refreshes")
     if kind == "smart" and len(arguments) != 3:
         raise SystemExit("smart requires: small|large begin|middle|end|selected enabled|disabled")
+    if kind == "keys" and len(arguments) != 2:
+        raise SystemExit("keys requires: block-count repeated-lines-per-block")
     command = [binary] + (["pause"] if kind == "synedit" else arguments)
+    if kind == "keys":
+        command.append("pause")
     output = Path(prefix)
     output.parent.mkdir(parents=True, exist_ok=True)
     if Path(str(output) + ".memgraph").exists():
@@ -75,7 +80,10 @@ def main():
                     ready |= line.startswith(b"checkpoint smart=")
                 elif line.startswith(b"{"):
                     stage = json.loads(line)["stage"]
-                    ready |= stage == ("storage" if arguments[1] == "storage" else "firstRender")
+                    if kind == "keys":
+                        ready |= stage == "structureApplied"
+                    else:
+                        ready |= stage == ("storage" if arguments[1] == "storage" else "firstRender")
         if not ready:
             raise RuntimeError("benchmark exited or failed to reach checkpoint within 120 seconds")
         graph = str(output) + ".memgraph"

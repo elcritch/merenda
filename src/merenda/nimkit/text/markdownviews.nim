@@ -138,7 +138,6 @@ type
   MarkdownCodeBlockPresentation = object
     range: TextRange
     storage: TextStorage
-    code: MarkdownCodeSource
     codeStart: int
     codeIndex: int
     codeAttributes: TextAttributes
@@ -223,6 +222,8 @@ type
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
     syntaxHighlighter: SyntaxHighlighter
+    codeIndex: proc(token: markdownParser.Token): int {.closure.}
+    cachedCodeSpans: proc(index: int): seq[SyntaxTokenSpan] {.closure.}
     tableColumnLimit: int
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
@@ -294,7 +295,8 @@ type
     xSyntaxHighlighter: SyntaxHighlighter
     xMatterGrammarSources: seq[MatterGrammarSource]
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
-    xMatterCodeIndices: Table[MarkdownCodeSource, int]
+    xMatterCodeIndices: Table[pointer, int]
+      ## Non-owning token identities, valid only while xMarkdownRoot is retained.
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
     xMarkdownCodePresentationIndices: seq[seq[int]]
     xActiveMarkdownHighlightGeneration: uint64
@@ -1243,6 +1245,8 @@ proc renderTable(
           imageLoader: builder.imageLoader,
           imageContentTypeLoader: builder.imageContentTypeLoader,
           syntaxHighlighter: builder.syntaxHighlighter,
+          codeIndex: builder.codeIndex,
+          cachedCodeSpans: builder.cachedCodeSpans,
           tableColumnLimit: builder.tableColumnLimit,
         )
         renderedCell.renderInlineChildren(cell, rowAttributes)
@@ -1364,6 +1368,8 @@ proc renderContainerChild(
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
+    codeIndex: builder.codeIndex,
+    cachedCodeSpans: builder.cachedCodeSpans,
     tableColumnLimit: builder.tableColumnLimit,
     headingIdentifier: headingIdentifier,
     sectionIdentifier: builder.sectionIdentifier,
@@ -1456,6 +1462,8 @@ proc renderBlockquote(
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
+    codeIndex: builder.codeIndex,
+    cachedCodeSpans: builder.cachedCodeSpans,
     tableColumnLimit: builder.tableColumnLimit,
     sectionIdentifier: builder.sectionIdentifier,
   )
@@ -1523,15 +1531,22 @@ proc renderBlockquote(
   builder.hasTables = builder.hasTables or quoted.hasTables
 
 proc addHighlightedCode(
-    builder: var MarkdownBuilder, source, language: string, attributes: TextAttributes
+    builder: var MarkdownBuilder,
+    source, language: string,
+    attributes: TextAttributes,
+    codeIndex: int,
 ) =
-  if source.len == 0 or language.len == 0 or builder.syntaxHighlighter.isNil:
+  if source.len == 0 or language.len == 0 or
+      (builder.syntaxHighlighter.isNil and builder.cachedCodeSpans.isNil):
     builder.add(source, attributes)
     return
 
   var spans: seq[SyntaxTokenSpan]
   try:
-    spans = builder.syntaxHighlighter(source, language)
+    if not builder.cachedCodeSpans.isNil:
+      spans = builder.cachedCodeSpans(codeIndex)
+    else:
+      spans = builder.syntaxHighlighter(source, language)
   except CatchableError:
     builder.add(source, attributes)
     return
@@ -1615,6 +1630,8 @@ proc renderBlock(
       imageLoader: builder.imageLoader,
       imageContentTypeLoader: builder.imageContentTypeLoader,
       syntaxHighlighter: builder.syntaxHighlighter,
+      codeIndex: builder.codeIndex,
+      cachedCodeSpans: builder.cachedCodeSpans,
       tableColumnLimit: builder.tableColumnLimit,
     )
     var codeAttributes = renderedCode.style.codeAttributes(attributes)
@@ -1628,15 +1645,20 @@ proc renderBlock(
     let
       codeSource = (source: code.doc.strip(chars = {'\n'}), language: code.info)
       codeStart = renderedCode.runeLength
+      codeIndex =
+        if builder.codeIndex.isNil:
+          -1
+        else:
+          builder.codeIndex(code)
     renderedCode.addHighlightedCode(
-      codeSource.source, codeSource.language, codeAttributes
+      codeSource.source, codeSource.language, codeAttributes, codeIndex
     )
     if renderedCode.runeLength > 0:
       var presentation = MarkdownCodeBlockPresentation(
         range: initTextRange(0, renderedCode.runeLength),
         storage: newTextStorage(renderedCode.text, renderedCode.runs),
-        code: codeSource,
         codeStart: codeStart,
+        codeIndex: codeIndex,
         codeAttributes: codeAttributes,
       )
       let codeLength = renderedCode.runeLength - codeStart
@@ -2221,8 +2243,6 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   view.xMarkdownCodePresentations = move document.codeBlocks
   view.xMarkdownCodePresentationIndices = newSeq[seq[int]](view.xMatterHighlights.len)
   for index, presentation in view.xMarkdownCodePresentations.mpairs:
-    presentation.codeIndex = view.xMatterCodeIndices.getOrDefault(presentation.code, -1)
-    presentation.code = default(MarkdownCodeSource)
     if presentation.codeIndex >= 0:
       view.xMarkdownCodePresentationIndices[presentation.codeIndex].add index
   textView.installMarkdownCodeBlocks(view.xMarkdownCodePresentations)
@@ -2552,16 +2572,22 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
   view.finishMarkdownWork()
 
 proc scheduleMarkdownRendering(view: MarkdownView) =
-  var highlighter = view.xSyntaxHighlighter
-  var dialect: MarkdownParseDialect
+  var
+    highlighter = view.xSyntaxHighlighter
+    codeIndex: proc(token: markdownParser.Token): int {.closure.}
+    cachedCodeSpans: proc(index: int): seq[SyntaxTokenSpan] {.closure.}
+    dialect: MarkdownParseDialect
   if highlighter == SyntaxHighlighter(matterSyntaxHighlighter) and
       view.xMarkdownConfig.builtInMarkdownDialect(dialect):
     let weakView = view.unsafeWeakRef()
-    highlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
-      if not weakView.isNil:
-        let index = weakView[].xMatterCodeIndices.getOrDefault((source, language), -1)
-        if index >= 0:
-          result = weakView[].xMatterHighlights[index]
+    highlighter = nil
+    codeIndex = proc(token: markdownParser.Token): int =
+      if weakView.isNil:
+        return -1
+      weakView[].xMatterCodeIndices.getOrDefault(cast[pointer](token), -1)
+    cachedCodeSpans = proc(index: int): seq[SyntaxTokenSpan] =
+      if not weakView.isNil and index >= 0 and index < weakView[].xMatterHighlights.len:
+        result = weakView[].xMatterHighlights[index]
   inc view.xMarkdownRenderGeneration
   let
     generation = view.xMarkdownRenderGeneration
@@ -2576,6 +2602,8 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
     builder: MarkdownBuilder(
       style: view.xMarkdownStyle,
       syntaxHighlighter: highlighter,
+      codeIndex: codeIndex,
+      cachedCodeSpans: cachedCodeSpans,
       tableColumnLimit: tableColumnLimit,
       headingDisclosureIndent: MarkdownHeadingDisclosureIndent,
     ),
@@ -2593,6 +2621,19 @@ proc cancelMarkdownRendering(view: MarkdownView) =
   view.xActiveMarkdownRenderGeneration = 0
   view.xMarkdownRenderJob = default(MarkdownRenderJob)
 
+proc indexMarkdownCodeBlocks(
+    token: markdownParser.Token,
+    indices: openArray[int],
+    ordinal: var int,
+    byToken: var Table[pointer, int],
+) =
+  if token of markdownParser.CodeBlock:
+    if ordinal < indices.len:
+      byToken[cast[pointer](token)] = indices[ordinal]
+    inc ordinal
+  for child in token.children:
+    child.indexMarkdownCodeBlocks(indices, ordinal, byToken)
+
 proc completeMarkdownParse(
     view: MarkdownView, parseResult: sink MarkdownParseResult
 ) {.slot.} =
@@ -2607,15 +2648,18 @@ proc completeMarkdownParse(
       view.xMarkdownRoot = move parseResult.root
       view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
       view.xMatterCodeIndices.clear()
-      view.xMatterHighlights = newSeq[seq[SyntaxTokenSpan]](parseResult.codes.len)
-      for index, code in parseResult.codes:
-        view.xMatterCodeIndices[code] = index
-      if parseResult.codes.len > 0:
-        if view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+      view.xMatterHighlights.setLen(0)
+      if view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+        view.xMatterHighlights = newSeq[seq[SyntaxTokenSpan]](parseResult.codeCount)
+        var codeOrdinal = 0
+        view.xMarkdownRoot.indexMarkdownCodeBlocks(
+          parseResult.codeIndices, codeOrdinal, view.xMatterCodeIndices
+        )
+        if parseResult.codeCount > 0:
           view.xActiveMarkdownHighlightGeneration = parseResult.generation
           view.xMarkdownHighlightStarted = false
-        else:
-          emit view.xMarkdownParseWorker.cancelMarkdownHighlight(parseResult.generation)
+      elif parseResult.codeCount > 0:
+        emit view.xMarkdownParseWorker.cancelMarkdownHighlight(parseResult.generation)
       view.xMarkdownRootGeneration = parseResult.generation
       view.xPendingMarkdownCompletionGeneration = parseResult.generation
       view.scheduleMarkdownRendering()
@@ -2665,6 +2709,8 @@ proc startLatestMarkdownParse(view: MarkdownView) =
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
     # their existing behavior rather than sharing or attempting to clone them.
+    view.xMatterCodeIndices.clear()
+    view.xMatterHighlights.setLen(0)
     view.xMarkdownRoot = view.xMarkdown.parseMarkdownRoot(view.xMarkdownConfig)
     view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
     view.xMarkdownRootGeneration = view.xMarkdownGeneration
@@ -3038,6 +3084,8 @@ proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
     view.scheduleMarkdownParse()
   else:
     view.cancelMarkdownColors()
+    view.xMatterCodeIndices.clear()
+    view.xMatterHighlights.setLen(0)
     view.renderCurrentMarkdownDocument()
     view.finishMarkdownWork()
 

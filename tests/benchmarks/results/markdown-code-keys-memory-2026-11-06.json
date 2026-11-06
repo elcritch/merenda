@@ -1,0 +1,207 @@
+{
+  "title": "Markdown compact highlight-key retention",
+  "baseRevision": "881e74bf",
+  "afterChange": "Only markdownviews.nim and markdownparsing.nim changed in an otherwise identical 881e74bf worktree.",
+  "workload": "16 distinct Nim fences, 8,192 short lines each; 2,883,958-byte UTF-8 source. Structure parse delivered to UI; render job queued but zero chunks run. Highlight worker retains its code-source payload in both variants.",
+  "checkpoint": "structureApplied, before rendering or highlighting continuation",
+  "method": "Three alternating fresh untraced processes and one MallocStackLogging full-history graph per version. Sigils owner thread polled non-blockingly with monotonic deadline; NimKit main work deliberately not drained. Trace uses leaks --fullStackHistory --outputGraph at checkpoint and malloc_history -highWaterMark -callTree plus live call tree.",
+  "platform": "macOS 15.7.9 arm64, Nim 2.4.0, classic nim c -d:release --mm:arc, same Atlas dependencies and nim.cfg",
+  "limitations": [
+    "The sampled structure-only checkpoint isolates UI map retention, not complete view/layout or released-worker memory. Worker still owns pending code sources in both variants.",
+    "Each allocation trace is one process; stack logging changes allocation timing and omits some no-stack allocations. Three untraced samples estimate variability.",
+    "131,072 code lines produce substantial parser allocation traffic; cumulative totals here are not a claim that parser churn was fixed.",
+    "RSS is process memory, not live object memory.",
+    "Units on traced fields are preserved exactly as malloc_history prints them."
+  ],
+  "buildCommand": "nim c -d:release --mm:arc --nimcache:<separate-cache> --out:<binary> tests/benchmarks/markdownkeymemory.nim",
+  "captureCommand": "python3 tests/benchmarks/capture_allocations.py keys <binary> <fresh-prefix> 16 8192",
+  "harness": {
+    "path": "tests/benchmarks/markdownkeymemory.nim",
+    "sha256": "503d622231fdb204777c811c9dc647830fe10f89960896453ffb22a1d4e04778"
+  },
+  "variants": {
+    "before": {
+      "binaryPath": "/tmp/merenda-utf8-profile/markdown-key-before",
+      "binarySha256": "f937856f48150787e5fe912e990e2db323701a380745bd5eef6f9f23c7e7acf6",
+      "sourceFilesSha256": {
+        "src/merenda/nimkit/text/markdownviews.nim": "14bf322fec545ab4e7bb8f54ee8946088a8ae0228ce83333a3ba5ec4160e305e",
+        "src/merenda/nimkit/text/markdownparsing.nim": "1a07554eba8b5a5b0fdd4e951deae84fa3d5fce8fea42d32660da3836a951dbc",
+        "src/merenda/nimkit/text/textstorage.nim": "99e3eb36f0f5beb3e48d0e22a4af460070b1e237cc3d98cf23e8d0b9a7636c89"
+      }
+    },
+    "after": {
+      "binaryPath": "/tmp/merenda-utf8-profile/markdown-key-after",
+      "binarySha256": "4c129e76f29c195bf49fa9da824f15e2e3c3e0ed6b9761f6840389c462f2afa1",
+      "sourceFilesSha256": {
+        "src/merenda/nimkit/text/markdownviews.nim": "c3525b77ac1c887f6a7e4d2ae988406d6ef4813a74e83b8c34f4309ce3650f87",
+        "src/merenda/nimkit/text/markdownparsing.nim": "d142abcae595a2fc0c74a51d180f54f479a1f5a42b488bf23cc8d0af2c73edb0",
+        "src/merenda/nimkit/text/textstorage.nim": "99e3eb36f0f5beb3e48d0e22a4af460070b1e237cc3d98cf23e8d0b9a7636c89"
+      }
+    }
+  },
+  "tracedSamples": [
+    {
+      "version": "before",
+      "graph": "/tmp/merenda-utf8-profile/markdown-key-before-trace.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/markdown-key-before-trace-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/markdown-key-before-trace-live.txt",
+      "checkpoint": {
+        "stage": "structureApplied",
+        "sourceBytes": 2883958,
+        "blocks": 16,
+        "lineRepeats": 8192,
+        "renderChunks": 0,
+        "heapBeforeView": 3575584,
+        "heapBytes": 86195312,
+        "rssBytes": 70762496,
+        "peakRssBytes": 136019968,
+        "elapsedMs": 19130
+      },
+      "peakHeapVm": "83 MB",
+      "currentHeapVm": "74.8 MB",
+      "cumulativeHeapVm": "4.28 GB",
+      "allocationEvents": "33,990,157",
+      "noStackBlocks": "810   total size: 71K",
+      "noStackVm": "6   total size: 112K"
+    },
+    {
+      "version": "after",
+      "graph": "/tmp/merenda-utf8-profile/markdown-key-after-trace.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/markdown-key-after-trace-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/markdown-key-after-trace-live.txt",
+      "checkpoint": {
+        "stage": "structureApplied",
+        "sourceBytes": 2883958,
+        "blocks": 16,
+        "lineRepeats": 8192,
+        "renderChunks": 0,
+        "heapBeforeView": 3581216,
+        "heapBytes": 83946864,
+        "rssBytes": 139968512,
+        "peakRssBytes": 139968512,
+        "elapsedMs": 19403
+      },
+      "peakHeapVm": "80.3 MB",
+      "currentHeapVm": "72 MB",
+      "cumulativeHeapVm": "4.27 GB",
+      "allocationEvents": "33,990,095",
+      "noStackBlocks": "810   total size: 71K",
+      "noStackVm": "6   total size: 112K"
+    }
+  ],
+  "untracedSamples": [
+    {
+      "version": "before",
+      "sample": 1,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3572992,
+      "heapBytes": 85790800,
+      "rssBytes": 130088960,
+      "peakRssBytes": 130088960,
+      "elapsedMs": 1653
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3768064,
+      "heapBytes": 84506448,
+      "rssBytes": 121192448,
+      "peakRssBytes": 121192448,
+      "elapsedMs": 1642
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 90263632,
+      "rssBytes": 130924544,
+      "peakRssBytes": 130924544,
+      "elapsedMs": 1628
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 83000656,
+      "rssBytes": 113082368,
+      "peakRssBytes": 113082368,
+      "elapsedMs": 1624
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 86230608,
+      "rssBytes": 125075456,
+      "peakRssBytes": 125075456,
+      "elapsedMs": 1630
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "stage": "structureApplied",
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 82893648,
+      "rssBytes": 121536512,
+      "peakRssBytes": 121536512,
+      "elapsedMs": 1616
+    }
+  ],
+  "untracedMedians": {
+    "before": {
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 86230608,
+      "rssBytes": 130088960,
+      "peakRssBytes": 130088960,
+      "elapsedMs": 1630
+    },
+    "after": {
+      "sourceBytes": 2883958,
+      "blocks": 16,
+      "lineRepeats": 8192,
+      "renderChunks": 0,
+      "heapBeforeView": 3571456,
+      "heapBytes": 83000656,
+      "rssBytes": 121192448,
+      "peakRssBytes": 121192448,
+      "elapsedMs": 1624
+    }
+  },
+  "attribution": {
+    "before": "32 string tuple duplication allocations / 3.00M under completeMarkdownParse",
+    "after": "2.00K pointer-to-index table allocation under indexMarkdownCodeBlocks",
+    "scope": "Worker code strings remain; only view-side source/language lookup copies are removed."
+  }
+}

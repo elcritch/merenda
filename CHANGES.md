@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Avoid copying the entire glyph arrangement for each mixed-wrap paragraph.
+- Keep compact per-block Markdown highlight indices instead of retained
+  source-string lookup keys, while deduplicating identical worker jobs.
 
 - Reduce terminal search coordinate storage to row mappings and sparse wide-cell
   or combining-cell exceptions while preserving literal and regular-expression
