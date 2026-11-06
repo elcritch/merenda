@@ -59,6 +59,11 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Shift-H` | Show GitHub issues and PRs | |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 | `F5` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. macOS also binds `Command-Control-T`, avoiding the fn-key row. |
+| `F6` | Open Link with Hints | Overlays markers on visible URLs; typing a marker's label opens it. macOS also binds `Command-Control-E`. |
+| `Shift-F6` | Open File with Hints | Overlays markers on visible file locations (including `path:line` and Nim's `path(line, col)`); selecting one opens it in the editor. macOS also binds `Command-Control-Shift-E`. |
+| `Alt-F6` | Copy Word with Hints | Overlays markers on visible words; selecting one copies it to the clipboard. macOS also binds `Command-Control-W`. |
+| `Ctrl-F6` | Copy Hash with Hints | Overlays markers on visible lowercase hexadecimal hashes; selecting one copies it. macOS also binds `Command-Control-H`. |
+| `Ctrl-Shift-F6` | Insert into Terminal with Hints | From a focused terminal, overlays markers on visible file locations; selecting one types it into the terminal. macOS also binds `Command-Control-P`. |
 | `primary-Shift-M` | Toggle Markdown source | Switches the selected Markdown tab between preview and source editing. |
 
 The scoped Vim pane commands are described below. They are handled only by a
@@ -439,6 +444,11 @@ the physical spelling shown by the active profile:
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |
 | Focus tool toolbar | `F5`, plus `Command-Control-T` on macOS |
+| Open Link with Hints | `F6`, plus `Command-Control-E` on macOS |
+| Open File with Hints | `Shift-F6`, plus `Command-Control-Shift-E` on macOS |
+| Copy Word with Hints | `Alt-F6`, plus `Command-Control-W` on macOS |
+| Copy Hash with Hints | `Ctrl-F6`, plus `Command-Control-H` on macOS |
+| Insert into Terminal with Hints | `Ctrl-Shift-F6`, plus `Command-Control-P` on macOS |
 | Toggle Markdown source | `primary-Shift-M` |
 | Split below / right | `Ctrl-W s` / `Ctrl-W v` in Vim routing, with their control-key aliases; configurable GUI alternatives otherwise |
 
@@ -484,6 +494,37 @@ mirroring the `</>` button. The chord is unused in the registry and by Moe's
 default Vim mappings, so it does not collide with editor input. It acts on the
 *selected* tab of the focused pane and leaves focus on the resulting content
 view.
+
+### Select with hints
+
+The `F6` family selects text that is currently visible on screen, Kitty-style:
+pressing the shortcut overlays short labeled markers on the matches, typing a
+marker's label picks it, and the picked snippet is acted on. Labels are
+prefix-free and assigned bottom-up, so the match nearest the cursor or prompt
+usually needs a single keystroke. `Escape` cancels, `Backspace` edits the typed
+prefix, `Enter` confirms a single remaining candidate, clicking a marker picks
+it directly, and any other key — including scrolling or resizing — ends the
+session and restores keyboard focus to the surface.
+
+Every pane surface participates: Moe editors (skipping the gutter, tab line,
+and status area), terminal tabs, Markdown previews and the Help reader, the
+GitHub reader, and the Git diff's summary and expanded file sections. Markdown
+code blocks inside previews are separate embedded views and stay unhinted for
+now. Markers cover the visible portion only, and matching follows Kitty's
+shapes: URLs with surrounding punctuation and brackets trimmed, existing file
+locations (including `path:line`, `path(line, col)`, and `~` expansion resolved
+against the terminal's or editor's working directory), selection-style words,
+and lowercase hexadecimal hashes.
+
+The actions pair a match shape with a follow-up: `F6` opens links in the
+browser, `Shift-F6` opens file locations in the editor (at the hinted line and
+column), `Alt-F6` and `Ctrl-F6` copy words and hashes to the clipboard, and
+`Ctrl-Shift-F6` types a file location into the focused terminal. Like the
+toolbar action above, `F6` claims the key only when the focused surface has
+matches; a terminal program keeps the key when nothing matches, and the
+bindings follow the same macOS fn-key reasoning with `Command-Control`
+alternatives. Settings lists every action, and `keybindings.json` can rebind
+them.
 
 Both commands are ordinary registry actions, so Settings lists them and
 `keybindings.json` can override them, disable them with `null`, or supply

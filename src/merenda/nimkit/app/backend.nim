@@ -1,5 +1,8 @@
 import
-  std/[atomics, deques, isolation, locks, math, options, os, strutils, tables, times]
+  std/[
+    atomics, deques, isolation, locks, math, options, os, osproc, strutils, tables,
+    times,
+  ]
 
 import threading/smartptrs
 import sigils/rchannels
@@ -1149,6 +1152,30 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
     provider.clearStoredItems()
     true
 
+when not defined(macosx):
+  proc openWithSystemHandler(target: string): bool =
+    ## Launch the platform's default handler for `target` without blocking the
+    ## event loop; the shell detaches the helper process. POSIX prefers the
+    ## freedesktop opener and falls back to GNOME's; Windows uses `start`.
+    when defined(windows):
+      execCmd("start \"\" " & target.quoteShell()) == 0
+    else:
+      let
+        xdgOpen = findExe("xdg-open")
+        gio = findExe("gio")
+      if xdgOpen.len > 0:
+        discard execCmd(
+          xdgOpen.quoteShell() & " " & target.quoteShell() & " >/dev/null 2>&1 &"
+        )
+        true
+      elif gio.len > 0:
+        discard execCmd(
+          gio.quoteShell() & " open " & target.quoteShell() & " >/dev/null 2>&1 &"
+        )
+        true
+      else:
+        false
+
 protocol NativeWorkspaceProviderProtocol of WorkspaceProviderProtocol:
   method workspaceFeatures(
       provider: NativeWorkspaceProvider, workspace: Workspace
@@ -1159,7 +1186,7 @@ protocol NativeWorkspaceProviderProtocol of WorkspaceProviderProtocol:
         wfActivateApplications,
       }
     else:
-      {}
+      {wfOpenUrls}
 
   method workspacePerformOperation(
       provider: NativeWorkspaceProvider, request: WorkspaceOperationRequest
@@ -1200,6 +1227,12 @@ protocol NativeWorkspaceProviderProtocol of WorkspaceProviderProtocol:
           result.succeeded = not url.isNil and nativeWorkspace.openURL(url)
       if not result.succeeded:
         result.message = "The native workspace could not complete the request"
+    else:
+      if request.kind == wokOpenUrl:
+        result.handled = true
+        result.succeeded = request.target.openWithSystemHandler()
+        if not result.succeeded:
+          result.message = "No system URL handler is installed"
 
 proc newNativeWorkspace*(): Workspace =
   let provider = NativeWorkspaceProvider()

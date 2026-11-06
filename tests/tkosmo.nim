@@ -18,6 +18,7 @@ import kosmo/gitdiff
 import kosmo/github
 import kosmo/hostcommands
 import kosmo/frontendwork
+import kosmo/hintsmode
 import kosmo/lsptcp
 import kosmo/markdownactivation
 import kosmo/markdownpreviewbudget

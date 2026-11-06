@@ -22,15 +22,17 @@ import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
-    gitdiff, githubviewer, inputtranslation, matterworkers, moe, moehighlighting,
-    panedocuments, panekeys, quickopen, recovery, scrolling, searchbar, settings,
+    gitdiff, githubviewer, hintsmode, inputtranslation, matterworkers, moe,
+    moehighlighting, panedocuments, panekeys, quickopen, recovery, scrolling,
+    searchbar, settings,
     shortcutpresentation, shortcuts, terminalsearch, textbackendlogging, viewersearch,
     updater, workspacefiles,
   ]
 
 export
-  cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, githubviewer, moe,
-  moehighlighting, panedocuments, quickopen, settings, shortcuts, terminalsearch
+  cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, githubviewer,
+  hintsmode, moe, moehighlighting, panedocuments, quickopen, settings, shortcuts,
+  terminalsearch
 export applicationassets except configureKosmoApplicationAssets
 export shortcutpresentation except focusPanelNumber
 

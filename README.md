@@ -424,6 +424,10 @@ It brings together a file browser, split panes, terminal tabs, Markdown previews
 Git diffs, and GitHub issues and PRs. Use it on its own or explore its source to
 see how a larger Merenda app fits together.
 
+Kitty-style `F6` hints pick text that is visible on screen — press `F6` to
+label every link, `Shift-F6` for file locations, or `Alt-F6` for words, then
+type a marker to open or copy the snippet.
+
 You don't need Nim to use a prebuilt Kosmo release. Run the installer from a
 shell (Git Bash on Windows):
 
