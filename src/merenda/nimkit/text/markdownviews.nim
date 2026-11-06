@@ -215,7 +215,7 @@ type
   MarkdownBuilder = object
     text: string
     runeLength: int
-    runs: seq[TextAttributeRun]
+    runs: TextRunBuilder
     codeBlocks: seq[MarkdownCodeBlockPresentation]
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
@@ -239,7 +239,7 @@ type
 
   MarkdownTableCell = object
     content: Utf8Runes
-    runs: seq[TextAttributeRun]
+    runs: TextRunBuilder
     images: seq[MarkdownImagePresentation]
     alignment: MarkdownTableAlignment
     paddingAttributes: TextAttributes
@@ -678,14 +678,7 @@ proc add(builder: var MarkdownBuilder, value: string, attributes: TextAttributes
   let start = builder.runeLength
   builder.text.add value
   builder.runeLength += length
-  if builder.runs.len > 0 and builder.runs[^1].attributes == attributes and
-      builder.runs[^1].range.maxIndex == start:
-    builder.runs[^1].range.length =
-      (int(builder.runs[^1].range.length) + length).Natural
-  else:
-    builder.runs.add TextAttributeRun(
-      range: initTextRange(start, length), attributes: attributes
-    )
+  builder.runs.add(initTextRange(start, length), attributes)
 
 proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
   if builder.text.len == 0 or builder.text.endsWith("\n\n"):
@@ -701,17 +694,7 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   builder.imageUrls.add(rendered.imageUrls)
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
-  for run in rendered.runs:
-    let shifted = TextAttributeRun(
-      range: initTextRange(offset + int(run.range.location), int(run.range.length)),
-      attributes: run.attributes,
-    )
-    if builder.runs.len > 0 and builder.runs[^1].attributes == shifted.attributes and
-        builder.runs[^1].range.maxIndex == int(shifted.range.location):
-      builder.runs[^1].range.length =
-        (int(builder.runs[^1].range.length) + int(shifted.range.length)).Natural
-    else:
-      builder.runs.add shifted
+  builder.runs.append(rendered.runs, offset)
   for presentation in rendered.codeBlocks.mitems:
     var shifted = move presentation
     shifted.range =
@@ -1046,7 +1029,7 @@ func tableAttributes(cell: MarkdownTableCell, index: int): TextAttributes =
   var high = cell.runs.len
   while low < high:
     let middle = (low + high) div 2
-    if cell.runs[middle].range.maxIndex <= index:
+    if cell.runs.rangeAt(middle).maxIndex <= index:
       low = middle + 1
     else:
       high = middle
@@ -1357,17 +1340,14 @@ proc renderTable(
   var presentation =
     MarkdownTablePresentation(range: tableRange, overflowing: overflowing)
   if overflowing:
-    var tableRuns: seq[TextAttributeRun]
+    var tableRuns: TextRunBuilder
     for index in tableStartRun ..< builder.runs.len:
       let
         run = builder.runs[index]
         start = max(int(run.range.location), tableStart)
         stop = min(run.range.maxIndex, builder.runeLength)
       if stop > start:
-        tableRuns.add TextAttributeRun(
-          range: initTextRange(start - tableStart, stop - start),
-          attributes: run.attributes,
-        )
+        tableRuns.add(initTextRange(start - tableStart, stop - start), run.attributes)
     presentation.storage = newTextStorage(builder.text[tableStartByte .. ^1], tableRuns)
   builder.tables.add move presentation
   builder.hasTables = true

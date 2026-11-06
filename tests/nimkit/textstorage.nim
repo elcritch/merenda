@@ -236,6 +236,41 @@ suite "nimkit text storage":
       check run.attributes == accent
     check count == 1
 
+  test "compact run builder preserves normalized storage and shifted styles":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      original = @[
+        TextAttributeRun(range: initTextRange(0, 3), attributes: red),
+        TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+        TextAttributeRun(range: initTextRange(4, 5), attributes: blue),
+      ]
+    var compact: TextRunBuilder
+    for run in original:
+      compact.add(run.range, run.attributes)
+    let
+      expected = newTextStorage("αβγδε", original)
+      actual = newTextStorage("αβγδε", compact)
+    var expectedRuns, actualRuns: seq[TextAttributeRun]
+    for run in expected.runs:
+      expectedRuns.add run
+    for run in actual.runs:
+      actualRuns.add run
+    check actualRuns == expectedRuns
+    for index in 0 ..< actual.len:
+      check actual.attributesAt(index) == expected.attributesAt(index)
+
+    var first, second: TextRunBuilder
+    first.add(initTextRange(0, 1), red)
+    second.add(initTextRange(0, 1), red)
+    second.add(initTextRange(1, 1), blue)
+    first.append(second, 1)
+    check first.len == 2
+    check first[0] == TextAttributeRun(range: initTextRange(0, 2), attributes: red)
+    check first[1] == TextAttributeRun(range: initTextRange(2, 1), attributes: blue)
+    expect ValueError:
+      first.append(first, 0)
+
   test "attribute run lookups preserve Unicode ranges and default gaps":
     let
       accent = defaultTextAttributes(color(0.2, 0.6, 0.4), 14.0)

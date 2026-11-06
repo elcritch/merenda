@@ -35,6 +35,11 @@ type
     # successive streamed edits move only the runs between changed ranges.
     before, after: seq[TextStyleRun]
 
+  TextRunBuilder* = object
+    ## Compact, value-owned attributed runs assembled before storage creation.
+    runs: seq[TextStyleRun]
+    styles: seq[TextAttributes]
+
   TextLayoutSource* = object
     ## Detached value data for background layout; contains no storage references.
     bytes: string
@@ -399,6 +404,60 @@ proc endEditing*(storage: TextStorage) =
   if storage.xEditingDepth == 0:
     storage.processEditing()
 
+func len*(builder: TextRunBuilder): int =
+  builder.runs.len
+
+func rangeAt*(builder: TextRunBuilder, index: int): TextRange =
+  ## Return a run's range without materializing its attributes.
+  builder.runs[index].range
+
+func `[]`*(builder: TextRunBuilder, index: int): TextAttributeRun =
+  let run = builder.runs[index]
+  TextAttributeRun(range: run.range, attributes: builder.styles[int(run.styleId)])
+
+iterator items*(builder: TextRunBuilder): TextAttributeRun =
+  for run in builder.runs:
+    yield
+      TextAttributeRun(range: run.range, attributes: builder.styles[int(run.styleId)])
+
+proc internStyle(builder: var TextRunBuilder, attributes: TextAttributes): uint32 =
+  for index, existing in builder.styles:
+    if existing == attributes:
+      return index.uint32
+  result = builder.styles.len.uint32
+  builder.styles.add attributes
+
+proc addRun(builder: var TextRunBuilder, range: TextRange, styleId: uint32) =
+  if builder.runs.len > 0 and builder.runs[^1].styleId == styleId and
+      builder.runs[^1].range.maxIndex == int(range.location):
+    builder.runs[^1].range.length =
+      (int(builder.runs[^1].range.length) + int(range.length)).Natural
+  else:
+    builder.runs.add TextStyleRun(range: range, styleId: styleId)
+
+proc add*(builder: var TextRunBuilder, range: TextRange, attributes: TextAttributes) =
+  ## Append a run, coalescing contiguous runs with equal attributes.
+  if builder.runs.len > 0 and builder.runs[^1].range.maxIndex == int(range.location) and
+      builder.styles[int(builder.runs[^1].styleId)] == attributes:
+    builder.runs[^1].range.length =
+      (int(builder.runs[^1].range.length) + int(range.length)).Natural
+  else:
+    builder.addRun(range, builder.internStyle(attributes))
+
+proc append*(builder: var TextRunBuilder, source: TextRunBuilder, offset: int) =
+  ## Append another builder's runs, shifting their rune locations by offset.
+  ## The source must be a different builder.
+  if (addr builder) == (unsafeAddr source):
+    raise newException(ValueError, "cannot append a run builder to itself")
+  var ids = newSeq[uint32](source.styles.len)
+  for index, attributes in source.styles:
+    ids[index] = builder.internStyle(attributes)
+  for run in source.runs:
+    builder.addRun(
+      initTextRange(int(run.range.location) + offset, int(run.range.length)),
+      ids[int(run.styleId)],
+    )
+
 proc styleId(storage: TextStorage, attributes: TextAttributes): uint32 =
   for index, existing in storage.xStyles:
     if storage.xStyleUses[index] >= 0 and existing == attributes:
@@ -631,6 +690,22 @@ proc newTextStorage*(
   result.xSnapshot = newTextSnapshot(value)
   for run in runs:
     result.xRuns.add result.styleRun(run.range, run.attributes)
+  result.xMaterialized = true
+  if result.xSnapshot.runeLength > 0 and result.xRuns.len == 0:
+    result.xRuns.add result.styleRun(
+      initTextRange(0, result.xSnapshot.runeLength), defaultTextAttributes()
+    )
+  result.normalizeRuns()
+
+proc newTextStorage*(value: sink string, runs: sink TextRunBuilder): TextStorage =
+  ## Creates storage directly from compact attributed runs.
+  ## Runs are normalized and clamped without emitting edit events.
+  result = TextStorage()
+  discard result.withProto()
+  result.xSnapshot = newTextSnapshot(value)
+  result.xRuns = TextStyleRuns(before: runs.runs)
+  result.xStyles = runs.styles
+  result.xStyleUses = newSeq[int](result.xStyles.len)
   result.xMaterialized = true
   if result.xSnapshot.runeLength > 0 and result.xRuns.len == 0:
     result.xRuns.add result.styleRun(

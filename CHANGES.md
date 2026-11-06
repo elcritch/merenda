@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Reduce terminal search coordinate storage to row mappings and sparse wide-cell
+  or combining-cell exceptions while preserving literal and regular-expression
+  searches across screen and scrollback.
+- Transfer compact interned text styles to background layout workers without
+  expanding every style run and re-interning it on the worker.
+- Wrap Markdown table cells using UTF-8 and word ranges instead of per-rune
+  attribute records, and build overflowing table storage from the table alone.
+- Borrow SynEdit tokenizer input during synchronous tokenization instead of
+  retaining a temporary owning string copy.
+- Intern Markdown builder attributes while assembling text and transfer compact
+  style runs into TextStorage without expanding them at the handoff.
+
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
   Moe engine integration and uses the shared module for content presentation.
