@@ -7,7 +7,7 @@ import sigils/core
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
 import ../nimkit/text/searchmatching
-import ./terminalinput
+import ./[hintsmode, terminalinput]
 
 export terminalinput
 
@@ -285,6 +285,25 @@ proc searchVisible*(view: KosmoTerminalView): bool =
 func searchMatchCount*(view: KosmoTerminalView): int =
   if not view.isNil:
     result = view.search.searchMatchCount()
+
+proc showHintMode*(
+    view: KosmoTerminalView,
+    kind: KosmoHintKind,
+    action: KosmoHintAction,
+    activation: KosmoHintActivation,
+): bool {.discardable.} =
+  ## Present hint markers over the terminal's visible screen and run `action`
+  ## on the selected snippet. Insertion types the text into the terminal.
+  if view.isNil or view.session().isNil:
+    return false
+  let info = view.session().screenInfo()
+  presentKosmoHints(view, view.collectMonoTextHints(kind, info.currentDirectory)) do(
+    hint: KosmoHint
+  ):
+    if action == khaInsert:
+      discard view.pasteText(hint.text)
+    else:
+      discard runKosmoHintAction(hint, action, activation)
 
 func selectedSearchMatch*(view: KosmoTerminalView): int =
   if view.isNil:

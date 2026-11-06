@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Add Kitty-style hint mode to Kosmo: `F6` overlays labeled markers on visible
+  links and opens the picked one in a browser, `Shift-F6` opens visible file
+  locations (including `path:line` and Nim's `path(line, col)`) in the editor,
+  `Alt-F6` and `Ctrl-F6` copy visible words and hexadecimal hashes, and
+  `Ctrl-Shift-F6` types a visible file location into the focused terminal.
+  Markers are prefix-free with the shortest labels nearest the cursor, Escape
+  or any foreign key cancels, and every action is configurable in Settings. The
+  feature works across Moe editors, terminal tabs, Markdown previews, the Help
+  and GitHub readers, and the Git diff's summary and expanded file sections
+  without touching editor state such as LSP hover, completion, or Moe registers.
+
+- Open links on Linux and Windows: the workspace's URL operation only
+  supported macOS and silently did nothing elsewhere. It now launches the
+  platform's default handler — `xdg-open` or `gio open` on Linux and the BSDs,
+  `start` on Windows — detached from the event loop, which also makes terminal
+  and GitHub reader links open on those platforms.
+
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
   Moe engine integration and uses the shared module for content presentation.

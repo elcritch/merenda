@@ -58,6 +58,10 @@ proc syncKeyModeChoices(controller: KosmoDockController)
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusToolToolbar(controller: KosmoDockController): bool
+proc showHintMode(
+  controller: KosmoDockController, kind: KosmoHintKind, action: KosmoHintAction
+): bool
+
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc focusFromSidebar(controller: KosmoDockController): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
@@ -3756,6 +3760,16 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       # Route through the pane as well as the content view so pane-hosted tools
       # in detached windows can toggle focus to their toolbars.
       return controller.focusToolToolbar()
+    of KosmoHintOpenUrlAction:
+      return controller.showHintMode(khkLink, khaOpen)
+    of KosmoHintOpenPathAction:
+      return controller.showHintMode(khkPath, khaOpen)
+    of KosmoHintCopyWordAction:
+      return controller.showHintMode(khkWord, khaCopy)
+    of KosmoHintCopyHashAction:
+      return controller.showHintMode(khkHash, khaCopy)
+    of KosmoHintInsertAction:
+      return controller.showHintMode(khkPath, khaInsert)
     of KosmoCopyAction:
       group.editorView.editorCopy()
     of KosmoCutAction:
@@ -3948,6 +3962,55 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
       invocation.setResult(markdownView.handleMarkdownNavigationKey(event))
   discard
     result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
+
+proc showHintMode(
+    view: KosmoEditorView,
+    kind: KosmoHintKind,
+    action: KosmoHintAction,
+    activation: KosmoHintActivation,
+): bool {.discardable.} =
+  ## Present hint markers over the editor's visible text area. The scan skips
+  ## Moe's tab line, status area, and line-number gutters, and only reads the
+  ## rendered grid, so register, search, hover, and completion state stays
+  ## untouched.
+  if view.isNil:
+    return false
+  let area = view.editor.gridTextArea()
+  presentKosmoHints(
+    view,
+    view.collectMonoTextHints(
+      kind,
+      view.editor.workingDirectory(),
+      area.firstRow,
+      area.lastRow,
+      area.firstColumn,
+    ),
+  ) do(hint: KosmoHint):
+    discard runKosmoHintAction(hint, action, activation)
+
+proc markdownHintWorkingDirectory(view: KosmoMarkdownView): string =
+  if not view.editorView.isNil:
+    view.editorView[].editor.workingDirectory()
+  else:
+    getCurrentDir()
+
+proc showHintMode(
+    view: KosmoMarkdownView,
+    kind: KosmoHintKind,
+    action: KosmoHintAction,
+    activation: KosmoHintActivation,
+): bool {.discardable.} =
+  ## Present hint markers over rendered Markdown text. Embedded code blocks
+  ## are separate text views and stay unhinted for now.
+  if view.isNil:
+    return false
+  let
+    textView = view.textView()
+    workingDirectory = view.markdownHintWorkingDirectory()
+  presentKosmoHints(textView, textView.collectTextViewHints(kind, workingDirectory)) do(
+    hint: KosmoHint
+  ):
+    discard runKosmoHintAction(hint, action, activation)
 
 proc openHelpDocument(view: KosmoEditorView): bool =
   if view.isNil or view.dockGroup.isNil or view.tabsDelegate.dockController.isNil:
