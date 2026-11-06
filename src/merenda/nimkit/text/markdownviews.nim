@@ -13,7 +13,7 @@ import
 import std/hashes
 from pkg/pixie import resize
 
-from figdraw import SystemTypeface, len, pairs
+from figdraw import SystemTypeface, Utf8Runes, len, pairs, `[]`
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
@@ -237,16 +237,20 @@ type
     mtaCenter
     mtaRight
 
-  MarkdownTableRune = object
-    value: Rune
-    attributes: TextAttributes
-    image: ImageResource
-    imageDisplaySize: Size
-
   MarkdownTableCell = object
-    content: seq[MarkdownTableRune]
+    content: Utf8Runes
+    runs: seq[TextAttributeRun]
+    images: seq[MarkdownImagePresentation]
     alignment: MarkdownTableAlignment
     paddingAttributes: TextAttributes
+
+  MarkdownTableWord = object
+    start, stop: int
+    space: int # Index of the last whitespace preceding this word, or -1.
+
+  MarkdownTableLine = object
+    words: seq[MarkdownTableWord]
+    width: int
 
   MarkdownTableRow = object
     cells: seq[MarkdownTableCell]
@@ -1037,43 +1041,33 @@ func tableAlignment(cell: markdownParser.Token): MarkdownTableAlignment =
   of "right": mtaRight
   else: mtaLeft
 
-proc tableRunes(rendered: MarkdownBuilder): seq[MarkdownTableRune] =
-  let runes = utf8RunesForText(rendered.text)
-  var
-    runIndex = 0
-    imageIndex = 0
-  for index, value in runes:
-    while runIndex < rendered.runs.high and
-        index >= rendered.runs[runIndex].range.maxIndex:
-      inc runIndex
-    while imageIndex < rendered.images.len and
-        rendered.images[imageIndex].range.maxIndex <= index:
-      inc imageIndex
-    var tableRune = MarkdownTableRune(
-      value: value,
-      attributes:
-        if runIndex < rendered.runs.len:
-          rendered.runs[runIndex].attributes
-        else:
-          rendered.style.bodyAttributes(),
-    )
-    if imageIndex < rendered.images.len and
-        int(rendered.images[imageIndex].range.location) <= index and
-        rendered.images[imageIndex].range.maxIndex > index:
-      tableRune.image = rendered.images[imageIndex].image
-      tableRune.imageDisplaySize = rendered.images[imageIndex].displaySize
-    result.add tableRune
+func tableAttributes(cell: MarkdownTableCell, index: int): TextAttributes =
+  var low = 0
+  var high = cell.runs.len
+  while low < high:
+    let middle = (low + high) div 2
+    if cell.runs[middle].range.maxIndex <= index:
+      low = middle + 1
+    else:
+      high = middle
+  if low < cell.runs.len:
+    cell.runs[low].attributes
+  else:
+    cell.paddingAttributes
 
-func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
+func tableWhitespace(cell: MarkdownTableCell, index: int, value: Rune): bool =
+  value.isWhiteSpace and not cell.tableAttributes(index).hasAttachment
+
+func naturalTableCellWidth(cell: MarkdownTableCell): int =
   var
     lineWidth = 0
     pendingSpace = false
-  for unit in content:
-    if unit.value == Rune('\n'):
+  for index, value in cell.content:
+    if value == Rune('\n'):
       result = max(result, lineWidth)
       lineWidth = 0
       pendingSpace = false
-    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
+    elif cell.tableWhitespace(index, value):
       pendingSpace = lineWidth > 0
     else:
       if pendingSpace:
@@ -1082,72 +1076,56 @@ func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
       pendingSpace = false
   max(result, lineWidth)
 
-func minimumTableCellWidth(content: openArray[MarkdownTableRune]): int =
+func minimumTableCellWidth(cell: MarkdownTableCell): int =
   var wordWidth = 0
-  for unit in content:
-    if unit.value == Rune('\n') or
-        (unit.value.isWhiteSpace and not unit.attributes.hasAttachment):
+  for index, value in cell.content:
+    if value == Rune('\n') or cell.tableWhitespace(index, value):
       result = max(result, wordWidth)
       wordWidth = 0
     else:
       inc wordWidth
   result = max(result, wordWidth)
   result =
-    max(result, min(content.naturalTableCellWidth(), MarkdownTablePreferredCellWidth))
-
-proc finishTableLine(
-    lines: var seq[seq[MarkdownTableRune]],
-    line: var seq[MarkdownTableRune],
-    hasPendingSpace: var bool,
-) =
-  lines.add move line
-  line = @[]
-  hasPendingSpace = false
+    max(result, min(cell.naturalTableCellWidth(), MarkdownTablePreferredCellWidth))
 
 proc appendTableWord(
-    lines: var seq[seq[MarkdownTableRune]],
-    line: var seq[MarkdownTableRune],
-    word: var seq[MarkdownTableRune],
-    pendingSpace: MarkdownTableRune,
-    hasPendingSpace: var bool,
-    limit: int,
+    lines: var seq[MarkdownTableLine],
+    line: var MarkdownTableLine,
+    start, stop, pendingSpace, limit: int,
 ) =
-  if word.len == 0:
+  if start >= stop:
     return
-  let spacing = if line.len > 0 and hasPendingSpace: 1 else: 0
-  if line.len > 0 and line.len + spacing + word.len > limit:
-    lines.finishTableLine(line, hasPendingSpace)
+  let spacing = if line.width > 0 and pendingSpace >= 0: 1 else: 0
+  if line.width > 0 and line.width + spacing + stop - start > limit:
+    lines.add move line
+    line = MarkdownTableLine()
+  let space = if line.width > 0: pendingSpace else: -1
+  line.words.add MarkdownTableWord(start: start, stop: stop, space: space)
+  line.width += stop - start + (if space >= 0: 1 else: 0)
 
-  if line.len > 0 and hasPendingSpace:
-    line.add pendingSpace
-  line.add word
-  word = @[]
-  hasPendingSpace = false
-
-proc wrapTableCell(
-    content: openArray[MarkdownTableRune], width: int
-): seq[seq[MarkdownTableRune]] =
+proc wrapTableCell(cell: MarkdownTableCell, width: int): seq[MarkdownTableLine] =
   let limit = max(width, 1)
   var
-    line: seq[MarkdownTableRune]
-    word: seq[MarkdownTableRune]
-    pendingSpace: MarkdownTableRune
-    hasPendingSpace = false
-
-  for unit in content:
-    if unit.value == Rune('\n'):
-      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-      result.finishTableLine(line, hasPendingSpace)
-    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
-      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-      if line.len > 0:
-        pendingSpace = unit
-        pendingSpace.value = Rune(' ')
-        hasPendingSpace = true
-    else:
-      word.add unit
-  result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-  if line.len > 0 or result.len == 0:
+    line: MarkdownTableLine
+    wordStart = -1
+    pendingSpace = -1
+  for index, value in cell.content:
+    if value == Rune('\n') or cell.tableWhitespace(index, value):
+      if wordStart >= 0:
+        result.appendTableWord(line, wordStart, index, pendingSpace, limit)
+        wordStart = -1
+        pendingSpace = -1
+      if value == Rune('\n'):
+        result.add move line
+        line = MarkdownTableLine()
+        pendingSpace = -1
+      elif line.width > 0:
+        pendingSpace = index
+    elif wordStart < 0:
+      wordStart = index
+  if wordStart >= 0:
+    result.appendTableWord(line, wordStart, cell.content.len, pendingSpace, limit)
+  if line.width > 0 or result.len == 0:
     result.add move line
 
 func fittedTableWidths(
@@ -1216,27 +1194,15 @@ func fittedTableWidths(
     if not distributed:
       break
 
-proc addTableRunes(
-    builder: var MarkdownBuilder, content: openArray[MarkdownTableRune]
-) =
-  for unit in content:
-    let start = builder.runeLength
-    builder.add($unit.value, unit.attributes)
-    if not unit.image.isNil:
-      builder.images.add MarkdownImagePresentation(
-        range: initTextRange(start, 1),
-        image: unit.image,
-        displaySize: unit.imageDisplaySize,
-      )
-
 proc addTableCellLine(
     builder: var MarkdownBuilder,
-    line: openArray[MarkdownTableRune],
+    cell: MarkdownTableCell,
+    line: MarkdownTableLine,
     width: int,
     alignment: MarkdownTableAlignment,
     paddingAttributes: TextAttributes,
 ) =
-  let padding = max(width - line.len, 0)
+  let padding = max(width - line.width, 0)
   var leftPadding, rightPadding: int
   case alignment
   of mtaLeft:
@@ -1248,7 +1214,22 @@ proc addTableCellLine(
     leftPadding = padding
   if leftPadding > 0:
     builder.add(" ".repeat(leftPadding), paddingAttributes)
-  builder.addTableRunes(line)
+  for word in line.words:
+    if word.space >= 0:
+      builder.add(" ", cell.tableAttributes(word.space))
+    for index in word.start ..< word.stop:
+      let
+        start = builder.runeLength
+        attributes = cell.tableAttributes(index)
+      builder.add($cell.content[index], attributes)
+      if attributes.hasAttachment:
+        for image in cell.images:
+          if int(image.range.location) <= index and image.range.maxIndex > index:
+            builder.images.add MarkdownImagePresentation(
+              range: initTextRange(start, 1),
+              image: image.image,
+              displaySize: image.displaySize,
+            )
   if rightPadding > 0:
     builder.add(" ".repeat(rightPadding), paddingAttributes)
 
@@ -1284,7 +1265,9 @@ proc renderTable(
         renderedCell.renderInlineChildren(cell, rowAttributes)
         builder.imageUrls.add(renderedCell.imageUrls)
         renderedRow.cells.add MarkdownTableCell(
-          content: renderedCell.tableRunes(),
+          content: utf8RunesForText(renderedCell.text),
+          runs: move renderedCell.runs,
+          images: move renderedCell.images,
           alignment: cell.tableAlignment(),
           paddingAttributes: rowAttributes,
         )
@@ -1301,10 +1284,8 @@ proc renderTable(
     minimumWidths = newSeq[int](columnCount)
   for row in rows:
     for index, cell in row.cells:
-      naturalWidths[index] =
-        max(naturalWidths[index], cell.content.naturalTableCellWidth())
-      minimumWidths[index] =
-        max(minimumWidths[index], cell.content.minimumTableCellWidth())
+      naturalWidths[index] = max(naturalWidths[index], cell.naturalTableCellWidth())
+      minimumWidths[index] = max(minimumWidths[index], cell.minimumTableCellWidth())
   let widths = naturalWidths.fittedTableWidths(
     minimumWidths,
     if builder.tableColumnLimit > 0:
@@ -1315,7 +1296,10 @@ proc renderTable(
   var tableColumnWidth = MarkdownTableSeparatorWidth * (columnCount - 1)
   for width in widths:
     tableColumnWidth += width
-  let tableStart = builder.runeLength
+  let
+    tableStart = builder.runeLength
+    tableStartByte = builder.text.len
+    tableStartRun = max(builder.runs.len - 1, 0)
   var separatorAttributes = tableAttributes
   separatorAttributes.foregroundColor = builder.style.ruleColor
 
@@ -1323,14 +1307,14 @@ proc renderTable(
     if rowIndex > 0:
       builder.add("\n", tableAttributes)
     var
-      wrappedCells = newSeq[seq[seq[MarkdownTableRune]]](columnCount)
+      wrappedCells = newSeq[seq[MarkdownTableLine]](columnCount)
       rowHeight = 1
     for index in 0 ..< columnCount:
       if index < row.cells.len:
-        wrappedCells[index] = row.cells[index].content.wrapTableCell(widths[index])
+        wrappedCells[index] = row.cells[index].wrapTableCell(widths[index])
         rowHeight = max(rowHeight, wrappedCells[index].len)
       else:
-        wrappedCells[index] = @[newSeq[MarkdownTableRune]()]
+        wrappedCells[index] = @[MarkdownTableLine()]
 
     for lineIndex in 0 ..< rowHeight:
       if lineIndex > 0:
@@ -1351,8 +1335,9 @@ proc renderTable(
               row.cells[columnIndex].paddingAttributes
             else:
               tableAttributes
-        if lineExists:
+        if lineExists and cellExists:
           builder.addTableCellLine(
+            row.cells[columnIndex],
             wrappedCells[columnIndex][lineIndex],
             widths[columnIndex],
             alignment,
@@ -1372,8 +1357,18 @@ proc renderTable(
   var presentation =
     MarkdownTablePresentation(range: tableRange, overflowing: overflowing)
   if overflowing:
-    presentation.storage =
-      newTextStorage(builder.text, builder.runs).sliceTextStorage(tableRange)
+    var tableRuns: seq[TextAttributeRun]
+    for index in tableStartRun ..< builder.runs.len:
+      let
+        run = builder.runs[index]
+        start = max(int(run.range.location), tableStart)
+        stop = min(run.range.maxIndex, builder.runeLength)
+      if stop > start:
+        tableRuns.add TextAttributeRun(
+          range: initTextRange(start - tableStart, stop - start),
+          attributes: run.attributes,
+        )
+    presentation.storage = newTextStorage(builder.text[tableStartByte .. ^1], tableRuns)
   builder.tables.add move presentation
   builder.hasTables = true
 

@@ -1346,8 +1346,7 @@ mystery value
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let source =
-      """
+    let source = """
 Before `inline`.
 
 ```nim
@@ -1487,8 +1486,7 @@ echo "fenced"
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
-    let source =
-      """
+    let source = """
 1. Install dependencies:
 
    ```bash
@@ -1663,6 +1661,34 @@ Press <kbd>Enter</kbd>.
     check storage.attributesFor("link").link == "https://example.test"
     check storage.attributesFor("│").foregroundColor == style.ruleColor
 
+  test "GFM table Unicode styling and attachments survive cell wrapping":
+    let image = newImageResourceFromFile(TestImagePath)
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      image
+    let view = newMarkdownView(
+      "| Name | Details |\n| --- | --- |\n" &
+        "| café 😀 | [linked Ω](https://example.test) ![Alt](asset:logo) |",
+      frame = rect(0, 0, 320, 240),
+      imageLoader = loader,
+    )
+    require view.waitForMarkdownParsing()
+    let storage = view.textStorage()
+    check storage.stringValue().contains("café 😀")
+    check storage.attributesFor("linked Ω").link == "https://example.test"
+    var attachments = 0
+    for run in storage.runs:
+      if run.attributes.hasAttachment:
+        inc attachments
+        check run.attributes.attachment.identifier == "markdown-image:asset:logo"
+    check attachments == 1
+    let renders = buildRenders(view)
+    require DefaultDrawLevel in renders
+    var images = 0
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkImage:
+        inc images
+    check images == 1
+
   test "GFM tables share bounded columns and wrap long cells":
     let
       storage = markdownTextStorage(
@@ -1770,6 +1796,10 @@ Press <kbd>Enter</kbd>.
       localTableRect =
         tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
 
+    check tableTextView.textStorage().stringValue() == rendered.runeSubStr(tableStart)
+    check tableTextView.textStorage().attributesFor("CPU p95") ==
+      view.textStorage().attributesFor("CPU p95")
+
     check paragraphRects.len > 1
     for rect in paragraphRects:
       check rect.maxX <= viewportWidth + 0.001'f32
@@ -1865,8 +1895,7 @@ Press <kbd>Enter</kbd>.
 
   test "GFM tables reflow once the Markdown viewport settles":
     let
-      source =
-        """
+      source = """
 | Mode | Shortcut | Notes |
 | :--- | :------: | :---- |
 | Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |
