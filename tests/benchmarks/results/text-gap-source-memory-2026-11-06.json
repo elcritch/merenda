@@ -1,0 +1,222 @@
+{
+  "measurement": "Three alternating fresh-process pairs; 8 MiB gap-buffer source; live macOS malloc-zone heap, RSS, peak process RSS. precache explicitly calls textSnapshot before payload creation to reproduce the previous caching behavior in the same fixed binary; it is not a separate baseline build. snapshotCached is an explicit size control.",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0 nim ic -d:release --mm:arc; repository config",
+  "command": [
+    "/tmp/merenda-gap-source",
+    "8388608",
+    "[precache]"
+  ],
+  "benchmarkSha256": "b9c1df205f7e299b938a2f87ed9da6fe091ae134445f55d0e49b27ded78282b0",
+  "samples": [
+    {
+      "mode": "fixed",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17230048,
+          "rssBytes": 24117248,
+          "peakRssBytes": 24150016
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 17410272,
+          "rssBytes": 49954816,
+          "peakRssBytes": 49954816
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26077520,
+          "rssBytes": 50053120,
+          "peakRssBytes": 50053120
+        }
+      ]
+    },
+    {
+      "mode": "precache",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17228576,
+          "rssBytes": 24018944,
+          "peakRssBytes": 24018944
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        }
+      ]
+    },
+    {
+      "mode": "fixed",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17228512,
+          "rssBytes": 24018944,
+          "peakRssBytes": 24018944
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 17310432,
+          "rssBytes": 49528832,
+          "peakRssBytes": 49528832
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26043216,
+          "rssBytes": 49577984,
+          "peakRssBytes": 49577984
+        }
+      ]
+    },
+    {
+      "mode": "precache",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17228576,
+          "rssBytes": 24018944,
+          "peakRssBytes": 24018944
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        }
+      ]
+    },
+    {
+      "mode": "fixed",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17228512,
+          "rssBytes": 24018944,
+          "peakRssBytes": 24018944
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 17310432,
+          "rssBytes": 49528832,
+          "peakRssBytes": 49528832
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26043216,
+          "rssBytes": 49577984,
+          "peakRssBytes": 49577984
+        }
+      ]
+    },
+    {
+      "mode": "precache",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 8388608,
+          "heapBytes": 17228576,
+          "rssBytes": 24018944,
+          "peakRssBytes": 24018944
+        },
+        {
+          "stage": "payloadReleased",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        },
+        {
+          "stage": "snapshotCached",
+          "sourceBytes": 8388608,
+          "heapBytes": 26076048,
+          "rssBytes": 58261504,
+          "peakRssBytes": 58261504
+        }
+      ]
+    }
+  ],
+  "medians": [
+    {
+      "stage": "storage",
+      "fixed": {
+        "sourceBytes": 8388608,
+        "heapBytes": 17228512,
+        "rssBytes": 24018944,
+        "peakRssBytes": 24018944
+      },
+      "precache": {
+        "sourceBytes": 8388608,
+        "heapBytes": 17228576,
+        "rssBytes": 24018944,
+        "peakRssBytes": 24018944
+      }
+    },
+    {
+      "stage": "payloadReleased",
+      "fixed": {
+        "sourceBytes": 8388608,
+        "heapBytes": 17310432,
+        "rssBytes": 49528832,
+        "peakRssBytes": 49528832
+      },
+      "precache": {
+        "sourceBytes": 8388608,
+        "heapBytes": 26076048,
+        "rssBytes": 58261504,
+        "peakRssBytes": 58261504
+      }
+    },
+    {
+      "stage": "snapshotCached",
+      "fixed": {
+        "sourceBytes": 8388608,
+        "heapBytes": 26043216,
+        "rssBytes": 49577984,
+        "peakRssBytes": 49577984
+      },
+      "precache": {
+        "sourceBytes": 8388608,
+        "heapBytes": 26076048,
+        "rssBytes": 58261504,
+        "peakRssBytes": 58261504
+      }
+    }
+  ]
+}

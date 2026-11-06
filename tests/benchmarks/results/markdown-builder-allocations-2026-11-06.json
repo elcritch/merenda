@@ -1,0 +1,1002 @@
+{
+  "baseVariant": "first compact-table batch, before compact builder",
+  "builderVariant": "compact style-ID run builder",
+  "platform": "macOS 15.7.9 arm64",
+  "method": "One fresh process per case, classic Nim c -d:release --mm:arc, identical dependencies and checkpoint harness; MallocStackLogging=1, paused after storage or first render; leaks --fullStackHistory --outputGraph=<file> <pid>, malloc_history <file> -highWaterMark -callTree -invert -ignoreThreads -consolidateAllBySymbol and without -highWaterMark. Units reported by Apple malloc_history as MB/M/GB are preserved verbatim; its no-stack blocks and VM regions are separate.",
+  "limitations": [
+    "One traced run per case; logging overhead and allocation scheduling perturb memory and timings.",
+    "malloc_history reports a dynamically-enabled logging warning with 816 pre-existing unstacked blocks for storage and 805 blocks plus 9 VM regions for view; totals exclude unstacked allocations.",
+    "Process heap/RSS/high-water are separate from logged live allocation heap and VM, and do not identify retained objects.",
+    "Graphs and full call trees are local artifacts in /tmp/merenda-utf8-profile; graph files include full stack history and are not checked into the repository.",
+    "Per-sample targetStages includes measurements after the graph checkpoint (such as resized); these later stages are not represented in the captured graph."
+  ],
+  "checkpointHarness": "tests/benchmarks/markdownallocationprobe.nim",
+  "checkpointHarnessSha256": "40cc040bc837f2e8ebee9f68031837c3b8c3d32797bcb17501bde574ba24ed68",
+  "sourceFilesSha256": {
+    "base": {
+      "src/merenda/nimkit/text/markdownviews.nim": "55fb62e4afe2f848e50ca67e3113b89c7ca543c5b562410551a073ea04d4312b",
+      "src/merenda/nimkit/text/textlayout.nim": "6661b51307d820cc9669a8895999f7506bf1ec98b34d429590aeb44e7ed60177",
+      "src/merenda/nimkit/text/textlayoutworkers.nim": "50d187b0de767fe523661ad8b45d682633e80c905e4d47e6d2f8eaf63a4d0e82",
+      "src/merenda/nimkit/text/textstorage.nim": "afb3c7f056644eec03f47a25f2585fc3e423699a4e7d4e2503956ccb690d8570"
+    },
+    "builder": {
+      "src/merenda/nimkit/text/markdownviews.nim": "14bf322fec545ab4e7bb8f54ee8946088a8ae0228ce83333a3ba5ec4160e305e",
+      "src/merenda/nimkit/text/textstorage.nim": "8c319164b27b61d870dda3d18699e2597d28319b599e452423014c4ba66f1a1b",
+      "src/merenda/nimkit/text/textlayout.nim": "6661b51307d820cc9669a8895999f7506bf1ec98b34d429590aeb44e7ed60177",
+      "src/merenda/nimkit/text/textlayoutworkers.nim": "50d187b0de767fe523661ad8b45d682633e80c905e4d47e6d2f8eaf63a4d0e82"
+    }
+  },
+  "allocationSamples": [
+    {
+      "mode": "storage",
+      "count": 2000,
+      "version": "base",
+      "capturedAt": "storage",
+      "binarySha256": "6e6f869d74e467e27ea54d34d05a52b8d7955efdd0b96966004f62ed089ad266",
+      "graph": "/tmp/merenda-utf8-profile/storage-2000-after.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/storage-2000-after-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/storage-2000-after-live.txt",
+      "peakHeapVm": "28.9 MB",
+      "currentHeapVm": "1.5 MB",
+      "cumulativeHeapVm": "276.3 MB",
+      "allocationEvents": "2,111,186",
+      "liveCallTreeTotal": "757 (1.59M)",
+      "noStackBlocks": "816   total size: 183K",
+      "noStackVm": null,
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 746352,
+          "rssBytes": 7815168,
+          "peakRssBytes": 7815168,
+          "elapsedMs": 1
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 9812816,
+          "rssBytes": 58556416,
+          "peakRssBytes": 58556416,
+          "elapsedMs": 2659
+        }
+      ]
+    },
+    {
+      "mode": "storage",
+      "count": 2000,
+      "version": "builder",
+      "capturedAt": "storage",
+      "binarySha256": "280fd45b4f60d568b7943dfd4ea9b5108ee185cc576c96aadc3131f1d12aa480",
+      "graph": "/tmp/merenda-utf8-profile/storage-2000-builder.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/storage-2000-builder-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/storage-2000-builder-live.txt",
+      "peakHeapVm": "13.7 MB",
+      "currentHeapVm": "1.5 MB",
+      "cumulativeHeapVm": "227.7 MB",
+      "allocationEvents": "2,113,143",
+      "liveCallTreeTotal": "756 (1.59M)",
+      "noStackBlocks": "816   total size: 183K",
+      "noStackVm": null,
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 8044544,
+          "peakRssBytes": 8044544,
+          "elapsedMs": 2
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2131744,
+          "rssBytes": 28262400,
+          "peakRssBytes": 28262400,
+          "elapsedMs": 1219
+        }
+      ]
+    },
+    {
+      "mode": "view",
+      "count": 500,
+      "version": "base",
+      "capturedAt": "firstRender",
+      "binarySha256": "6e6f869d74e467e27ea54d34d05a52b8d7955efdd0b96966004f62ed089ad266",
+      "graph": "/tmp/merenda-utf8-profile/view-500-after.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/view-500-after-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/view-500-after-live.txt",
+      "peakHeapVm": "284.3 MB",
+      "currentHeapVm": "228.3 MB",
+      "cumulativeHeapVm": "43.4 GB",
+      "allocationEvents": "3,761,713",
+      "liveCallTreeTotal": "67934 (229M)",
+      "noStackBlocks": "805   total size: 70K",
+      "noStackVm": "9   total size: 160K",
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 489840,
+          "rssBytes": 8667136,
+          "peakRssBytes": 8667136,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 242968656,
+          "rssBytes": 462028800,
+          "peakRssBytes": 462028800,
+          "elapsedMs": 7557
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 243307824,
+          "rssBytes": 462438400,
+          "peakRssBytes": 462438400,
+          "elapsedMs": 7597
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 348908272,
+          "rssBytes": 589365248,
+          "peakRssBytes": 589365248,
+          "elapsedMs": 18344
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 308610208,
+          "rssBytes": 598736896,
+          "peakRssBytes": 598736896,
+          "elapsedMs": 18394
+        }
+      ]
+    },
+    {
+      "mode": "view",
+      "count": 500,
+      "version": "builder",
+      "capturedAt": "firstRender",
+      "binarySha256": "280fd45b4f60d568b7943dfd4ea9b5108ee185cc576c96aadc3131f1d12aa480",
+      "graph": "/tmp/merenda-utf8-profile/view-500-builder.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/view-500-builder-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/view-500-builder-live.txt",
+      "peakHeapVm": "284.3 MB",
+      "currentHeapVm": "228.3 MB",
+      "cumulativeHeapVm": "43.38 GB",
+      "allocationEvents": "3,762,206",
+      "liveCallTreeTotal": "67964 (229M)",
+      "noStackBlocks": "805   total size: 70K",
+      "noStackVm": "9   total size: 160K",
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 484208,
+          "rssBytes": 7520256,
+          "peakRssBytes": 7520256,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 240296048,
+          "rssBytes": 378077184,
+          "peakRssBytes": 378077184,
+          "elapsedMs": 5753
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 241487696,
+          "rssBytes": 380452864,
+          "peakRssBytes": 380452864,
+          "elapsedMs": 5785
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 343062192,
+          "rssBytes": 519995392,
+          "peakRssBytes": 519995392,
+          "elapsedMs": 14262
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 306335888,
+          "rssBytes": 529383424,
+          "peakRssBytes": 529383424,
+          "elapsedMs": 14305
+        }
+      ]
+    }
+  ],
+  "untracedSamples": [
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6651904,
+          "peakRssBytes": 6651904,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2290000,
+          "rssBytes": 44367872,
+          "peakRssBytes": 44367872,
+          "elapsedMs": 131
+        }
+      ]
+    },
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "builder",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6602752,
+          "peakRssBytes": 6602752,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2519328,
+          "rssBytes": 22872064,
+          "peakRssBytes": 24428544,
+          "elapsedMs": 137
+        }
+      ]
+    },
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6651904,
+          "peakRssBytes": 6651904,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 135
+        }
+      ]
+    },
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "builder",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6602752,
+          "peakRssBytes": 6602752,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2123552,
+          "rssBytes": 22102016,
+          "peakRssBytes": 24100864,
+          "elapsedMs": 138
+        }
+      ]
+    },
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6651904,
+          "peakRssBytes": 6651904,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 132
+        }
+      ]
+    },
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "version": "builder",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6602752,
+          "peakRssBytes": 6602752,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2123552,
+          "rssBytes": 22102016,
+          "peakRssBytes": 24100864,
+          "elapsedMs": 136
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6389760,
+          "peakRssBytes": 6389760,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256566624,
+          "rssBytes": 334348288,
+          "peakRssBytes": 334348288,
+          "elapsedMs": 853
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257482640,
+          "rssBytes": 334774272,
+          "peakRssBytes": 334774272,
+          "elapsedMs": 854
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347147168,
+          "rssBytes": 438255616,
+          "peakRssBytes": 438255616,
+          "elapsedMs": 1159
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331330176,
+          "rssBytes": 438272000,
+          "peakRssBytes": 438272000,
+          "elapsedMs": 1161
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "builder",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6340608,
+          "peakRssBytes": 6340608,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257526176,
+          "rssBytes": 344522752,
+          "peakRssBytes": 344522752,
+          "elapsedMs": 879
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258447824,
+          "rssBytes": 345047040,
+          "peakRssBytes": 345047040,
+          "elapsedMs": 880
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347556320,
+          "rssBytes": 432717824,
+          "peakRssBytes": 432717824,
+          "elapsedMs": 1290
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331711072,
+          "rssBytes": 432734208,
+          "peakRssBytes": 432734208,
+          "elapsedMs": 1291
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6389760,
+          "peakRssBytes": 6389760,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256866144,
+          "rssBytes": 344686592,
+          "peakRssBytes": 344686592,
+          "elapsedMs": 896
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257807760,
+          "rssBytes": 348307456,
+          "peakRssBytes": 348307456,
+          "elapsedMs": 897
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347073952,
+          "rssBytes": 460701696,
+          "peakRssBytes": 460701696,
+          "elapsedMs": 1337
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331091072,
+          "rssBytes": 460718080,
+          "peakRssBytes": 460718080,
+          "elapsedMs": 1339
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "builder",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6340608,
+          "peakRssBytes": 6340608,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256614816,
+          "rssBytes": 348504064,
+          "peakRssBytes": 348504064,
+          "elapsedMs": 878
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257556432,
+          "rssBytes": 349143040,
+          "peakRssBytes": 349143040,
+          "elapsedMs": 879
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347109856,
+          "rssBytes": 455016448,
+          "peakRssBytes": 455016448,
+          "elapsedMs": 1313
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330996320,
+          "rssBytes": 455081984,
+          "peakRssBytes": 455081984,
+          "elapsedMs": 1315
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6389760,
+          "peakRssBytes": 6389760,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256457568,
+          "rssBytes": 336019456,
+          "peakRssBytes": 336019456,
+          "elapsedMs": 876
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257399184,
+          "rssBytes": 339673088,
+          "peakRssBytes": 339673088,
+          "elapsedMs": 877
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 346908064,
+          "rssBytes": 433799168,
+          "peakRssBytes": 433799168,
+          "elapsedMs": 1185
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330979968,
+          "rssBytes": 433815552,
+          "peakRssBytes": 433815552,
+          "elapsedMs": 1187
+        }
+      ]
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "version": "builder",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6340608,
+          "peakRssBytes": 6340608,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256717728,
+          "rssBytes": 335052800,
+          "peakRssBytes": 335052800,
+          "elapsedMs": 762
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257639376,
+          "rssBytes": 338640896,
+          "peakRssBytes": 338640896,
+          "elapsedMs": 764
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 346889696,
+          "rssBytes": 426377216,
+          "peakRssBytes": 426377216,
+          "elapsedMs": 1068
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330773088,
+          "rssBytes": 426409984,
+          "peakRssBytes": 426409984,
+          "elapsedMs": 1070
+        }
+      ]
+    }
+  ],
+  "untracedMedians": [
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "stage": "storage",
+      "base": {
+        "sourceBytes": 211871,
+        "renderedRunes": 146163,
+        "heapBytes": 2058064,
+        "rssBytes": 43974656,
+        "peakRssBytes": 43974656,
+        "elapsedMs": 132
+      },
+      "builder": {
+        "sourceBytes": 211871,
+        "renderedRunes": 146163,
+        "heapBytes": 2123552,
+        "rssBytes": 22102016,
+        "peakRssBytes": 24100864,
+        "elapsedMs": 137
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "layout",
+      "base": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 256566624,
+        "rssBytes": 336019456,
+        "peakRssBytes": 336019456,
+        "elapsedMs": 876
+      },
+      "builder": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 256717728,
+        "rssBytes": 344522752,
+        "peakRssBytes": 344522752,
+        "elapsedMs": 878
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "firstRender",
+      "base": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 257482640,
+        "rssBytes": 339673088,
+        "peakRssBytes": 339673088,
+        "elapsedMs": 877
+      },
+      "builder": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 257639376,
+        "rssBytes": 345047040,
+        "peakRssBytes": 345047040,
+        "elapsedMs": 879
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "resized",
+      "base": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 347073952,
+        "rssBytes": 438255616,
+        "peakRssBytes": 438255616,
+        "elapsedMs": 1185
+      },
+      "builder": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 347109856,
+        "rssBytes": 432717824,
+        "peakRssBytes": 432717824,
+        "elapsedMs": 1290
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "released",
+      "base": {
+        "sourceBytes": 31300,
+        "renderedRunes": 0,
+        "heapBytes": 331091072,
+        "rssBytes": 438272000,
+        "peakRssBytes": 438272000,
+        "elapsedMs": 1187
+      },
+      "builder": {
+        "sourceBytes": 31300,
+        "renderedRunes": 0,
+        "heapBytes": 330996320,
+        "rssBytes": 432734208,
+        "peakRssBytes": 432734208,
+        "elapsedMs": 1291
+      }
+    }
+  ],
+  "captureDriver": "tests/benchmarks/capture_allocations.py"
+}

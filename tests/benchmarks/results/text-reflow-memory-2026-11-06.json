@@ -1,0 +1,1038 @@
+{
+  "baselineRevision": "24896588",
+  "afterRevision": "8cd707d5 plus uncommitted UTF-8 changes",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0, nim c -d:release --mm:arc; repository config; same deps",
+  "benchmarkSha256": "291013e57583bb2914e259a58bece7ce5c69f776ca72cd296dea1fee0864a02a",
+  "measurement": "Fresh processes, alternating before/after; live malloc-zone heap, RSS and process high-water RSS; no native window",
+  "samples": [
+    {
+      "version": "before",
+      "sample": 1,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-before",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1338768,
+          "rssBytes": 6946816,
+          "peakRssBytes": 6946816,
+          "elapsedMs": 0
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 85835008,
+          "rssBytes": 142311424,
+          "peakRssBytes": 142311424,
+          "elapsedMs": 377
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 102768960,
+          "rssBytes": 187236352,
+          "peakRssBytes": 187236352,
+          "elapsedMs": 707
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 102791488,
+          "rssBytes": 190087168,
+          "peakRssBytes": 190087168,
+          "elapsedMs": 1032
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 103099200,
+          "rssBytes": 194560000,
+          "peakRssBytes": 194560000,
+          "elapsedMs": 1350
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 103104320,
+          "rssBytes": 195854336,
+          "peakRssBytes": 195854336,
+          "elapsedMs": 1665
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 103127360,
+          "rssBytes": 195870720,
+          "peakRssBytes": 195870720,
+          "elapsedMs": 1983
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 103127360,
+          "rssBytes": 195903488,
+          "peakRssBytes": 195903488,
+          "elapsedMs": 2298
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 104039232,
+          "rssBytes": 197181440,
+          "peakRssBytes": 197197824,
+          "elapsedMs": 2613
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 104532288,
+          "rssBytes": 197263360,
+          "peakRssBytes": 197263360,
+          "elapsedMs": 2930
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 104554816,
+          "rssBytes": 197279744,
+          "peakRssBytes": 197279744,
+          "elapsedMs": 3245
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 104622400,
+          "rssBytes": 197312512,
+          "peakRssBytes": 197312512,
+          "elapsedMs": 3557
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 113494688,
+          "rssBytes": 205733888,
+          "peakRssBytes": 205733888,
+          "elapsedMs": 3873
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 100611072,
+          "rssBytes": 205733888,
+          "peakRssBytes": 205733888,
+          "elapsedMs": 3873
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-after",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1338768,
+          "rssBytes": 6881280,
+          "peakRssBytes": 6881280,
+          "elapsedMs": 0
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 85280000,
+          "rssBytes": 141803520,
+          "peakRssBytes": 141803520,
+          "elapsedMs": 391
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 102657344,
+          "rssBytes": 180649984,
+          "peakRssBytes": 180649984,
+          "elapsedMs": 733
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 103825216,
+          "rssBytes": 181223424,
+          "peakRssBytes": 181239808,
+          "elapsedMs": 1058
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 104242496,
+          "rssBytes": 195788800,
+          "peakRssBytes": 195788800,
+          "elapsedMs": 1379
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 104188224,
+          "rssBytes": 208601088,
+          "peakRssBytes": 208601088,
+          "elapsedMs": 1694
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 104448320,
+          "rssBytes": 212647936,
+          "peakRssBytes": 212647936,
+          "elapsedMs": 2015
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 104579392,
+          "rssBytes": 215465984,
+          "peakRssBytes": 215465984,
+          "elapsedMs": 2331
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 104569152,
+          "rssBytes": 217497600,
+          "peakRssBytes": 217497600,
+          "elapsedMs": 2648
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 104714560,
+          "rssBytes": 228950016,
+          "peakRssBytes": 228950016,
+          "elapsedMs": 2973
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 105061696,
+          "rssBytes": 231620608,
+          "peakRssBytes": 231620608,
+          "elapsedMs": 3288
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 106678592,
+          "rssBytes": 231620608,
+          "peakRssBytes": 231620608,
+          "elapsedMs": 3608
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 114044064,
+          "rssBytes": 243449856,
+          "peakRssBytes": 243449856,
+          "elapsedMs": 3926
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 101314560,
+          "rssBytes": 243449856,
+          "peakRssBytes": 243449856,
+          "elapsedMs": 3926
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-before",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1528720,
+          "rssBytes": 7815168,
+          "peakRssBytes": 7815168,
+          "elapsedMs": 1
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 94758144,
+          "rssBytes": 151142400,
+          "peakRssBytes": 151142400,
+          "elapsedMs": 392
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 104166720,
+          "rssBytes": 199507968,
+          "peakRssBytes": 199524352,
+          "elapsedMs": 728
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 104299840,
+          "rssBytes": 208322560,
+          "peakRssBytes": 208322560,
+          "elapsedMs": 1053
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 103859008,
+          "rssBytes": 212025344,
+          "peakRssBytes": 212025344,
+          "elapsedMs": 1374
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 104921920,
+          "rssBytes": 219971584,
+          "peakRssBytes": 219971584,
+          "elapsedMs": 1707
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 105920320,
+          "rssBytes": 221478912,
+          "peakRssBytes": 221478912,
+          "elapsedMs": 2030
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 105135424,
+          "rssBytes": 224313344,
+          "peakRssBytes": 224313344,
+          "elapsedMs": 2354
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 105340736,
+          "rssBytes": 225607680,
+          "peakRssBytes": 225607680,
+          "elapsedMs": 2712
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 115732288,
+          "rssBytes": 237633536,
+          "peakRssBytes": 237633536,
+          "elapsedMs": 3106
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 116073280,
+          "rssBytes": 237666304,
+          "peakRssBytes": 237666304,
+          "elapsedMs": 3442
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 117591360,
+          "rssBytes": 237666304,
+          "peakRssBytes": 237666304,
+          "elapsedMs": 3772
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 124925600,
+          "rssBytes": 254771200,
+          "peakRssBytes": 254771200,
+          "elapsedMs": 4098
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 112195072,
+          "rssBytes": 254771200,
+          "peakRssBytes": 254771200,
+          "elapsedMs": 4098
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-after",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1338768,
+          "rssBytes": 6881280,
+          "peakRssBytes": 6881280,
+          "elapsedMs": 0
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 86953728,
+          "rssBytes": 157663232,
+          "peakRssBytes": 157663232,
+          "elapsedMs": 373
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 105205568,
+          "rssBytes": 213745664,
+          "peakRssBytes": 213745664,
+          "elapsedMs": 701
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 105215808,
+          "rssBytes": 223559680,
+          "peakRssBytes": 223559680,
+          "elapsedMs": 1022
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 105254720,
+          "rssBytes": 226967552,
+          "peakRssBytes": 226967552,
+          "elapsedMs": 1346
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 104409920,
+          "rssBytes": 231686144,
+          "peakRssBytes": 231686144,
+          "elapsedMs": 1670
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 103753536,
+          "rssBytes": 232292352,
+          "peakRssBytes": 232292352,
+          "elapsedMs": 1991
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 104537920,
+          "rssBytes": 232980480,
+          "peakRssBytes": 232980480,
+          "elapsedMs": 2316
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 103842624,
+          "rssBytes": 236519424,
+          "peakRssBytes": 236519424,
+          "elapsedMs": 2634
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 103842624,
+          "rssBytes": 241074176,
+          "peakRssBytes": 241074176,
+          "elapsedMs": 2952
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 104691008,
+          "rssBytes": 247431168,
+          "peakRssBytes": 247431168,
+          "elapsedMs": 3276
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 104624448,
+          "rssBytes": 247431168,
+          "peakRssBytes": 247431168,
+          "elapsedMs": 3602
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 113119904,
+          "rssBytes": 256180224,
+          "peakRssBytes": 256180224,
+          "elapsedMs": 3934
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 100444672,
+          "rssBytes": 256180224,
+          "peakRssBytes": 256180224,
+          "elapsedMs": 3934
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-before",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1338768,
+          "rssBytes": 6946816,
+          "peakRssBytes": 6946816,
+          "elapsedMs": 0
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 87883520,
+          "rssBytes": 152600576,
+          "peakRssBytes": 152600576,
+          "elapsedMs": 380
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 105123648,
+          "rssBytes": 194953216,
+          "peakRssBytes": 194953216,
+          "elapsedMs": 704
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 103861056,
+          "rssBytes": 206749696,
+          "peakRssBytes": 206749696,
+          "elapsedMs": 1034
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 104855360,
+          "rssBytes": 209977344,
+          "peakRssBytes": 209977344,
+          "elapsedMs": 1355
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 106640704,
+          "rssBytes": 219398144,
+          "peakRssBytes": 219398144,
+          "elapsedMs": 1677
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 106128192,
+          "rssBytes": 226820096,
+          "peakRssBytes": 226820096,
+          "elapsedMs": 2060
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 105165120,
+          "rssBytes": 229261312,
+          "peakRssBytes": 229261312,
+          "elapsedMs": 2389
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 105476928,
+          "rssBytes": 234815488,
+          "peakRssBytes": 234815488,
+          "elapsedMs": 2713
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 105643840,
+          "rssBytes": 241156096,
+          "peakRssBytes": 241156096,
+          "elapsedMs": 3032
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 106721088,
+          "rssBytes": 241205248,
+          "peakRssBytes": 241205248,
+          "elapsedMs": 3355
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 107089728,
+          "rssBytes": 245481472,
+          "peakRssBytes": 245481472,
+          "elapsedMs": 3674
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 114719904,
+          "rssBytes": 258539520,
+          "peakRssBytes": 258539520,
+          "elapsedMs": 3998
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 102000640,
+          "rssBytes": 258539520,
+          "peakRssBytes": 258539520,
+          "elapsedMs": 3998
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "command": [
+        "/tmp/merenda-utf8-profile/reflow-after",
+        "131072"
+      ],
+      "stages": [
+        {
+          "stage": "storage",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 1338768,
+          "rssBytes": 6881280,
+          "peakRssBytes": 6881280,
+          "elapsedMs": 0
+        },
+        {
+          "stage": "initialLayout",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 0,
+          "heapBytes": 85159168,
+          "rssBytes": 138821632,
+          "peakRssBytes": 138821632,
+          "elapsedMs": 373
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 1,
+          "heapBytes": 102430016,
+          "rssBytes": 188399616,
+          "peakRssBytes": 188399616,
+          "elapsedMs": 702
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 2,
+          "heapBytes": 103284544,
+          "rssBytes": 188973056,
+          "peakRssBytes": 188989440,
+          "elapsedMs": 1018
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 3,
+          "heapBytes": 103996736,
+          "rssBytes": 195215360,
+          "peakRssBytes": 195215360,
+          "elapsedMs": 1338
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 4,
+          "heapBytes": 104833344,
+          "rssBytes": 209666048,
+          "peakRssBytes": 209666048,
+          "elapsedMs": 1653
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 5,
+          "heapBytes": 104864064,
+          "rssBytes": 224051200,
+          "peakRssBytes": 224051200,
+          "elapsedMs": 1970
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 6,
+          "heapBytes": 104956224,
+          "rssBytes": 224051200,
+          "peakRssBytes": 224051200,
+          "elapsedMs": 2284
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 7,
+          "heapBytes": 105205056,
+          "rssBytes": 226951168,
+          "peakRssBytes": 226951168,
+          "elapsedMs": 2598
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 8,
+          "heapBytes": 105478464,
+          "rssBytes": 232030208,
+          "peakRssBytes": 232030208,
+          "elapsedMs": 2921
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 9,
+          "heapBytes": 105613632,
+          "rssBytes": 232177664,
+          "peakRssBytes": 232177664,
+          "elapsedMs": 3238
+        },
+        {
+          "stage": "widthReflow",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 106650432,
+          "rssBytes": 232816640,
+          "peakRssBytes": 232833024,
+          "elapsedMs": 3555
+        },
+        {
+          "stage": "styleRevision",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 115553440,
+          "rssBytes": 238436352,
+          "peakRssBytes": 238436352,
+          "elapsedMs": 3870
+        },
+        {
+          "stage": "releasedManager",
+          "sourceBytes": 131157,
+          "runCount": 1726,
+          "reflows": 10,
+          "heapBytes": 102724608,
+          "rssBytes": 238436352,
+          "peakRssBytes": 238436352,
+          "elapsedMs": 3870
+        }
+      ],
+      "stderr": ""
+    }
+  ],
+  "medians": [
+    {
+      "stage": "storage",
+      "reflows": 0,
+      "before": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 1338768,
+        "rssBytes": 6946816,
+        "peakRssBytes": 6946816,
+        "elapsedMs": 0
+      },
+      "after": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 1338768,
+        "rssBytes": 6881280,
+        "peakRssBytes": 6881280,
+        "elapsedMs": 0
+      }
+    },
+    {
+      "stage": "initialLayout",
+      "reflows": 0,
+      "before": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 87883520,
+        "rssBytes": 151142400,
+        "peakRssBytes": 151142400,
+        "elapsedMs": 380
+      },
+      "after": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 85280000,
+        "rssBytes": 141803520,
+        "peakRssBytes": 141803520,
+        "elapsedMs": 373
+      }
+    },
+    {
+      "stage": "widthReflow",
+      "reflows": 10,
+      "before": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 107089728,
+        "rssBytes": 237666304,
+        "peakRssBytes": 237666304,
+        "elapsedMs": 3674
+      },
+      "after": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 106650432,
+        "rssBytes": 232816640,
+        "peakRssBytes": 232833024,
+        "elapsedMs": 3602
+      }
+    },
+    {
+      "stage": "styleRevision",
+      "reflows": 10,
+      "before": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 114719904,
+        "rssBytes": 254771200,
+        "peakRssBytes": 254771200,
+        "elapsedMs": 3998
+      },
+      "after": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 114044064,
+        "rssBytes": 243449856,
+        "peakRssBytes": 243449856,
+        "elapsedMs": 3926
+      }
+    },
+    {
+      "stage": "releasedManager",
+      "reflows": 10,
+      "before": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 102000640,
+        "rssBytes": 254771200,
+        "peakRssBytes": 254771200,
+        "elapsedMs": 3998
+      },
+      "after": {
+        "sourceBytes": 131157,
+        "runCount": 1726,
+        "heapBytes": 101314560,
+        "rssBytes": 243449856,
+        "peakRssBytes": 243449856,
+        "elapsedMs": 3926
+      }
+    }
+  ],
+  "workerPayloadStrategy": "Detached compact payload per request; no worker source cache",
+  "dependencies": {
+    "figdraw": "3f31bc3355103303dff19def582795985b0bbfbf",
+    "markdown": "c8e8cd8800d4e6a8349241321b24c753be8733c4",
+    "sigils": "5190b389ef7448adfc591924d80ad3a971e3487b",
+    "threading": "c5a39a039f24d48ba9503dcb9a0aee68a0fbb36d"
+  },
+  "sourceFilesSha256": {
+    "src/merenda/nimkit/text/markdownviews.nim": "55fb62e4afe2f848e50ca67e3113b89c7ca543c5b562410551a073ea04d4312b",
+    "src/merenda/nimkit/text/textlayout.nim": "6661b51307d820cc9669a8895999f7506bf1ec98b34d429590aeb44e7ed60177",
+    "src/merenda/nimkit/text/textlayoutworkers.nim": "50d187b0de767fe523661ad8b45d682633e80c905e4d47e6d2f8eaf63a4d0e82",
+    "src/merenda/nimkit/text/textstorage.nim": "ddff81643f920f0758c2305ef5224301e798b6308522ee845f93b85516a3065c"
+  },
+  "notes": [
+    "Live heap includes all malloc zones and global state, not only text objects.",
+    "Process peak RSS includes transient allocations and retained allocator pages.",
+    "Markdown storage uses nine fresh runs per version; view cases use three. Reflow uses three.",
+    "Syntax highlighting is disabled; builds use repository test configuration and runtime text backend selection.",
+    "No native window or GPU renderer is created."
+  ]
+}
