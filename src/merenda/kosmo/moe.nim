@@ -146,6 +146,7 @@ type
     matterSources: seq[moeMatter.MatterGrammarSource]
     matterFileTypes: seq[MatterGrammarFileType]
     viewerSources: seq[matterhighlighting.MatterGrammarSource]
+    viewerGrammarRevision: uint64
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
@@ -608,6 +609,11 @@ proc viewerGrammarSources*(
   if not editor.isNil:
     result = editor.viewerSources
 
+func viewerGrammarRevision*(editor: KosmoEditor): uint64 =
+  ## Identify the currently loaded native-viewer grammar set for this editor.
+  if not editor.isNil:
+    result = editor.viewerGrammarRevision
+
 func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
   var command: KosmoHostCommand
   case r.kind
@@ -961,6 +967,7 @@ proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   editor.matterSources = grammarState.sources
   editor.matterFileTypes = grammarState.fileTypes
   editor.viewerSources = grammarState.viewerSources
+  inc editor.viewerGrammarRevision
   editor.matterHighlighting.close()
   editor.matterHighlighting = nil
   editor.matterRequests.clear()

@@ -1,5 +1,13 @@
 # Kosmo editor views, Markdown controls, and pane presentation.
 
+import std/algorithm
+
+import ../nimkit/foundation/backrefs
+import ../nimkit/text/markdownparsing
+import ./markdownpreviewbudget
+
+const DefaultMarkdownPreviewByteBudget = 128 * 1024 * 1024
+
 proc updateActivePaneIndicator(group: KosmoEditorGroup, active: bool) =
   if group.isNil or group.pane.isNil:
     return
@@ -309,15 +317,203 @@ proc documentForIdentifier(
   if index >= 0:
     result = group.documents[index]
 
+proc scheduleMarkdownPreviewReconcile(controller: KosmoDockController)
+proc reconcileMarkdownPreviews(controller: KosmoDockController)
+
+proc markdownCacheDidChange(watch: KosmoMarkdownCacheWatch) {.slot.} =
+  let controller = watch.controller.target
+  if not controller.isNil:
+    controller.scheduleMarkdownPreviewReconcile()
+
+proc newMarkdownCacheWatch(controller: KosmoDockController): KosmoMarkdownCacheWatch =
+  result = KosmoMarkdownCacheWatch()
+  result.controller.set(controller, controller.markdownBackRefs)
+
+proc watchMarkdownPreview(controller: KosmoDockController, view: KosmoMarkdownView) =
+  if controller.isNil or view.isNil or not view.previewWatch.isNil:
+    return
+  view.previewWatch = controller.newMarkdownCacheWatch()
+  view.connect(
+    nimkit.markdownRetainedCostDidChange, view.previewWatch, markdownCacheDidChange
+  )
+
+proc unwatchMarkdownPreview(view: KosmoMarkdownView) =
+  if not view.isNil and not view.previewWatch.isNil:
+    view.disconnect(
+      nimkit.markdownRetainedCostDidChange, view.previewWatch, markdownCacheDidChange
+    )
+    view.previewWatch = nil
+
+proc scheduleMarkdownPreviewReconcile(controller: KosmoDockController) =
+  if controller.isNil or controller.markdownCacheClosed or
+      controller.markdownReconcileScheduled:
+    return
+  controller.markdownReconcileScheduled = true
+  # This one-shot work item keeps the controller alive, while BackRef watchers
+  # never dereference it after destruction.
+  let owner = controller
+  scheduleMainThreadWork do() -> bool:
+    owner.markdownReconcileScheduled = false
+    if not owner.markdownCacheClosed:
+      owner.reconcileMarkdownPreviews()
+    false
+
+proc markdownPreviewByteBudget*(frontend: KosmoApplication): Natural =
+  ## Soft budget for known Markdown preview payloads across this controller.
+  ## Visible previews are pinned; unmeasured native/font resources and pending
+  ## work can make total process memory exceed this estimate.
+  if frontend.isNil or frontend.dockController.isNil:
+    DefaultMarkdownPreviewByteBudget
+  else:
+    frontend.dockController.markdownPreviewByteBudget
+
+proc `markdownPreviewByteBudget=`*(frontend: KosmoApplication, bytes: Natural) =
+  ## Update the soft retained-payload budget and schedule cache reconciliation.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let controller = frontend.dockController
+  if controller.markdownPreviewByteBudget != bytes:
+    controller.markdownPreviewByteBudget = bytes
+    controller.scheduleMarkdownPreviewReconcile()
+
+proc isMarkdownPreviewWorkPending*(frontend: KosmoApplication): bool =
+  ## Report tracked preview work in this live controller without starting work.
+  ## This does not report process-wide workers or native resources. After close,
+  ## the controller releases its tracking records, so it is not a shutdown query.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let controller = frontend.dockController
+  if controller.markdownCacheClosed:
+    return
+  if controller.markdownReconcileScheduled:
+    return true
+  for group in controller.groups:
+    if not group.pane.isNil:
+      for preview in group.pane.markdownPreviews:
+        let view = preview.view
+        if view.isMarkdownParsing() or view.isMarkdownRendering() or
+            view.isMarkdownLayoutPending():
+          return true
+  for item in controller.markdownOwners:
+    if item.owner.markdownOwnerRetention().pending:
+      return true
+  for retirement in controller.markdownRetirements:
+    if retirement.receipt.isMarkdownRetirementPending():
+      return true
+
+when defined(markdownPreviewProbe):
+  proc markdownPreviewCount*(pane: KosmoEditorPane): int =
+    ## Report cached view count for the allocation benchmark.
+    if not pane.isNil: pane.markdownPreviews.len else: 0
+
+proc suspendMarkdownPreview(
+    controller: KosmoDockController, view: KosmoMarkdownView
+): nimkit.MarkdownViewState =
+  var receipt: nimkit.MarkdownRetirement
+  result = view.suspendMarkdown(receipt)
+  if not controller.isNil and not controller.markdownCacheClosed and
+      receipt.isMarkdownRetirementPending():
+    let watch = controller.newMarkdownCacheWatch()
+    receipt.connect(nimkit.markdownRetirementDidChange, watch, markdownCacheDidChange)
+    controller.markdownRetirements.add KosmoMarkdownRetirement(
+      receipt: receipt, watch: watch
+    )
+
+proc releaseCompletedMarkdownRetirements(controller: KosmoDockController) =
+  var index = controller.markdownRetirements.high
+  while index >= 0:
+    let retirement = controller.markdownRetirements[index]
+    if not retirement.receipt.isMarkdownRetirementPending():
+      retirement.receipt.disconnect(
+        nimkit.markdownRetirementDidChange, retirement.watch, markdownCacheDidChange
+      )
+      controller.markdownRetirements.delete(index)
+    dec index
+
 proc markdownViewForBuffer(pane: KosmoEditorPane, id: KosmoBufferId): KosmoMarkdownView
+
+proc markdownStateIndex(pane: KosmoEditorPane, id: KosmoBufferId): int =
+  for index in 0 ..< pane.markdownPreviewStates.len:
+    if pane.markdownPreviewStates[index].bufferId == id:
+      return index
+  -1
+
+proc forgetMarkdownPreviewState(pane: KosmoEditorPane, id: KosmoBufferId) =
+  let index = pane.markdownStateIndex(id)
+  if index >= 0:
+    pane.markdownPreviewStates.delete(index)
+
+proc retireMarkdownPreview(
+    pane: KosmoEditorPane, controller: KosmoDockController, view: KosmoMarkdownView
+): nimkit.MarkdownViewState =
+  # Public suspension signals may synchronously select another tab. Keep the
+  # retiring view out of reuse until suspension has completely returned.
+  pane.markdownRetiringViews.add view
+  view.unwatchMarkdownPreview()
+  try:
+    result = controller.suspendMarkdownPreview(view)
+  finally:
+    let index = pane.markdownRetiringViews.find(view)
+    if index >= 0:
+      pane.markdownRetiringViews.delete(index)
 
 proc removeMarkdownPreview(pane: KosmoEditorPane, id: KosmoBufferId) =
   if pane.isNil:
     return
+  pane.forgetMarkdownPreviewState(id)
   for index, preview in pane.markdownPreviews:
     if preview.bufferId == id:
-      preview.view.markdown = ""
+      let retiringView = preview.view
+      let controller =
+        if retiringView.previewWatch.isNil:
+          nil
+        else:
+          retiringView.previewWatch.controller.target
       pane.markdownPreviews.delete(index)
+      discard pane.retireMarkdownPreview(controller, retiringView)
+      if not controller.isNil:
+        controller.scheduleMarkdownPreviewReconcile()
+      return
+
+proc evictMarkdownPreview(
+    pane: KosmoEditorPane,
+    id: KosmoBufferId,
+    expectedView: KosmoMarkdownView,
+    expectedVersion: Option[int],
+    expectedGrammarRevision: uint64,
+) =
+  if pane.isNil:
+    return
+  for index, preview in pane.markdownPreviews:
+    if preview.bufferId == id and preview.view == expectedView and
+        preview.contentVersion == expectedVersion and
+        preview.grammarRevision == expectedGrammarRevision and
+        pane.contentView != nimkit.View(preview.view):
+      let
+        retiringView = preview.view
+        contentVersion = preview.contentVersion
+      let controller =
+        if retiringView.previewWatch.isNil:
+          nil
+        else:
+          retiringView.previewWatch.controller.target
+      pane.markdownPreviews.delete(index)
+      var saved = KosmoMarkdownPreviewState(
+        bufferId: id,
+        contentVersion: contentVersion,
+        state: pane.retireMarkdownPreview(controller, retiringView),
+      )
+      # A synchronous signal handler may have closed the tab or opened a new
+      # preview for it while the old view was being suspended.
+      var replacement = false
+      for current in pane.markdownPreviews:
+        if current.bufferId == id:
+          replacement = true
+          break
+      if not replacement and not controller.isNil and not controller.markdownCacheClosed and
+          not pane.dockGroup.isNil and id.tabIdentifier in pane.dockGroup[].tabOrder:
+        pane.forgetMarkdownPreviewState(id)
+        pane.markdownPreviewStates.add move(saved)
       return
 
 proc pruneMarkdownPreviews(pane: KosmoEditorPane, tabs: openArray[KosmoTab]) =
@@ -325,6 +521,9 @@ proc pruneMarkdownPreviews(pane: KosmoEditorPane, tabs: openArray[KosmoTab]) =
     return
   var index = pane.markdownPreviews.high
   while index >= 0:
+    index = min(index, pane.markdownPreviews.high)
+    if index < 0:
+      break
     var retained = false
     for tab in tabs:
       if tab.id == pane.markdownPreviews[index].bufferId:
@@ -333,13 +532,190 @@ proc pruneMarkdownPreviews(pane: KosmoEditorPane, tabs: openArray[KosmoTab]) =
     if not retained:
       pane.removeMarkdownPreview(pane.markdownPreviews[index].bufferId)
     dec index
+  index = pane.markdownPreviewStates.high
+  while index >= 0:
+    var retained = false
+    for tab in tabs:
+      if tab.id == pane.markdownPreviewStates[index].bufferId:
+        retained = true
+        break
+    if not retained:
+      pane.markdownPreviewStates.delete(index)
+    dec index
 
 proc clearMarkdownPreviews(pane: KosmoEditorPane) =
   if pane.isNil:
     return
-  for preview in pane.markdownPreviews:
-    preview.view.markdown = ""
-  pane.markdownPreviews.setLen(0)
+  let previews = move(pane.markdownPreviews)
+  pane.markdownPreviewStates.setLen(0)
+  for preview in previews:
+    let controller =
+      if preview.view.previewWatch.isNil:
+        nil
+      else:
+        preview.view.previewWatch.controller.target
+    discard pane.retireMarkdownPreview(controller, preview.view)
+    if not controller.isNil:
+      controller.scheduleMarkdownPreviewReconcile()
+
+proc releaseUnusedMarkdownOwners(controller: KosmoDockController) =
+  var index = controller.markdownOwners.high
+  while index >= 0:
+    let item = controller.markdownOwners[index]
+    let retention = item.owner.markdownOwnerRetention()
+    var used = false
+    for group in controller.groups:
+      if not group.pane.isNil:
+        for preview in group.pane.markdownPreviews:
+          if preview.ownerId == retention.ownerId:
+            used = true
+            break
+      if used:
+        break
+    if not used and not retention.pending:
+      item.owner.disconnect(
+        nimkit.markdownOwnerRetentionDidChange, item.watch, markdownCacheDidChange
+      )
+      controller.markdownOwners.delete(index)
+    dec index
+
+proc reconcileMarkdownPreviews(controller: KosmoDockController) =
+  if controller.isNil or controller.markdownCacheClosed:
+    return
+  for group in controller.groups:
+    if not group.pane.isNil:
+      for preview in group.pane.markdownPreviews.mitems:
+        preview.retainedCost = preview.view.retainedMarkdownCost()
+        preview.ownerId = preview.retainedCost.ownerId
+  controller.releaseUnusedMarkdownOwners()
+  controller.releaseCompletedMarkdownRetirements()
+  var
+    entries: seq[MarkdownPreviewBudgetEntry]
+    previews: seq[
+      tuple[
+        pane: KosmoEditorPane,
+        id: KosmoBufferId,
+        view: KosmoMarkdownView,
+        version: Option[int],
+        grammarRevision: uint64,
+      ]
+    ]
+  for paneIndex, group in controller.groups:
+    let pane = group.pane
+    if not pane.isNil:
+      for preview in pane.markdownPreviews:
+        let cost = preview.retainedCost
+        entries.add MarkdownPreviewBudgetEntry(
+          paneId: uint64(paneIndex),
+          lastUsed: preview.lastUsed,
+          pinned: pane.contentView == nimkit.View(preview.view),
+          ownerId: cost.ownerId,
+          ownerBytes: cost.ownerBytes,
+          viewBytes: cost.viewBytes,
+          ownerIncomplete: cost.ownerIncomplete,
+          viewIncomplete: cost.viewIncomplete,
+        )
+        previews.add (
+          pane, preview.bufferId, preview.view, preview.contentVersion,
+          preview.grammarRevision,
+        )
+      for index in 0 ..< pane.markdownPreviewStates.len:
+        let state {.cursor.} = pane.markdownPreviewStates[index]
+        let cost = state.state.retainedMarkdownViewStateCost()
+        entries.add MarkdownPreviewBudgetEntry(
+          kind: mpbkSavedState, viewBytes: cost.bytes, viewIncomplete: cost.incomplete
+        )
+        previews.add (nil, default(KosmoBufferId), nil, none(int), 0'u64)
+  for item in controller.markdownOwners:
+    let retention = item.owner.markdownOwnerRetention()
+    if retention.pending:
+      entries.add MarkdownPreviewBudgetEntry(
+        kind: mpbkPendingOwner,
+        ownerId: retention.ownerId,
+        ownerBytes: retention.bytes,
+        ownerIncomplete: retention.incomplete,
+      )
+      previews.add (nil, default(KosmoBufferId), nil, none(int), 0'u64)
+  for retirement in controller.markdownRetirements:
+    let cost = retirement.receipt.retainedMarkdownRetirementCost()
+    entries.add MarkdownPreviewBudgetEntry(
+      kind: mpbkRetiredView, viewBytes: cost.bytes, viewIncomplete: cost.incomplete
+    )
+    previews.add (nil, default(KosmoBufferId), nil, none(int), 0'u64)
+  let decision = markdownPreviewEvictions(
+    entries,
+    uint64(controller.markdownPreviewByteBudget),
+    KosmoMarkdownPreviewCacheLimit,
+  )
+  for index in decision.victims:
+    let victim = previews[index]
+    if not victim.pane.isNil and victim.pane.contentView != nimkit.View(victim.view):
+      victim.pane.evictMarkdownPreview(
+        victim.id, victim.view, victim.version, victim.grammarRevision
+      )
+  controller.releaseUnusedMarkdownOwners()
+  controller.releaseCompletedMarkdownRetirements()
+
+proc closeMarkdownPreviewCache(controller: KosmoDockController) =
+  if controller.isNil or controller.markdownCacheClosed:
+    return
+  controller.markdownCacheClosed = true
+  for group in controller.groups:
+    group.pane.clearMarkdownPreviews()
+  for item in controller.markdownOwners:
+    item.owner.disconnect(
+      nimkit.markdownOwnerRetentionDidChange, item.watch, markdownCacheDidChange
+    )
+  controller.markdownOwners.setLen(0)
+  for retirement in controller.markdownRetirements:
+    retirement.receipt.disconnect(
+      nimkit.markdownRetirementDidChange, retirement.watch, markdownCacheDidChange
+    )
+  controller.markdownRetirements.setLen(0)
+
+proc sharedMarkdownOwner(
+    controller: KosmoDockController,
+    view: KosmoMarkdownView,
+    id: KosmoBufferId,
+    version: int,
+): nimkit.MarkdownDocumentOwner =
+  if controller.isNil or controller.markdownCacheClosed or
+      view.syntaxHighlighter() !=
+      nimkit.SyntaxHighlighter(nimkit.matterSyntaxHighlighter):
+    return
+  var dialect: MarkdownParseDialect
+  if not view.markdownConfig().builtInMarkdownDialect(dialect):
+    return
+  let revision = controller.editor.viewerGrammarRevision()
+  for item in controller.markdownOwners:
+    if item.bufferId == id and item.contentVersion == version and
+        item.grammarRevision == revision and view.canAdoptMarkdownDocument(item.owner):
+      return item.owner
+  var source = controller.editor.bufferText(id)
+  if source.isNone:
+    return
+  var grammars = controller.editor.viewerGrammarSources()
+  try:
+    result = nimkit.newMarkdownDocumentOwner(
+      move(source.get()), view.markdownConfig(), move(grammars)
+    )
+    if not view.canAdoptMarkdownDocument(result):
+      result = nil
+      return
+    let watch = controller.newMarkdownCacheWatch()
+    result.connect(
+      nimkit.markdownOwnerRetentionDidChange, watch, markdownCacheDidChange
+    )
+    controller.markdownOwners.add KosmoMarkdownOwner(
+      bufferId: id,
+      contentVersion: version,
+      grammarRevision: revision,
+      owner: result,
+      watch: watch,
+    )
+  except ValueError:
+    # Custom parser configurations keep their per-view behavior.
+    result = nil
 
 func documents*(group: KosmoEditorGroup): lent seq[KosmoPaneDocument] =
   ## Return the non-Moe documents currently owned by this pane group.
@@ -1097,8 +1473,21 @@ proc syncSelectedEditorContent(
 ): KosmoEditorContentKind =
   if view.dockGroup.isNil:
     return keckSyntax
-  let group = view.dockGroup[]
+  let
+    group = view.dockGroup[]
+    controller = view.tabsDelegate.dockController
+    pane = group.pane
+    selectedIdentifier = group.selectedTabIdentifier
+  inc pane.markdownSyncGeneration
+  let generation = pane.markdownSyncGeneration
+  template stillSelected(): bool =
+    not view.dockGroup.isNil and view.dockGroup[] == group and
+      pane.markdownSyncGeneration == generation and
+      group.selectedTabIdentifier == selectedIdentifier
+
   group.pane.pruneMarkdownPreviews(tabs)
+  if not stillSelected():
+    return keckStale
   var selectedId: KosmoBufferId
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
     group.pane.syncMarkdownControls(false)
@@ -1120,24 +1509,91 @@ proc syncSelectedEditorContent(
       return keckSyntax
     let mode = view.markdownMode(selectedId)
     group.pane.syncMarkdownControls(true, mode)
+    if not stillSelected():
+      return keckStale
     if mode == kmmPreview:
       let version = view.editor.bufferContentVersion(selectedId)
       if version.isNone:
         group.pane.setContentView(view)
         return keckSyntax
+      let revision = view.editor.viewerGrammarRevision()
       let markdownView = group.pane.markdownViewForBuffer(selectedId)
+      template previewIndex(): int =
+        block:
+          var found = -1
+          for index, preview in pane.markdownPreviews:
+            if preview.bufferId == selectedId and preview.view == markdownView:
+              found = index
+              break
+          found
+
+      template currentPreview(): bool =
+        stillSelected() and previewIndex() >= 0 and
+          view.editor.bufferContentVersion(selectedId) == version and
+          view.editor.viewerGrammarRevision() == revision
+
+      if not currentPreview():
+        return keckStale
       group.pane.markdownView = markdownView
       markdownView.imageBasePath = tab.filePath.get.parentDir
+      if not currentPreview():
+        return keckStale
       markdownView.markdownStyle =
         group.pane.markdownControls.markdownPresentationStyle()
-      if group.pane.markdownPreviews[^1].contentVersion != version:
-        let source = view.editor.bufferText(selectedId)
-        if source.isNone:
-          group.pane.setContentView(view)
-          return keckSyntax
-        markdownView.markdown = source.get
-        group.pane.markdownPreviews[^1].contentVersion = version
+      if not currentPreview():
+        return keckStale
+      if markdownView.previewGrammarRevision != revision:
+        markdownView.matterGrammarSources = view.editor.viewerGrammarSources()
+        if not currentPreview():
+          return keckStale
+        markdownView.previewGrammarRevision = revision
+      let recordIndex = previewIndex()
+      if pane.markdownPreviews[recordIndex].contentVersion != version or
+          pane.markdownPreviews[recordIndex].grammarRevision != revision:
+        var
+          state: nimkit.MarkdownViewState
+          hasState = false
+        let stateIndex = group.pane.markdownStateIndex(selectedId)
+        if stateIndex >= 0:
+          if group.pane.markdownPreviewStates[stateIndex].contentVersion == version:
+            state = group.pane.markdownPreviewStates[stateIndex].state
+            hasState = true
+        let owner =
+          if controller.isNil:
+            nil
+          else:
+            controller[].sharedMarkdownOwner(markdownView, selectedId, version.get)
+        var adopted = false
+        if not owner.isNil:
+          # A new revision resets folding unless an exact-version state was saved.
+          adopted = markdownView.resumeMarkdown(owner, state)
+          if not currentPreview():
+            return keckStale
+        if not adopted:
+          var source = view.editor.bufferText(selectedId)
+          if source.isNone:
+            group.pane.setContentView(view)
+            return keckSyntax
+          if hasState:
+            discard markdownView.resumeMarkdown(move(source.get()), state)
+          else:
+            markdownView.markdown = move(source.get())
+          if not currentPreview():
+            return keckStale
+        let currentIndex = previewIndex()
+        pane.forgetMarkdownPreviewState(selectedId)
+        pane.markdownPreviews[currentIndex].contentVersion = version
+        pane.markdownPreviews[currentIndex].grammarRevision = revision
+        pane.markdownPreviews[currentIndex].ownerId =
+          if adopted:
+            owner.markdownOwnerId()
+          else:
+            0
+        if not controller.isNil:
+          controller[].scheduleMarkdownPreviewReconcile()
       group.pane.setContentView(markdownView)
+      if not currentPreview():
+        return keckStale
       return keckMarkdownPreview
     group.pane.setContentView(view)
     return keckSyntax
@@ -1219,6 +1675,8 @@ proc refresh*(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
   view.selectVisibleBuffer(tabs)
   case view.syncSelectedEditorContent(tabs)
+  of keckStale:
+    return
   of keckMarkdownPreview:
     view.syncChrome()
     view.cursorVisible = false
@@ -3627,6 +4085,9 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
           not document.preferredFirstResponder.isNil:
         responder = nimkit.Responder(document.preferredFirstResponder)
     discard nimkit.Window(owner).makeFirstResponder(responder)
+  if not pane.editorView.isNil and not pane.editorView.tabsDelegate.isNil and
+      not pane.editorView.tabsDelegate.dockController.isNil:
+    pane.editorView.tabsDelegate.dockController[].scheduleMarkdownPreviewReconcile()
 
 proc dispatchContentEditingCommand(
     pane: KosmoEditorPane, args: nimkit.TryToPerformArgs
@@ -3912,6 +4373,7 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
   discard result.withProtocol(MarkdownReaderPresentation)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
+  result.previewGrammarRevision = editorView.editor.viewerGrammarRevision()
   result.editorView = editorView.unsafeWeakRef()
   let weakView = result.unsafeWeakRef()
   result.search = newKosmoViewerSearch(
@@ -4082,25 +4544,53 @@ proc openRecoveryDocument(view: KosmoEditorView): bool =
     controller.activeGroup, document, insertAfterSelected = true
   )
 
+proc rebaseMarkdownPreviewAccess(controller: KosmoDockController) =
+  var ordered: seq[tuple[pane: KosmoEditorPane, index: int, stamp: uint64]]
+  for group in controller.groups:
+    if not group.pane.isNil:
+      for index, preview in group.pane.markdownPreviews:
+        ordered.add (group.pane, index, preview.lastUsed)
+  ordered.sort do(left, right: auto) -> int:
+    cmp(left.stamp, right.stamp)
+  for index, item in ordered:
+    item.pane.markdownPreviews[item.index].lastUsed = uint64(index + 1)
+  controller.markdownPreviewAccessClock = uint64(ordered.len)
+
+proc touchMarkdownPreview(
+    controller: KosmoDockController, pane: KosmoEditorPane, index: int
+) =
+  if controller.isNil:
+    return
+  if controller.markdownPreviewAccessClock == high(uint64):
+    controller.rebaseMarkdownPreviewAccess()
+  inc controller.markdownPreviewAccessClock
+  pane.markdownPreviews[index].lastUsed = controller.markdownPreviewAccessClock
+  controller.watchMarkdownPreview(pane.markdownPreviews[index].view)
+
 proc markdownViewForBuffer(
     pane: KosmoEditorPane, id: KosmoBufferId
 ): KosmoMarkdownView =
+  let controller =
+    if pane.editorView.tabsDelegate.dockController.isNil:
+      nil
+    else:
+      pane.editorView.tabsDelegate.dockController[]
   for index in 0 ..< pane.markdownPreviews.len:
     if pane.markdownPreviews[index].bufferId == id:
       let cached = pane.markdownPreviews[index]
       result = cached.view
       pane.markdownPreviews.delete(index)
       pane.markdownPreviews.add cached
+      controller.touchMarkdownPreview(pane, pane.markdownPreviews.high)
       return
-  if pane.markdownPreviews.len >= KosmoMarkdownPreviewCacheLimit:
-    pane.markdownPreviews[0].view.markdown = ""
-    pane.markdownPreviews.delete(0)
-  if pane.markdownPreviews.len == 0:
+  if pane.markdownPreviews.len == 0 and
+      pane.markdownView notin pane.markdownRetiringViews:
     result = pane.markdownView
   else:
     result = newKosmoMarkdownView(pane.editorView)
     result.textView().delegate = nimkit.DynamicAgent(pane)
   pane.markdownPreviews.add KosmoMarkdownPreview(bufferId: id, view: result)
+  controller.touchMarkdownPreview(pane, pane.markdownPreviews.high)
 
 proc popupItemText(item: KosmoPopupMenuItem): string =
   if item.detail.len == 0:

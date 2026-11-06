@@ -436,11 +436,16 @@ proc reloadInstalledVscodeGrammars*(frontend: KosmoApplication) =
     return
   let editor = frontend.dockController.editor
   editor.reloadInstalledVscodeGrammars()
-  let sources = editor.viewerGrammarSources()
+  let
+    sources = editor.viewerGrammarSources()
+    revision = editor.viewerGrammarRevision()
   for group in frontend.dockController.groups:
     group.pane.markdownView.matterGrammarSources = sources
+    group.pane.markdownView.previewGrammarRevision = revision
     for preview in group.pane.markdownPreviews:
-      preview.view.matterGrammarSources = sources
+      if preview.view != group.pane.markdownView:
+        preview.view.matterGrammarSources = sources
+        preview.view.previewGrammarRevision = revision
     for document in group.documents:
       document.contentView.updateViewerGrammars(sources)
     group.editorView.refresh()
@@ -1386,6 +1391,7 @@ proc newKosmoApplication*(
   let
     controller = KosmoDockController(
       editor: editorView.editor,
+      markdownPreviewByteBudget: DefaultMarkdownPreviewByteBudget,
       shortcutBindings: shortcutConfiguration.bindings,
       shortcutProfile: shortcutConfiguration.profile,
       editorInputPolicy: shortcutConfiguration.editorInput,
@@ -1943,10 +1949,10 @@ proc close*(frontend: KosmoApplication) =
     if not frontend.xSettingsWindow.window.isClosed():
       frontend.xSettingsWindow.window.close()
   if not frontend.dockController.isNil:
+    frontend.dockController.closeMarkdownPreviewCache()
     for group in frontend.dockController.groups:
       group.editorView.stopMatterHighlightRefresh()
       group.editorView.tabsDelegate.stopObservingWindow()
-      group.pane.clearMarkdownPreviews()
       for document in group.documents:
         discard document.close()
     let hosts = frontend.dockController.hosts

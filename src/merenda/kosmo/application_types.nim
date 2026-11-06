@@ -15,6 +15,7 @@ type
     krcDark
 
   KosmoEditorContentKind = enum
+    keckStale
     keckOther
     keckSyntax
     keckMarkdownPreview
@@ -28,11 +29,36 @@ type
     pendingSearchRange: Option[nimkit.TextRange]
     pendingFileSearchMatch: Option[nimkit.FileSearchMatch]
     editorView: WeakRef[KosmoEditorView]
+    previewWatch: KosmoMarkdownCacheWatch
+    previewGrammarRevision: uint64
+
+  KosmoMarkdownCacheWatch = ref object of nimkit.DynamicAgent
+    controller: nimkit.BackRef[KosmoDockController]
+
+  KosmoMarkdownPreviewState = object
+    bufferId: KosmoBufferId
+    contentVersion: Option[int]
+    state: nimkit.MarkdownViewState
+
+  KosmoMarkdownOwner = object
+    bufferId: KosmoBufferId
+    contentVersion: int
+    grammarRevision: uint64
+    owner: nimkit.MarkdownDocumentOwner
+    watch: KosmoMarkdownCacheWatch
+
+  KosmoMarkdownRetirement = object
+    receipt: nimkit.MarkdownRetirement
+    watch: KosmoMarkdownCacheWatch
 
   KosmoMarkdownPreview = object
     bufferId: KosmoBufferId
     view: KosmoMarkdownView
     contentVersion: Option[int]
+    grammarRevision: uint64
+    ownerId: uint64
+    retainedCost: nimkit.MarkdownRetainedCost
+    lastUsed: uint64
 
   KosmoMarkdownControls* = ref object of nimkit.Box
     modeButton*: nimkit.Button
@@ -88,6 +114,9 @@ type
     popupMenuState: Option[KosmoPopupMenu]
     popupHighlightedIndex: int
     markdownPreviews: seq[KosmoMarkdownPreview]
+    markdownRetiringViews: seq[KosmoMarkdownView]
+    markdownSyncGeneration: uint64
+    markdownPreviewStates: seq[KosmoMarkdownPreviewState]
     markdownControls*: KosmoMarkdownControls
     contentView*: nimkit.View
     activeIndicator: KosmoPaneIndicator
@@ -137,6 +166,13 @@ type
     projectedEditorView: WeakRef[KosmoEditorView]
     nextGroupIdentifier: int
     nextDocumentIdentifier: int
+    markdownPreviewByteBudget: Natural
+    markdownPreviewAccessClock: uint64
+    markdownOwners: seq[KosmoMarkdownOwner]
+    markdownRetirements: seq[KosmoMarkdownRetirement]
+    markdownBackRefs: nimkit.BackRefSet[KosmoDockController]
+    markdownReconcileScheduled: bool
+    markdownCacheClosed: bool
     shortcutBindings: nimkit.KeyBindingTable
     shortcutProfile: KosmoShortcutProfile
     editorInputPolicy: KosmoEditorInputPolicy

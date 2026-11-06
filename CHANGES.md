@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
+  budget, keeping visible previews and pending work pinned and sharing
+  compatible document owners across panes.
 - Share compatible Markdown document parsing and highlighting across views,
   release inactive embedded views, and preserve preview state while asynchronous
   work retires safely.

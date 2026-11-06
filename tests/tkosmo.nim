@@ -19,6 +19,7 @@ import kosmo/hostcommands
 import kosmo/frontendwork
 import kosmo/lsptcp
 import kosmo/markdownactivation
+import kosmo/markdownpreviewbudget
 import kosmo/matterhighlighting
 import kosmo/moelogging
 import kosmo/panelshortcuts
