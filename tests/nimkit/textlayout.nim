@@ -1125,6 +1125,37 @@ suite "nimkit text layout":
     check snapshot.lineFragments.len > 1
     check foundWrapped
 
+  test "mixed wrapping and clipping preserve Unicode paragraph geometry":
+    let
+      first = "α one two three four five six seven eight"
+      clipped = "猫 clipped code payload that extends far beyond the viewport"
+      last = "😀 nine ten eleven twelve thirteen fourteen"
+      storage = newTextStorage(first & "\n" & clipped & "\n" & last)
+      clippedStart = first.runeLen + 1
+      lastStart = clippedStart + clipped.runeLen + 1
+      firstRange = initTextRange(0, first.runeLen)
+      clippedRange = initTextRange(clippedStart, clipped.runeLen)
+      lastRange = initTextRange(lastStart, last.runeLen)
+    var attributes = storage.attributesAt(clippedStart)
+    attributes.paragraphStyle.lineBreakMode = tlbmClipping
+    storage.setAttributes(clippedRange, attributes)
+    let
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(100, 800), insets(0), wraps = true)
+      )
+      firstRects = manager.selectionRects(firstRange)
+      clippedRects = manager.selectionRects(clippedRange)
+      lastRects = manager.selectionRects(lastRange)
+    check firstRects.len > 1
+    require clippedRects.len == 1
+    check clippedRects[0].size.width > 100
+    check lastRects.len > 1
+    for range in [firstRange, clippedRange, lastRange]:
+      let glyphs = manager.glyphRangeForTextRange(range)
+      let recovered = manager.textRangeForGlyphRange(glyphs)
+      check int(recovered.location) <= int(range.location)
+      check recovered.maxIndex >= range.maxIndex
+
   test "wrapped content size follows the visual layout extent":
     let
       storage =

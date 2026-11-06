@@ -433,7 +433,8 @@ unlike process RSS alone.
 | Workload and captured checkpoint | Logged live allocations, before → after | Logged peak, before → after | Cumulative allocation bytes, before → after |
 | --- | ---: | ---: | ---: |
 | 2,000-row Markdown table, attributed storage constructed | 1.5 MB → 1.5 MB | 88.2 MB → 28.9 MB | 583.9 MB → 276.3 MB |
-| 500-row Markdown table view, first render | 228.3 MB → 228.3 MB | 293.5 MB → 284.3 MB | 43.49 GB → 43.4 GB |
+| 500-row table view, earlier table-compaction batch (historical) | 228.3 MB → 228.3 MB | 293.5 MB → 284.3 MB | 43.49 GB → 43.4 GB |
+| 500-row table view, current mixed-layout copy fix | 228.4 MB → 228.4 MB | 284.3 MB → 281.5 MB | 43.38 GB → 1.09 GB |
 | SynEdit, tokenize 8 MiB of spaces | 8.2 MB → 8.2 MB | 16.2 MB → 8.2 MB | 17.6 MB → 9.6 MB |
 | 2,000-row table, compact table cells → compact builder styles | 1.59M → 1.59M | 28.9 MB → 13.7 MB | 276.3 MB → 227.7 MB |
 
@@ -456,12 +457,31 @@ Full Markdown view profiles retain the same 10 HarfBuzz fallback-font blob
 allocations / 78.5M before and after. They are a substantial existing rich-text
 cost, not a saving from the UTF-8 changes.
 
+The earlier table-view row is historical: its 43.4 GB cumulative figure is
+superseded by the focused mixed-layout fix in the following row. The pinned
+current-baseline event history attributes 4,015 requests of 9,867,768 bytes
+each to copies of the full arranged-glyph sequence; the per-paragraph choice
+of wrapped or clipped layout copied the complete arrangement. Passing the
+chosen arrangement by reference removes those repeated copies. The independently
+summed event request sizes need not equal the tool's cumulative header because
+VM and realloc accounting differ; neither figure means those bytes remained
+resident or were necessarily physically copied. One separate arrangement
+initialization copy remains. At the measured first-render checkpoint, logged
+live heap and VM remain 228.4 MB; retained fonts, theme data, and layout are
+still substantial process-wide costs, not solely the Markdown document.
+Three additional untraced paired processes reached first render in a median
+3,363 → 2,341 ms from workload start; the resize checkpoint was 6,595 →
+4,555 ms. Median first-render live malloc heap was 230.83 → 231.95 MiB,
+and resize heap was 328.72 → 327.70 MiB. These small variations and changes
+in RSS are not proof that retained memory is identical across workloads.
+
 Raw process and allocation summaries, build/source hashes, commands, checkpoint
 details, and limitations:
 
 - [Markdown allocation stacks](tests/benchmarks/results/markdown-allocations-2026-11-06.json).
 - [SynEdit allocation stacks](tests/benchmarks/results/synedit-allocations-2026-11-06.json).
 - [Compact builder allocation stacks](tests/benchmarks/results/markdown-builder-allocations-2026-11-06.json).
+- [Mixed-layout churn allocation stacks](tests/benchmarks/results/markdown-layout-churn-2026-11-06.json).
 - [Markdown fresh-process samples](tests/benchmarks/results/markdown-memory-2026-11-06.json):
   nine storage and nine prose/code control runs per version, three table-view
   runs per version. RSS peaks vary; they are not a count of retained text objects.

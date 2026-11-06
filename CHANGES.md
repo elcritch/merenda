@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid copying the entire glyph arrangement for each mixed-wrap paragraph.
+
 - Reduce terminal search coordinate storage to row mappings and sparse wide-cell
   or combining-cell exceptions while preserving literal and regular-expression
   searches across screen and scrollback.

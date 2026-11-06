@@ -83,3 +83,9 @@ and timing, and its reported no-stack blocks are separate from logged totals.
 RSS is a process measurement and is not live object memory. Results should
 include the exact source, binary and harness hashes, the checkpoint, and any
 logging limitations; use repeated untraced processes to assess variation.
+
+The pinned mixed-line-break layout comparison, event-stack attribution and
+three paired untraced table-view samples are recorded in
+[markdown-layout-churn-2026-11-06.json](results/markdown-layout-churn-2026-11-06.json).
+Its allocation-request total is cumulative traffic, not retained memory; the
+live process also includes font, theme and layout caches.
