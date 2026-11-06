@@ -80,6 +80,11 @@ type
   TextGapStorage* = ref object of TextStorage
     xGapBuffer: GapTextBuffer
 
+  TextRangeStorage = ref object of TextStorage
+    # A captured immutable snapshot remains authoritative until a character edit.
+    xParent: TextSnapshot
+    xParentStartRune, xParentStartByte, xParentEndByte, xRangeLength: int
+
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
 
@@ -384,6 +389,114 @@ method storageParagraphRange*(
 
 method storageParagraphRange*(storage: TextGapStorage, range: TextRange): TextRange =
   storage.xGapBuffer.paragraphRange(range)
+
+iterator rangeRunes(storage: TextRangeStorage): Rune =
+  if storage.xParentEndByte > storage.xParentStartByte:
+    for rune in storage.xParent.bytes.toOpenArray(
+      storage.xParentStartByte, storage.xParentEndByte - 1
+    ).runes:
+      yield rune
+
+iterator rangeLineBreaks(storage: TextRangeStorage): bool =
+  # Match TextSnapshot's byte-width traversal, including truncated UTF-8.
+  when defined(useNativeDynlib):
+    let source = storage.xParent.bytes
+  else:
+    template source(): untyped =
+      storage.xParent.bytes
+
+  var position = storage.xParentStartByte
+  while position < storage.xParentEndByte:
+    let newline = source[position] == '\n'
+    position =
+      min(position + max(runeLenAt(source, position), 1), storage.xParentEndByte)
+    yield newline
+
+method storageLength*(storage: TextRangeStorage): int =
+  if storage.xParent.isNil: storage.xSnapshot.runeLength else: storage.xRangeLength
+
+method storageString*(storage: TextRangeStorage): string =
+  if storage.xParent.isNil:
+    return procCall storageString(TextStorage(storage))
+  if storage.xSnapshot != nil:
+    return storage.xSnapshot.bytes
+  if storage.xParentEndByte > storage.xParentStartByte:
+    result = storage.xParent.bytes[storage.xParentStartByte ..< storage.xParentEndByte]
+
+method storageSnapshot(storage: TextRangeStorage): TextSnapshot =
+  if storage.xSnapshot.isNil:
+    storage.xSnapshot = newTextSnapshot(storage.storageString())
+  storage.xSnapshot
+
+method storageSubstring*(storage: TextRangeStorage, range: TextRange): string =
+  if storage.xParent.isNil:
+    return procCall storageSubstring(TextStorage(storage), range)
+  let
+    clamped = clampTextRange(storage.xRangeLength, range)
+    first = storage.xParent.byteOffset(storage.xParentStartRune + int(clamped.location))
+    last = storage.xParent.byteOffset(storage.xParentStartRune + clamped.maxIndex)
+  if last > first:
+    result = storage.xParent.bytes[first ..< last]
+
+method setStorageString*(storage: TextRangeStorage, value: string) =
+  storage.xSnapshot = newTextSnapshot(value)
+  storage.xParent = nil
+
+method restoreStorageText(storage: TextRangeStorage, snapshot: TextStorage) =
+  storage.xSnapshot = snapshot.storageSnapshot()
+  storage.xParent = nil
+
+method replaceStorageText*(storage: TextRangeStorage, range: TextRange, text: string) =
+  discard storage.storageSnapshot()
+  storage.xParent = nil
+  procCall replaceStorageText(TextStorage(storage), range, text)
+
+method storageLineCount*(storage: TextRangeStorage): int =
+  if storage.xParent.isNil:
+    return procCall storageLineCount(TextStorage(storage))
+  result = 1
+  for newline in storage.rangeLineBreaks:
+    if newline:
+      inc result
+
+method storageLineRange*(storage: TextRangeStorage, line: int): TextRange =
+  if storage.xParent.isNil:
+    return procCall storageLineRange(TextStorage(storage), line)
+  let target = max(line, 0)
+  var
+    currentLine = 0
+    start = 0
+    index = 0
+  for newline in storage.rangeLineBreaks:
+    inc index
+    if newline:
+      if currentLine == target:
+        return initTextRange(start, index - start)
+      inc currentLine
+      start = index
+  if currentLine == target:
+    return initTextRange(start, storage.xRangeLength - start)
+  initTextRange(storage.xRangeLength, 0)
+
+method storageParagraphRange*(storage: TextRangeStorage, range: TextRange): TextRange =
+  if storage.xParent.isNil:
+    return procCall storageParagraphRange(TextStorage(storage), range)
+  let
+    clamped = clampTextRange(storage.xRangeLength, range)
+    startTarget = int(clamped.location)
+    stopTarget = clamped.maxIndex
+  var
+    start = 0
+    stop = storage.xRangeLength
+    index = 0
+  for rune in storage.rangeRunes:
+    if index < startTarget and rune == Rune('\n'):
+      start = index + 1
+    elif index >= stopTarget and rune == Rune('\n'):
+      stop = index + 1
+      break
+    inc index
+  initTextRange(start, stop - start)
 
 proc notifyCommittedEdit(storage: TextStorage, edit: TextStorageEdit) =
   storage.dispatchDidEdit(edit)
@@ -728,6 +841,54 @@ proc newTextStorage*(value: sink string, runs: sink TextRunBuilder): TextStorage
     )
   result.normalizeRuns()
 
+proc newTextRangeStorage*(
+    snapshot: TextSnapshot, range: TextRange, styles: TextStorage
+): TextStorage =
+  ## Capture an immutable snapshot range with independent local styles. The
+  ## supplied styles cover local positions and must have the same rune length.
+  ## Out-of-range coordinates or mismatched lengths raise ValueError. Callers
+  ## adopting existing text must first verify byte-for-byte identity.
+  if snapshot.isNil or styles.isNil:
+    raise newException(ValueError, "range storage requires a snapshot and styles")
+  styles.materialize()
+  let
+    start = int(range.location)
+    length = int(range.length)
+    total = snapshot.runeLength
+  if start > total or length > total - start or styles.storageLength() != length:
+    raise newException(ValueError, "invalid range or style storage length")
+  result = TextRangeStorage(
+    xParent: snapshot,
+    xParentStartRune: start,
+    xParentStartByte: snapshot.byteOffset(start),
+    xParentEndByte: snapshot.byteOffset(start + length),
+    xRangeLength: length,
+    xRuns: styles.xRuns,
+    xStyles: styles.xStyles,
+    xStyleUses: styles.xStyleUses,
+    xFreeStyles: styles.xFreeStyles,
+    xUnusedStyles: styles.xUnusedStyles,
+    xOverlappingRuns: styles.xOverlappingRuns,
+    xMaterialized: true,
+  )
+  discard result.withProto()
+
+proc discardTextRangeStorageMaterialization*(storage: TextStorage) =
+  ## Release a range's cached local snapshot; returned snapshots remain valid.
+  if storage of TextRangeStorage:
+    let rangeStorage = TextRangeStorage(storage)
+    if not rangeStorage.xParent.isNil:
+      rangeStorage.xSnapshot = nil
+
+when defined(merendaTests):
+  proc textRangeStorageStateForTest*(
+      storage: TextStorage, snapshot: TextSnapshot
+  ): tuple[sharesSource, materialized: bool] =
+    if storage of TextRangeStorage:
+      let rangeStorage = TextRangeStorage(storage)
+      result.sharesSource = rangeStorage.xParent == snapshot
+      result.materialized = not rangeStorage.xSnapshot.isNil
+
 proc textLayoutSource*(storage: TextStorage): TextLayoutSource =
   ## Copy the interned representation before transferring it to a worker.
   if not storage.isNil:
@@ -800,6 +961,10 @@ method newEmptyStorageCopy*(storage: TextStorage): TextStorage {.base.} =
 method newEmptyStorageCopy*(storage: TextGapStorage): TextStorage =
   newTextGapStorage()
 
+method newEmptyStorageCopy*(storage: TextRangeStorage): TextStorage =
+  result = TextRangeStorage()
+  result.initTextStorageFields()
+
 method copyStorageTextTo*(storage: TextStorage, copy: TextStorage) {.base.} =
   copy.xSnapshot = storage.xSnapshot
 
@@ -807,6 +972,15 @@ method copyStorageTextTo*(storage: TextGapStorage, copy: TextStorage) =
   let gapCopy = TextGapStorage(copy)
   gapCopy.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
   gapCopy.xSnapshot = storage.xSnapshot
+
+method copyStorageTextTo*(storage: TextRangeStorage, copy: TextStorage) =
+  let rangeCopy = TextRangeStorage(copy)
+  rangeCopy.xSnapshot = storage.xSnapshot
+  rangeCopy.xParent = storage.xParent
+  rangeCopy.xParentStartRune = storage.xParentStartRune
+  rangeCopy.xParentStartByte = storage.xParentStartByte
+  rangeCopy.xParentEndByte = storage.xParentEndByte
+  rangeCopy.xRangeLength = storage.xRangeLength
 
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   storage.materialize()

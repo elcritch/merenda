@@ -1,0 +1,532 @@
+{
+  "measurement": "Three alternating fresh processes per mode in one binary. Both retain the same 16 MiB parent and construct the same 8 MiB child style fixture via the sink TextRunBuilder constructor inside a helper procedure; copy mode retains that independent storage, range mode retains the parent range. The fixture helper has returned before childRetained. Bounded substring/style reads precede explicit materialization; discardHeld retains a previously returned snapshot, and discardReleased releases it. Live macOS malloc-zone heap, RSS, and process peak RSS; this is a storage-only probe, not Markdown rendering/layout.",
+  "attribution": "Separate paused MallocStackLogging memgraphs at childRetained: malloc_history -allBySize reports one 8,388,617-byte requested allocation in copy mode from mnewString -> string slice -> TextStorage.storageSubstring -> childStorage; this allocation is absent in range mode. The call-tree heap+VM view charges the same stack 16.0M and zone totals differ by roughly 16.1 MiB; the reason for that discrepancy is unresolved. A standalone untraced calloc(1,8388617) macOS malloc_size check reported 8,404,992 usable bytes; do not attribute the entire reported heap difference to two copies or ordinary allocator rounding. A parent allocation is retained in both modes.",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0 nim c -d:release --mm:arc; same binary/config/deps. Isolated nim ic failed twice with compiler rescheduling error, so classic backend used for both modes.",
+  "sourceRevision": "881e74bf with range helper copied from working tree",
+  "sourceSha256": "4fb856441c06ed05e4bc77e95b899ad2e87c95bf378f96a477bfd33b5e23135a",
+  "benchmarkSha256": "fa946b965a856ae450f230e39a204a50e830dab94618b6bfe6185e66e3fdd2b9",
+  "binarySha256": "7ca58c4af7866604ed763b2ce1d2107c51f0df26b60e7939795a8ebbc75f6225",
+  "buildCommand": "nim c -d:release --nimcache:/tmp/merenda-range-probe-c-cache --out:/tmp/merenda-range-memory tests/benchmarks/textrangestoragememory.nim",
+  "sampleCommands": {
+    "copy": [
+      "/tmp/merenda-range-memory",
+      "copy",
+      "16777216"
+    ],
+    "range": [
+      "/tmp/merenda-range-memory",
+      "range",
+      "16777216"
+    ]
+  },
+  "samples": [
+    {
+      "mode": "copy",
+      "sample": 1,
+      "stages": [
+        {
+          "mode": "copy",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17542752,
+          "rssBytes": 56557568,
+          "peakRssBytes": 56590336
+        },
+        {
+          "mode": "copy",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587280,
+          "rssBytes": 57081856,
+          "peakRssBytes": 57114624
+        },
+        {
+          "mode": "copy",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587280,
+          "rssBytes": 57163776,
+          "peakRssBytes": 57163776
+        },
+        {
+          "mode": "copy",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587296,
+          "rssBytes": 57163776,
+          "peakRssBytes": 57163776
+        },
+        {
+          "mode": "copy",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587296,
+          "rssBytes": 57163776,
+          "peakRssBytes": 57163776
+        },
+        {
+          "mode": "copy",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587296,
+          "rssBytes": 57163776,
+          "peakRssBytes": 57163776
+        },
+        {
+          "mode": "copy",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34587296,
+          "rssBytes": 57163776,
+          "peakRssBytes": 57163776
+        }
+      ]
+    },
+    {
+      "mode": "range",
+      "sample": 1,
+      "stages": [
+        {
+          "mode": "range",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17539680,
+          "rssBytes": 56590336,
+          "peakRssBytes": 56590336
+        },
+        {
+          "mode": "range",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34597520,
+          "rssBytes": 56803328,
+          "peakRssBytes": 56803328
+        },
+        {
+          "mode": "range",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17705520,
+          "rssBytes": 56868864,
+          "peakRssBytes": 56868864
+        },
+        {
+          "mode": "range",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17705536,
+          "rssBytes": 56868864,
+          "peakRssBytes": 56868864
+        },
+        {
+          "mode": "range",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34728656,
+          "rssBytes": 57065472,
+          "peakRssBytes": 57065472
+        },
+        {
+          "mode": "range",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34728656,
+          "rssBytes": 57065472,
+          "peakRssBytes": 57065472
+        },
+        {
+          "mode": "range",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17934912,
+          "rssBytes": 57065472,
+          "peakRssBytes": 57065472
+        }
+      ]
+    },
+    {
+      "mode": "copy",
+      "sample": 2,
+      "stages": [
+        {
+          "mode": "copy",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17541216,
+          "rssBytes": 56344576,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "copy",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599056,
+          "rssBytes": 56852480,
+          "peakRssBytes": 56885248
+        },
+        {
+          "mode": "copy",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599056,
+          "rssBytes": 56967168,
+          "peakRssBytes": 56967168
+        },
+        {
+          "mode": "copy",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599072,
+          "rssBytes": 56967168,
+          "peakRssBytes": 56967168
+        },
+        {
+          "mode": "copy",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599072,
+          "rssBytes": 56967168,
+          "peakRssBytes": 56967168
+        },
+        {
+          "mode": "copy",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599072,
+          "rssBytes": 56967168,
+          "peakRssBytes": 56967168
+        },
+        {
+          "mode": "copy",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34599072,
+          "rssBytes": 56967168,
+          "peakRssBytes": 56967168
+        }
+      ]
+    },
+    {
+      "mode": "range",
+      "sample": 2,
+      "stages": [
+        {
+          "mode": "range",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17539680,
+          "rssBytes": 56344576,
+          "peakRssBytes": 56344576
+        },
+        {
+          "mode": "range",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34597520,
+          "rssBytes": 56590336,
+          "peakRssBytes": 56623104
+        },
+        {
+          "mode": "range",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17705520,
+          "rssBytes": 56754176,
+          "peakRssBytes": 56754176
+        },
+        {
+          "mode": "range",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17705536,
+          "rssBytes": 56754176,
+          "peakRssBytes": 56754176
+        },
+        {
+          "mode": "range",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34728656,
+          "rssBytes": 56950784,
+          "peakRssBytes": 56950784
+        },
+        {
+          "mode": "range",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34728656,
+          "rssBytes": 56950784,
+          "peakRssBytes": 56950784
+        },
+        {
+          "mode": "range",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17934912,
+          "rssBytes": 56950784,
+          "peakRssBytes": 56950784
+        }
+      ]
+    },
+    {
+      "mode": "copy",
+      "sample": 3,
+      "stages": [
+        {
+          "mode": "copy",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17522784,
+          "rssBytes": 56131584,
+          "peakRssBytes": 56131584
+        },
+        {
+          "mode": "copy",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34563728,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "copy",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34563728,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "copy",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34563744,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "copy",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34563744,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "copy",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34571936,
+          "rssBytes": 56459264,
+          "peakRssBytes": 56492032
+        },
+        {
+          "mode": "copy",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34571936,
+          "rssBytes": 56524800,
+          "peakRssBytes": 56524800
+        }
+      ]
+    },
+    {
+      "mode": "range",
+      "sample": 3,
+      "stages": [
+        {
+          "mode": "range",
+          "stage": "parent",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17522784,
+          "rssBytes": 56115200,
+          "peakRssBytes": 56115200
+        },
+        {
+          "mode": "range",
+          "stage": "styleFixture",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34563728,
+          "rssBytes": 56360960,
+          "peakRssBytes": 56360960
+        },
+        {
+          "mode": "range",
+          "stage": "childRetained",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17671728,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "range",
+          "stage": "boundedReads",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17671744,
+          "rssBytes": 56377344,
+          "peakRssBytes": 56377344
+        },
+        {
+          "mode": "range",
+          "stage": "materialized",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34580688,
+          "rssBytes": 56541184,
+          "peakRssBytes": 56573952
+        },
+        {
+          "mode": "range",
+          "stage": "discardHeld",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 34580688,
+          "rssBytes": 56688640,
+          "peakRssBytes": 56688640
+        },
+        {
+          "mode": "range",
+          "stage": "discardReleased",
+          "parentBytes": 16777216,
+          "childBytes": 8388608,
+          "heapBytes": 17688640,
+          "rssBytes": 56688640,
+          "peakRssBytes": 56688640
+        }
+      ]
+    }
+  ],
+  "medians": [
+    {
+      "stage": "parent",
+      "copy": {
+        "heapBytes": 17541216,
+        "rssBytes": 56344576,
+        "peakRssBytes": 56377344
+      },
+      "range": {
+        "heapBytes": 17539680,
+        "rssBytes": 56344576,
+        "peakRssBytes": 56344576
+      }
+    },
+    {
+      "stage": "styleFixture",
+      "copy": {
+        "heapBytes": 34587280,
+        "rssBytes": 56852480,
+        "peakRssBytes": 56885248
+      },
+      "range": {
+        "heapBytes": 34597520,
+        "rssBytes": 56590336,
+        "peakRssBytes": 56623104
+      }
+    },
+    {
+      "stage": "childRetained",
+      "copy": {
+        "heapBytes": 34587280,
+        "rssBytes": 56967168,
+        "peakRssBytes": 56967168
+      },
+      "range": {
+        "heapBytes": 17705520,
+        "rssBytes": 56754176,
+        "peakRssBytes": 56754176
+      }
+    },
+    {
+      "stage": "boundedReads",
+      "copy": {
+        "heapBytes": 34587296,
+        "rssBytes": 56967168,
+        "peakRssBytes": 56967168
+      },
+      "range": {
+        "heapBytes": 17705536,
+        "rssBytes": 56754176,
+        "peakRssBytes": 56754176
+      }
+    },
+    {
+      "stage": "materialized",
+      "copy": {
+        "heapBytes": 34587296,
+        "rssBytes": 56967168,
+        "peakRssBytes": 56967168
+      },
+      "range": {
+        "heapBytes": 34728656,
+        "rssBytes": 56950784,
+        "peakRssBytes": 56950784
+      }
+    },
+    {
+      "stage": "discardHeld",
+      "copy": {
+        "heapBytes": 34587296,
+        "rssBytes": 56967168,
+        "peakRssBytes": 56967168
+      },
+      "range": {
+        "heapBytes": 34728656,
+        "rssBytes": 56950784,
+        "peakRssBytes": 56950784
+      }
+    },
+    {
+      "stage": "discardReleased",
+      "copy": {
+        "heapBytes": 34587296,
+        "rssBytes": 56967168,
+        "peakRssBytes": 56967168
+      },
+      "range": {
+        "heapBytes": 17934912,
+        "rssBytes": 56950784,
+        "peakRssBytes": 56950784
+      }
+    }
+  ]
+}
