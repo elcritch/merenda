@@ -9,6 +9,8 @@ Compile the tracked Nim probes with the project's Atlas configuration first:
   python3 tests/benchmarks/capture_allocations.py preview /tmp/preview /tmp/preview-graph 20
   python3 tests/benchmarks/capture_allocations.py smart /tmp/smart /tmp/smart-graph small middle enabled
   python3 tests/benchmarks/capture_allocations.py keys /tmp/keys /tmp/keys-graph 16 8192
+  python3 tests/benchmarks/capture_allocations.py owner /tmp/owner /tmp/owner-graph 16 8192
+  python3 tests/benchmarks/capture_allocations.py cache /tmp/cache /tmp/cache-graph
 
 Run baseline and changed builds with identical settings, without other builds.
 The full-history graph can contain program memory; keep it in a safe location.
@@ -23,8 +25,8 @@ import time
 
 
 def main():
-    if len(sys.argv) < 4 or sys.argv[1] not in ("markdown", "synedit", "undo", "preview", "smart", "keys"):
-        raise SystemExit("usage: capture_allocations.py markdown|synedit|undo|preview|smart|keys BINARY OUTPUT_PREFIX [arguments]")
+    if len(sys.argv) < 4 or sys.argv[1] not in ("markdown", "synedit", "undo", "preview", "smart", "keys", "owner", "cache"):
+        raise SystemExit("usage: capture_allocations.py markdown|synedit|undo|preview|smart|keys|owner|cache BINARY OUTPUT_PREFIX [arguments]")
     kind, binary, prefix = sys.argv[1:4]
     arguments = sys.argv[4:]
     if kind == "markdown" and (len(arguments) != 3 or arguments[1] not in ("storage", "view")):
@@ -39,8 +41,12 @@ def main():
         raise SystemExit("smart requires: small|large begin|middle|end|selected enabled|disabled")
     if kind == "keys" and len(arguments) != 2:
         raise SystemExit("keys requires: block-count repeated-lines-per-block")
+    if kind == "owner" and len(arguments) != 2:
+        raise SystemExit("owner requires: block-count repeated-lines-per-block")
+    if kind == "cache" and arguments:
+        raise SystemExit("cache takes no extra arguments")
     command = [binary] + (["pause"] if kind == "synedit" else arguments)
-    if kind == "keys":
+    if kind in ("keys", "owner", "cache"):
         command.append("pause")
     output = Path(prefix)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +88,10 @@ def main():
                     stage = json.loads(line)["stage"]
                     if kind == "keys":
                         ready |= stage == "structureApplied"
+                    elif kind == "owner":
+                        ready |= stage == "twoStructuresApplied"
+                    elif kind == "cache":
+                        ready |= stage == "previewCacheSettled"
                     else:
                         ready |= stage == ("storage" if arguments[1] == "storage" else "firstRender")
         if not ready:

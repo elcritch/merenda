@@ -97,3 +97,54 @@ it asserts rendering is queued and no render chunks have run. The worker still
 owns pending code strings at that checkpoint. Traced and three-pair untraced
 measurements, source/binary hashes, and limits are in
 [markdown-code-keys-memory-2026-11-06.json](results/markdown-code-keys-memory-2026-11-06.json).
+
+For shared document owners, build `markdownownermemory.nim` from matched
+checkouts, adding `-d:sharedMarkdownOwner` only to the shared-owner build.
+Both variants initialize two empty views, then poll only Sigils until the new
+structures are applied and rendering is queued; highlighting has not started.
+For example, capture a fresh graph with `capture_allocations.py owner
+/tmp/merenda-owner-after /tmp/owner-after 16 8192`.
+
+`markdownembeddedmemory.nim` measures the same quoted and overflowing content
+and viewport roundtrip in fresh processes, waiting for observable main and
+child layout work. `markdownpreviewcachememory.nim` compares three Kosmo
+previews with a nonempty isolated installed grammar; build the changed variant
+with `-d:previewBudget -d:markdownPreviewProbe` to select a zero-byte soft
+budget and assert one retained active view. Capture a graph with
+`capture_allocations.py cache /tmp/merenda-cache-after /tmp/cache-after`.
+The budget is an estimated retained-payload policy, not an RSS or native-memory
+cap. Source revisions, build commands, checkpoints, raw paired samples and
+limitations are in [Markdown sharing memory evidence](results/markdown-sharing-memory-2026-11-07.json).
+
+For the embedded RSS investigation, `markdownembeddedtrace.nim` adds an
+optional checkpoint pause to the same workload, and
+`markdownembeddedcycles.nim` repeats the viewport roundtrip ten times. Build
+both fixtures in the matched checkouts with `nim c -d:release -d:useMalloc` and
+separate caches, using output names `/tmp/merenda-embedded-trace-before`,
+`/tmp/merenda-embedded-trace-after`, `/tmp/merenda-embedded-cycles-before`,
+and `/tmp/merenda-embedded-cycles-after`. The wrappers preserve their original
+capture commands, deadlines, cleanup and output paths. For the ABBA first
+render check, run:
+
+```sh
+python3 tests/benchmarks/embedded_vm_capture.py after firstRender A1
+python3 tests/benchmarks/embedded_vm_capture.py before firstRender B1
+python3 tests/benchmarks/embedded_vm_capture.py before firstRender B2
+python3 tests/benchmarks/embedded_vm_capture.py after firstRender A2
+python3 tests/benchmarks/embedded_highwater_capture.py before firstRender B
+python3 tests/benchmarks/embedded_highwater_capture.py after firstRender A
+python3 tests/benchmarks/embedded_stack_capture.py before firstRender Bfirst
+python3 tests/benchmarks/embedded_stack_capture.py after firstRender Afirst
+python3 tests/benchmarks/embedded_stack_capture.py before restored Brestored
+python3 tests/benchmarks/embedded_stack_capture.py after restored Arestored
+/tmp/merenda-embedded-cycles-before 12
+/tmp/merenda-embedded-cycles-after 12
+```
+
+The pause wrapper uses `vmmap -summary`; the high-water wrapper uses
+`MallocStackLogging=all` and `malloc_history` on the live process. The stack
+wrapper captures current-live call trees at the selected checkpoint. Each sample
+has its own startup and native allocator state, so compare the within-process
+cycle trend separately from absolute values between processes. The measured
+cycle source and its subsequently formatted equivalent have separate hashes
+in the evidence file.

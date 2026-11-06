@@ -29,8 +29,8 @@ effort: this document already excluded much of the completed foundation.
 | SynEdit tokenizer source ownership | Scoped borrow implemented; an 8 MiB copy is absent in allocation stacks |
 | Background layout requests | Compact interned payload implemented; source caching deferred pending a reliable memory benefit |
 | Edit history | Attributed deltas for ordinary internal-storage edits; conservative snapshot fallbacks and budget work remain |
-| Markdown tables and embedded storage | UTF-8 cells/word ranges, table-only overflow storage, and compact builder styles implemented; shared child text remains open |
-| Markdown child layout | Lazy creation implemented; releasing inactive state remains open |
+| Markdown tables and embedded storage | UTF-8 cell ranges and compact styles implemented; compatible child text shares immutable parent segments |
+| Markdown preview lifecycle | Compatible panes share parsed documents; inactive previews and offscreen child views can release reconstructible state under a soft byte budget |
 | Terminal search | Compact row/exception mapping implemented on this branch; full search text and match list remain |
 | Kosmo Matter | Streaming columns and latest-request handoff implemented; broader source reuse and aggregate byte budgets remain open |
 | Git Diff | Patch ownership duplication remains; existing payload/cache limits are retained |
@@ -46,7 +46,7 @@ The detailed checklist records validation and remaining work below.
 | --- | --- | --- |
 | 1 | Stream/bound Kosmo terminal search | Avoid a full search subject and unbounded match list |
 | 2 | Measure compact layout payload reuse | Verify reflow allocation savings and revision-overlap memory |
-| 2 | Share Markdown embedded text | Reduce duplicate retained text |
+| 2 | Measure embedded-view allocator and native costs further | Explain process-memory variation despite smaller logical payloads |
 | 2 | Reduce Kosmo Matter and Git Diff source duplication | Bound worker and document working sets |
 | 3 | Extend undo deltas/budgets and evaluate chunks | Larger structural reductions for long documents |
 
@@ -182,7 +182,8 @@ MarkdownTableCell, wrapTableCell, and renderTable.
 
 These per-rune table records are rendering temporaries, not permanently retained
 by MarkdownView. The primary gain is lower rendering/resize peak memory and
-allocation traffic; embedded table storage is a separate retained cost.
+allocation traffic. Compatible embedded table storage now shares immutable
+parent segments; unmatched content retains an independent fallback.
 
 ## Share Markdown children and budget preview caches
 
@@ -193,10 +194,10 @@ continueMarkdownHighlight;
 [application_editor.nim](src/merenda/kosmo/application_editor.nim),
 syncSelectedEditorContent and markdownViewForBuffer.
 
-- [ ] Add immutable storage range views for embedded code/table text. Code
-  blocks retain child storage and append the same bytes into the main document.
-  Include a stable style table and range origin in the view; borrowing mutable
-  storage style IDs is insufficient.
+- [x] Share immutable source ranges for embedded code/table text when their
+  complete mapped content matches the parent. Segmented ranges cover nested
+  quote and list prefixes; unsafe or mismatched mappings retain the independent
+  storage fallback. Child-local styles and edits remain independent.
 - [x] Intern builder attributes while building instead of keeping full
   TextAttributeRun payloads until final storage construction. `TextRunBuilder`
   transfers compact runs and a stable palette into storage; builder merges
@@ -221,13 +222,13 @@ syncSelectedEditorContent and markdownViewForBuffer.
   "fitting code blocks do not allocate embedded text views" and "offscreen code
   and table scroll views are created near the viewport" in
   [markdownviews.nim](tests/nimkit/markdownviews.nim).
-- [ ] Release reconstructible AST/render state for inactive previews where
-  useful. Offscreen child views are currently hidden, not evicted; child storage
-  is prepared during rendering and the AST remains retained. Preserve heading
-  folding and resize behavior that currently reuse this state.
-- [ ] Budget Kosmo Markdown previews by retained bytes as well as count. A
-  three-preview limit already exists; three large ASTs, layouts, images, and
-  storages can still be expensive, especially across panes.
+- [x] Release inactive preview render state and offscreen embedded views while
+  preserving folds, selection and scroll state. Pending parser and layout work
+  remains charged through retirement receipts until acknowledgement.
+- [x] Add a controller-wide soft retained-payload budget alongside the existing
+  per-pane count limit. Visible previews and pending work remain pinned; unknown
+  native, shared font and renderer resources are explicitly incomplete, so this
+  is not an RSS or hard process-memory cap.
 - [x] Gate preview synchronization by Moe buffer content version before calling
   bufferText(). It builds a complete string before markdown= can reject an
   unchanged value. Six focused tests cover refresh, selection, style, reload,
@@ -235,7 +236,9 @@ syncSelectedEditorContent and markdownViewForBuffer.
   allocations / 9,004,480 bytes across 20 unchanged refreshes before the gate
   and none after initial setup with the gate. Global traced peak stays
   183.8 MB; this isolates extraction rather than full-preview layout costs.
-- [ ] Share immutable preview document data across panes where feasible.
+- [x] Share built-in Markdown source, AST and neutral Matter spans between
+  compatible panes using an explicit per-document owner. Custom parser and
+  highlighter paths retain independent behavior.
 
 ## Stream Kosmo terminal search
 
@@ -481,9 +484,35 @@ Three additional untraced paired processes reached first render in a median
 and resize heap was 328.72 → 327.70 MiB. These small variations and changes
 in RSS are not proof that retained memory is identical across workloads.
 
+The later shared-owner fixture applies two 2,883,958-byte document structures
+without running their queued rendering or highlighting. Across three alternating
+fresh-process pairs, median live malloc heap was 103,391,168 → 83,827,616 bytes.
+One logged pair reported current heap+VM 88.4 → 72.2 MB, high-water 96.6 →
+80.4 MB and cumulative requests 8.42 → 4.27 GB. These are structure-only
+measurements, not completed-view or exact document-object sizes.
+
+In a separate three-document Kosmo fixture with a nonempty installed grammar,
+the baseline retained three previews and the changed build used a configured
+zero-byte soft budget to retain the same active preview. Median live malloc
+heap was 486,869,952 → 316,819,728 bytes; this does not predict savings from the
+default budget or bound process RSS. For a smaller quoted/overflow embedded
+fixture, the offscreen child count changed from one to zero; the median heap
+difference was small relative to run variation and recreating the child added
+some allocation on return. In one logged first-render pair, current and
+high-water heap+VM both matched at the displayed precision (114.9 and 127.6 MB);
+cumulative requests were 473.5 → 473.6 MB. An untraced ten-cycle check
+plateaued within each process, while its absolute process heaps already differed
+at first render and after release. The initial RSS ordering reversed in a
+separate ABBA run. These checks do not establish a universal RSS non-regression
+or a cause for native/allocator variation. The final matched 500-row
+first-render trace retained the earlier
+rounded logged values of 228.4 MB current, 281.5 MB high-water and 1.09 GB
+cumulative requests; it is one traced sample, not a general no-growth claim.
+
 Raw process and allocation summaries, build/source hashes, commands, checkpoint
 details, and limitations:
 
+- [Shared Markdown owner, embedded views, and preview budget samples](tests/benchmarks/results/markdown-sharing-memory-2026-11-07.json).
 - [Markdown allocation stacks](tests/benchmarks/results/markdown-allocations-2026-11-06.json).
 - [SynEdit allocation stacks](tests/benchmarks/results/synedit-allocations-2026-11-06.json).
 - [Compact builder allocation stacks](tests/benchmarks/results/markdown-builder-allocations-2026-11-06.json).
@@ -531,9 +560,10 @@ text allocations unchanged at these checkpoints. Keep this as an acceptance
 criterion for subsequent work, rather than extrapolating it to unmeasured APIs.
 
 Validation after the latest feature batches: the complete shared NimKit runner
-passes, all 45 focused Kosmo Matter/Markdown activation tests pass, focused
-TextStorage ASan/UBSan checks pass, and the example bundle compiles with `nim ic`
-without running it. This is component and example coverage, not a full Kosmo or
+passes 1,433 tests, 69 selected Kosmo Matter/Markdown, pane and split tests
+pass, and the example bundle compiles with `nim ic` without running it. Eight
+focused owner-lifetime and reentrancy cases also pass ASan/UBSan with leak
+detection disabled. This is component and example coverage, not a full Kosmo or
 integration-suite result.
 
 ## Historical measurements from completed changes

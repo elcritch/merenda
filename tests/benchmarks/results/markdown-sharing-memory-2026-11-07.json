@@ -1,0 +1,2418 @@
+{
+  "date": "2026-11-07",
+  "status": "complete; embedded RSS direction remains workload- and process-dependent",
+  "environment": {
+    "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+    "architecture": "arm64",
+    "nimVersion": "Nim Compiler Version 2.4.0 [MacOSX: arm64]",
+    "memory": "heapBytes is malloc-zone live size_in_use; RSS is process-wide and peakRssBytes is process high-water RSS. These are not exact Markdown object sizes."
+  },
+  "sourceProvenance": {
+    "baseRevision": "59b4ba35",
+    "sharedHelperRevision": "1a42667b",
+    "before": "59b4ba35 with six identical 1a42667b helper modules copied into both trees",
+    "after": "same base and helpers, plus frozen Markdown and Kosmo integration changes",
+    "afterMarkdownViewsSha256": "302176ad60c53eb7e1d4e45b7da57c8906fe0168d532b3607816cbd27e4b4105",
+    "afterMarkdownParsingSha256": "fbc6b2a6d3004fc5adce78ebc481fac6f06ced54924137aec86f250f5d406986",
+    "afterKosmoEditorSha256": "e435b2c99c2498f460059b9ff87165b04caceab47253e653ec466d5b689645c2",
+    "nimCfgSha256": "fa0104ed6d19539b720e95d42480275adcacebc2363d680b37597139f0a15111",
+    "backend": "classic Nim C, release, ARC, -d:useMalloc, separate caches; IC rescheduling previously failed for matched probes",
+    "sharedHelperSha256": {
+      "src/merenda/nimkit/drawing/images.nim": "98401a2d80e8e7a20d74b9267061c97a8e0ae2bf0367d75953210b92b01a6227",
+      "src/merenda/nimkit/text/gaptextbuffers.nim": "2453a4f02453e50fec439981a511ee0c44e4398c7105274a84142597b20c828a",
+      "src/merenda/nimkit/text/textlayout.nim": "ce200744525a181bbf1e712e21db371455a753bb9044d3301ff476c097527ea6",
+      "src/merenda/nimkit/text/textlayoutworkers.nim": "1c1714808cbcf7fb24cf56280a3bc8fa1e7766d9d85d997844040860f86a8d13",
+      "src/merenda/nimkit/text/textsnapshots.nim": "e18e98390bb8ac164d3b50f83825c289c228ff3ad3a2f87145aa166f5276e890",
+      "src/merenda/nimkit/text/textstorage.nim": "8a43a6701b48a9c06d260dc2910c73619d0c0264a1ef294712c0d82dc4af051c"
+    },
+    "afterChangedSourceSha256": {
+      "src/merenda/kosmo/application_dock.nim": "2d25880af9a6efd0b1acd617ec8460505c9803c428d71c4958c5d38f88944fd6",
+      "src/merenda/kosmo/application_editor.nim": "e435b2c99c2498f460059b9ff87165b04caceab47253e653ec466d5b689645c2",
+      "src/merenda/kosmo/application_types.nim": "0f11023f8d551874bf2d54cdba9d8c3cbd8b8ba971eb503ee23279de9ae7e1bc",
+      "src/merenda/kosmo/application_windows.nim": "22a95e3c7367a4186a72cb802b59b158a5755340a90f56b6991641efa5468bd8",
+      "src/merenda/kosmo/moe.nim": "4d6d6f3592df20c3d5ae798fe8fe0854fb5c819e85b0ef6225ec10b00424196a",
+      "src/merenda/kosmo/markdownpreviewbudget.nim": "464110554ed71c92c89efba391d1d1abd1d34da3b29a58a14955ecca180fddfa",
+      "src/merenda/nimkit/text/markdownparsing.nim": "fbc6b2a6d3004fc5adce78ebc481fac6f06ced54924137aec86f250f5d406986",
+      "src/merenda/nimkit/text/markdownviews.nim": "302176ad60c53eb7e1d4e45b7da57c8906fe0168d532b3607816cbd27e4b4105"
+    },
+    "afterRevision": "484466f7",
+    "coreRevision": "bb222389",
+    "beforeEquivalentRevision": "1a42667b",
+    "afterRevisionNote": "Frozen Nim product sources match the profiled after snapshot. The isolated worktree retained merenda.nimble version 0.30.4 from 59b4ba35; the later unrelated 067f2c4a commit changed the final checkout manifest to 0.31.0. Benchmark and evidence files were added afterward."
+  },
+  "ownerStructure": {
+    "harness": "tests/benchmarks/markdownownermemory.nim",
+    "harnessSha256": "02b19ff833be3ac16cce3b1818429af464c93a50cc70555a5290742e3ab2be18",
+    "beforeBinarySha256": "2c4a6e7082a17d5ad421c372f4916a0a46a9c4d2a94c0c59fe66bfe034a64931",
+    "afterBinarySha256": "0f16b88cc7563327ce1c70333d512bcb2f86c57bcce7bdd9f27dc7d5a5b1e726",
+    "buildBefore": "nim c -d:release -d:useMalloc --nimcache:/tmp/merenda-owner-before-cache --out:/tmp/merenda-owner-before tests/benchmarks/markdownownermemory.nim",
+    "buildAfter": "nim c -d:release -d:useMalloc -d:sharedMarkdownOwner --nimcache:/tmp/merenda-owner-after-cache --out:/tmp/merenda-owner-after tests/benchmarks/markdownownermemory.nim",
+    "arguments": [
+      "16",
+      "8192"
+    ],
+    "checkpoint": "Both initialized views have structure applied and rendering queued; only Sigils is pumped, no new render chunks or code highlighting. Source and worker code strings remain live. heapWithEmptyViewsAndSource precedes either new parse.",
+    "samples": {
+      "before": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-owner-before",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 3.713040041970089,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "standalone",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 59783856,
+              "heapBytes": 103525312,
+              "rssBytes": 166051840,
+              "peakRssBytes": 166051840,
+              "elapsedMs": 3173
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-owner-before",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 3.31357774999924,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "standalone",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 59137712,
+              "heapBytes": 103391168,
+              "rssBytes": 164724736,
+              "peakRssBytes": 164724736,
+              "elapsedMs": 3257
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-owner-before",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 3.271703290985897,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "standalone",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 58855088,
+              "heapBytes": 100785600,
+              "rssBytes": 149995520,
+              "peakRssBytes": 149995520,
+              "elapsedMs": 3219
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-owner-after",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 1.979892458068207,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "shared",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 59888048,
+              "heapBytes": 83827616,
+              "rssBytes": 115343360,
+              "peakRssBytes": 115343360,
+              "elapsedMs": 1579
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-owner-after",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 1.6376272498164326,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "shared",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 59207600,
+              "heapBytes": 83411360,
+              "rssBytes": 140230656,
+              "peakRssBytes": 140230656,
+              "elapsedMs": 1580
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-owner-after",
+            "16",
+            "8192"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 1.6438467078842223,
+          "stages": [
+            {
+              "stage": "twoStructuresApplied",
+              "variant": "shared",
+              "sourceBytes": 2883958,
+              "blocks": 16,
+              "lineRepeats": 8192,
+              "views": 2,
+              "heapWithEmptyViewsAndSource": 58872240,
+              "heapBytes": 84130208,
+              "rssBytes": 122339328,
+              "peakRssBytes": 122339328,
+              "elapsedMs": 1591
+            }
+          ]
+        }
+      ]
+    },
+    "summary": {
+      "before": {
+        "heapBytes": {
+          "samples": [
+            103525312,
+            103391168,
+            100785600
+          ],
+          "median": 103391168
+        },
+        "rssBytes": {
+          "samples": [
+            166051840,
+            164724736,
+            149995520
+          ],
+          "median": 164724736
+        },
+        "peakRssBytes": {
+          "samples": [
+            166051840,
+            164724736,
+            149995520
+          ],
+          "median": 164724736
+        }
+      },
+      "after": {
+        "heapBytes": {
+          "samples": [
+            83827616,
+            83411360,
+            84130208
+          ],
+          "median": 83827616
+        },
+        "rssBytes": {
+          "samples": [
+            115343360,
+            140230656,
+            122339328
+          ],
+          "median": 122339328
+        },
+        "peakRssBytes": {
+          "samples": [
+            115343360,
+            140230656,
+            122339328
+          ],
+          "median": 122339328
+        }
+      }
+    },
+    "trace": {
+      "method": "One fresh paused process per variant, MallocStackLogging=1, leaks --fullStackHistory --outputGraph, malloc_history high-water and live inverted call trees. Apple-reported decimal labels retained; stack logging changes memory and timing. No-stack malloc and VM blocks are separate from logged totals.",
+      "captureCommands": [
+        "python3 tests/benchmarks/capture_allocations.py owner /tmp/merenda-owner-before /tmp/merenda-markdown-owner-trace/before 16 8192",
+        "python3 tests/benchmarks/capture_allocations.py owner /tmp/merenda-owner-after /tmp/merenda-markdown-owner-trace/after 16 8192"
+      ],
+      "capturedAt": "twoStructuresApplied, before rendering/highlighting",
+      "before": {
+        "currentHeapVmMB": 88.4,
+        "highWaterHeapVmMB": 96.6,
+        "cumulativeRequestedHeapVmGB": 8.42,
+        "allocations": 67492516,
+        "loggedLiveCallTreeMB": 89.7,
+        "unstackedMalloc": "810 blocks / 71K",
+        "unstackedVM": "6 regions / 112K"
+      },
+      "after": {
+        "currentHeapVmMB": 72.2,
+        "highWaterHeapVmMB": 80.4,
+        "cumulativeRequestedHeapVmGB": 4.27,
+        "allocations": 33993378,
+        "loggedLiveCallTreeMB": 72.7,
+        "unstackedMalloc": "810 blocks / 71K",
+        "unstackedVM": "6 regions / 112K"
+      },
+      "localArtifactPrefix": "/tmp/merenda-markdown-owner-trace/{before,after}",
+      "caveat": "Cumulative allocation-request totals are traffic, not retained memory or physical bytes copied; current and live call-tree totals use different tool accounting. Do not compare logged totals directly to untraced malloc-zone medians."
+    }
+  },
+  "previewCache": {
+    "harness": "tests/benchmarks/markdownpreviewcachememory.nim",
+    "harnessSha256": "d059633aae94781cd4a5474612b03371d7753022cab7f33e8fc4dd733647fa24",
+    "beforeBinarySha256": "e74de22a961ff9a4e9eb2c78e380480c572923deb9ca3c82bcc9a36f93b4aaf1",
+    "afterBinarySha256": "b2185e42109ebae1d63bf6e5ab252fb0d1b0fa1f49c211fd24e5482b39277ac8",
+    "buildBefore": "nim c -d:release -d:useMalloc --nimcache:/tmp/merenda-owner-before-cache --out:/tmp/merenda-cache-before tests/benchmarks/markdownpreviewcachememory.nim",
+    "buildAfter": "nim c -d:release -d:useMalloc -d:previewBudget -d:markdownPreviewProbe --nimcache:/tmp/merenda-owner-after-cache --out:/tmp/merenda-cache-after tests/benchmarks/markdownpreviewcachememory.nim",
+    "checkpoint": "Three 500-row documents in one Kosmo pane with an isolated installed SQL grammar. The baseline verifies three cached preview identities; after uses a configured zero-byte soft budget and asserts exactly one retained active preview and no pending controller work. The active document and rendered rune counts match. This is not a measurement of the default 128 MiB budget.",
+    "samples": {
+      "before": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-cache-before"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.540243583964184,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "baseline",
+              "documents": 3,
+              "retainedPreviews": 3,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 487259776,
+              "rssBytes": 706068480,
+              "peakRssBytes": 706068480
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-cache-before"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.193808458046988,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "baseline",
+              "documents": 3,
+              "retainedPreviews": 3,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 486869952,
+              "rssBytes": 712228864,
+              "peakRssBytes": 712228864
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-cache-before"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.111835292074829,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "baseline",
+              "documents": 3,
+              "retainedPreviews": 3,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 486118432,
+              "rssBytes": 687489024,
+              "peakRssBytes": 687489024
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-cache-after"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.547211333177984,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "evicted",
+              "documents": 3,
+              "retainedPreviews": 1,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 316819728,
+              "rssBytes": 646004736,
+              "peakRssBytes": 663814144
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-cache-after"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.115619500167668,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "evicted",
+              "documents": 3,
+              "retainedPreviews": 1,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 316857904,
+              "rssBytes": 662585344,
+              "peakRssBytes": 687374336
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-cache-after"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 5.146180459065363,
+          "stages": [
+            {
+              "stage": "previewCacheSettled",
+              "variant": "evicted",
+              "documents": 3,
+              "retainedPreviews": 1,
+              "rowsPerDocument": 500,
+              "sourceBytes": 70482,
+              "activeRunes": 49611,
+              "heapBytes": 316396080,
+              "rssBytes": 640679936,
+              "peakRssBytes": 657440768
+            }
+          ]
+        }
+      ]
+    },
+    "summary": {
+      "before": {
+        "heapBytes": {
+          "samples": [
+            487259776,
+            486869952,
+            486118432
+          ],
+          "median": 486869952
+        },
+        "rssBytes": {
+          "samples": [
+            706068480,
+            712228864,
+            687489024
+          ],
+          "median": 706068480
+        },
+        "peakRssBytes": {
+          "samples": [
+            706068480,
+            712228864,
+            687489024
+          ],
+          "median": 706068480
+        }
+      },
+      "after": {
+        "heapBytes": {
+          "samples": [
+            316819728,
+            316857904,
+            316396080
+          ],
+          "median": 316819728
+        },
+        "rssBytes": {
+          "samples": [
+            646004736,
+            662585344,
+            640679936
+          ],
+          "median": 646004736
+        },
+        "peakRssBytes": {
+          "samples": [
+            663814144,
+            687374336,
+            657440768
+          ],
+          "median": 663814144
+        }
+      }
+    }
+  },
+  "samplingOrder": "For each workload, three fresh-process pairs alternated before then after; fixtures asserted matching source/render counts and state.",
+  "embedded": {
+    "harness": "tests/benchmarks/markdownembeddedmemory.nim",
+    "harnessSha256": "8ff96941198f6a73ab35a478e9515ffa74bc18575716554e416d395a972e710c",
+    "beforeBinarySha256": "3cc3d02ba8cb19038dce27ba67507994806175ba433d7e78794cfb4b9208e00a",
+    "afterBinarySha256": "d49c931ab21b092aeee37727bcdc416b3d0ae54494146fa7ba54ec2a825dcdac",
+    "buildBefore": "nim c -d:release -d:useMalloc --nimcache:/tmp/merenda-owner-before-cache --out:/tmp/merenda-embedded-before tests/benchmarks/markdownembeddedmemory.nim",
+    "buildAfter": "nim c -d:release -d:useMalloc --nimcache:/tmp/merenda-owner-after-cache --out:/tmp/merenda-embedded-after tests/benchmarks/markdownembeddedmemory.nim",
+    "arguments": [
+      "12"
+    ],
+    "checkpoint": "One visible wide code block followed by nested quoted Unicode code and linked overflow tables. Samples wait for observable main/child layout and eviction work, scroll offscreen and back, and assert selection, horizontal offset and child-storage identity. The first version of this fixture failed in both builds because its first quoted child was not initially visible; it is excluded.",
+    "limitations": "At this fixture size heap differences are small relative to sample variation. RSS was higher in after samples; neither cause nor a resident-memory improvement is established. The offscreen child count is observed, not a direct byte attribution.",
+    "samples": {
+      "before": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-embedded-before",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.8502274588681757,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465392,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122326224,
+              "rssBytes": 202981376,
+              "peakRssBytes": 202981376,
+              "elapsedMs": 413
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122176352,
+              "rssBytes": 202981376,
+              "peakRssBytes": 202981376,
+              "elapsedMs": 413
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122390144,
+              "rssBytes": 202997760,
+              "peakRssBytes": 202997760,
+              "elapsedMs": 415
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 121216432,
+              "rssBytes": 203014144,
+              "peakRssBytes": 203014144,
+              "elapsedMs": 415
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-embedded-before",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.386521500069648,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465392,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121700048,
+              "rssBytes": 198721536,
+              "peakRssBytes": 198721536,
+              "elapsedMs": 377
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121550176,
+              "rssBytes": 199016448,
+              "peakRssBytes": 199016448,
+              "elapsedMs": 377
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121763968,
+              "rssBytes": 199016448,
+              "peakRssBytes": 199016448,
+              "elapsedMs": 379
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120585648,
+              "rssBytes": 199032832,
+              "peakRssBytes": 199032832,
+              "elapsedMs": 379
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-embedded-before",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.38373866700567305,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465392,
+              "rssBytes": 6307840,
+              "peakRssBytes": 6307840,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 130333392,
+              "rssBytes": 200310784,
+              "peakRssBytes": 200310784,
+              "elapsedMs": 374
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 130183520,
+              "rssBytes": 202620928,
+              "peakRssBytes": 202620928,
+              "elapsedMs": 375
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 130397312,
+              "rssBytes": 202620928,
+              "peakRssBytes": 202620928,
+              "elapsedMs": 376
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 129238448,
+              "rssBytes": 202637312,
+              "peakRssBytes": 202637312,
+              "elapsedMs": 376
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "sample": 1,
+          "command": [
+            "/tmp/merenda-embedded-after",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.6949880418833345,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 466960,
+              "rssBytes": 6897664,
+              "peakRssBytes": 6897664,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122583328,
+              "rssBytes": 216203264,
+              "peakRssBytes": 216203264,
+              "elapsedMs": 438
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 122497920,
+              "rssBytes": 216219648,
+              "peakRssBytes": 216219648,
+              "elapsedMs": 439
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122945168,
+              "rssBytes": 216285184,
+              "peakRssBytes": 216285184,
+              "elapsedMs": 444
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 121665072,
+              "rssBytes": 216301568,
+              "peakRssBytes": 216301568,
+              "elapsedMs": 444
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "command": [
+            "/tmp/merenda-embedded-after",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.38754529203288257,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465424,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121900768,
+              "rssBytes": 212697088,
+              "peakRssBytes": 212697088,
+              "elapsedMs": 374
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 121815360,
+              "rssBytes": 213041152,
+              "peakRssBytes": 213041152,
+              "elapsedMs": 375
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122262608,
+              "rssBytes": 213106688,
+              "peakRssBytes": 213106688,
+              "elapsedMs": 380
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120998384,
+              "rssBytes": 213123072,
+              "peakRssBytes": 213123072,
+              "elapsedMs": 380
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "command": [
+            "/tmp/merenda-embedded-after",
+            "12"
+          ],
+          "exitCode": 0,
+          "durationSeconds": 0.3921107919886708,
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465424,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121516768,
+              "rssBytes": 204685312,
+              "peakRssBytes": 204685312,
+              "elapsedMs": 378
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 121433920,
+              "rssBytes": 204701696,
+              "peakRssBytes": 204701696,
+              "elapsedMs": 379
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121881168,
+              "rssBytes": 204767232,
+              "peakRssBytes": 204767232,
+              "elapsedMs": 384
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120653296,
+              "rssBytes": 204783616,
+              "peakRssBytes": 204783616,
+              "elapsedMs": 384
+            }
+          ]
+        }
+      ]
+    },
+    "summary": {
+      "before": {
+        "firstRender": {
+          "heapBytes": {
+            "samples": [
+              122326224,
+              121700048,
+              130333392
+            ],
+            "median": 122326224
+          },
+          "rssBytes": {
+            "samples": [
+              202981376,
+              198721536,
+              200310784
+            ],
+            "median": 200310784
+          },
+          "peakRssBytes": {
+            "samples": [
+              202981376,
+              198721536,
+              200310784
+            ],
+            "median": 200310784
+          },
+          "codeViews": {
+            "samples": [
+              1,
+              1,
+              1
+            ],
+            "median": 1
+          }
+        },
+        "offscreen": {
+          "heapBytes": {
+            "samples": [
+              122176352,
+              121550176,
+              130183520
+            ],
+            "median": 122176352
+          },
+          "rssBytes": {
+            "samples": [
+              202981376,
+              199016448,
+              202620928
+            ],
+            "median": 202620928
+          },
+          "peakRssBytes": {
+            "samples": [
+              202981376,
+              199016448,
+              202620928
+            ],
+            "median": 202620928
+          },
+          "codeViews": {
+            "samples": [
+              1,
+              1,
+              1
+            ],
+            "median": 1
+          }
+        },
+        "restored": {
+          "heapBytes": {
+            "samples": [
+              122390144,
+              121763968,
+              130397312
+            ],
+            "median": 122390144
+          },
+          "rssBytes": {
+            "samples": [
+              202997760,
+              199016448,
+              202620928
+            ],
+            "median": 202620928
+          },
+          "peakRssBytes": {
+            "samples": [
+              202997760,
+              199016448,
+              202620928
+            ],
+            "median": 202620928
+          },
+          "codeViews": {
+            "samples": [
+              1,
+              1,
+              1
+            ],
+            "median": 1
+          }
+        },
+        "released": {
+          "heapBytes": {
+            "samples": [
+              121216432,
+              120585648,
+              129238448
+            ],
+            "median": 121216432
+          },
+          "rssBytes": {
+            "samples": [
+              203014144,
+              199032832,
+              202637312
+            ],
+            "median": 202637312
+          },
+          "peakRssBytes": {
+            "samples": [
+              203014144,
+              199032832,
+              202637312
+            ],
+            "median": 202637312
+          },
+          "codeViews": {
+            "samples": [
+              0,
+              0,
+              0
+            ],
+            "median": 0
+          }
+        }
+      },
+      "after": {
+        "firstRender": {
+          "heapBytes": {
+            "samples": [
+              122583328,
+              121900768,
+              121516768
+            ],
+            "median": 121900768
+          },
+          "rssBytes": {
+            "samples": [
+              216203264,
+              212697088,
+              204685312
+            ],
+            "median": 212697088
+          },
+          "peakRssBytes": {
+            "samples": [
+              216203264,
+              212697088,
+              204685312
+            ],
+            "median": 212697088
+          },
+          "codeViews": {
+            "samples": [
+              1,
+              1,
+              1
+            ],
+            "median": 1
+          }
+        },
+        "offscreen": {
+          "heapBytes": {
+            "samples": [
+              122497920,
+              121815360,
+              121433920
+            ],
+            "median": 121815360
+          },
+          "rssBytes": {
+            "samples": [
+              216219648,
+              213041152,
+              204701696
+            ],
+            "median": 213041152
+          },
+          "peakRssBytes": {
+            "samples": [
+              216219648,
+              213041152,
+              204701696
+            ],
+            "median": 213041152
+          },
+          "codeViews": {
+            "samples": [
+              0,
+              0,
+              0
+            ],
+            "median": 0
+          }
+        },
+        "restored": {
+          "heapBytes": {
+            "samples": [
+              122945168,
+              122262608,
+              121881168
+            ],
+            "median": 122262608
+          },
+          "rssBytes": {
+            "samples": [
+              216285184,
+              213106688,
+              204767232
+            ],
+            "median": 213106688
+          },
+          "peakRssBytes": {
+            "samples": [
+              216285184,
+              213106688,
+              204767232
+            ],
+            "median": 213106688
+          },
+          "codeViews": {
+            "samples": [
+              1,
+              1,
+              1
+            ],
+            "median": 1
+          }
+        },
+        "released": {
+          "heapBytes": {
+            "samples": [
+              121665072,
+              120998384,
+              120653296
+            ],
+            "median": 120998384
+          },
+          "rssBytes": {
+            "samples": [
+              216301568,
+              213123072,
+              204783616
+            ],
+            "median": 213123072
+          },
+          "peakRssBytes": {
+            "samples": [
+              216301568,
+              213123072,
+              204783616
+            ],
+            "median": 213123072
+          },
+          "codeViews": {
+            "samples": [
+              0,
+              0,
+              0
+            ],
+            "median": 0
+          }
+        }
+      }
+    },
+    "rssInvestigation": {
+      "reason": "Initial three pairs showed higher after RSS despite small lower live-heap medians. Reversed-order and allocation-stack checks investigate this without claiming RSS equivalence.",
+      "pauseHarness": "tests/benchmarks/markdownembeddedtrace.nim",
+      "pauseHarnessSha256": "7e963cb89d52b349f865a0ea2c77ea2275e2578f03a8c02573db3af3cbd7aeee",
+      "cycleHarness": "tests/benchmarks/markdownembeddedcycles.nim",
+      "vmDriver": "tests/benchmarks/embedded_vm_capture.py",
+      "vmDriverSha256": "b8b08f965a62246d45fa1daa0f8ab019a3648a1f5d0de35636398bdffe6692e0",
+      "highWaterDriver": "tests/benchmarks/embedded_highwater_capture.py",
+      "highWaterDriverSha256": "a1ccf6a4ff5684f2c888d89c26bc2d9d6223d13bbfc314aa640c3ea3255ad61f",
+      "traceBinarySha256": {
+        "before": "d56da21c986d8b6c90496c7d843cde119b210a3dbc5f7dd18b44edd26018a771",
+        "after": "3dca35339534007b0a6a7ec88d731717511c695649499c841abd7a415390a565"
+      },
+      "cycleBinarySha256": {
+        "before": "6f3ae7e9b54c578e6635ae0546026d6729c1bf731e6ce59f15ddc2fed48827b9",
+        "after": "09400fd75d81af8785f6a06ca335e7f0361f9c0ee063b199121d83fd964e8a0e"
+      },
+      "buildTemplate": "In each worktree: nim c -d:release -d:useMalloc --nimcache:/tmp/merenda-owner-<variant>-cache --out:/tmp/merenda-embedded-<fixture>-<variant> tests/benchmarks/markdownembedded<fixture>.nim; variant before|after, fixture trace|cycles.",
+      "vmCaptureCommands": [
+        "python3 tests/benchmarks/embedded_vm_capture.py after firstRender A1",
+        "python3 tests/benchmarks/embedded_vm_capture.py before firstRender B1",
+        "python3 tests/benchmarks/embedded_vm_capture.py before firstRender B2",
+        "python3 tests/benchmarks/embedded_vm_capture.py after firstRender A2"
+      ],
+      "highWaterCommands": [
+        "python3 tests/benchmarks/embedded_highwater_capture.py before firstRender B",
+        "python3 tests/benchmarks/embedded_highwater_capture.py after firstRender A"
+      ],
+      "cycleCommands": [
+        "/tmp/merenda-embedded-cycles-before 12",
+        "/tmp/merenda-embedded-cycles-after 12"
+      ],
+      "abba": {
+        "A1": {
+          "variant": "after",
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465472,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122350640,
+              "rssBytes": 187072512,
+              "peakRssBytes": 187072512,
+              "elapsedMs": 419
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 122281616,
+              "rssBytes": 187416576,
+              "peakRssBytes": 187416576,
+              "elapsedMs": 1118
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122728864,
+              "rssBytes": 189480960,
+              "peakRssBytes": 189480960,
+              "elapsedMs": 1123
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 121465152,
+              "rssBytes": 189497344,
+              "peakRssBytes": 189497344,
+              "elapsedMs": 1123
+            }
+          ],
+          "vmmapTotals": [
+            "TOTAL                              2.5G   436.8M   129.9M       0K       0K      16K       0K     1911",
+            "TOTAL                               1.3G     162.9M     127.0M         0K      54488     115.5M      11.6M     10%      25"
+          ],
+          "vmmapPhysicalLines": [
+            "Physical footprint:         129.8M",
+            "Physical footprint (peak):  131.5M"
+          ]
+        },
+        "B1": {
+          "variant": "before",
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 466976,
+              "rssBytes": 6422528,
+              "peakRssBytes": 6422528,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122539296,
+              "rssBytes": 204374016,
+              "peakRssBytes": 204374016,
+              "elapsedMs": 409
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122405808,
+              "rssBytes": 204701696,
+              "peakRssBytes": 204701696,
+              "elapsedMs": 991
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122619600,
+              "rssBytes": 204701696,
+              "peakRssBytes": 204701696,
+              "elapsedMs": 992
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 121442816,
+              "rssBytes": 204718080,
+              "peakRssBytes": 204718080,
+              "elapsedMs": 993
+            }
+          ],
+          "vmmapTotals": [
+            "TOTAL                              2.5G   453.2M   125.0M       0K       0K      16K       0K     1910",
+            "TOTAL                               1.3G     179.5M     122.3M         0K      54538     115.5M      6987K      6%      24"
+          ],
+          "vmmapPhysicalLines": [
+            "Physical footprint:         125.0M",
+            "Physical footprint (peak):  125.0M"
+          ]
+        },
+        "B2": {
+          "variant": "before",
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465440,
+              "rssBytes": 6324224,
+              "peakRssBytes": 6324224,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 129899984,
+              "rssBytes": 184877056,
+              "peakRssBytes": 184877056,
+              "elapsedMs": 380
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 129732704,
+              "rssBytes": 184877056,
+              "peakRssBytes": 184877056,
+              "elapsedMs": 952
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 129946496,
+              "rssBytes": 184877056,
+              "peakRssBytes": 184877056,
+              "elapsedMs": 953
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 128787120,
+              "rssBytes": 184893440,
+              "peakRssBytes": 184893440,
+              "elapsedMs": 953
+            }
+          ],
+          "vmmapTotals": [
+            "TOTAL                              2.0G   434.6M   114.1M       0K       0K      16K       0K     1901",
+            "TOTAL                             956.0M     160.9M     111.5M         0K      54541     115.5M         0K      0%      15"
+          ],
+          "vmmapPhysicalLines": [
+            "Physical footprint:         114.1M",
+            "Physical footprint (peak):  114.1M"
+          ]
+        },
+        "A2": {
+          "variant": "after",
+          "stages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 465472,
+              "rssBytes": 6258688,
+              "peakRssBytes": 6258688,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121402992,
+              "rssBytes": 174243840,
+              "peakRssBytes": 174243840,
+              "elapsedMs": 372
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 121333968,
+              "rssBytes": 174571520,
+              "peakRssBytes": 174571520,
+              "elapsedMs": 941
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121781216,
+              "rssBytes": 176635904,
+              "peakRssBytes": 176635904,
+              "elapsedMs": 947
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120535424,
+              "rssBytes": 176652288,
+              "peakRssBytes": 176652288,
+              "elapsedMs": 947
+            }
+          ],
+          "vmmapTotals": [
+            "TOTAL                              2.2G   424.4M   118.3M       0K       0K      16K       0K     1903",
+            "TOTAL                               1.1G     150.6M     115.6M         0K      54500     115.5M       163K      1%      17"
+          ],
+          "vmmapPhysicalLines": [
+            "Physical footprint:         118.3M",
+            "Physical footprint (peak):  119.9M"
+          ]
+        }
+      },
+      "highWater": {
+        "method": "One paused firstRender process per variant with MallocStackLogging=all and malloc_history PID -highWaterMark -callTree -invert -noContent. Apple tool-reported MB labels retained.",
+        "before": {
+          "currentHeapVmMB": 114.9,
+          "highWaterHeapVmMB": 127.6,
+          "cumulativeRequestedHeapVmMB": 473.5,
+          "allocations": 1655732,
+          "physicalFootprintM": 118.1,
+          "physicalPeakM": 126.8,
+          "targetStages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 461344,
+              "rssBytes": 7454720,
+              "peakRssBytes": 7454720,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121987456,
+              "rssBytes": 204210176,
+              "peakRssBytes": 204210176,
+              "elapsedMs": 1398
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121853968,
+              "rssBytes": 204537856,
+              "peakRssBytes": 204537856,
+              "elapsedMs": 2767
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 122067760,
+              "rssBytes": 204537856,
+              "peakRssBytes": 204537856,
+              "elapsedMs": 2783
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120887904,
+              "rssBytes": 204554240,
+              "peakRssBytes": 204554240,
+              "elapsedMs": 2785
+            }
+          ],
+          "operations": 3257664,
+          "deallocations": 1601932
+        },
+        "after": {
+          "currentHeapVmMB": 114.9,
+          "highWaterHeapVmMB": 127.6,
+          "cumulativeRequestedHeapVmMB": 473.6,
+          "allocations": 1656049,
+          "physicalFootprintM": 124.5,
+          "physicalPeakM": 124.5,
+          "targetStages": [
+            {
+              "stage": "source",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 461376,
+              "rssBytes": 7438336,
+              "peakRssBytes": 7438336,
+              "elapsedMs": 0
+            },
+            {
+              "stage": "firstRender",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121423440,
+              "rssBytes": 187269120,
+              "peakRssBytes": 187269120,
+              "elapsedMs": 1385
+            },
+            {
+              "stage": "offscreen",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 0,
+              "heapBytes": 121354416,
+              "rssBytes": 187580416,
+              "peakRssBytes": 187580416,
+              "elapsedMs": 2746
+            },
+            {
+              "stage": "restored",
+              "sourceBytes": 22621,
+              "renderedRunes": 18192,
+              "codeViews": 1,
+              "heapBytes": 121801664,
+              "rssBytes": 197132288,
+              "peakRssBytes": 197132288,
+              "elapsedMs": 2772
+            },
+            {
+              "stage": "released",
+              "sourceBytes": 22621,
+              "renderedRunes": 0,
+              "codeViews": 0,
+              "heapBytes": 120540512,
+              "rssBytes": 197148672,
+              "peakRssBytes": 197148672,
+              "elapsedMs": 2774
+            }
+          ],
+          "operations": 3258344,
+          "deallocations": 1602295
+        }
+      },
+      "cycles": {
+        "before": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 465440,
+            "rssBytes": 6275072,
+            "peakRssBytes": 6275072,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122245360,
+            "rssBytes": 198180864,
+            "peakRssBytes": 198180864,
+            "elapsedMs": 423
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122095488,
+            "rssBytes": 200507392,
+            "peakRssBytes": 200507392,
+            "elapsedMs": 424
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122309280,
+            "rssBytes": 200523776,
+            "peakRssBytes": 200523776,
+            "elapsedMs": 426
+          },
+          {
+            "stage": "cycleOffscreen1",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200589312,
+            "peakRssBytes": 200589312,
+            "elapsedMs": 427
+          },
+          {
+            "stage": "cycleRestored1",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200589312,
+            "peakRssBytes": 200589312,
+            "elapsedMs": 428
+          },
+          {
+            "stage": "cycleOffscreen2",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200605696,
+            "peakRssBytes": 200605696,
+            "elapsedMs": 429
+          },
+          {
+            "stage": "cycleRestored2",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200605696,
+            "peakRssBytes": 200605696,
+            "elapsedMs": 430
+          },
+          {
+            "stage": "cycleOffscreen3",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200622080,
+            "peakRssBytes": 200622080,
+            "elapsedMs": 431
+          },
+          {
+            "stage": "cycleRestored3",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200622080,
+            "peakRssBytes": 200622080,
+            "elapsedMs": 432
+          },
+          {
+            "stage": "cycleOffscreen4",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200622080,
+            "peakRssBytes": 200622080,
+            "elapsedMs": 433
+          },
+          {
+            "stage": "cycleRestored4",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200622080,
+            "peakRssBytes": 200622080,
+            "elapsedMs": 435
+          },
+          {
+            "stage": "cycleOffscreen5",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200622080,
+            "peakRssBytes": 200622080,
+            "elapsedMs": 435
+          },
+          {
+            "stage": "cycleRestored5",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 437
+          },
+          {
+            "stage": "cycleOffscreen6",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 438
+          },
+          {
+            "stage": "cycleRestored6",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 439
+          },
+          {
+            "stage": "cycleOffscreen7",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 440
+          },
+          {
+            "stage": "cycleRestored7",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 441
+          },
+          {
+            "stage": "cycleOffscreen8",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 442
+          },
+          {
+            "stage": "cycleRestored8",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 443
+          },
+          {
+            "stage": "cycleOffscreen9",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 444
+          },
+          {
+            "stage": "cycleRestored9",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 446
+          },
+          {
+            "stage": "cycleOffscreen10",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122143472,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 446
+          },
+          {
+            "stage": "cycleRestored10",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 122357280,
+            "rssBytes": 200638464,
+            "peakRssBytes": 200638464,
+            "elapsedMs": 448
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 121125328,
+            "rssBytes": 200654848,
+            "peakRssBytes": 200654848,
+            "elapsedMs": 448
+          }
+        ],
+        "after": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 465472,
+            "rssBytes": 6275072,
+            "peakRssBytes": 6275072,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 130528576,
+            "rssBytes": 197935104,
+            "peakRssBytes": 197935104,
+            "elapsedMs": 405
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130444192,
+            "rssBytes": 200261632,
+            "peakRssBytes": 200261632,
+            "elapsedMs": 406
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 130891440,
+            "rssBytes": 200327168,
+            "peakRssBytes": 200327168,
+            "elapsedMs": 411
+          },
+          {
+            "stage": "cycleOffscreen1",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130724528,
+            "rssBytes": 200491008,
+            "peakRssBytes": 200491008,
+            "elapsedMs": 412
+          },
+          {
+            "stage": "cycleRestored1",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131187264,
+            "rssBytes": 200523776,
+            "peakRssBytes": 200523776,
+            "elapsedMs": 417
+          },
+          {
+            "stage": "cycleOffscreen2",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130740064,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 418
+          },
+          {
+            "stage": "cycleRestored2",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131187264,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 423
+          },
+          {
+            "stage": "cycleOffscreen3",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130740064,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 424
+          },
+          {
+            "stage": "cycleRestored3",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 429
+          },
+          {
+            "stage": "cycleOffscreen4",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 430
+          },
+          {
+            "stage": "cycleRestored4",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 435
+          },
+          {
+            "stage": "cycleOffscreen5",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 436
+          },
+          {
+            "stage": "cycleRestored5",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 441
+          },
+          {
+            "stage": "cycleOffscreen6",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 442
+          },
+          {
+            "stage": "cycleRestored6",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 447
+          },
+          {
+            "stage": "cycleOffscreen7",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200556544,
+            "peakRssBytes": 200556544,
+            "elapsedMs": 448
+          },
+          {
+            "stage": "cycleRestored7",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 453
+          },
+          {
+            "stage": "cycleOffscreen8",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 454
+          },
+          {
+            "stage": "cycleRestored8",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 459
+          },
+          {
+            "stage": "cycleOffscreen9",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 460
+          },
+          {
+            "stage": "cycleRestored9",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 465
+          },
+          {
+            "stage": "cycleOffscreen10",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 130742112,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 466
+          },
+          {
+            "stage": "cycleRestored10",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 131189312,
+            "rssBytes": 200572928,
+            "peakRssBytes": 200572928,
+            "elapsedMs": 471
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 129915504,
+            "rssBytes": 200589312,
+            "peakRssBytes": 200589312,
+            "elapsedMs": 471
+          }
+        ]
+      },
+      "liveStackObservation": "At firstRender, both live call trees are dominated by the same font blobs (~49.1 MiB), sequence payloads (~37.8 MiB), and string assignments (~16.7 MiB). New segmented-storage stacks are ~25 KiB live, including ~848 bytes attributed to rangeSubstring. Freed transients are not resolved by current-live call trees.",
+      "interpretation": "ABBA first-render RSS ordering reversed relative to the original three pairs; current and peak logged heap+VM matched at displayed precision, while cumulative requests increased by 0.1 MB and allocations by 317 in one traced pair. Eviction/recreation adds a small restoration cost. The 10-cycle fixture plateaus within each process, but its absolute before/after live heaps already differ at firstRender and after release, so they must not be treated as a direct saving or proven cause. No universal RSS non-regression or explanation for native/allocator variation is established.",
+      "localArtifacts": "/tmp/merenda-embedded-{vm-*,stack-*,highwater-*,cycles-*}",
+      "cycleMeasuredHarnessSha256": "07e389af2c42cdd3950add6eb93d35b749115e6c748c04b8769b5517314ae4b9",
+      "cycleCommittedFormattedHarnessSha256": "2a7bdf9c22dd243c2d9489fb6c47ff25b0a072d4775728b67cc7ed57d34007a7",
+      "cycleFormattingNote": "The committed fixture was nph-formatted after capture; only one assignment line wrap changed. Binary was built from the measured hash.",
+      "liveStackDriver": "tests/benchmarks/embedded_stack_capture.py",
+      "liveStackDriverSha256": "eee0c44313fb403bda8b47310747af0ddece61de2641048ddad6e08e80daeac6",
+      "liveStackCommands": [
+        "python3 tests/benchmarks/embedded_stack_capture.py before firstRender Bfirst",
+        "python3 tests/benchmarks/embedded_stack_capture.py after firstRender Afirst",
+        "python3 tests/benchmarks/embedded_stack_capture.py before restored Brestored",
+        "python3 tests/benchmarks/embedded_stack_capture.py after restored Arestored"
+      ],
+      "liveStackTargetStages": {
+        "Bfirst": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 461344,
+            "rssBytes": 7454720,
+            "peakRssBytes": 7454720,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121714928,
+            "rssBytes": 191365120,
+            "peakRssBytes": 191365120,
+            "elapsedMs": 1399
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121547648,
+            "rssBytes": 191365120,
+            "peakRssBytes": 191365120,
+            "elapsedMs": 2643
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121761440,
+            "rssBytes": 191381504,
+            "peakRssBytes": 191381504,
+            "elapsedMs": 2658
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 120586192,
+            "rssBytes": 191397888,
+            "peakRssBytes": 191397888,
+            "elapsedMs": 2661
+          }
+        ],
+        "Afirst": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 461376,
+            "rssBytes": 7438336,
+            "peakRssBytes": 7438336,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121449488,
+            "rssBytes": 216809472,
+            "peakRssBytes": 216809472,
+            "elapsedMs": 1425
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 121350768,
+            "rssBytes": 216907776,
+            "peakRssBytes": 216907776,
+            "elapsedMs": 2723
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121798016,
+            "rssBytes": 226902016,
+            "peakRssBytes": 226902016,
+            "elapsedMs": 2751
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 120615712,
+            "rssBytes": 226934784,
+            "peakRssBytes": 226934784,
+            "elapsedMs": 2754
+          }
+        ],
+        "Brestored": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 461344,
+            "rssBytes": 7454720,
+            "peakRssBytes": 7454720,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121809648,
+            "rssBytes": 197525504,
+            "peakRssBytes": 197525504,
+            "elapsedMs": 1443
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121659776,
+            "rssBytes": 197525504,
+            "peakRssBytes": 197525504,
+            "elapsedMs": 1447
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121873568,
+            "rssBytes": 197541888,
+            "peakRssBytes": 197541888,
+            "elapsedMs": 1464
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 120687568,
+            "rssBytes": 197558272,
+            "peakRssBytes": 197558272,
+            "elapsedMs": 2557
+          }
+        ],
+        "Arestored": [
+          {
+            "stage": "source",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 461376,
+            "rssBytes": 7438336,
+            "peakRssBytes": 7438336,
+            "elapsedMs": 0
+          },
+          {
+            "stage": "firstRender",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121336256,
+            "rssBytes": 204144640,
+            "peakRssBytes": 204144640,
+            "elapsedMs": 1454
+          },
+          {
+            "stage": "offscreen",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 0,
+            "heapBytes": 121250848,
+            "rssBytes": 204455936,
+            "peakRssBytes": 204455936,
+            "elapsedMs": 1459
+          },
+          {
+            "stage": "restored",
+            "sourceBytes": 22621,
+            "renderedRunes": 18192,
+            "codeViews": 1,
+            "heapBytes": 121698096,
+            "rssBytes": 204521472,
+            "peakRssBytes": 204521472,
+            "elapsedMs": 1485
+          },
+          {
+            "stage": "released",
+            "sourceBytes": 22621,
+            "renderedRunes": 0,
+            "codeViews": 0,
+            "heapBytes": 120446672,
+            "rssBytes": 214417408,
+            "peakRssBytes": 214433792,
+            "elapsedMs": 2586
+          }
+        ]
+      }
+    }
+  },
+  "final500RowTrace": {
+    "baseline": "Previously captured drawing-only churn fix on 385a01c7, corresponding to 881e74bf; see markdown-layout-churn-2026-11-06.json.",
+    "after": {
+      "currentHeapVmMB": 228.4,
+      "highWaterHeapVmMB": 281.5,
+      "cumulativeRequestedHeapVmGB": 1.09,
+      "allocations": 3735759,
+      "unstackedMalloc": "805 blocks / 70K",
+      "unstackedVM": "9 regions / 160K",
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 494544,
+          "rssBytes": 8110080,
+          "peakRssBytes": 8110080,
+          "elapsedMs": 1
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 240883184,
+          "rssBytes": 387072000,
+          "peakRssBytes": 387072000,
+          "elapsedMs": 4974
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 242074832,
+          "rssBytes": 389103616,
+          "peakRssBytes": 389103616,
+          "elapsedMs": 5006
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 344920688,
+          "rssBytes": 501825536,
+          "peakRssBytes": 501825536,
+          "elapsedMs": 14560
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 306831280,
+          "rssBytes": 511066112,
+          "peakRssBytes": 511066112,
+          "elapsedMs": 14605
+        }
+      ]
+    },
+    "harness": "tests/benchmarks/markdownallocationprobe.nim",
+    "harnessSha256": "40cc040bc837f2e8ebee9f68031837c3b8c3d32797bcb17501bde574ba24ed68",
+    "beforeBinarySha256": "565e68f5d24d301370404a0df73e12be427394a85eca0b78e53d29190a2de8a6",
+    "afterBinarySha256": "17be91bdbabd55ca77676126cf4f2e29fbd7b62c9755ee5b2d9f6b5c76d26af0",
+    "buildAfter": "nim c -d:release --mm:arc --nimcache:/tmp/merenda-final-trace-matched-cache --out:/tmp/merenda-final-trace-matched tests/benchmarks/markdownallocationprobe.nim",
+    "captureAfter": "python3 tests/benchmarks/capture_allocations.py markdown /tmp/merenda-final-trace-matched /tmp/merenda-markdown-final-view/matched table view 500",
+    "capturedAt": "firstRender; later resized and released stages are outside the graph",
+    "sourceBytes": 52371,
+    "renderedRunes": 90107,
+    "before": {
+      "currentHeapVmMB": 228.4,
+      "highWaterHeapVmMB": 281.5,
+      "cumulativeRequestedHeapVmGB": 1.09,
+      "allocations": 3734513
+    },
+    "limitations": "One traced process per variant; Apple labels retained as reported, stack logging changes behavior, and these rounded heap+VM figures include fonts/theme/layout and exclude unstacked blocks. Cumulative allocation requests are traffic, not retained bytes. A separate after-only trace built with -d:useMalloc is diagnostic and is not used for the matched comparison."
+  },
+  "validation": {
+    "nimkit": "1433 tests passed in the shared NimKit runner using Atlas IC",
+    "kosmo": "69 selected Matter/Markdown, pane, split, activation and budget tests passed using Atlas IC",
+    "examples": "atlas-run tests --nimcache:deps/.nimcache/ --backend:ic --compile-only examples/all_compile.nim passed",
+    "sanitizers": {
+      "build": "nim c -d:release -d:nimkitSanitizers --nimcache:/tmp/merenda-markdown-final-asan-cache --out:/tmp/merenda-markdown-final-asan tests/tnimkit.nim",
+      "environment": "ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=1 UBSAN_OPTIONS=halt_on_error=1",
+      "configuration": "ARC, useMalloc, noSignalHandler, clang address and undefined behavior sanitizers; classic backend used after IC rescheduling failures",
+      "cases": [
+        "cancel acknowledgement keeps an owner alive after its last handle is dropped",
+        "dropping the final subscriber cancels an unrendered shared document",
+        "selection callback changing document invalidates pending restore",
+        "layout retirement drains captured work after the same view resumes",
+        "nested resume during attachment cannot install stale saved state",
+        "render completion cannot apply stale work after a nested resume",
+        "nested resume during suspension preserves the newer document",
+        "focused and pending offscreen code views remain until safe to release"
+      ],
+      "result": "8 selected cases passed; no sanitizer findings; leak detection disabled",
+      "localLogs": [
+        "/tmp/merenda-final-asan-build.log",
+        "/tmp/merenda-final-asan-run.log"
+      ],
+      "run": "ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=1 UBSAN_OPTIONS=halt_on_error=1 /tmp/merenda-markdown-final-asan <eight nimkit markdown views:: selectors below>"
+    }
+  }
+}
