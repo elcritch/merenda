@@ -25,6 +25,9 @@
   avoiding repeated whole-buffer extraction for unchanged previews.
 - Build replacement TextStorage strings in one buffer, avoiding full prefix and
   suffix temporaries while preserving rune ranges and snapshot aliasing.
+- Coalesce pending Matter highlight requests per buffer and allow one source
+  handoff per controller at a time. Moe queues metadata against its existing
+  fallback snapshots, preserving immediate fallback colors and cancellation.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all

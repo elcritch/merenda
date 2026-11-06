@@ -1,5 +1,5 @@
 ## Matter highlighting in Kosmo editors and Markdown previews.
-import std/[monotimes, os, strutils, tempfiles, unicode, unittest]
+import std/[monotimes, options, os, strutils, tempfiles, unicode, unittest]
 
 import celina/core/colors as celinaColors
 import sigils/threads
@@ -246,6 +246,169 @@ suite "Kosmo Matter highlighting":
     check batches[0].segments[0].firstColumn == 0
     check batches[0].segments[0].lastColumn == line.len div 2 - 1
     check batches[0].segments[0].color == moeHighlight.EditorColorPairIndex.default
+
+  when defined(merendaTests):
+    test "source handoffs coalesce before fetching and continue after cancellation":
+      let
+        rootPath = "/kosmo/config/grammars/toy/syntaxes/queue.tmLanguage.json"
+        sources = @[
+          moeMatter.MatterGrammarSource(
+            path: rootPath, content: """{"scopeName":"source.toy","patterns":[]}"""
+          )
+        ]
+        fileTypes = @[
+          MatterGrammarFileType(
+            identifier: "toy:queue",
+            languageId: "toy",
+            rootPath: rootPath,
+            extensions: @[".toy"],
+          )
+        ]
+      var fetched: seq[(int, int)]
+      let highlighting = newMatterHighlighting(
+        sources,
+        fileTypes,
+        sourceProvider = proc(bufferId, version: int): Option[string] =
+          fetched.add (bufferId, version)
+          if bufferId == 3:
+            none(string)
+          elif bufferId == 4:
+            raise newException(ValueError, "provider failed")
+          else:
+            some("latest source"),
+      )
+      defer:
+        highlighting.close()
+      highlighting.pauseMatterDispatchForTest(true)
+      var firstDispatched: uint64
+      for version in 1 .. 200:
+        firstDispatched = highlighting.requestMatterHighlightFromProvider(
+          1, version, moeHighlight.SourceLanguage.langNone, "buffer.toy"
+        )
+      var stats = highlighting.matterDispatchStatsForTest()
+      check stats.queued == 1
+      check stats.queuedBytes == 0
+      check stats.dispatched == 0
+      check fetched.len == 0
+      highlighting.pauseMatterDispatchForTest(false)
+      check fetched == @[(1, 200)]
+      check highlighting.matterDispatchStatsForTest().inFlight == 1
+      let missing = highlighting.requestMatterHighlightFromProvider(
+        3, 4, moeHighlight.SourceLanguage.langNone, "buffer.toy"
+      )
+      let failed = highlighting.requestMatterHighlightFromProvider(
+        4, 5, moeHighlight.SourceLanguage.langNone, "buffer.toy"
+      )
+      let unsupported = highlighting.requestMatterHighlightFromProvider(
+        5, 5, moeHighlight.SourceLanguage.langNone, "missing.unknown"
+      )
+      discard highlighting.requestMatterHighlight(
+        6,
+        1,
+        "x".repeat(2 * 1024 * 1024),
+        moeHighlight.SourceLanguage.langNone,
+        "buffer.toy",
+      )
+      check highlighting.matterDispatchStatsForTest().queuedBytes == 2 * 1024 * 1024
+      discard highlighting.requestMatterHighlight(
+        6, 2, "x", moeHighlight.SourceLanguage.langNone, "buffer.toy"
+      )
+      check highlighting.matterDispatchStatsForTest().queuedBytes == 1
+      highlighting.cancelMatterHighlight(6)
+      check highlighting.matterDispatchStatsForTest().queuedBytes == 0
+      let other = highlighting.requestMatterHighlightFromProvider(
+        2, 5, moeHighlight.SourceLanguage.langNone, "buffer.toy"
+      )
+      let latest = highlighting.requestMatterHighlightFromProvider(
+        1, 201, moeHighlight.SourceLanguage.langNone, "buffer.toy"
+      )
+      stats = highlighting.matterDispatchStatsForTest()
+      check stats.queued == 5
+      check stats.queuedBytes == 0
+      check stats.inFlight == 1
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      var completed: seq[matterworkers.MatterHighlightResult]
+      while getMonoTime() < deadline and
+          not (
+            highlighting.matterHighlightingReady(1, latest) and
+            highlighting.matterHighlightingReady(2, other) and
+            highlighting.matterHighlightingReady(3, missing) and
+            highlighting.matterHighlightingReady(4, failed) and
+            highlighting.matterHighlightingReady(5, unsupported)
+          )
+      :
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        completed.add highlighting.takeMatterHighlightResults()
+        sleep(1)
+      completed.add highlighting.takeMatterHighlightResults()
+      require highlighting.matterHighlightingReady(1, latest)
+      require highlighting.matterHighlightingReady(2, other)
+      require highlighting.matterHighlightingReady(3, missing)
+      require highlighting.matterHighlightingReady(4, failed)
+      require highlighting.matterHighlightingReady(5, unsupported)
+      check fetched == @[(1, 200), (3, 4), (4, 5), (5, 5), (2, 5), (1, 201)]
+      stats = highlighting.matterDispatchStatsForTest()
+      check stats.dispatched == 4
+      check stats.maxInFlight == 1
+      var sawMissing, sawFailure, sawUnsupported: bool
+      for batch in completed:
+        if batch.requestId == missing:
+          sawMissing = batch.finished and batch.errorMessage.len > 0
+        elif batch.requestId == failed:
+          sawFailure = batch.finished and batch.errorMessage == "provider failed"
+        elif batch.requestId == unsupported:
+          sawUnsupported = batch.finished and batch.errorMessage.len > 0
+        check batch.requestId != firstDispatched
+      check sawMissing
+      check sawFailure
+      check sawUnsupported
+
+    test "missing source completion remains asynchronous":
+      let
+        highlighting = newMatterHighlighting(
+          @[],
+          sourceProvider = proc(bufferId, version: int): Option[string] =
+            none(string),
+        )
+        spy = MatterBatchSpy()
+      defer:
+        highlighting.close()
+      highlighting.connect(matterHighlightCompleted, spy, rememberMatterBatch)
+      let requestId = highlighting.requestMatterHighlightFromProvider(
+        8, 1, moeHighlight.SourceLanguage.langNone, "missing.toy"
+      )
+      check spy.batches == 0
+      check not highlighting.matterHighlightingReady(8, requestId)
+      let completed = highlighting.collectMatterBatches(8, requestId)
+      require completed.len == 1
+      check completed[0].finished
+      check completed[0].errorMessage.len > 0
+      check spy.batches == 1
+
+    test "source provider can replace or close requests synchronously":
+      var
+        highlighting: MatterHighlighting
+        calls: seq[int]
+      highlighting = newMatterHighlighting(
+        @[],
+        sourceProvider = proc(bufferId, version: int): Option[string] =
+          calls.add version
+          if version == 1:
+            discard highlighting.requestMatterHighlightFromProvider(
+              bufferId, 2, moeHighlight.SourceLanguage.langNone, "missing.toy"
+            )
+          elif version == 2:
+            highlighting.close()
+          some("must not be transferred"),
+      )
+      discard highlighting.requestMatterHighlightFromProvider(
+        5, 1, moeHighlight.SourceLanguage.langNone, "missing.toy"
+      )
+      check calls == @[1, 2]
+      let stats = highlighting.matterDispatchStatsForTest()
+      check stats.queued == 0
+      check stats.inFlight == 0
+      check stats.dispatched == 0
 
   when not defined(KosmoMatterMaximumLineBytes) or
       KosmoMatterMaximumLineBytes >= NimBindingMaximumLineBytes:

@@ -4,7 +4,8 @@
 ## retains that state on the shared Sigils pool. Results contain only plain
 ## value data and are applied to Moe buffers by the owner thread.
 
-import std/[atomics, isolation, monotimes, os, strutils, tables, times, unicode]
+import
+  std/[atomics, isolation, monotimes, options, os, strutils, tables, times, unicode]
 
 from matter/engine import hasActiveScope
 import sigils/[core, threadProxies, threads]
@@ -82,6 +83,19 @@ type
     fileTypes: seq[MatterGrammarFileType]
     jobs: Table[int, MatterHighlightJob]
 
+  MatterSourceProvider* =
+    proc(bufferId, contentVersion: int): Option[string] {.closure.}
+    ## Called on the owning thread only when a queued request is dispatched.
+
+  PendingMatterRequest = object
+    requestId: uint64
+    bufferId, contentVersion: int
+    source: string
+    language: moeHighlight.SourceLanguage
+    fileName: string
+    control: SharedPtr[MatterHighlightControl]
+    usesProvider: bool
+
   MatterHighlighting* = ref object of Agent
     worker: AgentProxy[MatterHighlightWorker]
     pending: seq[MatterHighlightResult]
@@ -89,7 +103,18 @@ type
     requested: Table[int, uint64]
     completed: Table[int, uint64]
     nextRequestId: uint64
+    sourceProvider: MatterSourceProvider
+    queued: OrderedTable[int, PendingMatterRequest]
+    inFlightRequestId: uint64
+    inFlightBufferId: int
+    pumping: bool
     closed: bool
+    when defined(merendaTests):
+      testDispatchPaused: bool
+      testDispatchCount: int
+      testOutstandingHandoffs: int
+      testTrackedSourceId: uint64
+      testMaxInFlight: int
 
 proc matterHighlightCompleted*(highlighting: MatterHighlighting) {.signal.}
   ## A batch is ready to consume; query readiness separately for EOF.
@@ -550,6 +575,10 @@ proc matterHighlightFinished*(
   worker: MatterHighlightWorker, highlighted: SharedPtr[MatterHighlightResult]
 ) {.signal.}
 
+proc matterSourceAccepted*(
+  worker: MatterHighlightWorker, bufferId: int, requestId: uint64
+) {.signal.}
+
 proc requestMatterHighlight*(
   worker: AgentProxy[MatterHighlightWorker],
   requestId: uint64,
@@ -560,6 +589,36 @@ proc requestMatterHighlight*(
   fileName: string,
   control: SharedPtr[MatterHighlightControl],
 ) {.signal.}
+
+proc rejectMatterSource*(
+  worker: AgentProxy[MatterHighlightWorker],
+  requestId: uint64,
+  bufferId: int,
+  contentVersion: int,
+  message: string,
+  control: SharedPtr[MatterHighlightControl],
+) {.signal.}
+
+proc rejectMatterSource(
+    worker: MatterHighlightWorker,
+    requestId: uint64,
+    bufferId: int,
+    contentVersion: int,
+    message: string,
+    control: SharedPtr[MatterHighlightControl],
+) {.slot.} =
+  defer:
+    emit worker.matterSourceAccepted(bufferId, requestId)
+  if not control.cancelled:
+    var batch = MatterHighlightResult(
+      requestId: requestId,
+      bufferId: bufferId,
+      contentVersion: contentVersion,
+      workerThreadId: getThreadId(),
+      finished: true,
+      errorMessage: message,
+    )
+    emit worker.matterHighlightFinished(newSharedPtr(unsafeIsolate(move batch)))
 
 proc continueMatterHighlight*(
   worker: AgentProxy[MatterHighlightWorker], bufferId: int, requestId: uint64
@@ -627,6 +686,10 @@ proc requestMatterHighlight(
     fileName: string,
     control: SharedPtr[MatterHighlightControl],
 ) {.slot.} =
+  # After consuming the source and processing its first bounded chunk, release
+  # the owner's in-flight slot, including when the request was canceled.
+  defer:
+    emit worker.matterSourceAccepted(bufferId, requestId)
   worker.jobs.del(bufferId)
   if control.cancelled:
     return
@@ -673,13 +736,95 @@ proc receiveMatterHighlight(
     highlighting.pending.add move result[]
     emit highlighting.matterHighlightCompleted()
 
+proc pumpMatterRequests(highlighting: MatterHighlighting) =
+  if highlighting.pumping or highlighting.closed:
+    return
+  highlighting.pumping = true
+  defer:
+    highlighting.pumping = false
+  while highlighting.inFlightRequestId == 0 and highlighting.queued.len > 0 and
+      not highlighting.closed:
+    when defined(merendaTests):
+      if highlighting.testDispatchPaused:
+        return
+    var bufferId: int
+    for id in highlighting.queued.keys:
+      bufferId = id
+      break
+    var request = move highlighting.queued[bufferId]
+    highlighting.queued.del(bufferId)
+    # Reserve before calling client code. A reentrant cancellation or replacement
+    # may invalidate this request, but must not start a second dispatch.
+    highlighting.inFlightBufferId = bufferId
+    highlighting.inFlightRequestId = request.requestId
+    var
+      errorMessage = ""
+      sourceFailed = false
+    if request.usesProvider:
+      try:
+        let provider = highlighting.sourceProvider
+        if provider.isNil:
+          errorMessage = "Matter source provider is unavailable"
+          sourceFailed = true
+        else:
+          var source = provider(bufferId, request.contentVersion)
+          if source.isSome:
+            request.source = move source.get()
+          else:
+            errorMessage = "Matter source is no longer available"
+            sourceFailed = true
+      except CatchableError as error:
+        errorMessage =
+          if error.msg.len > 0: error.msg else: "Matter source provider failed"
+        sourceFailed = true
+    if highlighting.closed or
+        highlighting.requested.getOrDefault(bufferId) != request.requestId:
+      highlighting.inFlightRequestId = 0
+    elif sourceFailed:
+      # Complete through the worker so failure notification retains the same
+      # asynchronous delivery contract as a normal request.
+      emit highlighting.worker.rejectMatterSource(
+        request.requestId, bufferId, request.contentVersion, errorMessage,
+        request.control,
+      )
+    else:
+      when defined(merendaTests):
+        inc highlighting.testDispatchCount
+        inc highlighting.testOutstandingHandoffs
+        highlighting.testTrackedSourceId = request.requestId
+        highlighting.testMaxInFlight =
+          max(highlighting.testMaxInFlight, highlighting.testOutstandingHandoffs)
+      emit highlighting.worker.requestMatterHighlight(
+        request.requestId, bufferId, request.contentVersion, request.source,
+        request.language, request.fileName, request.control,
+      )
+
+proc receiveMatterSourceAccepted(
+    highlighting: MatterHighlighting, bufferId: int, requestId: uint64
+) {.slot.} =
+  if highlighting.inFlightRequestId == requestId and
+      highlighting.inFlightBufferId == bufferId:
+    when defined(merendaTests):
+      if highlighting.testTrackedSourceId == requestId:
+        dec highlighting.testOutstandingHandoffs
+        highlighting.testTrackedSourceId = 0
+    highlighting.inFlightRequestId = 0
+    highlighting.pumpMatterRequests()
+
 proc newMatterHighlighting*(
     sources: sink seq[moeMatter.MatterGrammarSource],
     fileTypes: sink seq[MatterGrammarFileType] = @[],
+    sourceProvider: MatterSourceProvider = nil,
 ): MatterHighlighting =
+  ## The provider is retained on the owning thread until close and never sent
+  ## to the worker. Each controller allows one source handoff in flight;
+  ## provider requests queue metadata only, while concrete requests retain at
+  ## most one pending source per buffer with no aggregate byte cap.
   result = MatterHighlighting(
     controls: initTable[int, SharedPtr[MatterHighlightControl]](),
     completed: initTable[int, uint64](),
+    queued: initOrderedTable[int, PendingMatterRequest](),
+    sourceProvider: sourceProvider,
   )
   var worker = MatterHighlightWorker(
     sources: move sources,
@@ -693,6 +838,7 @@ proc newMatterHighlighting*(
   connectThreaded(
     result.worker, requestMatterHighlight, result.worker, requestMatterHighlight
   )
+  connectThreaded(result.worker, rejectMatterSource, result.worker, rejectMatterSource)
   connectThreaded(
     result.worker, continueMatterHighlight, result.worker, continueMatterHighlight
   )
@@ -705,23 +851,60 @@ proc newMatterHighlighting*(
     result,
     MatterHighlighting.receiveMatterHighlight(),
   )
+  connectThreaded(
+    result.worker,
+    matterSourceAccepted,
+    result,
+    MatterHighlighting.receiveMatterSourceAccepted(),
+  )
 
 proc cancelMatterHighlight*(highlighting: MatterHighlighting, bufferId: int) =
   ## Discard a closed buffer's pending batch and retained worker state.
   if highlighting.isNil or highlighting.closed:
     return
+  let hadQueued = highlighting.queued.hasKey(bufferId)
+  highlighting.queued.del(bufferId)
   if highlighting.controls.hasKey(bufferId):
     highlighting.controls[bufferId].cancel()
     highlighting.controls.del(bufferId)
   if highlighting.requested.hasKey(bufferId):
-    emit highlighting.worker.discardMatterHighlight(
-      bufferId, highlighting.requested[bufferId]
-    )
+    if not hadQueued:
+      emit highlighting.worker.discardMatterHighlight(
+        bufferId, highlighting.requested[bufferId]
+      )
     highlighting.requested.del(bufferId)
   highlighting.completed.del(bufferId)
   for index in countdown(highlighting.pending.high, 0):
     if highlighting.pending[index].bufferId == bufferId:
       highlighting.pending.delete(index)
+
+proc queueMatterHighlight(
+    highlighting: MatterHighlighting,
+    bufferId, contentVersion: int,
+    source: sink string,
+    language: moeHighlight.SourceLanguage,
+    fileName: string,
+    usesProvider: bool,
+): uint64 =
+  if highlighting.isNil or highlighting.closed:
+    return
+  inc highlighting.nextRequestId
+  result = highlighting.nextRequestId
+  highlighting.cancelMatterHighlight(bufferId)
+  let control = newMatterHighlightControl()
+  highlighting.controls[bufferId] = control
+  highlighting.requested[bufferId] = result
+  highlighting.queued[bufferId] = PendingMatterRequest(
+    requestId: result,
+    bufferId: bufferId,
+    contentVersion: contentVersion,
+    source: source,
+    language: language,
+    fileName: fileName,
+    control: control,
+    usesProvider: usesProvider,
+  )
+  highlighting.pumpMatterRequests()
 
 proc requestMatterHighlight*(
     highlighting: MatterHighlighting,
@@ -731,18 +914,37 @@ proc requestMatterHighlight*(
     language: moeHighlight.SourceLanguage,
     fileName: string,
 ): uint64 =
-  if highlighting.isNil or highlighting.closed:
-    return
-  inc highlighting.nextRequestId
-  result = highlighting.nextRequestId
-  highlighting.cancelMatterHighlight(bufferId)
-  let control = newMatterHighlightControl()
-  highlighting.controls[bufferId] = control
-  highlighting.completed.del(bufferId)
-  highlighting.requested[bufferId] = result
-  emit highlighting.worker.requestMatterHighlight(
-    result, bufferId, contentVersion, source, language, fileName, control
+  highlighting.queueMatterHighlight(
+    bufferId, contentVersion, source, language, fileName, false
   )
+
+proc requestMatterHighlightFromProvider*(
+    highlighting: MatterHighlighting,
+    bufferId: int,
+    contentVersion: int,
+    language: moeHighlight.SourceLanguage,
+    fileName: string,
+): uint64 =
+  ## Queue metadata; fetch the matching source only when the worker can accept it.
+  highlighting.queueMatterHighlight(
+    bufferId, contentVersion, "", language, fileName, true
+  )
+
+when defined(merendaTests):
+  proc pauseMatterDispatchForTest*(highlighting: MatterHighlighting, paused: bool) =
+    highlighting.testDispatchPaused = paused
+    if not paused:
+      highlighting.pumpMatterRequests()
+
+  proc matterDispatchStatsForTest*(
+      highlighting: MatterHighlighting
+  ): tuple[queued, queuedBytes, inFlight, dispatched, maxInFlight: int] =
+    result.queued = highlighting.queued.len
+    for request in highlighting.queued.values:
+      result.queuedBytes += request.source.len
+    result.inFlight = int(highlighting.inFlightRequestId != 0)
+    result.dispatched = highlighting.testDispatchCount
+    result.maxInFlight = highlighting.testMaxInFlight
 
 proc takeMatterHighlightResults*(
     highlighting: MatterHighlighting
@@ -776,6 +978,8 @@ proc close*(highlighting: MatterHighlighting) =
   highlighting.completed.clear()
   highlighting.requested.clear()
   highlighting.pending.setLen(0)
+  highlighting.queued.clear()
+  highlighting.sourceProvider = nil
   highlighting.worker = nil
 
 var matterWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
