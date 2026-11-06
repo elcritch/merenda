@@ -21,6 +21,8 @@
   document revisions, with compatible snapshot fallbacks for other operations.
   Adjacent grouped edits preserve earlier deltas; undo/redo reconstruct flat text
   rather than retaining every revision.
+- Refresh Kosmo Markdown source only when its buffer content version changes,
+  avoiding repeated whole-buffer extraction for unchanged previews.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all

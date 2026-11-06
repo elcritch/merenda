@@ -32,6 +32,7 @@ type
   KosmoMarkdownPreview = object
     bufferId: KosmoBufferId
     view: KosmoMarkdownView
+    contentVersion: Option[int]
 
   KosmoMarkdownControls* = ref object of nimkit.Box
     modeButton*: nimkit.Button

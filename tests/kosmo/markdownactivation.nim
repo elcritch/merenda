@@ -161,6 +161,68 @@ suite "Kosmo Markdown activation":
     check not frontend.editorView.editor.tabs()[0].modified
     check "Updated" in readFile(path)
 
+  test "cached preview follows edits and reload while unchanged refresh keeps state":
+    let
+      root = createTempDir("kosmo-markdown-version-", "")
+      path = root / "version.md"
+      frontend = newKosmoApplication(
+        newApplication("Markdown version"), monitorsGitStatus = false
+      )
+    writeFile(path, "# Original heading\n\nFirst version.\n")
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 800, 600)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(path)
+    let
+      preview = frontend.editorPane.markdownView
+      editor = frontend.editorView.editor
+      id = editor.tabs()[0].id
+      initialVersion = editor.bufferContentVersion(id)
+    require initialVersion.isSome
+    require preview.waitForMarkdownParsing()
+    preview.textView().selectedRange = initTextRange(1, 3)
+    for iteration in 0 ..< 3:
+      discard iteration
+      frontend.editorView.refresh()
+      check editor.bufferContentVersion(id) == initialVersion
+      check frontend.editorPane.markdownView == preview
+      check not preview.isMarkdownParsing()
+      check preview.textView().selectedRange == initTextRange(1, 3)
+
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let
+      button = frontend.editorPane.markdownControls.increaseFontButton
+      oldSize = preview.markdownStyle().bodyFontSize
+      bounds = button.bounds()
+    require frontend.window.clickAt(
+      button.pointToWindow(initPoint(bounds.size.width / 2, bounds.size.height / 2))
+    )
+    require preview.waitForMarkdownParsing()
+    require preview.waitForMarkdownLayout()
+    check preview.markdownStyle().bodyFontSize > oldSize
+    check "Original heading" in preview.textStorage().stringValue()
+    check editor.bufferContentVersion(id) == initialVersion
+
+    writeFile(path, "# Reloaded heading\n\nChanged on disk.\n")
+    editor.reloadUnmodifiedFile(path)
+    require editor.bufferContentVersion(id).isSome
+    check editor.bufferContentVersion(id) != initialVersion
+    frontend.editorView.refresh()
+    require preview.waitForMarkdownParsing()
+    check "Reloaded heading" in preview.textStorage().stringValue()
+
+    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    check editor.bufferContentVersion(id).isNone
+    require frontend.openPath(path)
+    let reopened = frontend.editorPane.markdownView
+    require reopened.waitForMarkdownParsing()
+    check "Reloaded heading" in reopened.textStorage().stringValue()
+    check editor.tabs()[0].id != id
+
   test "Markdown toolbar keeps zoom controls on the trailing side":
     let frontend = newKosmoApplication(
       newApplication("Markdown toolbar layout"), monitorsGitStatus = false

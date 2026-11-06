@@ -1121,8 +1121,8 @@ proc syncSelectedEditorContent(
     let mode = view.markdownMode(selectedId)
     group.pane.syncMarkdownControls(true, mode)
     if mode == kmmPreview:
-      let source = view.editor.bufferText(selectedId)
-      if source.isNone:
+      let version = view.editor.bufferContentVersion(selectedId)
+      if version.isNone:
         group.pane.setContentView(view)
         return keckSyntax
       let markdownView = group.pane.markdownViewForBuffer(selectedId)
@@ -1130,7 +1130,13 @@ proc syncSelectedEditorContent(
       markdownView.imageBasePath = tab.filePath.get.parentDir
       markdownView.markdownStyle =
         group.pane.markdownControls.markdownPresentationStyle()
-      markdownView.markdown = source.get
+      if group.pane.markdownPreviews[^1].contentVersion != version:
+        let source = view.editor.bufferText(selectedId)
+        if source.isNone:
+          group.pane.setContentView(view)
+          return keckSyntax
+        markdownView.markdown = source.get
+        group.pane.markdownPreviews[^1].contentVersion = version
       group.pane.setContentView(markdownView)
       return keckMarkdownPreview
     group.pane.setContentView(view)

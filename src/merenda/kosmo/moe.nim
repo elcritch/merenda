@@ -1283,6 +1283,14 @@ proc gitWatchRoots*(editor: KosmoEditor): seq[string] =
         result.add root
   result.sort()
 
+proc bufferContentVersion*(editor: KosmoEditor, id: KosmoBufferId): Option[int] =
+  ## Return the buffer's monotonic content generation, or none if it is closed.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let buffer = editor.editor.bufferById(id.toMoeBufferId)
+  if buffer.isSome:
+    result = some(buffer.get.contentVersion)
+
 proc bufferText*(editor: KosmoEditor, id: KosmoBufferId): Option[string] =
   ## Return the current in-memory text for a buffer, including unsaved edits.
   if editor.isNil or editor.editor.isNil:
