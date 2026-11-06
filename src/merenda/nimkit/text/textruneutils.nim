@@ -51,10 +51,63 @@ proc wordRangeAt*(runes: Utf8Runes, index: int): TextRange =
   initTextRange(start, stop - start)
 
 proc previousWordBoundary*(text: string, index: int): int =
-  utf8RunesForText(text).previousWordBoundary(index)
+  let target = max(index, 0)
+  var
+    position = 0
+    inWord = false
+  for rune in text.runes:
+    if position >= target:
+      break
+    if rune.isWhiteSpace:
+      inWord = false
+    elif not inWord:
+      result = position
+      inWord = true
+    inc position
 
 proc nextWordBoundary*(text: string, index: int): int =
-  utf8RunesForText(text).nextWordBoundary(index)
+  let target = max(index, 0)
+  var inWord = false
+  for rune in text.runes:
+    if result >= target:
+      if rune.isWhiteSpace:
+        if inWord:
+          return
+      else:
+        inWord = true
+    inc result
 
 proc wordRangeAt*(text: string, index: int): TextRange =
-  utf8RunesForText(text).wordRangeAt(index)
+  var count = 0
+  for rune in text.runes:
+    inc count
+  if count == 0:
+    return initTextRange(0, 0)
+  var
+    start = max(0, min(index, count))
+    stop = start
+  if start == count:
+    dec start
+  var
+    position = 0
+    wordStart = 0
+    inWord = false
+    scanningEnd = true
+  for rune in text.runes:
+    if position < start:
+      if rune.isWordRune:
+        if not inWord:
+          wordStart = position
+          inWord = true
+      else:
+        inWord = false
+    elif position == start:
+      if inWord:
+        start = wordStart
+    if position >= stop and scanningEnd:
+      if rune.isWordRune:
+        inc stop
+      else:
+        scanningEnd = false
+    inc position
+  initTextRange(start, stop - start)

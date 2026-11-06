@@ -1,0 +1,152 @@
+{
+  "measurement": "Three alternating fresh-process pairs on 32 MiB valid UTF-8 text. Indexed mode reproduces prior helper using utf8RunesForText per query in the same binary; streaming uses the string overloads. Live malloc heap, RSS, and process high-water RSS. Checksum verifies equal outputs for all samples.",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0 nim ic -d:release --mm:arc; repository config",
+  "benchmarkSha256": "3cc2b1e36c0fa33e6f283bba231a70bc622add113025e463447f6b275dc62d67",
+  "samples": [
+    {
+      "mode": "indexed",
+      "sample": 1,
+      "stages": [
+        {
+          "mode": "indexed",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791280,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "indexed",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 34495792,
+          "rssBytes": 139886592,
+          "peakRssBytes": 139886592
+        }
+      ]
+    },
+    {
+      "mode": "streaming",
+      "sample": 1,
+      "stages": [
+        {
+          "mode": "streaming",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791328,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "streaming",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 33807712,
+          "rssBytes": 37650432,
+          "peakRssBytes": 37650432
+        }
+      ]
+    },
+    {
+      "mode": "indexed",
+      "sample": 2,
+      "stages": [
+        {
+          "mode": "indexed",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791280,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "indexed",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 34495792,
+          "rssBytes": 139886592,
+          "peakRssBytes": 139886592
+        }
+      ]
+    },
+    {
+      "mode": "streaming",
+      "sample": 2,
+      "stages": [
+        {
+          "mode": "streaming",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791328,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "streaming",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 33807712,
+          "rssBytes": 37650432,
+          "peakRssBytes": 37650432
+        }
+      ]
+    },
+    {
+      "mode": "indexed",
+      "sample": 3,
+      "stages": [
+        {
+          "mode": "indexed",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791280,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "indexed",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 34495792,
+          "rssBytes": 139886592,
+          "peakRssBytes": 139886592
+        }
+      ]
+    },
+    {
+      "mode": "streaming",
+      "sample": 3,
+      "stages": [
+        {
+          "mode": "streaming",
+          "stage": "source",
+          "sourceBytes": 33554448,
+          "checksum": 0,
+          "heapBytes": 33791328,
+          "rssBytes": 37519360,
+          "peakRssBytes": 37519360
+        },
+        {
+          "mode": "streaming",
+          "stage": "queriesFinished",
+          "sourceBytes": 33554448,
+          "checksum": 50331651,
+          "heapBytes": 33815904,
+          "rssBytes": 37650432,
+          "peakRssBytes": 37683200
+        }
+      ]
+    }
+  ]
+}

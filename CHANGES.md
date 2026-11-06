@@ -13,6 +13,8 @@
   retaining a temporary owning string copy.
 - Intern Markdown builder attributes while assembling text and transfer compact
   style runs into TextStorage without expanding them at the handoff.
+- Stream word-boundary string queries and pending-layout glyph-property lookups
+  without building a second full UTF-8 buffer and sparse index.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all

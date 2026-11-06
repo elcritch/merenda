@@ -1,5 +1,5 @@
 {
-  "measurement": "Three alternating fresh-process pairs; 8 MiB gap-buffer source; live macOS malloc-zone heap, RSS, peak process RSS. precache explicitly calls textSnapshot before payload creation to reproduce the previous caching behavior in the same fixed binary; it is not a separate baseline build. snapshotCached is an explicit size control.",
+  "measurement": "Three alternating fresh-process pairs; 8 MiB gap-buffer source; live macOS malloc-zone heap, RSS, peak process RSS. precache explicitly calls textSnapshot before payload creation to reproduce a regression caught in the uncommitted compact-payload prototype, not behavior of baseline 24896588. Both modes use the same fixed binary; this is not a separate baseline build. snapshotCached is an explicit size control.",
   "platform": "macOS 15.7.9 arm64",
   "compiler": "Nim 2.4.0 nim ic -d:release --mm:arc; repository config",
   "command": [

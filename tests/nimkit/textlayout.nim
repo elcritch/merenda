@@ -1391,8 +1391,25 @@ suite "nimkit text layout":
     storage.replace(initTextRange(0, 1), "x")
     check storage.hasPendingEdit()
     check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "\t")
+    check gpControl in manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "é")
+    check gpControl notin manager.glyphProperties(initGlyphIndex(0))
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "\xFF")
+    check gpControl notin manager.glyphProperties(initGlyphIndex(0))
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    check manager.glyphProperties(initGlyphIndex(10000)) == {gpNull}
+    # The shaping backend rejects malformed UTF-8; restore valid text before reflow.
+    storage.replace(initTextRange(0, 1), "é")
     storage.endEditing()
     check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+
+  test "glyph properties without storage are null":
+    let manager = newTextLayoutManager(
+      nil, initTextContainer(initSize(220.0, 100.0), insets(4.0), wraps = false)
+    )
+    check manager.glyphProperties(initGlyphIndex(0)) == {gpNull}
 
   test "temporary attributes and invalidation APIs are observable":
     let

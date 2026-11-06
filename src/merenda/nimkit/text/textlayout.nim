@@ -1662,16 +1662,27 @@ proc defaultGlyphProperties(
   if manager.xTextStorage.isNil:
     return
 
-  var text: Utf8Runes
+  let index = int(textRange.location)
+  var
+    value: Rune
+    found = false
   if manager.xHasLayout and not manager.xTextStorage.hasPendingEdit() and
       not manager.xLayout.sourceRunes.isNil:
-    text = manager.xLayout.sourceRunes
+    let text = manager.xLayout.sourceRunes
+    if index < text.len:
+      value = text[index]
+      found = true
   else:
-    text = utf8RunesForText(manager.xTextStorage.stringValue())
-  let index = int(textRange.location)
-  if index < 0 or index >= text.len:
+    var position = 0
+    for rune in manager.xTextStorage.stringValue().runes:
+      if position == index:
+        value = rune
+        found = true
+        break
+      inc position
+  if not found:
     return {gpNull}
-  case text[index]
+  case value
   of Rune('\n'), Rune('\r'), Rune('\t'):
     result.incl gpControl
   of Rune(' '):

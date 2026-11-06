@@ -275,10 +275,15 @@ applySmartInsert; [textlayout.nim](src/merenda/nimkit/text/textlayout.nim),
 defaultGlyphProperties;
 [textsnapshots.nim](src/merenda/nimkit/text/textsnapshots.nim), bytes and lineRange.
 
-- [ ] Pass the storage's existing snapshot to word, smart-insertion, and pending
-  layout queries instead of stringValue() followed by another UTF-8 copy and
-  index build. Preserve the helper's malformed-input replacement semantics;
-  direct source reuse needs equivalent semantics or a cached normalized view.
+- [x] Stream word-boundary string queries and pending-layout glyph-property
+  lookups without constructing another complete UTF-8 buffer/index. Keep the
+  existing indexed overloads and the existing storage string-query boundary;
+  this avoids changing gap storage retention or subclass overrides. The shared
+  runner verifies Unicode/malformed parity, including 300 seeded random byte
+  strings, plus pending-layout control/out-of-range/nil cases.
+- [ ] Remove the remaining full-source indexed construction in smart insertion
+  using bounded neighbor queries. Preserve malformed-input replacement and
+  custom storage behavior; do not populate a gap snapshot just to read neighbors.
 
 ## Share layout resources and remove redundant glyph geometry
 
@@ -401,9 +406,14 @@ details, and limitations:
   nine storage and nine prose/code control runs per version, three table-view
   runs per version. RSS peaks vary; they are not a count of retained text objects.
 - [Attributed-text reflows](tests/benchmarks/results/text-reflow-memory-2026-11-06.json).
+- [Streaming boundary queries](tests/benchmarks/results/text-boundary-memory-2026-11-06.json):
+  three paired processes over 32 MiB UTF-8, with identical query checksums.
+  Median peak RSS is 133.41 MiB for the explicit prior indexed path versus
+  35.91 MiB streaming; live heap after queries is 32.90 versus 32.24 MiB. This
+  uses old/new modes in one binary, not separate baseline checkouts.
 - [Gap-source cache control](tests/benchmarks/results/text-gap-source-memory-2026-11-06.json):
-  an explicit precache mode reproduces the previous path in the same binary;
-  this is not a separate baseline checkout.
+  an explicit precache mode reproduces a regression caught in the uncommitted
+  worker prototype, not the original baseline. Both modes use the fixed binary.
 
 Reproduce checkpoint captures using the tracked probes and driver described in
 [ALLOCATION-PROFILING.md](tests/benchmarks/ALLOCATION-PROFILING.md).
