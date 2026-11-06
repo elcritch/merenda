@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Share compatible Markdown document parsing and highlighting across views,
+  release inactive embedded views, and preserve preview state while asynchronous
+  work retires safely.
 - Add segmented immutable text-storage views and non-materializing logical
   payload estimates; report terminal background-layout results and
   request-specific retirement progress.

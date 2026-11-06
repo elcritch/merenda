@@ -171,11 +171,16 @@ proc markdownHighlightReady*(
   worker: MarkdownParseWorker, batch: sink MarkdownHighlightBatch
 ) {.signal.}
 
+proc markdownHighlightCancelled*(
+  worker: MarkdownParseWorker, generation: uint64
+) {.signal.}
+
 proc cancelMarkdownHighlight(worker: MarkdownParseWorker, generation: uint64) {.slot.} =
   if worker.generation == generation:
     worker.codes.setLen(0)
     worker.highlightJob = default(MatterHighlightJob)
     worker.codeStarted = false
+  emit worker.markdownHighlightCancelled(generation)
 
 proc continueMarkdownHighlight(
     worker: MarkdownParseWorker, generation: uint64
