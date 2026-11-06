@@ -39,7 +39,7 @@ path, and `-d:harfbuzzyFribidiDynlib` selects FriBidi.
 
 The five bundled Moe themes are embedded in the executable and installed into
 Kosmo's platform asset cache for Moe's file-based theme loader. Release archives
-do not need a separate `data/moe/themes` directory, and theme discovery does not
+do not need a separate `data/contentthemes` directory, and theme discovery does not
 depend on the working directory used to launch Kosmo.
 
 Release executables retain native debug information and link the `libbacktrace`

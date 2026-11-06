@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
+  and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
+  Moe engine integration and uses the shared module for content presentation.
+
 - Start Kosmo theme selection on Moe, give the theme picker more horizontal space,
   and add Reset to restore selected items to their themes when Settings opened.
 

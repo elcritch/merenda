@@ -441,23 +441,23 @@ suite "Kosmo configuration":
     let controls = frontend.editorPane.markdownControls
     check controls.markdownPresentationStyle(KosmoThemeTarget.Markdown).backgroundColor ==
       color(
-        themes[0].preview.background.red.float32 / 255,
-        themes[0].preview.background.green.float32 / 255,
-        themes[0].preview.background.blue.float32 / 255,
+        themes[0].palette.background.red.float32 / 255,
+        themes[0].palette.background.green.float32 / 255,
+        themes[0].palette.background.blue.float32 / 255,
         1.0,
       )
     check controls.markdownPresentationStyle(KosmoThemeTarget.GitDiff).backgroundColor ==
       color(
-        themes[1].preview.background.red.float32 / 255,
-        themes[1].preview.background.green.float32 / 255,
-        themes[1].preview.background.blue.float32 / 255,
+        themes[1].palette.background.red.float32 / 255,
+        themes[1].palette.background.green.float32 / 255,
+        themes[1].palette.background.blue.float32 / 255,
         1.0,
       )
     check controls.markdownPresentationStyle(KosmoThemeTarget.GitHub).backgroundColor ==
       color(
-        themes[2].preview.background.red.float32 / 255,
-        themes[2].preview.background.green.float32 / 255,
-        themes[2].preview.background.blue.float32 / 255,
+        themes[2].palette.background.red.float32 / 255,
+        themes[2].palette.background.green.float32 / 255,
+        themes[2].palette.background.blue.float32 / 255,
         1.0,
       )
     check loadKosmoConfig(path).markdownTheme == config.markdownTheme

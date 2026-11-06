@@ -92,13 +92,13 @@ type
   KosmoMoeThemeSetting* = object
     identifier*: string
     name*: string
-    preview*: KosmoMoeThemePreview
+    preview*: ContentThemePalette
 
   KosmoShortcutsTableSource = ref object of nimkit.Responder
     shortcuts: seq[KosmoShortcutSetting]
 
   KosmoMoeThemePreviewView = ref object of nimkit.View
-    preview: KosmoMoeThemePreview
+    preview: ContentThemePalette
 
   KosmoMoeThemesTableSource = ref object of nimkit.Responder
     themes: seq[KosmoMoeThemeSetting]
@@ -212,20 +212,13 @@ proc newKosmoShortcutsTableSource(
   discard result.withProtocol(KosmoShortcutsTableDataSource)
   discard result.withProtocol(KosmoShortcutsTableDelegate)
 
-func nimkitColor(value: KosmoMoeThemeColor): nimkit.Color =
-  nimkit.color(
-    value.red.float32 / 255.0'f32,
-    value.green.float32 / 255.0'f32,
-    value.blue.float32 / 255.0'f32,
-  )
-
 protocol KosmoMoeThemePreviewDrawing of nimkit.ViewDrawingProtocol:
   method draw(view: KosmoMoeThemePreviewView, context: nimkit.DrawContext) =
     let
       bounds = view.bounds()
       baseStyle = context.appearance.resolveTextStyle(
         nimkit.controlStyle(nimkit.srMonoTextView),
-        view.preview.foreground.nimkitColor(),
+        view.preview.foreground.toColor(),
         nimkit.insets(0.0),
       )
       textSize = KosmoMoeThemePreviewText.textNaturalSize(baseStyle)
@@ -236,12 +229,12 @@ protocol KosmoMoeThemePreviewDrawing of nimkit.ViewDrawingProtocol:
         min(textSize.height + 4.0'f32, bounds.size.height),
       )
       textY = max((bounds.size.height - textSize.height) * 0.5'f32, 0.0'f32)
-    context.addRectangle(backgroundRect, view.preview.background.nimkitColor())
+    context.addRectangle(backgroundRect, view.preview.background.toColor())
     var textX = backgroundRect.origin.x + 6.0'f32
-    template addSegment(text: string, colorValue: KosmoMoeThemeColor) =
+    template addSegment(text: string, colorValue: ContentThemeColor) =
       block:
         var style = baseStyle
-        style.color = colorValue.nimkitColor()
+        style.color = colorValue.toColor()
         let segmentSize = text.textNaturalSize(style)
         context.addText(
           nimkit.rect(textX, textY, segmentSize.width, textSize.height), text, style
@@ -257,7 +250,7 @@ protocol KosmoMoeThemePreviewDrawing of nimkit.ViewDrawingProtocol:
     addSegment("#", view.preview.comment)
 
 proc newKosmoMoeThemePreviewView(
-    preview: KosmoMoeThemePreview
+    preview: ContentThemePalette
 ): KosmoMoeThemePreviewView =
   result = KosmoMoeThemePreviewView(preview: preview)
   nimkit.initViewFields(result)

@@ -40,9 +40,9 @@ suite "Kosmo terminal shortcut PTY input":
       terminal = KosmoTerminalView(second.editorGroups()[0].pane.contentView)
       check terminal.palette.background ==
         color(
-          themes[1].preview.background.red.float32 / 255,
-          themes[1].preview.background.green.float32 / 255,
-          themes[1].preview.background.blue.float32 / 255,
+          themes[1].palette.background.red.float32 / 255,
+          themes[1].palette.background.green.float32 / 255,
+          themes[1].palette.background.blue.float32 / 255,
           1.0,
         )
       check terminal.palette != initTerminalPalette()

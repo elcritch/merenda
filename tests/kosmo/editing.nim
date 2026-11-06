@@ -8,7 +8,7 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 import fixtures/ui
-import merenda/kosmo/moethemeassets
+import merenda/nimkit/contentthemes
 
 type QueuedBufferProjection = ref object of Agent
   editor: KosmoEditor
@@ -181,21 +181,20 @@ suite "Kosmo":
       removeFile(vividPath)
       removeDir(root)
 
-    let themes = discoverMoeThemes(root)
+    let themes = discoverContentThemes(root)
     check themes.len == 3
     check themes[0].identifier == KosmoMoeDefaultThemeIdentifier
     check themes[0].name == "Default"
     check themes[1].name == "Soft Light"
     check themes[2].name == "Vivid"
-    check themes[1].preview.foreground ==
-      KosmoMoeThemeColor(red: 16, green: 16, blue: 16)
-    check themes[1].preview.background ==
-      KosmoMoeThemeColor(red: 248, green: 248, blue: 248)
-    check themes[2].preview.foreground ==
-      KosmoMoeThemeColor(red: 255, green: 221, blue: 102)
-    check themes[2].preview.background == KosmoMoeThemeColor(
-      red: 22, green: 0, blue: 34
+    check themes[1].palette.foreground == ContentThemeColor(
+      red: 16, green: 16, blue: 16
     )
+    check themes[1].palette.background ==
+      ContentThemeColor(red: 248, green: 248, blue: 248)
+    check themes[2].palette.foreground ==
+      ContentThemeColor(red: 255, green: 221, blue: 102)
+    check themes[2].palette.background == ContentThemeColor(red: 22, green: 0, blue: 34)
 
     let editor = newKosmoEditor(text = "themed")
     let outcome = editor.applyMoeTheme(themes[1])
@@ -237,22 +236,24 @@ suite "Kosmo":
           matchingIndex = index
           break
       require matchingIndex >= 0
-      let preview = themes[matchingIndex].preview
+      let preview = themes[matchingIndex].palette
       check preview.foreground != preview.background
       check preview.keyword != preview.foreground
       if expectedName == "Shades of Purple":
-        check preview.background ==
-          KosmoMoeThemeColor(red: 0x2d, green: 0x2b, blue: 0x55)
-        check preview.keyword == KosmoMoeThemeColor(red: 0xff, green: 0x9d, blue: 0x00)
+        check preview.background == ContentThemeColor(
+          red: 0x2d, green: 0x2b, blue: 0x55
+        )
+        check preview.keyword == ContentThemeColor(red: 0xff, green: 0x9d, blue: 0x00)
         check preview.stringLiteral ==
-          KosmoMoeThemeColor(red: 0xa5, green: 0xff, blue: 0x90)
-        check preview.comment == KosmoMoeThemeColor(red: 0xb3, green: 0x62, blue: 0xff)
+          ContentThemeColor(red: 0xa5, green: 0xff, blue: 0x90)
+        check preview.comment == ContentThemeColor(red: 0xb3, green: 0x62, blue: 0xff)
       if expectedName == "Dark Orchid":
-        check preview.background ==
-          KosmoMoeThemeColor(red: 0x0c, green: 0x00, blue: 0x1a)
-        check preview.keyword == KosmoMoeThemeColor(red: 0xa7, green: 0x8b, blue: 0xfa)
+        check preview.background == ContentThemeColor(
+          red: 0x0c, green: 0x00, blue: 0x1a
+        )
+        check preview.keyword == ContentThemeColor(red: 0xa7, green: 0x8b, blue: 0xfa)
         check preview.stringLiteral ==
-          KosmoMoeThemeColor(red: 0x86, green: 0xef, blue: 0xac)
+          ContentThemeColor(red: 0x86, green: 0xef, blue: 0xac)
       let outcome = editor.applyMoeTheme(themes[matchingIndex])
       check outcome.applied
       check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier
@@ -263,7 +264,7 @@ suite "Kosmo":
     defer:
       removeDir(root)
     let
-      directory = installBundledMoeThemes(root)
+      directory = installBundledContentThemes(root)
       mochaPath = directory / "catppuccin-mocha.toml"
       oneDarkPath = directory / "one-dark.toml"
       originalMocha = readFile(mochaPath)
@@ -271,13 +272,13 @@ suite "Kosmo":
     writeFile(mochaPath, "invalid cached theme")
     removeFile(oneDarkPath)
 
-    check installBundledMoeThemes(root) == directory
+    check installBundledContentThemes(root) == directory
     check readFile(mochaPath) == originalMocha
     check readFile(oneDarkPath) == originalOneDark
     check fileExists(directory / "licenses" / "dracula.txt")
     check fileExists(directory / "licenses" / "solarized.txt")
     check fileExists(directory / "licenses" / "tokyo.txt")
-    let restoredThemes = discoverMoeThemes(directory)
+    let restoredThemes = discoverContentThemes(directory)
     for expected in ["Catppuccin Mocha", "One Dark"]:
       check restoredThemes.anyIt(it.name == expected)
 
@@ -289,7 +290,7 @@ suite "Kosmo":
       removeDir(root)
     writeFile(cachePath, "occupied")
 
-    let themes = discoverMoeThemes(installBundledMoeThemes(cachePath))
+    let themes = discoverContentThemes(installBundledContentThemes(cachePath))
     require themes.len == 1
     check themes[0].identifier == KosmoMoeDefaultThemeIdentifier
 

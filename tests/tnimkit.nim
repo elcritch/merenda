@@ -25,6 +25,7 @@ else:
   import nimkit/colorpicker
   import nimkit/comboboxes
   import nimkit/constraints
+  import nimkit/contentthemes
   import nimkit/controlfontfaces
   import nimkit/controls
   import nimkit/cssthemes

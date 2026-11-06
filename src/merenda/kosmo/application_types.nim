@@ -229,7 +229,7 @@ type
     xTerminalInputPolicy: KosmoTerminalInputPolicy
     xTerminalPalette: nimkit.TerminalPalette
     xTerminalTheme: string
-    xRichTextThemes: array[KosmoThemeTarget, KosmoMoeTheme]
+    xRichTextThemes: array[KosmoThemeTarget, ContentTheme]
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string

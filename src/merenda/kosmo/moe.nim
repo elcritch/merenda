@@ -52,8 +52,7 @@ from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
 from moepkg/command_handlers/visual_commands import visualDelete, operandArea
 from moepkg/registers import storeYanked
-from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
-from moepkg/theme import DefaultColors
+from moepkg/color import EditorColorPairIndex
 from moepkg/render_utils import
   steadyBottomAreaHeight, searchHighlightStyle, screenXToCharIndex,
   displayWidthSubstrWithTabs
@@ -73,7 +72,9 @@ import ../nimkit/foundation/textsearch
 import ./matterworkers
 import ./moelogging
 import ./cli
-import ./moethemeassets
+import ../nimkit/contentthemes
+from ../nimkit/foundation/assetcache import nimkitAssetCacheDirectory
+export contentthemes
 import ./vscodegrammars
 
 when not defined(moe.embedded):
@@ -312,32 +313,6 @@ type
     saved*: bool
     message*: string
 
-  KosmoMoeThemeKind* = enum
-    kmmtDefault
-    kmmtConfig
-
-  KosmoMoeThemeColor* = object
-    ## An RGB theme color that can be presented without exposing Moe types.
-    red*, green*, blue*: uint8
-
-  KosmoMoeThemePreview* = object
-    ## Key colors used by Kosmo's compact Moe theme preview.
-    background*: KosmoMoeThemeColor
-    foreground*: KosmoMoeThemeColor
-    keyword*: KosmoMoeThemeColor
-    functionName*: KosmoMoeThemeColor
-    stringLiteral*: KosmoMoeThemeColor
-    comment*: KosmoMoeThemeColor
-    red*, yellow*, cyan*, selection*: KosmoMoeThemeColor
-
-  KosmoMoeTheme* = object
-    ## A Moe theme that Kosmo can present without exposing Moe configuration types.
-    kind*: KosmoMoeThemeKind
-    identifier*: string
-    name*: string
-    path*: string
-    preview*: KosmoMoeThemePreview
-
   KosmoMoeThemeApplyResult* = object
     applied*: bool
     message*: string
@@ -435,127 +410,7 @@ proc moeThemesDirectory*(): string =
 
 proc bundledMoeThemesDirectory*(): string =
   ## Install embedded Moe themes and return their directory in Kosmo's asset cache.
-  installBundledMoeThemes()
-
-proc normalizedThemePath(path: string): string =
-  normalizedPath(absolutePath(path.expandTilde()))
-
-proc configThemeIdentifier(path: string): string =
-  "config:" & path.normalizedThemePath()
-
-func moeThemeName(path: string): string =
-  let baseName = splitFile(path).name
-  if baseName == "shades-of-purple":
-    return "Shades of Purple"
-  var capitalizeNext = true
-  for character in baseName:
-    if character in {'-', '_'}:
-      if result.len > 0 and result[^1] != ' ':
-        result.add ' '
-      capitalizeNext = true
-    elif capitalizeNext:
-      result.add character.toUpperAscii()
-      capitalizeNext = false
-    else:
-      result.add character
-
-func moeThemeColor(rgb: Rgb, fallback: KosmoMoeThemeColor): KosmoMoeThemeColor =
-  if rgb.isTermDefaultColor():
-    return fallback
-  KosmoMoeThemeColor(red: rgb.red.uint8, green: rgb.green.uint8, blue: rgb.blue.uint8)
-
-func moeThemePreview(colors: ThemeColors): KosmoMoeThemePreview =
-  let
-    fallbackBackground = KosmoMoeThemeColor(red: 0, green: 0, blue: 0)
-    fallbackForeground = KosmoMoeThemeColor(red: 218, green: 218, blue: 218)
-    background = colors[EditorColorPairIndex.default].background.rgb.moeThemeColor(
-      fallbackBackground
-    )
-    foreground = colors[EditorColorPairIndex.default].foreground.rgb.moeThemeColor(
-      fallbackForeground
-    )
-  KosmoMoeThemePreview(
-    background: background,
-    foreground: foreground,
-    keyword:
-      colors[EditorColorPairIndex.keyword].foreground.rgb.moeThemeColor(foreground),
-    functionName:
-      colors[EditorColorPairIndex.functionName].foreground.rgb.moeThemeColor(foreground),
-    stringLiteral:
-      colors[EditorColorPairIndex.stringLit].foreground.rgb.moeThemeColor(foreground),
-    comment:
-      colors[EditorColorPairIndex.comment].foreground.rgb.moeThemeColor(foreground),
-    red:
-      colors[EditorColorPairIndex.errorMessage].foreground.rgb.moeThemeColor(foreground),
-    yellow:
-      colors[EditorColorPairIndex.warnMessage].foreground.rgb.moeThemeColor(foreground),
-    cyan: colors[EditorColorPairIndex.operator].foreground.rgb.moeThemeColor(foreground),
-    selection:
-      colors[EditorColorPairIndex.selectArea].background.rgb.moeThemeColor(background),
-  )
-
-proc themePreview(path: string): KosmoMoeThemePreview =
-  let loaded = loadThemeFromToml(path)
-  if loaded.isOk:
-    return loaded.get().moeThemePreview()
-  DefaultColors.moeThemePreview()
-
-proc configMoeTheme(path: string): KosmoMoeTheme =
-  let normalizedPath = path.normalizedThemePath()
-  KosmoMoeTheme(
-    kind: kmmtConfig,
-    identifier: normalizedPath.configThemeIdentifier(),
-    name: normalizedPath.moeThemeName(),
-    path: normalizedPath,
-    preview: normalizedPath.themePreview(),
-  )
-
-proc sortConfigThemes(themes: var seq[KosmoMoeTheme]) =
-  themes.sort do(left, right: KosmoMoeTheme) -> int:
-    result = cmp(left.name.toLowerAscii(), right.name.toLowerAscii())
-    if result == 0:
-      result = cmp(left.identifier, right.identifier)
-
-proc discoverMoeThemes*(themesDirectory: string): seq[KosmoMoeTheme] =
-  ## Discover Moe-compatible TOML themes in `themesDirectory`.
-  result.add KosmoMoeTheme(
-    kind: kmmtDefault,
-    identifier: KosmoMoeDefaultThemeIdentifier,
-    name: "Default",
-    preview: DefaultColors.moeThemePreview(),
-  )
-  if not dirExists(themesDirectory):
-    return
-  var configThemes: seq[KosmoMoeTheme]
-  try:
-    for path in walkFiles(themesDirectory / "*.toml"):
-      configThemes.add path.configMoeTheme()
-  except OSError:
-    discard
-  configThemes.sortConfigThemes()
-  result.add configThemes
-
-proc mergeConfigThemes(
-    themes: var seq[KosmoMoeTheme], additions: openArray[KosmoMoeTheme]
-) =
-  for addition in additions:
-    if addition.kind == kmmtConfig:
-      var matchingIndex = -1
-      for index in 1 ..< themes.len:
-        if themes[index].name.toLowerAscii() == addition.name.toLowerAscii():
-          matchingIndex = index
-          break
-      if matchingIndex >= 0:
-        themes[matchingIndex] = addition
-      else:
-        themes.add addition
-
-proc sortAvailableMoeThemes(themes: var seq[KosmoMoeTheme]) =
-  if themes.len > 2:
-    var configThemes = themes[1 ..^ 1]
-    configThemes.sortConfigThemes()
-    themes.setLen(1)
-    themes.add configThemes
+  installBundledContentThemes(nimkitAssetCacheDirectory("kosmo") / "moe")
 
 proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
   ## Return the stable identifier for the theme currently configured in Moe.
@@ -565,49 +420,51 @@ proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
   of tkDefault:
     KosmoMoeDefaultThemeIdentifier
   of tkConfig:
-    editor.editor.config.theme.path.configThemeIdentifier()
+    editor.editor.config.theme.path.contentThemeIdentifier()
   of tkVscode:
     "vscode"
 
-proc availableMoeThemes*(editor: KosmoEditor): seq[KosmoMoeTheme] =
+proc availableMoeThemes*(editor: KosmoEditor): seq[ContentTheme] =
   ## Return bundled and installed themes, retaining a custom active path.
-  result = discoverMoeThemes(bundledMoeThemesDirectory())
-  result.mergeConfigThemes(discoverMoeThemes(moeThemesDirectory()))
+  result = discoverContentThemes(bundledMoeThemesDirectory())
+  result.mergeContentThemes(discoverContentThemes(moeThemesDirectory()))
   if editor.isNil or editor.editor.isNil or editor.editor.config.theme.kind != tkConfig:
-    result.sortAvailableMoeThemes()
+    result.sortContentThemes()
     return
   let currentPath = editor.editor.config.theme.path.normalizedThemePath()
   if not fileExists(currentPath):
-    result.sortAvailableMoeThemes()
+    result.sortContentThemes()
     return
-  let current = currentPath.configMoeTheme()
+  let current =
+    try:
+      currentPath.loadContentTheme()
+    except CatchableError:
+      return
   for theme in result:
     if theme.identifier == current.identifier:
-      result.sortAvailableMoeThemes()
+      result.sortContentThemes()
       return
-  result.mergeConfigThemes([current])
-  result.sortAvailableMoeThemes()
-
-proc validMoeTheme*(theme: KosmoMoeTheme): bool =
-  ## Check whether a theme can be loaded without changing the editor.
-  theme.kind == kmmtDefault or
-    (fileExists(theme.path) and loadThemeFromToml(theme.path).isOk)
+  result.mergeContentThemes([current])
+  result.sortContentThemes()
 
 proc applyMoeTheme*(
-    editor: KosmoEditor, theme: KosmoMoeTheme
+    editor: KosmoEditor, theme: ContentTheme
 ): KosmoMoeThemeApplyResult =
   ## Apply a discovered theme to Moe's live configuration.
   if editor.isNil or editor.editor.isNil:
     return KosmoMoeThemeApplyResult(message: "The editor is closed.")
-  if theme.kind == kmmtConfig and not fileExists(theme.path):
+  if theme.kind == ctkFile and not fileExists(theme.path):
     return KosmoMoeThemeApplyResult(message: "Theme not found: " & theme.name)
 
   let previousTheme = editor.editor.config.theme
   case theme.kind
-  of kmmtDefault:
+  of ctkPalette:
+    return
+      KosmoMoeThemeApplyResult(message: "The Moe engine requires a file-backed theme.")
+  of ctkDefault:
     editor.editor.config.theme.kind = tkDefault
     editor.editor.config.theme.path = ""
-  of kmmtConfig:
+  of ctkFile:
     editor.editor.config.theme.kind = tkConfig
     editor.editor.config.theme.path = theme.path
 
