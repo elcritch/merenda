@@ -59,6 +59,24 @@ can be inspected with `malloc_history /tmp/preview-graph.memgraph -allEvents`;
 the full history can be very large, and global heap or RSS alone does not
 identify the source-extraction allocations.
 
+For smart insertion, compile `textsmartallocationprobe.nim` after copying the
+chosen TextView source to `textviews_profile_baseline.nim`, as for the undo
+probe. Run `capture_allocations.py smart /tmp/smart-probe /tmp/smart-graph
+small middle enabled`. The checkpoint reports source and insertion lengths,
+result length, and a streamed checksum, so each before/after pair can be
+checked for identical output. The matched source revisions, build commands,
+five case pairs and stack totals are in
+[text-smart-insertion-allocations-2026-11-06.json](results/text-smart-insertion-allocations-2026-11-06.json).
+
+The separate `matterhandoffmemory.nim` fixture measures an 8 MiB oversized
+line submitted to a standalone Matter worker, retaining one source fixture in
+both versions. Build each variant with Nim IC release/ARC and identical
+dependencies, then run each binary with `8388608` in alternating fresh
+processes. Three-sample medians, hashes, and commands are recorded in
+[matter-handoff-memory-2026-11-06.json](results/matter-handoff-memory-2026-11-06.json).
+Request-return RSS varies with asynchronous timing; this fixture does not
+measure full Moe fallback extraction or an edit burst.
+
 The `.memgraph` and text reports provide allocation stacks and logged live,
 high-water and cumulative allocation totals. Stack logging can change memory
 and timing, and its reported no-stack blocks are separate from logged totals.

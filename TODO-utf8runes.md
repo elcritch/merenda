@@ -32,7 +32,7 @@ effort: this document already excluded much of the completed foundation.
 | Markdown tables and embedded storage | UTF-8 cells/word ranges, table-only overflow storage, and compact builder styles implemented; shared child text remains open |
 | Markdown child layout | Lazy creation implemented; releasing inactive state remains open |
 | Terminal search | Compact row/exception mapping implemented on this branch; full search text and match list remain |
-| Kosmo Matter | Current-line processing and streaming rune-column cursor implemented; source reuse and queue-byte bounds remain open |
+| Kosmo Matter | Streaming columns and latest-request handoff implemented; broader source reuse and aggregate byte budgets remain open |
 | Git Diff | Patch ownership duplication remains; existing payload/cache limits are retained |
 
 Implementation on branch `utf8-memory-followups` also covers compact builder
@@ -46,9 +46,9 @@ The detailed checklist records validation and remaining work below.
 | --- | --- | --- |
 | 1 | Stream/bound Kosmo terminal search | Avoid a full search subject and unbounded match list |
 | 2 | Measure compact layout payload reuse | Verify reflow allocation savings and revision-overlap memory |
-| 2 | Share Markdown embedded text and intern builder styles | Reduce duplicate retained text and style payloads |
+| 2 | Share Markdown embedded text | Reduce duplicate retained text |
 | 2 | Reduce Kosmo Matter and Git Diff source duplication | Bound worker and document working sets |
-| 3 | Use edit deltas/chunks and share layout geometry | Larger structural reductions for long documents |
+| 3 | Extend undo deltas/budgets and evaluate chunks | Larger structural reductions for long documents |
 
 Priorities are estimates from the code paths, not measured rankings. Distinguish
 retained memory, transient peak memory, and allocation traffic when evaluating
@@ -144,7 +144,8 @@ and applySnapshot.
 - [x] Reduce flat replacement temporaries without changing backend dispatch or
   snapshot aliasing. Replacement copies prefix, insertion and suffix directly
   into one final buffer, with overflow/empty guards and retained input owners.
-  The shared NimKit runner passes both backends and borrowed-input cases.
+  The shared NimKit runner and focused ASan/UBSan checks pass both backends
+  and borrowed-input cases.
 - [ ] Keep gap storage's compact mutable representation where useful; switching
   every TextView to gap storage alone does not solve history copies.
 
@@ -270,11 +271,26 @@ continueMatterHighlight, runeColumns, and addLineSegments.
   lines with lexical-state checkpoints. `scheduleMatterHighlighting` still
   calls `getTextString()` for each new request and transfers a full source;
   current-line iteration does not eliminate this payload.
-- [ ] Coalesce superseded requests before transferring their source payloads
-  and bound queued source bytes. Cancellation already exists and prevents
-  stale work from publishing, but an enqueued cancelled request still owns its
-  payload until consumed. Keep buffer/version checks and worker-local grammar
-  state.
+- [x] Coalesce superseded requests before transferring their source payloads.
+  Each Matter controller queues the latest metadata per buffer and allows one
+  handoff in flight, acknowledged even after cancellation or grammar failure.
+  Moe supplies the handoff from its existing matching-version fallback snapshot;
+  pending provider requests retain zero source bytes. Source extraction and
+  immediate fallback remapping still happen on each scheduled edit. Owner-thread
+  callbacks stay off the worker; detached values cross the thread boundary.
+  Forty-five focused Matter/Markdown tests pass, including supersession,
+  fairness, missing/throwing providers, grammar errors, and reentrant close.
+  Three matched 8 MiB single-handoff pairs keep completed live heap effectively
+  flat (16.14 to 16.16 MiB) and median peak RSS flat (51.70 to 51.73 MiB).
+  This fixture does not cover full Moe fallback extraction or edit bursts;
+  intermediate request-return RSS differs with asynchronous timing. See
+  [handoff samples](tests/benchmarks/results/matter-handoff-memory-2026-11-06.json).
+- [ ] Add an aggregate byte budget/admission policy for concrete-string
+  callers and worker sources across open buffers. Concrete pending requests now
+  retain at most one source per buffer; neither their total bytes nor one
+  individually large in-flight source has an absolute cap. Controllers are
+  independent per editor. Preserve existing fallback coloring and completion
+  semantics when designing backpressure.
 - [x] Convert Matter byte endpoints to rune columns with a monotonic cursor
   instead of allocating `runeColumns` per line. Preserve interior-byte,
   truncated-sequence, empty-span and fallback behavior. The parser's 1,024-byte
@@ -314,9 +330,20 @@ defaultGlyphProperties;
   this avoids changing gap storage retention or subclass overrides. The shared
   runner verifies Unicode/malformed parity, including 300 seeded random byte
   strings, plus pending-layout control/out-of-range/nil cases.
-- [ ] Remove the remaining full-source indexed construction in smart insertion
-  using bounded neighbor queries. Preserve malformed-input replacement and
-  custom storage behavior; do not populate a gap snapshot just to read neighbors.
+- [x] Remove full-source indexed construction in smart insertion using streaming
+  neighbor queries through the existing string accessor. The insertion scan
+  keeps only its first/last rune classification; the source scan stops after
+  the right neighbor. The full string accessor remains, with no new gap snapshot
+  cache or bypass of custom overrides. The shared NimKit runner passes 500
+  seeded malformed/NUL comparisons to the old indexed implementation, explicit
+  Unicode/boundary cases, gap storage, and overridden string access.
+  Matched allocator traces over 8 MiB reduce peak heap/VM from 63.9 MB to
+  55.9 MB for a small insertion near the beginning, middle, or end, with retained
+  memory unchanged at 47.7 MB. A 1 MiB insertion lowers peak from 68.9 MB to
+  61.9 MB and retains 49.7 MB in both versions; smart-disabled controls remain
+  unchanged. Paired output lengths and checksums match. These are single traced
+  samples in Apple tool units, not full-document layout profiles. See
+  [smart-insertion allocation evidence](tests/benchmarks/results/text-smart-insertion-allocations-2026-11-06.json).
 
 ## Share layout resources and remove redundant glyph geometry
 
@@ -461,6 +488,14 @@ details, and limitations:
 - [Unchanged Markdown previews](tests/benchmarks/results/kosmo-preview-allocations-2026-11-06.json):
   full event-history attribution isolates removed source-extraction allocations;
   initial preview construction and global peak remain present.
+- [Matter source handoff](tests/benchmarks/results/matter-handoff-memory-2026-11-06.json):
+  three matched fresh-process pairs keep one-source peak and completed live
+  memory effectively flat; queue-byte tests separately prove superseded provider
+  requests retain no source payload.
+- [Smart insertion](tests/benchmarks/results/text-smart-insertion-allocations-2026-11-06.json):
+  ten matched traces cover three insertion positions, a large insertion, and a
+  smart-disabled control. Peak and allocation traffic fall; retained memory
+  and paired output checksums stay unchanged.
 
 Reproduce checkpoint captures using the tracked probes and driver described in
 [ALLOCATION-PROFILING.md](tests/benchmarks/ALLOCATION-PROFILING.md).
@@ -468,6 +503,12 @@ Reproduce checkpoint captures using the tracked probes and driver described in
 The measured first batches reduce temporary allocation and keep retained rich
 text allocations unchanged at these checkpoints. Keep this as an acceptance
 criterion for subsequent work, rather than extrapolating it to unmeasured APIs.
+
+Validation after the latest feature batches: the complete shared NimKit runner
+passes, all 45 focused Kosmo Matter/Markdown activation tests pass, focused
+TextStorage ASan/UBSan checks pass, and the example bundle compiles with `nim ic`
+without running it. This is component and example coverage, not a full Kosmo or
+integration-suite result.
 
 ## Historical measurements from completed changes
 
