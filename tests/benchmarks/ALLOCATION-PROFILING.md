@@ -8,10 +8,10 @@ call trees using `malloc_history`. It resumes and reaps the child even on an
 error or timeout. Graphs may contain application memory; store them locally.
 
 Build the same probe in each Atlas-configured checkout, using matching Nim,
-flags, and dependency versions. For example, the recorded results use `nim c
--d:release --mm:arc` with separate nimcache directories and these probe files:
-The baseline's incremental build failed with an IC rescheduling error, so both
-variants used the same classic backend for a matched comparison.
+flags, and dependency versions. The recorded Markdown results use `nim c
+-d:release --mm:arc` with separate nimcache directories. The baseline's
+incremental build failed with an IC rescheduling error, so both variants used
+the same classic backend for a matched comparison:
 
 ```sh
 nim c -d:release --mm:arc --nimcache:/tmp/probe-cache \
@@ -35,6 +35,29 @@ SynEdit module copied alongside it as `syneditviews_profile_baseline.nim`; the
 changed build uses the normal module. Both source versions and the exact
 harness are identified by SHA-256 in the results file. The probe retains the
 8 MiB source at its post-tokenization checkpoint.
+
+For undo history, build `textundoallocationprobe.nim` after placing the exact
+TextView variant to profile in `src/merenda/nimkit/text/textviews_profile_baseline.nim`.
+Use identical module filenames for each variant, record their hashes, and run,
+for example, `capture_allocations.py undo /tmp/undo-probe /tmp/undo-graph 32
+enabled redo plain`. The probe retains the source and view at the checkpoint.
+The separate `textundogroupallocationprobe.nim` reproduces the grouped-edit
+comparison with `32 enabled group plain`.
+
+The matched committed undo and replacement comparisons, including exact source
+revisions, build commands, binary hashes, controls, and traced allocation
+totals, are in [text-edit-allocations-2026-11-06.json](results/text-edit-allocations-2026-11-06.json).
+Earlier intermediate-implementation measurements are labeled separately in
+[textundo-allocations-2026-11-06.json](results/textundo-allocations-2026-11-06.json).
+
+For the Kosmo preview gate, compile `kosmomarkdownrefreshmemory.nim` in each
+checkout and run `capture_allocations.py preview /tmp/preview-probe
+/tmp/preview-graph 20`. Repeat with zero refreshes to distinguish initial
+preview setup from refresh work. Its large whitespace-only tail keeps rendered
+layout small while exercising full source-buffer extraction. Full event history
+can be inspected with `malloc_history /tmp/preview-graph.memgraph -allEvents`;
+the full history can be very large, and global heap or RSS alone does not
+identify the source-extraction allocations.
 
 The `.memgraph` and text reports provide allocation stacks and logged live,
 high-water and cumulative allocation totals. Stack logging can change memory

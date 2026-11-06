@@ -1,0 +1,71 @@
+{
+  "baselineRevision": "a2f5e306",
+  "afterRevision": "a2f5e306 plus preview version-gate changes only",
+  "platform": "macOS 15.7.9 arm64",
+  "method": "Matching classic Nim c -d:release --mm:arc builds from isolated checkouts at same revision and same Atlas deps; MallocStackLogging=1; leaks --fullStackHistory --outputGraph at checkpoint after 20 unchanged frontend.editorView.refresh calls; malloc_history graph -allEvents filtered for syncSelectedEditorContent and then bufferText. Per-event ALLOC sizes are summed; FREE events are excluded.",
+  "workload": "225,040-byte source: short rendered paragraph followed by whitespace-only tail; 20 unchanged preview refreshes. Source and preview retained through checkpoint.",
+  "limitations": [
+    "One traced sample per version; stack logging affects timing and memory.",
+    "Synthetic whitespace tail isolates source extraction, not realistic long-document layout costs.",
+    "Only recorded stack events are counted; no-stack blocks are excluded.",
+    "Global peak includes app startup, font and UI caches and does not isolate the preview or the gate."
+  ],
+  "harness": {
+    "path": "tests/benchmarks/kosmomarkdownrefreshmemory.nim",
+    "sha256": "24edd94e6f76fbbee2d0128fa39f048f16f310addae54f0da408590df4136e38"
+  },
+  "captureDriver": "tests/benchmarks/capture_allocations.py",
+  "sourceFilesSha256": {
+    "before": {
+      "src/merenda/kosmo/application_editor.nim": "c3729ceec821ca474a59bd0bf9fc3c875e57ee5b50cd5a87ce9d2121450e1353",
+      "src/merenda/kosmo/application_types.nim": "b5e43266a6a36c67056e2ab43c76d71329e1eb03b16b2997c26ec26fc6240f82",
+      "src/merenda/kosmo/moe.nim": "22220ef7e836edbe00ecf739ab0cf43c02191275ad2c31a1bb58d0ee92768fbd"
+    },
+    "after": {
+      "src/merenda/kosmo/application_editor.nim": "301435279114d5900d091d7b07f749293e53618cde0113197220ff46590011ce",
+      "src/merenda/kosmo/application_types.nim": "d7621f3f5eddf4bbbdc51cb82b7a3cb34816d16893238c9ff7963312499a33d4",
+      "src/merenda/kosmo/moe.nim": "79b44cea426c51b8ef4153c011dfc8f58da846e88edbd861d26fb0d429f53ef8"
+    }
+  },
+  "samples": [
+    {
+      "version": "before",
+      "binarySha256": "1829d3d30842f23ee3841be2f26a45889c71a42e16e8e637301e187dd4cdc2d7",
+      "graph": "/tmp/merenda-utf8-profile/preview-before-20.memgraph",
+      "eventReport": "/tmp/merenda-utf8-profile/preview-before-20-refresh-events.txt",
+      "eventReportSha256": "7fad6e4f8e21d4242229caaf096e781ebf4239bf3f8ab4dd217010f83f75e074",
+      "highReport": "/tmp/merenda-utf8-profile/preview-before-20-high.txt",
+      "peakHeapVm": "183.8 MB",
+      "currentHeapVm": "182 MB",
+      "cumulativeHeapVm": "2.3 GB",
+      "bufferTextAllocations": {
+        "initialOpen": 12,
+        "other": 126,
+        "explicitRefreshLoop": 120
+      },
+      "bufferTextAllocatedBytes": {
+        "initialOpen": 900448,
+        "other": 9454704,
+        "explicitRefreshLoop": 9004480
+      },
+      "exampleRefreshAllocationStack": "ALLOC 0x140810000-0x140846ef0 [size=225009]:  0x1997feb98 (dyld) start | 0x104be4c64 (preview-before) main  markdown.nim:1873 | 0x104be4a98 (preview-before) NimMainModule  kosmomarkdownrefreshmemory.nim:28 | 0x104bb24a0 (preview-before) application::refresh(ref<application::KosmoEditorViewcolonObjectType_>)  application_editor.nim:1217 | 0x104680674 (preview-before) application::syncSelectedEditorContent(ref<application::KosmoEditorViewcolonObjectType_>, openArray<moe::KosmoTab>)  application_editor.nim:1124 | 0x104b94398 (preview-before) moe::bufferText(ref<moe::KosmoEditorcolonObjectType_>, moe::KosmoBufferId)  moe.nim:1300 | 0x104a7ab0c (preview-before) gap_buffer::dollar_(ref<gap_buffer::GapBuffercolonObjectType_>)  gap_buffer.nim:326 | 0x1040b0da0 (preview-before) nimAsgnStrV2  strs_v2.nim:28 | 0x1999d10f4 (libsystem_malloc.dylib) _malloc_zone_malloc_instrumented_or_legacy"
+    },
+    {
+      "version": "after",
+      "binarySha256": "6298f134f0a22c29f53c73942a249f88b304aa7478db09ad9b6e34a21d567651",
+      "graph": "/tmp/merenda-utf8-profile/preview-after-20.memgraph",
+      "eventReport": "/tmp/merenda-utf8-profile/preview-after-20-refresh-events.txt",
+      "eventReportSha256": "b6d443a445b35edb37159514d342f61862dfc6bc2cecabf1718af36ae94c1f19",
+      "highReport": "/tmp/merenda-utf8-profile/preview-after-20-high.txt",
+      "peakHeapVm": "183.8 MB",
+      "currentHeapVm": "182 MB",
+      "cumulativeHeapVm": "2.29 GB",
+      "bufferTextAllocations": {
+        "initialOpen": 6
+      },
+      "bufferTextAllocatedBytes": {
+        "initialOpen": 450224
+      }
+    }
+  ]
+}

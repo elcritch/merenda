@@ -28,17 +28,17 @@ effort: this document already excluded much of the completed foundation.
 | SynEdit incremental tokenization | Single-line fast path only; multiline/custom paths still open |
 | SynEdit tokenizer source ownership | Scoped borrow implemented; an 8 MiB copy is absent in allocation stacks |
 | Background layout requests | Compact interned payload implemented; source caching deferred pending a reliable memory benefit |
-| Edit history | Still retains before/after storages; grouping exists, deltas/budget remain open |
+| Edit history | Attributed deltas for ordinary internal-storage edits; conservative snapshot fallbacks and budget work remain |
 | Markdown tables and embedded storage | UTF-8 cells/word ranges, table-only overflow storage, and compact builder styles implemented; shared child text remains open |
 | Markdown child layout | Lazy creation implemented; releasing inactive state remains open |
 | Terminal search | Compact row/exception mapping implemented on this branch; full search text and match list remain |
-| Kosmo Matter | Current-line processing implemented; source reuse, queue-byte bounds, and rune-column cursor remain open |
+| Kosmo Matter | Current-line processing and streaming rune-column cursor implemented; source reuse and queue-byte bounds remain open |
 | Git Diff | Patch ownership duplication remains; existing payload/cache limits are retained |
 
-Implementation on branch `utf8-memory-followups` covers terminal search mappings,
-compact background-layout payloads, and Markdown table temporaries. The detailed
-checklist records validation below. The shared NimKit runner and all eight
-terminal-search tests pass.
+Implementation on branch `utf8-memory-followups` also covers compact builder
+styles, borrowed tokenization input, streaming text queries, Matter column
+mapping, ordinary edit-history deltas, and unchanged-preview version gating.
+The detailed checklist records validation and remaining work below.
 
 ## Priorities
 
@@ -125,17 +125,43 @@ xMarkedUndoStorage, and grouped undo;
 [textstorage.nim](src/merenda/nimkit/text/textstorage.nim), replaceStorageText
 and applySnapshot.
 
-- [ ] Store removed/inserted text, affected style ranges, and selection state
-  in undo records instead of entire before/after storages.
+- [x] Store removed/inserted text, affected style ranges, and selection state
+  for ordinary string edits to internally owned base storage. Validate text,
+  style and storage identity across callbacks before accepting a delta.
+  Adjacent grouped edits preserve earlier compatible deltas, and discarded
+  redo history is released before any fallback materialization.
+- [ ] Extend deltas where safe beyond ordinary internal-storage edits.
+  Grouped/IME edits, attributed insertion, external/gap/custom storage,
+  overlapping or sparse styles, and undo-manager/delegate paths conservatively
+  retain snapshots. Preserve their existing behavior and observer semantics.
 - [ ] Coalesce typing and composition edits, and support an undo byte budget.
   Explicit `beginUndoGrouping`/`endUndoGrouping` and marked-text grouping already
   exist; they still record complete `storageBefore`/`storageAfter` values.
 - [ ] Evaluate persistent chunks or a piece table for large editable documents.
   Sharing snapshots makes copies of an unchanged revision cheap; it does not
   share unchanged portions between character revisions. Ordinary replacement
-  still slices/concatenates a complete new string and rebuilds its indexes.
+  still builds a complete new string and rebuilds its indexes.
+- [x] Reduce flat replacement temporaries without changing backend dispatch or
+  snapshot aliasing. Replacement copies prefix, insertion and suffix directly
+  into one final buffer, with overflow/empty guards and retained input owners.
+  The shared NimKit runner passes both backends and borrowed-input cases.
 - [ ] Keep gap storage's compact mutable representation where useful; switching
   every TextView to gap storage alone does not solve history copies.
+
+Matched allocator traces over an 8 MiB source show 32 ordinary edits reducing
+logged current heap/VM from 309.8 MB to 47.8 MB with deltas and peak from
+317.8 MB to 64 MB. The subsequent single-buffer replacement keeps current at
+47.8 MB, lowers peak to 56 MB, and reduces cumulative allocation from 621.8 MB
+to 365.8 MB. Undo-disabled controls also retain 47.8 MB, with peak falling from
+63.9 MB to 55.9 MB.
+
+Replay still reconstructs flat strings. Single-buffer replacement reduces
+cumulative allocation for 32 edits plus undo from 1.11 GB to 628 MB, and plus
+redo from 1.62 GB to 890.2 MB. Snapshot history used about 622 MB cumulatively
+for these workloads, so undo replay is close but redo still allocates more;
+persistent chunks remain a separate structural task. These are single traced
+samples in Apple tool units, not document-only sizes or RSS. See the
+[matched edit allocation evidence](tests/benchmarks/results/text-edit-allocations-2026-11-06.json).
 
 ## Compact Markdown table rendering
 
@@ -195,9 +221,14 @@ syncSelectedEditorContent and markdownViewForBuffer.
 - [ ] Budget Kosmo Markdown previews by retained bytes as well as count. A
   three-preview limit already exists; three large ASTs, layouts, images, and
   storages can still be expensive, especially across panes.
-- [ ] Gate preview synchronization by Moe buffer content version before calling
+- [x] Gate preview synchronization by Moe buffer content version before calling
   bufferText(). It builds a complete string before markdown= can reject an
-  unchanged value. Share immutable document data across panes where feasible.
+  unchanged value. Six focused tests cover refresh, selection, style, reload,
+  and close/reopen behavior. Allocator stacks show 120 source-extraction
+  allocations / 9,004,480 bytes across 20 unchanged refreshes before the gate
+  and none after initial setup with the gate. Global traced peak stays
+  183.8 MB; this isolates extraction rather than full-preview layout costs.
+- [ ] Share immutable preview document data across panes where feasible.
 
 ## Stream Kosmo terminal search
 
@@ -420,6 +451,16 @@ details, and limitations:
   three matched fresh-process pairs on an 8 MiB line. Median peak RSS falls
   from 115.95 MiB to 51.78 MiB; post-completion live heap stays 16.15 MiB and
   the final rune column is identical.
+- [Matched edit and undo history](tests/benchmarks/results/text-edit-allocations-2026-11-06.json):
+  compare original history, final attributed deltas, and single-buffer
+  replacement with identical harnesses and dependency trees. Retention and peak
+  fall; flat replay still costs allocation traffic, as detailed above.
+- [Earlier undo experiments](tests/benchmarks/results/textundo-allocations-2026-11-06.json):
+  explicitly labeled intermediate results and a separate grouped comparison
+  isolate the refinement that preserves prior deltas across adjacent groups.
+- [Unchanged Markdown previews](tests/benchmarks/results/kosmo-preview-allocations-2026-11-06.json):
+  full event-history attribution isolates removed source-extraction allocations;
+  initial preview construction and global peak remain present.
 
 Reproduce checkpoint captures using the tracked probes and driver described in
 [ALLOCATION-PROFILING.md](tests/benchmarks/ALLOCATION-PROFILING.md).
