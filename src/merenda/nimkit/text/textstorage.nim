@@ -322,10 +322,25 @@ method replaceStorageText*(
     replaceStop = clamped.maxIndex
     startByte = snapshot.byteOffset(replaceStart)
     stopByte = snapshot.byteOffset(replaceStop)
-  storage.xSnapshot = newTextSnapshot(
-    snapshot.bytes[0 ..< startByte] & text &
-      snapshot.bytes[stopByte ..< snapshot.byteLength]
-  )
+  let
+    suffixLength = snapshot.byteLength - stopByte
+    retainedLength = startByte + suffixLength
+  if text.len > high(int) - retainedLength:
+    raise newException(OverflowDefect, "replacement text is too large")
+  # Keep snapshot and text alive until every segment has been copied; text may
+  # borrow the old snapshot.
+  var replacement = newStringUninit(retainedLength + text.len)
+  if startByte > 0:
+    copyMem(addr replacement[0], unsafeAddr snapshot.bytes[0], startByte)
+  if text.len > 0:
+    copyMem(addr replacement[startByte], unsafeAddr text[0], text.len)
+  if suffixLength > 0:
+    copyMem(
+      addr replacement[startByte + text.len],
+      unsafeAddr snapshot.bytes[stopByte],
+      suffixLength,
+    )
+  storage.xSnapshot = newTextSnapshot(replacement)
 
 method replaceStorageText*(storage: TextGapStorage, range: TextRange, text: string) =
   storage.xGapBuffer.replace(range, text)

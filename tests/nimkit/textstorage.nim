@@ -4,6 +4,7 @@ import sigils/core
 
 import merenda/nimkit
 import merenda/nimkit/text/textstorage
+import merenda/nimkit/text/textsnapshots
 
 type
   OverriddenStringStorage = ref object of TextStorage
@@ -211,6 +212,30 @@ suite "nimkit text storage":
     check storage.stringValue == "aLpha"
     check storage.len == 5
     check storage.substring(initTextRange(1, 2)) == "Lp"
+
+  test "replacement preserves bytes at every boundary in both backends":
+    for (initial, start, length, replacement, expected) in [
+      ("", 0, 0, "", ""),
+      ("abc", 0, 0, "é", "éabc"),
+      ("abc", 3, 0, "😀", "abc😀"),
+      ("abc", 1, 1, "", "ac"),
+      ("abc", 0, 3, "", ""),
+      ("abc", 0, 3, "中", "中"),
+      ("é😀\xffz", 1, 2, "中", "é中z"),
+      ("a\0b", 1, 1, "\0x", "a\0xb"),
+    ]:
+      for storage in [newTextStorage(initial), TextStorage(newTextGapStorage(initial))]:
+        storage.replace(initTextRange(start, length), replacement)
+        check storage.stringValue() == expected
+
+  test "replacement can borrow the source snapshot as input":
+    for storage in [
+      newTextStorage("é😀x"), TextStorage(newTextGapStorage("é😀x"))
+    ]:
+      let snapshot = storage.textSnapshot()
+      storage.replace(initTextRange(1, 1), snapshot.bytes())
+      check storage.stringValue() == "éé😀xx"
+      check snapshot.bytes() == "é😀x"
 
   test "base storage scans UTF-8 lines and paragraphs in rune coordinates":
     let storage = newTextStorage("α\nβeta\n終")

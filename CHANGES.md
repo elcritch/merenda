@@ -23,6 +23,8 @@
   rather than retaining every revision.
 - Refresh Kosmo Markdown source only when its buffer content version changes,
   avoiding repeated whole-buffer extraction for unchanged previews.
+- Build replacement TextStorage strings in one buffer, avoiding full prefix and
+  suffix temporaries while preserving rune ranges and snapshot aliasing.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
