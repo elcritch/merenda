@@ -29,6 +29,21 @@ type TextViewCheckerSpy = ref object of DynamicAgent
   checkingResults: seq[TextCheckingResult]
   dataResults: seq[TextCheckingResult]
 
+type TextUndoReentrySpy = ref object of DynamicAgent
+  view: TextView
+  replacement: TextStorage
+  manager: UndoManager
+
+proc changeUndoStorage(spy: TextUndoReentrySpy, sender: DynamicAgent) {.slot.} =
+  discard sender
+  if not spy.view.isNil:
+    let view = spy.view
+    spy.view = nil
+    if not spy.replacement.isNil:
+      view.textStorage = spy.replacement
+    if not spy.manager.isNil:
+      view.textStorage().undoManager = spy.manager
+
 type TextCommandSpy = ref object of DynamicAgent
   selectors: seq[string]
   handled: seq[bool]
@@ -368,6 +383,236 @@ suite "nimkit text views":
     check textView.redoText()
     check textView.stringValue == "abcd"
     check textView.selectedRange == initTextRange(4, 0)
+
+  test "undo preserves separate recorded states across unrecorded text changes":
+    let textView = newTextView("abc")
+    textView.insertTextValue("d")
+    textView.textStorage().stringValue = "X"
+    textView.selectedRange = initTextRange(1, 0)
+    textView.insertTextValue("y")
+    check textView.stringValue == "Xy"
+    check textView.undoText()
+    check textView.stringValue == "X"
+    check textView.undoText()
+    check textView.stringValue == "abc"
+    check textView.redoText()
+    check textView.stringValue == "abcd"
+    check textView.redoText()
+    check textView.stringValue == "Xy"
+
+  test "undo restores replacements crossing differently styled runs":
+    let
+      textView = newTextView("abcdef")
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+    textView.textStorage().setAttributes(initTextRange(0, 3), red)
+    textView.textStorage().setAttributes(initTextRange(3, 3), blue)
+    let originalRuns = textView.textStorage().attributeRuns()
+    textView.selectedRange = initTextRange(2, 2)
+    textView.insertTextValue("X")
+    let changedRuns = textView.textStorage().attributeRuns()
+    check textView.stringValue == "abXef"
+    check textView.undoText()
+    check textView.stringValue == "abcdef"
+    check textView.selectedRange == initTextRange(2, 2)
+    check textView.textStorage().attributeRuns() == originalRuns
+    check textView.redoText()
+    check textView.stringValue == "abXef"
+    check textView.textStorage().attributeRuns() == changedRuns
+
+  test "undo preserves unrecorded attribute changes between edits":
+    let
+      textView = newTextView("a")
+      accent = defaultTextAttributes(color(0.9, 0.1, 0.1))
+      plain = textView.textStorage().attributesAt(0)
+    textView.insertTextValue("b")
+    textView.textStorage().setAttributes(initTextRange(0, 1), accent)
+    textView.selectedRange = initTextRange(2, 0)
+    textView.insertTextValue("c")
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.textStorage().attributesAt(0) == accent
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.textStorage().attributesAt(0) == plain
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.textStorage().attributesAt(0) == plain
+    check textView.redoText()
+    check textView.stringValue == "abc"
+    check textView.textStorage().attributesAt(0) == accent
+
+  test "undo ignores unrecorded live changes and redo restores its recorded state":
+    let textView = newTextView("a")
+    textView.insertTextValue("b")
+    textView.textStorage().stringValue = "external"
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+
+  test "undo retains Unicode and malformed bytes across edits":
+    let textView = newTextView("é😀\xffz")
+    textView.selectedRange = initTextRange(1, 2)
+    textView.insertTextValue("中")
+    check textView.stringValue == "é中z"
+    check textView.undoText()
+    check textView.stringValue == "é😀\xffz"
+    check textView.selectedRange == initTextRange(1, 2)
+    check textView.redoText()
+    check textView.stringValue == "é中z"
+
+  test "external overlapping storage and its undo manager keep snapshot history":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      storage = newTextStorage(
+        "abcdef",
+        @[
+          TextAttributeRun(range: initTextRange(0, 4), attributes: red),
+          TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(3, 3), attributes: blue),
+        ],
+      )
+      originalRuns = storage.attributeRuns()
+      manager = newUndoManager()
+      textView = newTextView()
+    defer:
+      manager.clearAll()
+    storage.undoManager = manager
+    textView.textStorage = storage
+    textView.selectedRange = initTextRange(2, 1)
+    textView.insertTextValue("Z")
+    check manager.undoCount == 1
+    check textView.undoText()
+    check textView.stringValue == "abcdef"
+    check textView.textStorage().attributeRuns() == originalRuns
+    check textView.redoText()
+    check textView.stringValue == "abZdef"
+    check manager.undoCount == 1
+
+  test "undo handles storage replacement from a change observer":
+    let
+      textView = newTextView("a")
+      replacement = newTextStorage("ab")
+      spy = TextUndoReentrySpy(view: textView, replacement: replacement)
+    textView.connect(textDidChange, spy, changeUndoStorage)
+    textView.insertTextValue("b")
+    check textView.stringValue == "ab"
+    textView.insertTextValue("c")
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.redoText()
+    check textView.stringValue == "abc"
+
+  test "undo handles an undo manager attached by a change observer":
+    let
+      textView = newTextView("a")
+      manager = newUndoManager()
+      spy = TextUndoReentrySpy(view: textView, manager: manager)
+    defer:
+      manager.clearAll()
+    textView.connect(textDidChange, spy, changeUndoStorage)
+    textView.insertTextValue("b")
+    check manager.undoCount == 0
+    textView.insertTextValue("c")
+    check manager.undoCount == 1
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.redoText()
+    check textView.stringValue == "abc"
+    check manager.undoCount == 1
+
+  test "grouped snapshot history remains adjacent to delta edits":
+    let textView = newTextView("a")
+    textView.insertTextValue("b")
+    textView.beginUndoGrouping()
+    textView.insertTextValue("c")
+    textView.insertTextValue("d")
+    textView.endUndoGrouping()
+    textView.insertTextValue("e")
+    for expected in ["abcd", "ab", "a"]:
+      check textView.undoText()
+      check textView.stringValue == expected
+    for expected in ["ab", "abcd", "abcde"]:
+      check textView.redoText()
+      check textView.stringValue == expected
+
+  test "composition snapshot remains adjacent to earlier edits":
+    let textView = newTextView("a")
+    textView.insertTextValue("b")
+    textView.selectedRange = initTextRange(1, 1)
+    textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
+    textView.insertTextValue("Z")
+    check textView.stringValue == "aZ"
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.selectedRange == initTextRange(1, 1)
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.redoText()
+    check textView.stringValue == "aZ"
+
+  test "attributed paste snapshot remains adjacent to earlier edits":
+    let
+      textView = newTextView("a")
+      pasteboard = pasteboardWithUniqueName()
+      accent = defaultTextAttributes(color(0.9, 0.1, 0.2))
+    textView.insertTextValue("b")
+    require pasteboard.setTextStorage(
+      PasteboardTypeTextStorage, newTextStorage("c", accent)
+    )
+    require textView.insertTextFromPasteboard(pasteboard)
+    check textView.stringValue == "abc"
+    check textView.textStorage().attributesAt(2) == accent
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.redoText()
+    check textView.stringValue == "abc"
+    check textView.textStorage().attributesAt(2) == accent
+
+  test "an unrecorded no-op preserves the redo branch":
+    let textView = newTextView("a")
+    textView.insertTextValue("b")
+    check textView.undoText()
+    check textView.stringValue == "a"
+    textView.insertTextValue("")
+    check textView.redoText()
+    check textView.stringValue == "ab"
+
+  test "a grouped edit after undo discards the redo branch":
+    let textView = newTextView("a")
+    textView.insertTextValue("b")
+    textView.insertTextValue("c")
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    textView.beginUndoGrouping()
+    textView.insertTextValue("d")
+    textView.insertTextValue("e")
+    textView.endUndoGrouping()
+    check not textView.redoText()
+    check textView.undoText()
+    check textView.stringValue == "ab"
+    check textView.undoText()
+    check textView.stringValue == "a"
+    check textView.redoText()
+    check textView.stringValue == "ab"
+    check textView.redoText()
+    check textView.stringValue == "abde"
 
   test "text view delegate gates edits and receives lifecycle callbacks":
     let

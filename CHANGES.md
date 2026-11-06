@@ -17,6 +17,10 @@
   without building a second full UTF-8 buffer and sparse index.
 - Map Matter highlight byte endpoints with a small rune cursor, avoiding dense
   per-byte tables even for oversized lines that skip grammar parsing.
+- Keep attributed edit deltas for normal TextView string edits instead of full
+  document revisions, with compatible snapshot fallbacks for other operations.
+  Adjacent grouped edits preserve earlier deltas; undo/redo reconstruct flat text
+  rather than retaining every revision.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
