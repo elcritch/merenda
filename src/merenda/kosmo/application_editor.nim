@@ -3194,8 +3194,14 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
     bar.indexEntryLabel.setFrameFromLayout(
       nimkit.rect(0, 0, entryWidth, bounds.size.height)
     )
+    let buttonSize = min(buttonWidth, choiceHeight)
     bar.nimdexButton.setFrameFromLayout(
-      nimkit.rect(buttonX - progressX, 0, buttonWidth, bounds.size.height)
+      nimkit.rect(
+        buttonX - progressX + (buttonWidth - buttonSize) * 0.5'f32,
+        (bounds.size.height - buttonSize) * 0.5'f32,
+        buttonSize,
+        buttonSize,
+      )
     )
     bar.indexSpinner.setFrameFromLayout(nimkit.rect(entryWidth, choiceY + 2, 16, 16))
     bar.indexProgress.setFrameFromLayout(
