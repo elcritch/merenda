@@ -505,13 +505,12 @@ suite "nimkit text layout":
   test "worker snapshots match synchronous Unicode wrapping and container geometry":
     for source in ["", "αβ\n\nZ\n", repeat("hello κόσμος ", 30) & "\n"]:
       for wraps in [false, true]:
-        let containers =
-          @[
-            initTextContainer(initSize(120, 60), insets(3), wraps = wraps),
-            initTextContainer(
-              initSize(120, 4000), insets(3), wraps = wraps, origin = initPoint(150, 0)
-            ),
-          ]
+        let containers = @[
+          initTextContainer(initSize(120, 60), insets(3), wraps = wraps),
+          initTextContainer(
+            initSize(120, 4000), insets(3), wraps = wraps, origin = initPoint(150, 0)
+          ),
+        ]
         let storage = newTextStorage(source)
         let synchronous = newTextLayoutManager(storage, containers[0])
         synchronous.textContainers = containers
@@ -530,6 +529,53 @@ suite "nimkit text layout":
         check actual.containerRects == expected.containerRects
         check actual.usedRect == expected.usedRect
         check actual.contentSize == expected.contentSize
+
+  test "background layout accepts missing storage":
+    let manager =
+      newTextLayoutManager(nil, initTextContainer(initSize(120, 200), wraps = true))
+    manager.usesBackgroundLayout = true
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    require manager.waitForBackgroundSnapshot()
+    let expected = newTextLayoutManager(
+        nil, initTextContainer(initSize(120, 200), wraps = true)
+      )
+      .layoutSnapshot()
+    check manager.layoutSnapshot().lineFragments == expected.lineFragments
+
+  test "background reflows use the current attributed source after edits":
+    let storage = newTextStorage(repeat("κόσμος text ", 30))
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 24
+    storage.setAttributes(initTextRange(2, 8), emphasis)
+    let background = newTextLayoutManager(
+      storage, initTextContainer(initSize(180, 4000), wraps = true)
+    )
+    background.usesBackgroundLayout = true
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    for width in [95.0'f32, 140.0'f32]:
+      let container = initTextContainer(initSize(width, 4000), wraps = true)
+      background.textContainer = container
+      background.requestBackgroundLayout(allowUncachedLayout = true)
+      require background.waitForBackgroundSnapshot()
+      let expected = newTextLayoutManager(storage, container).layoutSnapshot()
+      check background.layoutSnapshot().layoutHash == expected.layoutHash
+      check background.layoutSnapshot().lineFragments == expected.lineFragments
+    emphasis.fontSize = 32
+    storage.setAttributes(initTextRange(2, 8), emphasis)
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    let styledExpected =
+      newTextLayoutManager(storage, background.textContainer()).layoutSnapshot()
+    check background.layoutSnapshot().layoutHash == styledExpected.layoutHash
+    check background.layoutSnapshot().lineFragments == styledExpected.lineFragments
+    storage.stringValue = "changed αβγ text"
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    let expected =
+      newTextLayoutManager(storage, background.textContainer()).layoutSnapshot()
+    check background.layoutSnapshot().textHash == expected.textHash
+    check background.layoutSnapshot().lineFragments == expected.lineFragments
 
   test "background layout keeps snapshot delegate calls on the owning thread":
     let manager = newTextLayoutManager(

@@ -3,8 +3,11 @@ import std/[random, strutils, unittest]
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/text/textstorage
 
 type
+  OverriddenStringStorage = ref object of TextStorage
+
   StorageEventSpy = ref object of DynamicAgent
     events: seq[string]
     lastEdit: TextStorageEdit
@@ -29,6 +32,9 @@ type
 
   DispatchRecorder = ref object of DynamicAgent
     dispatches: seq[string]
+
+method storageString(storage: OverriddenStringStorage): string =
+  "αβγ"
 
 protocol StorageEventSpySlots from StorageEventSpy:
   includes TextStorageEditingEvents
@@ -138,6 +144,29 @@ proc newDispatchingTextStorage(value: string, recorder: DispatchRecorder): TextS
   result = newTextStorage(value)
   result.delegate = DynamicAgent(recorder)
   discard result.withProtocol(RecordingTextStorageDispatchProtocol)
+
+suite "background text source":
+  test "worker source uses the storage text override":
+    let original = OverriddenStringStorage()
+    original.initTextStorageFields("abc")
+    let detached = newTextLayoutStorage(original.textLayoutSource())
+    check detached.stringValue() == "αβγ"
+
+  test "detached interned styles survive edits to the original":
+    let original = newTextStorage("αβγδε")
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 23
+    emphasis.link = "https://example.test/α"
+    original.setAttributes(initTextRange(1, 2), emphasis)
+    let source = original.textLayoutSource()
+    let expectedRuns = original.attributeRuns()
+    original.stringValue = "replacement"
+    let detached = newTextLayoutStorage(source)
+    check detached.stringValue() == "αβγδε"
+    check detached.attributeRuns() == expectedRuns
+    detached.setAttributes(initTextRange(0, 1), emphasis)
+    let second = newTextLayoutStorage(source)
+    check second.attributeRuns() == expectedRuns
 
 suite "nimkit text storage":
   test "text storage revisions advance once per committed editing batch":
@@ -275,13 +304,12 @@ suite "nimkit text storage":
     let
       red = defaultTextAttributes(color(0.9, 0.1, 0.2))
       blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
-      source =
-        @[
-          TextAttributeRun(range: initTextRange(1, 4), attributes: red),
-          TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
-          TextAttributeRun(range: initTextRange(4, 3), attributes: blue),
-          TextAttributeRun(range: initTextRange(8, 1), attributes: red),
-        ]
+      source = @[
+        TextAttributeRun(range: initTextRange(1, 4), attributes: red),
+        TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
+        TextAttributeRun(range: initTextRange(4, 3), attributes: blue),
+        TextAttributeRun(range: initTextRange(8, 1), attributes: red),
+      ]
       storage = newTextStorage("aé中😀xyz!w", source)
     var found: seq[TextAttributeRun]
     for run in storage.runs(initTextRange(3, 2)):

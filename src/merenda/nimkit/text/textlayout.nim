@@ -1,4 +1,4 @@
-import std/[algorithm, hashes, options, sets, unicode]
+import std/[algorithm, hashes, isolation, options, sets, unicode]
 
 import sigils/[core, threads]
 import threading/smartptrs
@@ -1111,22 +1111,13 @@ proc startBackgroundTextLayout(manager: TextLayoutManager) =
     containers = request.effectiveContainers()
     layoutRect = containers.virtualLayoutRect()
     generation = manager.xBackgroundGeneration
-    source =
-      if request.storage.isNil:
-        ""
-      else:
-        request.storage.stringValue()
-    runs =
-      if request.storage.isNil:
-        @[]
-      else:
-        request.storage.attributeRuns()
+  var sourceValue = request.storage.textLayoutSource()
+  let source = newConstPtr(unsafeIsolate(move sourceValue))
   manager.xPendingBackgroundGeneration = generation
   emit manager.xBackgroundWorker.requestTextLayout(
     generation,
     layoutRect,
     source,
-    runs,
     request.style,
     request.alignment,
     request.wraps or containers.anyContainerWraps(),

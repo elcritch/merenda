@@ -35,6 +35,15 @@ type
     # successive streamed edits move only the runs between changed ranges.
     before, after: seq[TextStyleRun]
 
+  TextLayoutSource* = object
+    ## Detached value data for background layout; contains no storage references.
+    bytes: string
+    runs: TextStyleRuns
+    styles: seq[TextAttributes]
+    styleUses: seq[int]
+    freeStyles: seq[uint32]
+    overlappingRuns: bool
+
   TextStyledSpan* = object
     source*: TextSnapshot
     byteStart*: int
@@ -628,6 +637,29 @@ proc newTextStorage*(
       initTextRange(0, result.xSnapshot.runeLength), defaultTextAttributes()
     )
   result.normalizeRuns()
+
+proc textLayoutSource*(storage: TextStorage): TextLayoutSource =
+  ## Copy the interned representation before transferring it to a worker.
+  if not storage.isNil:
+    storage.materialize()
+    result.bytes = storage.storageString()
+    result.runs = storage.xRuns
+    result.styles = storage.xStyles
+    result.styleUses = storage.xStyleUses
+    result.freeStyles = storage.xFreeStyles
+    result.overlappingRuns = storage.xOverlappingRuns
+
+proc newTextLayoutStorage*(source: TextLayoutSource): TextStorage =
+  ## Reconstruct worker-owned storage without expanding and re-interning styles.
+  result = TextStorage()
+  discard result.withProto()
+  result.xSnapshot = newTextSnapshot(source.bytes)
+  result.xRuns = source.runs
+  result.xStyles = source.styles
+  result.xStyleUses = source.styleUses
+  result.xFreeStyles = source.freeStyles
+  result.xOverlappingRuns = source.overlappingRuns
+  result.xMaterialized = true
 
 proc initTextGapStorageFields*(
     storage: TextGapStorage, value = "", attributes = defaultTextAttributes()

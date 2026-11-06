@@ -37,8 +37,7 @@ proc requestTextLayout*(
   worker: AgentProxy[TextLayoutWorker],
   generation: uint64,
   layoutRect: Rect,
-  source: string,
-  runs: seq[TextAttributeRun],
+  source: ConstPtr[TextLayoutSource],
   style: TextStyle,
   alignment: TextAlignment,
   wraps: bool,
@@ -54,19 +53,15 @@ proc requestTextLayout(
     worker: TextLayoutWorker,
     generation: uint64,
     layoutRect: Rect,
-    source: string,
-    runs: seq[TextAttributeRun],
+    source: ConstPtr[TextLayoutSource],
     style: TextStyle,
     alignment: TextAlignment,
     wraps: bool,
     containers: seq[TextContainer],
     buildSnapshot: bool,
 ) {.slot.} =
-  var
-    ownedSource = source
-    ownedRuns = runs
-    layoutResult = TextLayoutWorkerResult(generation: generation)
-  let storage = newTextStorage(move ownedSource, move ownedRuns)
+  var layoutResult = TextLayoutWorkerResult(generation: generation)
+  let storage = newTextLayoutStorage(source[])
   layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
   if buildSnapshot and not worker.snapshotBuilder.isNil:
     layoutResult.snapshot = worker.snapshotBuilder(
