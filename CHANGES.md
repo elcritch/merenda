@@ -28,6 +28,8 @@
 - Coalesce pending Matter highlight requests per buffer and allow one source
   handoff per controller at a time. Moe queues metadata against its existing
   fallback snapshots, preserving immediate fallback colors and cancellation.
+- Stream smart-insertion neighbor checks without constructing full UTF-8 indexes
+  for the document and insertion, preserving malformed input and storage overrides.
 
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all

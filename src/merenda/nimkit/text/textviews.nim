@@ -1382,22 +1382,35 @@ proc applySmartInsert(
   result = insertion
   if not textView.xSmartInsertDelete or insertion.len == 0:
     return
-  let insertedRunes = utf8RunesForText(insertion)
-  if insertedRunes.len == 0:
+  var
+    firstWord = false
+    lastWord = false
+    hasRune = false
+  for rune in insertion.runes:
+    if not hasRune:
+      firstWord = rune.isWordRune
+      hasRune = true
+    lastWord = rune.isWordRune
+  if not hasRune:
     return
   let
-    textRunes = utf8RunesForText(textView.textViewStringValue())
+    source = textView.textViewStringValue()
     start = int(selected.location)
     stop = selected.maxIndex
   var
-    prefix = ""
-    suffix = ""
-  if start > 0 and start <= textRunes.len and textRunes[start - 1].isWordRune and
-      insertedRunes[0].isWordRune:
-    prefix = " "
-  if stop < textRunes.len and insertedRunes[insertedRunes.len - 1].isWordRune and
-      textRunes[stop].isWordRune:
-    suffix = " "
+    previousWord = false
+    nextWord = false
+    index = 0
+  for rune in source.runes:
+    if index == start - 1:
+      previousWord = rune.isWordRune
+    if index == stop:
+      nextWord = rune.isWordRune
+      break
+    inc index
+  let
+    prefix = if start > 0 and previousWord and firstWord: " " else: ""
+    suffix = if nextWord and lastWord: " " else: ""
   result = prefix & insertion & suffix
 
 proc preparedInsertion(

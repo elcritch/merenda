@@ -1,6 +1,9 @@
-import std/[sequtils, strutils, unittest]
+import std/[random, sequtils, strutils, unittest]
+
+from figdraw import len, `[]`
 
 import merenda/nimkit
+import merenda/nimkit/text/textruneutils
 
 const TextGeometryEpsilon = 0.01'f32
 
@@ -8,6 +11,31 @@ type TestPasteboardProvider = ref object of DynamicAgent
   text: string
   clearCount: int
   writtenText: seq[string]
+
+type SmartInsertionStorage = ref object of TextStorage
+  reported: string
+
+method storageString(storage: SmartInsertionStorage): string =
+  storage.reported
+
+proc referenceSmartInsertion(
+    source: string, selected: TextRange, insertion: string
+): string =
+  result = insertion
+  if insertion.len == 0:
+    return
+  let
+    inserted = utf8RunesForText(insertion)
+    text = utf8RunesForText(source)
+    first = int(selected.location)
+    last = selected.maxIndex
+  if inserted.len == 0:
+    return
+  if first > 0 and first <= text.len and text[first - 1].isWordRune and
+      inserted[0].isWordRune:
+    result = " " & result
+  if last < text.len and text[last].isWordRune and inserted[inserted.len - 1].isWordRune:
+    result.add ' '
 
 type TextViewDelegateSpy = ref object of DynamicAgent
   allowBegin: bool
@@ -655,6 +683,65 @@ suite "nimkit text views":
     check rectSelection.ranges.len >= 2
     textView.allowsRectangularSelection = false
     check textView.rectangularSelection.ranges.len == 0
+
+  test "smart insertion streams neighbors with malformed UTF-8 parity":
+    let view = newTextView()
+    view.smartInsertDeleteEnabled = true
+    view.allowsUndo = false
+    var rng = initRand(0x7319)
+    const alphabet = ['a', 'Z', '4', '_', ' ', '\0', '\xff', '\xc1', '\x80', '\xe2']
+    for trial in 0 ..< 500:
+      var source = newString(rng.rand(0 .. 12))
+      var insertion = newString(rng.rand(0 .. 8))
+      for ch in source.mitems:
+        ch = alphabet[rng.rand(alphabet.high)]
+      for ch in insertion.mitems:
+        ch = alphabet[rng.rand(alphabet.high)]
+      view.stringValue = source
+      let
+        total = view.textStorage().len
+        first = rng.rand(0 .. total)
+        count = rng.rand(0 .. total - first)
+        selected = initTextRange(first, count)
+        expected = referenceSmartInsertion(source, selected, insertion)
+        model = newTextStorage(source)
+      model.replace(selected, expected)
+      view.selectedRange = selected
+      view.insertTextValue(insertion)
+      check view.stringValue == model.stringValue()
+
+  test "smart insertion handles Unicode neighbors and clamped selections":
+    for (position, length, insertion, expected) in [
+      (1, 0, "X", "éX abc😀def"),
+      (4, 0, "X", "éabc X😀def"),
+      (8, 0, "X", "éabc😀def X"),
+      (2, 4, "X", "éa X ef"),
+      (2, 0, "λ", "éaλbc😀def"),
+      (99, 3, "X", "éabc😀def X"),
+    ]:
+      let view = newTextView("éabc😀def")
+      view.smartInsertDeleteEnabled = true
+      view.selectedRange = initTextRange(position, length)
+      view.insertTextValue(insertion)
+      check view.stringValue == expected
+
+  test "smart insertion uses gap and overridden storage string boundaries":
+    let
+      gapView = newTextView()
+      customView = newTextView()
+      custom = SmartInsertionStorage(reported: "a")
+    gapView.textStorage = newTextGapStorage("abcd")
+    gapView.smartInsertDeleteEnabled = true
+    gapView.selectedRange = initTextRange(2, 0)
+    gapView.insertTextValue("x")
+    check gapView.stringValue == "ab x cd"
+
+    custom.initTextStorageFields(" ")
+    customView.textStorage = custom
+    customView.smartInsertDeleteEnabled = true
+    customView.selectedRange = initTextRange(1, 0)
+    customView.insertTextValue("x")
+    check custom.substring(initTextRange(0, custom.len)) == "  x"
 
   test "text view smart insert substitution and undo grouping are reusable":
     let textView = newTextView("helloworld", frame = rect(0, 0, 180, 24))
