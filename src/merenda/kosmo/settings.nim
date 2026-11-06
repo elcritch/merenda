@@ -38,7 +38,7 @@ const
     KosmoThemeTarget.Moe, KosmoThemeTarget.Terminal, KosmoThemeTarget.Markdown,
     KosmoThemeTarget.GitDiff, KosmoThemeTarget.GitHub,
   ]
-  KosmoThemeItemNames = ["Moe", "Terminal", "Markdown", "Git Diff", "GitHub"]
+  KosmoThemeItemNames = ["Editor", "Terminal", "Markdown", "Git Diff", "GitHub"]
   KosmoThemeTargetIdentifier* = "kosmo.settings.themes.target"
   KosmoMoeThemesTableIdentifier* = "kosmo.settings.moeThemes.table"
   KosmoMoeThemeSelectorIdentifier* = KosmoMoeThemesTableIdentifier
