@@ -2592,12 +2592,13 @@ Press <kbd>Enter</kbd>.
   when defined(merendaTests):
     test "embedded source ranges preserve full quoted code and table text":
       let
-        code = "let value = \"" & repeat("αβxyz", 40) & "\""
+        code = "let value = 1\nlet longValue = \"" & repeat("αβxyz", 40) & "\""
         tableRow = "| " & repeat("long linked words ", 12) & " | second | third |"
         source =
-          "```nim\n" & code & "\n```\n\n" & "> > ```nim\n> > " & code &
-          "\n> > let next = 2\n> > ```\n\n" & "- ```nim\n  " & code & "\n  ```\n\n" &
-          "> " & tableRow & "\n> | --- | --- | --- |\n> " & tableRow
+          "```nim\n" & code & "\n```\n\n" & "> > ```nim\n> > " &
+          code.replace("\n", "\n> > ") & "\n> > let next = 2\n> > ```\n\n" &
+          "- ```nim\n  " & code.replace("\n", "\n  ") & "\n  ```\n\n" & "> " & tableRow &
+          "\n> | --- | --- | --- |\n> " & tableRow
         view = newMarkdownView(source, frame = rect(0, 0, 240, 200))
       require view.waitForMarkdownParsing(60_000)
       let

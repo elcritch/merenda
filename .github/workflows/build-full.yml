@@ -28,10 +28,7 @@ jobs:
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
-            nimargs: >-
-              -- --opt:none
-              -d:KosmoMatterMaximumLineBytes=96
-              -d:NimkitMatterMaximumLineBytes=96
+            nimargs: '-- --opt:none'
     steps:
     - uses: actions/checkout@v5
 
@@ -257,10 +254,7 @@ jobs:
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
-            nimargs: >-
-              -- --opt:none
-              -d:KosmoMatterMaximumLineBytes=96
-              -d:NimkitMatterMaximumLineBytes=96
+            nimargs: '-- --opt:none'
     steps:
     - uses: actions/checkout@v5
 
