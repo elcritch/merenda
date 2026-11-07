@@ -391,7 +391,10 @@ NIMKIT_THEME=aqua nim ic -r examples/controls_showcase.nim
 NIMKIT_THEME=punch nim ic -r examples/controls_showcase.nim
 ```
 
-Use [CSS](docs/css-theming.md) to customize colors, fonts, spacing, and layout.
+`macos-adaptive` recolors the macOS Dark chrome from a shared content
+palette such as Catppuccin Mocha; in Kosmo it follows the selected editor
+theme. Use [CSS](docs/css-theming.md) to customize colors, fonts, spacing,
+and layout.
 The [CSS preview](examples/css_theme_demo.nim) lets you edit a stylesheet and
 reload it while the app is running.
 

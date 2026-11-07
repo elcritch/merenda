@@ -1,7 +1,7 @@
 ## Compile application CSS into the same snapshots as the bundled themes.
 
 import std/[os, strutils]
-import ./[defaulttheme, themecore]
+import ./[adaptivetheme, defaulttheme, themecore]
 import ./private/csscompiler
 export csscompiler.CssDiagnostic, csscompiler.CssThemeResult
 
@@ -24,6 +24,7 @@ proc reloadThemeCss*(name: string, directory = themeCssDirectory()): CssThemeRes
   ## Deleted declarations disappear; native font and chrome resources remain.
   ## The caller applies the snapshot only when diagnostics is empty.
   var files = @["base", "aqua"]
+  var adaptiveCss = ""
   case name.strip().toLowerAscii()
   of "aqua":
     discard
@@ -31,6 +32,9 @@ proc reloadThemeCss*(name: string, directory = themeCssDirectory()): CssThemeRes
     files.add "macos"
   of "macos-dark", "dark-macos":
     files.add ["macos", "macos-dark"]
+  of "macos-adaptive", "adaptive", "adaptive-macos":
+    files.add ["macos", "macos-dark"]
+    adaptiveCss = adaptiveThemeCss(adaptiveContentPalette())
   of "darkbsd", "dark-bsd":
     files.add ["macos", "macos-dark", "darkbsd"]
   of "banner", "nebula", "peachy", "punch", "synthwave83":
@@ -41,4 +45,5 @@ proc reloadThemeCss*(name: string, directory = themeCssDirectory()): CssThemeRes
   for file in files:
     source.add readFile(directory / (file & ".css"))
     source.add '\n'
+  source.add adaptiveCss
   compileCssTheme(source, initThemeResources(), sroTheme)

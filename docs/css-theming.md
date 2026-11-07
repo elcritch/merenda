@@ -41,6 +41,16 @@ constructors and `NIMKIT_THEME` names remain available. Stylesheets are embedded
 in the executable, compiled once per thread, and cached until font settings or
 registered native theme extensions change.
 
+macOS Adaptive keeps the macOS Dark structure and derives every chrome color
+from a shared content palette such as Catppuccin Mocha. Choose **macOS Adaptive**
+in Merenda Settings, set `NIMKIT_THEME=macos-adaptive`, or call
+`initMacOSAdaptiveTheme(palette)`. Surfaces mix the palette background and
+foreground, borders tint the foreground with low alpha, and the accent follows
+the palette's function color. Applications can supply the live palette with
+`registerAdaptivePaletteProvider`; without a provider the shared default
+palette applies. Kosmo registers its selected editor palette, so the chrome
+recolors whenever the editor theme changes.
+
 Punch is adapted from [RUI2’s Punch theme](https://github.com/kobi2187/rui2/blob/main/docs/theme_punch.png),
 with its orange/cream palette, 3px ink outlines, 4px hard shadows and 46px buttons.
 Choose **Punch** in Merenda Settings, set `NIMKIT_THEME=punch`, or call
