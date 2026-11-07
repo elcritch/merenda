@@ -25,6 +25,8 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
     ## Open editor tabs in a pane that is not displaying a terminal when available.
   terminalInput*: string = "hybrid"
     ## Terminal Control shortcut routing: "hybrid" or "raw".
+  terminalOptionAsMeta*: bool = not (defined(macosx) or defined(macos))
+    ## Whether Option/Alt sends the terminal Meta modifier.
   fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation
     ## Horizontal spacing in points for each file-tree level; zero removes indentation.
 

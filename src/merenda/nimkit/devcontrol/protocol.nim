@@ -1,5 +1,5 @@
 ## Versioned development-control messages shared by apps, CLI clients and adapters.
-import std/[json, math, strutils]
+import std/[json, math]
 import sigils/selectors
 import sigils/rpcs/jsonrpc
 

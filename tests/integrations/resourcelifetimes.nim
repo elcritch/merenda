@@ -103,7 +103,9 @@ proc exerciseWorkspace(app: Application, root: string) =
   when defined(macosx) or defined(linux):
     doAssert processResourceUsage().childProcesses >= 5
   for _ in 0 ..< 8:
-    doAssert runGitCommand(root, ["status", "--porcelain"]).exitCode == 0
+    let status = runGitCommand(root, ["status", "--porcelain"])
+    doAssert status.exitCode == 0,
+      "Git status failed with exit code " & $status.exitCode & ": " & status.output
   let preview = newMarkdownView("# Lifecycle\n\n**Text** and `code`.")
   doAssert preview.waitForMarkdownParsing()
   doAssert preview.waitForMarkdownLayout()

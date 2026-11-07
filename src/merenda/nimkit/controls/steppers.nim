@@ -1,4 +1,4 @@
-import std/[strutils, times]
+import std/times
 
 import ../accessibility/accessibility
 import ../drawing
@@ -70,9 +70,6 @@ func normalizedStepValue(stepper: Stepper, value: float32): float32 =
     stepper.wrappedStepValue(value)
   else:
     stepper.clampedValue(value)
-
-func defaultStepperValueFormat(value: float32): string =
-  formatFloat(value, ffDefault, -1)
 
 proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
   let nextValue = stepper.clampedValue(value)
@@ -240,8 +237,7 @@ proc `valueFormatter=`*(stepper: Stepper, formatter: StepperValueFormatter) =
 proc formatValue*(stepper: Stepper, value: float32): string =
   if not stepper.xValueFormatter.isNil:
     return stepper.xValueFormatter(value)
-  return Control(stepper).formatObjectValue(toObj(value), ovrStepper)
-  defaultStepperValueFormat(value)
+  Control(stepper).formatObjectValue(toObj(value), ovrStepper)
 
 proc formattedValue*(stepper: Stepper): string =
   stepper.formatValue(stepper.xValue)

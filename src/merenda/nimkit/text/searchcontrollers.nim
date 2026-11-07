@@ -8,7 +8,7 @@ import ../controls/searchbars
 import ../foundation/[events, types]
 import ../responder/keybindings
 import ./[textfields, textlayout, textviews]
-import ../view/[viewconstraints, viewgeometry, views]
+import ../view/[viewconstraints, views]
 import ./searchmatching
 
 export searchbars, searchmatching

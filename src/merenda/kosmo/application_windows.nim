@@ -203,10 +203,7 @@ proc `terminalInputPolicy=`*(
         target.applyTerminalInputPolicy(policy)
     discard manager.config.saveKosmoConfig(manager.configPath)
 
-proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
-  ## Apply the Option/Alt-as-Meta preference to current and future terminals.
-  if frontend.isNil:
-    return
+proc applyTerminalOptionAsMeta(frontend: KosmoApplication, enabled: bool) =
   frontend.xTerminalOptionAsMeta = enabled
   if not frontend.xSettingsWindow.isNil:
     frontend.xSettingsWindow.optionAsMeta = enabled
@@ -216,6 +213,20 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
     for document in group.documents:
       if document.contentView of nimkit.TerminalView:
         nimkit.TerminalView(document.contentView).optionAsMeta = enabled
+
+proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply and persist the preference across current and future project windows.
+  if frontend.isNil:
+    return
+  if frontend.xWindowManager.isNil:
+    frontend.applyTerminalOptionAsMeta(enabled)
+  else:
+    let manager = frontend.xWindowManager[]
+    manager.config.terminalOptionAsMeta = enabled
+    for target in manager.frontends:
+      if not target.xClosed:
+        target.applyTerminalOptionAsMeta(enabled)
+    discard manager.config.saveKosmoConfig(manager.configPath)
 
 func terminalLinksEnabled*(frontend: KosmoApplication): bool =
   ## Return whether modifier-hover and modifier-click terminal links are enabled.
@@ -1381,7 +1392,7 @@ proc newKosmoApplication*(
     contentView: contentView,
     documentView: documentView,
     xPreferEditorPanes: manager.config.preferEditorPanes,
-    xTerminalOptionAsMeta: nimkit.DefaultTerminalOptionAsMeta,
+    xTerminalOptionAsMeta: manager.config.terminalOptionAsMeta,
     xTerminalLinksEnabled: true,
     xTerminalInputPolicy: parseTerminalInputPolicy(manager.config.terminalInput),
     xWindowManager: manager.unsafeWeakRef(),

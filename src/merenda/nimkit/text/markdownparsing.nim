@@ -1,6 +1,6 @@
 ## Parse Markdown structure first, then stream bounded code-color batches.
 
-import std/[lists, locks, os, strutils, tables]
+import std/[lists, locks, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
