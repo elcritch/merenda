@@ -7,9 +7,19 @@ import merenda/nimkit/foundation/gitprocesses
 
 type GitStatusSpy = ref object of Agent
   snapshots: seq[GitStatusSnapshot]
+  switchCode: int
+  switchOutput: string
+  switchCount: int
 
 proc rememberGitStatus(spy: GitStatusSpy, snapshot: GitStatusSnapshot) {.slot.} =
   spy.snapshots.add snapshot
+
+proc rememberGitSwitch(
+    spy: GitStatusSpy, root, branch: string, code: int, output: string
+) {.slot.} =
+  inc spy.switchCount
+  spy.switchCode = code
+  spy.switchOutput = output
 
 proc runGit(rootPath: string, args: openArray[string]): string =
   let process = startProcess(
@@ -42,6 +52,45 @@ func entryForPath(
       return (true, entry)
 
 suite "nimkit Git status service":
+  test "discovers branches and switches without discarding conflicting work":
+    let
+      root = createTempDir("merenda-git-branches-", "")
+      service = newGitStatusService(refreshInterval = initDuration())
+      spy = GitStatusSpy()
+    defer:
+      service.close()
+      removeDir(root)
+    root.initializeRepository()
+    discard runGit(root, ["branch", "other"])
+    discard runGit(root, ["tag", "other"])
+    let original = runGit(root, ["branch", "--show-current"]).strip()
+    service.connect(gitBranchDidSwitch, spy, rememberGitSwitch)
+    service.rootPath = root
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check service.lastSnapshot().branch == original
+    check "other" in service.lastSnapshot().branches
+    require service.switchBranch(root, "other")
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.switchCount == 1
+    check spy.switchCode == 0
+    check service.lastSnapshot().branch == "other"
+    discard runGit(root, ["checkout", original])
+    writeFile(root / "tracked.nim", "uncommitted work\n")
+    discard runGit(root, ["checkout", "-b", "changes"])
+    discard runGit(root, ["add", "tracked.nim"])
+    discard runGit(
+      root,
+      [
+        "-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "change",
+      ],
+    )
+    writeFile(root / "tracked.nim", "more work\n")
+    require service.switchBranch(root, "other")
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.switchCount == 2
+    check spy.switchCode != 0
+    check readFile(root / "tracked.nim") == "more work\n"
   test "Git commands drain output larger than a pipe buffer":
     let root = createTempDir("merenda-git-process-output-", "")
     defer:

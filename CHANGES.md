@@ -9,6 +9,7 @@
   moved from `contentthemes` into `contentthemepalettes`; `contentthemes`
   re-exports them and keeps the view adapters.
 
+- Show and switch Git branches from the Kosmo file browser.
 - Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
