@@ -631,6 +631,11 @@ proc constraintExpression(
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   first.constraintExpression(relation, constant.resolveLayoutLength())
 
+# These operators build expressions rather than bools. Nim's automatic >=
+# rewrite would swap the anchors or reject a dimension and constant pair.
+when (NimMajor, NimMinor) >= (2, 4):
+  {.push warning[InvalidCmpOp]: off.}
+
 proc `==`*(
     first, second: LayoutXAxisAnchor
 ): LayoutConstraintExpression[LayoutXAxisAnchor] =
@@ -705,6 +710,9 @@ proc `<=`*(
     first: LayoutDimensionAnchor, constant: LayoutLength
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   first.constraintExpression(lrLessThanOrEqual, constant)
+
+when (NimMajor, NimMinor) >= (2, 4):
+  {.pop.}
 
 proc constraintFromExpression(
     expression: LayoutConstraintExpression,

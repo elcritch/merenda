@@ -1,4 +1,4 @@
-import std/[options, os, strutils]
+import std/[options, os]
 
 import sigils/core
 

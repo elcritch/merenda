@@ -12,7 +12,6 @@ import ../foundation/types
 import ../foundation/backgroundworkers
 import ../themes
 import ./textstorage
-import ./texttypes
 import ./textlayouttypes
 
 type

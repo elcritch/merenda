@@ -15,7 +15,6 @@ import ./textlayoutworkers
 import ./textlayouttypes
 export textlayouttypes
 import ./texttypes
-import ./textruneutils
 import ../themes
 import ../foundation/types
 

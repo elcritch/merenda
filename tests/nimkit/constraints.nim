@@ -182,6 +182,43 @@ suite "nimkit constraints":
     check not compiles(root.contentLayoutGuide()[atFirstBaseline])
     check not compiles(root.contentLayoutGuide()[atLastBaseline])
 
+  test "greater-than-or-equal expressions preserve their operands":
+    let
+      first = newView()
+      second = newView()
+      width = first[atWidth]
+      otherWidth = second[atWidth]
+      threshold = 42.0'f32
+      compareWidth: proc(
+        a: LayoutDimensionAnchor, b: float32
+      ): LayoutConstraintExpression[LayoutDimensionAnchor] = `>=`
+      betweenViews = cx(width >= otherWidth)
+      dynamicConstant = cx(width >= threshold)
+      literalConstant = cx(width >= 17.0'f32)
+      callableConstant = cx(compareWidth(width, threshold))
+      horizontal = cx(first[atLeft] >= second[atRight])
+      vertical = cx(first[atTop] >= second[atBottom])
+
+    for constraint in [
+      betweenViews, dynamicConstant, literalConstant, callableConstant, horizontal,
+      vertical,
+    ]:
+      check constraint.relation == lrGreaterThanOrEqual
+      check constraint.firstItem == first
+    check betweenViews.secondItem == second
+    check betweenViews.firstAttribute == atWidth
+    check betweenViews.secondAttribute == atWidth
+    check dynamicConstant.secondItem.isNil
+    check dynamicConstant.constant == threshold
+    check literalConstant.constant == 17.0'f32
+    check callableConstant.constant == threshold
+    check horizontal.secondItem == second
+    check horizontal.firstAttribute == atLeft
+    check horizontal.secondAttribute == atRight
+    check vertical.secondItem == second
+    check vertical.firstAttribute == atTop
+    check vertical.secondAttribute == atBottom
+
   test "activateConstraints macro wraps block expressions in cx":
     let
       root = newView(frame = rect(0, 0, 320, 200))
