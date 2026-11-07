@@ -56,6 +56,15 @@ suite "Kosmo terminal search":
     let selectedCell = terminal.cellAt(info.rows div 2, 0)
     check selectedCell.backgroundColor == color(1.0, 0.82, 0.16, 1.0)
     check selectedCell.foregroundColor == color(0.08, 0.08, 0.08, 1.0)
+    var lightPalette = initTerminalPalette()
+    lightPalette.background = color(1, 1, 1, 1)
+    lightPalette.foreground = color(0, 0, 0, 1)
+    lightPalette.selection = color(1, 0.82, 0.16, 0.15)
+    terminal.palette = lightPalette
+    check terminal.cellAt(info.rows div 2, 0).backgroundColor ==
+      selectedCell.backgroundColor
+    check terminal.cellAt(info.rows div 2, 0).foregroundColor ==
+      selectedCell.foregroundColor
     session.processOutput("\x1b[?1000h\x1b[?1004h")
     session.waitForCommands()
     let beforeClick = terminal.scrollPosition()
