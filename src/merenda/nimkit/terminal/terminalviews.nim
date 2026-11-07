@@ -44,6 +44,7 @@ type
     xSelection: TerminalSelection
     xSelectionOrigin: TerminexPosition
     xHasSelection: bool
+    xSearchSelection: bool
     xSelecting: bool
     xScrollPosition: float32
     xLastScrollbackCount: int
@@ -400,6 +401,7 @@ func selection*(view: TerminalView): TerminalSelection =
   view.xSelection
 
 proc clearSelection*(view: TerminalView) =
+  view.xSearchSelection = false
   if not view.xHasSelection:
     return
   view.xHasSelection = false
@@ -419,19 +421,23 @@ proc clearScrollback*(view: TerminalView) =
   view.xLastGeneration = high(uint64)
   view.syncTerminalScreen()
 
-proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
+proc writeTerminalInput(view: TerminalView, input: string, followOutput: bool): bool =
   if view.isNil or view.xSession.isNil or input.len == 0:
     return false
   try:
     view.xSession.write(input)
     view.xLastInputError.setLen(0)
-    view.xScrollPosition = 0.0'f32
-    view.clearSelection()
-    view.syncTerminalScreen()
+    if followOutput:
+      view.xScrollPosition = 0.0'f32
+      view.clearSelection()
+      view.syncTerminalScreen()
     true
   except TerminexSessionError as error:
     view.xLastInputError = error.msg
     false
+
+proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
+  view.writeTerminalInput(input, followOutput = true)
 
 proc pasteText*(view: TerminalView, text: string): bool {.discardable.} =
   if text.len == 0:
@@ -480,7 +486,11 @@ proc viewportStart(view: TerminalView): int =
   max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
 proc selectTerminalRange*(
-    view: TerminalView, selection: TerminalSelection, reveal = true, centered = false
+    view: TerminalView,
+    selection: TerminalSelection,
+    reveal = true,
+    centered = false,
+    searchHighlight = false,
 ) =
   ## Select an absolute range in the terminal buffer and optionally reveal it.
   ## Centering clamps at the history boundaries, keeping the latest output at
@@ -508,6 +518,7 @@ proc selectTerminalRange*(
     view.xSelection = normalized
     view.xHasSelection = true
     view.xSelecting = false
+    view.xSearchSelection = searchHighlight
   if reveal:
     let
       bounds = normalized.orderedSelection()
@@ -684,6 +695,10 @@ proc appendTerminalRow(
       selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
       blinkVisible = view.xTextBlinkVisible,
     )
+    if view.xSearchSelection and view.xHasSelection and
+        view.xSelection.contains(absoluteRow, column):
+      style.backgroundColor = color(1.0, 0.82, 0.16, 1.0)
+      style.foregroundColor = color(0.08, 0.08, 0.08, 1.0)
     if taBlink in cell.style.attributes:
       view.xHasBlinkingText = true
     if view.xHoveredLink.contains(absoluteRow, column):
@@ -934,6 +949,7 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
   of mtreMouseDown:
     if mouse.button != mbPrimary:
       return false
+    view.xSearchSelection = false
     let owner = view.window()
     if owner of Window:
       discard Window(owner).makeFirstResponder(view, focusVisible = false)
@@ -1003,6 +1019,8 @@ proc mouseTrackingAccepts(modes: TerminexModes, kind: MonoTextRawEventKind): boo
     false
 
 proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
+  if view.xScrollPosition > 0.0'f32:
+    return false
   let position = view.absolutePosition(event.row, event.column)
   if kmShift in event.mouseEvent.modifiers or (
     view.xAllowsLinkActivation and event.mouseEvent.modifiers.hasTerminalLinkModifier() and
@@ -1342,6 +1360,7 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
       anchor: initTerminalPosition(0, 0),
       extent: initTerminalPosition(info.totalLineCount - 1, info.columns),
     )
+    view.xSearchSelection = false
     view.xHasSelection = true
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
@@ -1349,14 +1368,14 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
 protocol TerminalViewFocus of ResponderProtocol:
   method didBecomeFirstResponder(view: TerminalView) =
     view.refreshTerminalBlinkFocus()
-    discard view.sendInput(
-      terminput.terminalFocusInput(true, view.xSession.screenInfo().modes)
+    discard view.writeTerminalInput(
+      terminput.terminalFocusInput(true, view.xSession.screenInfo().modes), false
     )
 
   method didResignFirstResponder(view: TerminalView) =
     view.refreshTerminalBlinkFocus()
-    discard view.sendInput(
-      terminput.terminalFocusInput(false, view.xSession.screenInfo().modes)
+    discard view.writeTerminalInput(
+      terminput.terminalFocusInput(false, view.xSession.screenInfo().modes), false
     )
 
 protocol TerminalViewLayout of ViewLayoutProtocol:

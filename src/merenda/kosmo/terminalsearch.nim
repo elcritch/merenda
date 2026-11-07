@@ -301,7 +301,9 @@ proc newKosmoTerminalView*(
       reveal: proc(match: nimkit.TextSearchLocation) =
         if not terminal.isNil:
           terminal[].selectTerminalRange(
-            terminal[].searchSnapshot.terminalSelection(match.range), centered = true
+            terminal[].searchSnapshot.terminalSelection(match.range),
+            centered = true,
+            searchHighlight = true,
           )
       ,
       clear: proc() =

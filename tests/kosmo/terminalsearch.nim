@@ -53,6 +53,21 @@ suite "Kosmo terminal search":
     let info = session.screenInfo()
     let start = info.totalLineCount - info.rows - int(terminal.scrollPosition())
     check terminal.selection().anchor.row - start == info.rows div 2
+    let selectedCell = terminal.cellAt(info.rows div 2, 0)
+    check selectedCell.backgroundColor == color(1.0, 0.82, 0.16, 1.0)
+    check selectedCell.foregroundColor == color(0.08, 0.08, 0.08, 1.0)
+    session.processOutput("\x1b[?1000h\x1b[?1004h")
+    session.waitForCommands()
+    let beforeClick = terminal.scrollPosition()
+    let point = terminal.pointToWindow(
+      initPoint(
+        padding + metrics.cellWidth * 1.5,
+        padding + metrics.lineHeight * (info.rows div 2).float32,
+      )
+    )
+    check window.mouseDownAt(point)
+    discard window.mouseUpAt(point)
+    check terminal.scrollPosition() == beforeClick
     terminal.findNext()
     check terminal.selection().anchor.row == 19
     check terminal.scrollPosition() == 0
