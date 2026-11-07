@@ -49,6 +49,8 @@ type
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
     onItemAction*: FileTreeItemActionHandler
+    onGitStatus*: proc(snapshot: nimkit.GitStatusSnapshot) {.closure.}
+    onBranchSwitched*: proc(root, branch: string, code: int, output: string) {.closure.}
     xOpenDisposition: FileTreeOpenDisposition
     xGitStatusService: nimkit.GitStatusService
     xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
@@ -69,6 +71,8 @@ type
     fileTree*: KosmoFileTree
     filterField*: nimkit.TextField
     scopeButton*: nimkit.PopupMenuButton
+    branchButton*: nimkit.PopupMenuButton
+    onSelectBranch*: proc(root, branch: string) {.closure.}
     closeFilterButton*: nimkit.Button
     expressionButton: nimkit.Button
     errorLabel: nimkit.Label
@@ -768,6 +772,8 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   tree.xGitDescendantStates.clear()
   tree.xGitChildren.clear()
   tree.xGitSnapshots.clear()
+  if not tree.onGitStatus.isNil:
+    tree.onGitStatus(nimkit.GitStatusSnapshot())
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = nextRoots
   let expanded =
@@ -790,6 +796,8 @@ proc addRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
     tree.xGitDescendantStates.clear()
     tree.xGitChildren.clear()
   tree.xRootPaths.add next
+  if not tree.onGitStatus.isNil:
+    tree.onGitStatus(nimkit.GitStatusSnapshot())
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = tree.xRootPaths
   var expanded = tree.expandedItemIdentifiers()
@@ -812,6 +820,8 @@ proc removeRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
     else:
       ""
   tree.xGitSnapshots.del(root)
+  if not tree.onGitStatus.isNil:
+    tree.onGitStatus(nimkit.GitStatusSnapshot())
   discard tree.rebuildGitStates()
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = tree.xRootPaths
@@ -850,6 +860,8 @@ proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
   if tree.isNil or snapshot.rootPath notin tree.xRootPaths:
     return
   tree.xGitSnapshots[snapshot.rootPath] = snapshot
+  if not tree.onGitStatus.isNil:
+    tree.onGitStatus(snapshot)
   if tree.rebuildGitStates():
     tree.reloadFilteredTree()
 
@@ -862,6 +874,16 @@ proc workspaceGitChanged(tree: KosmoFileTree) {.slot.} =
   if not tree.xGitStatusService.isNil:
     discard tree.xGitStatusService.refresh()
 
+proc branchSwitched(
+    tree: KosmoFileTree, root, branch: string, code: int, output: string
+) {.slot.} =
+  if not tree.onBranchSwitched.isNil:
+    tree.onBranchSwitched(root, branch, code, output)
+
+proc switchBranch*(tree: KosmoFileTree, root, branch: string): bool {.discardable.} =
+  not tree.isNil and not tree.xGitStatusService.isNil and
+    tree.xGitStatusService.switchBranch(root, branch)
+
 proc startGitStatusMonitoring*(
     tree: KosmoFileTree, refreshInterval: Duration = initDuration()
 ): nimkit.GitStatusService =
@@ -873,6 +895,7 @@ proc startGitStatusMonitoring*(
     tree.xGitStatusService.close()
   result = nimkit.newGitStatusService(refreshInterval = refreshInterval)
   result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
+  result.connect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
   tree.xGitStatusService = result
   result.rootPaths = tree.xRootPaths
   tree.xWorkspaceFiles.connect(workspaceRepositoryDidChange, tree, workspaceGitChanged)
@@ -902,6 +925,7 @@ proc stopGitStatusMonitoring*(tree: KosmoFileTree) =
   tree.xGitStatusService.disconnect(
     nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus
   )
+  tree.xGitStatusService.disconnect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
   tree.xGitStatusService.close()
   tree.xGitStatusService = nil
 
@@ -917,6 +941,53 @@ proc syncScopeControl(panel: KosmoFileBrowserPanel) =
   panel.scopeButton.toolTip = mode.title()
   for index, item in panel.scopeButton.menu().items():
     item.state = if index == mode.ord: nimkit.bsOn else: nimkit.bsOff
+
+proc branchMenuItem(
+    panel: WeakRef[KosmoFileBrowserPanel], root, branch, label: string, current: bool
+): nimkit.MenuItem =
+  let action = nimkit.actionSelector("kosmo.selectGitBranch")
+  result = nimkit.newMenuItem(label, action)
+  result.state = if current: nimkit.bsOn else: nimkit.bsOff
+  result.validates = false
+  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not panel.isNil and not panel[].onSelectBranch.isNil:
+      panel[].onSelectBranch(root, branch)
+
+proc updateBranches(panel: KosmoFileBrowserPanel) =
+  let menu = panel.branchButton.menu()
+  menu.removeAllItems()
+  var repositories = 0
+  var current = ""
+  for root in panel.fileTree.rootPaths:
+    if root notin panel.fileTree.xGitSnapshots:
+      continue
+    let snapshot = panel.fileTree.xGitSnapshots[root]
+    if not snapshot.isRepository:
+      continue
+    inc repositories
+    if current.len == 0:
+      current = snapshot.branch
+    for branch in snapshot.branches:
+      let label =
+        if panel.fileTree.rootPaths.len > 1:
+          root.lastPathPart() & ": " & branch
+        else:
+          branch
+      discard menu.addItem(
+        branchMenuItem(
+          panel.unsafeWeakRef(), root, branch, label, branch == snapshot.branch
+        )
+      )
+  panel.branchButton.title =
+    if current.len == 0:
+      "Git branch"
+    elif repositories > 1:
+      current & " (+" & $(repositories - 1) & ")"
+    else:
+      current
+  panel.branchButton.hidden = repositories == 0
+  panel.setNeedsLayout()
 
 proc selectScope(panel: KosmoFileBrowserPanel, mode: FileTreeDisplayMode) =
   panel.fileTree.displayMode = mode
@@ -1003,7 +1074,9 @@ proc dismissFilter*(panel: KosmoFileBrowserPanel) =
   if owner of nimkit.Window:
     discard nimkit.Window(owner).makeFirstResponder(panel.fileTree)
 
-proc toggleToolbarFocus*(panel: KosmoFileBrowserPanel, focused: nimkit.Responder): bool =
+proc toggleToolbarFocus*(
+    panel: KosmoFileBrowserPanel, focused: nimkit.Responder
+): bool =
   ## Toggle keyboard focus between the file tree and the panel's filter controls.
   if panel.isNil:
     return false
@@ -1095,6 +1168,11 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoFileBrowserPanel) =
     let
       bounds = panel.bounds()
+      branchHeight =
+        if panel.branchButton.hidden:
+          0.0'f32
+        else:
+          min(FileBrowserControlRowHeight, bounds.size.height)
       searchHeight =
         if panel.filterField.hidden:
           0.0'f32
@@ -1102,22 +1180,24 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
           min(
             FileBrowserControlRowHeight +
               (if panel.errorLabel.hidden: 0.0'f32 else: 22.0'f32),
-            bounds.size.height,
+            max(bounds.size.height - branchHeight, 0.0'f32),
           )
       scopeHeight = min(
-        FileBrowserControlRowHeight, max(bounds.size.height - searchHeight, 0.0'f32)
+        FileBrowserControlRowHeight,
+        max(bounds.size.height - branchHeight - searchHeight, 0.0'f32),
       )
-      treeHeight = max(bounds.size.height - searchHeight - scopeHeight, 0.0'f32)
+      treeHeight =
+        max(bounds.size.height - branchHeight - searchHeight - scopeHeight, 0.0'f32)
       contentWidth = max(bounds.size.width - FileBrowserControlInset * 2.0'f32, 0.0'f32)
       closeWidth = min(FileBrowserControlHeight, contentWidth / 2.0'f32)
       filterWidth = max(contentWidth - 2 * closeWidth - 12.0'f32, 0.0'f32)
     panel.fileTree.setFrameFromLayout(
-      nimkit.rect(0.0'f32, searchHeight, bounds.size.width, treeHeight)
+      nimkit.rect(0.0'f32, branchHeight + searchHeight, bounds.size.width, treeHeight)
     )
     panel.filterField.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset,
-        FileBrowserControlInset,
+        branchHeight + FileBrowserControlInset,
         filterWidth,
         min(FileBrowserControlHeight, searchHeight),
       )
@@ -1125,7 +1205,7 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     panel.promptLabel.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset + 10.0'f32,
-        FileBrowserControlInset,
+        branchHeight + FileBrowserControlInset,
         max(filterWidth - 20.0'f32, 0.0'f32),
         min(FileBrowserControlHeight, searchHeight),
       )
@@ -1133,7 +1213,7 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     panel.expressionButton.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset + filterWidth + 6.0'f32,
-        FileBrowserControlInset,
+        branchHeight + FileBrowserControlInset,
         closeWidth,
         min(FileBrowserControlHeight, searchHeight),
       )
@@ -1141,7 +1221,7 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     panel.closeFilterButton.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset + filterWidth + closeWidth + 12.0'f32,
-        FileBrowserControlInset,
+        branchHeight + FileBrowserControlInset,
         closeWidth,
         min(FileBrowserControlHeight, searchHeight),
       )
@@ -1149,7 +1229,7 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     panel.errorLabel.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset,
-        FileBrowserControlRowHeight,
+        branchHeight + FileBrowserControlRowHeight,
         contentWidth,
         max(searchHeight - FileBrowserControlRowHeight, 0.0'f32),
       )
@@ -1157,9 +1237,17 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     panel.scopeButton.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset,
-        searchHeight + treeHeight + FileBrowserControlInset,
+        branchHeight + searchHeight + treeHeight + FileBrowserControlInset,
         contentWidth,
         min(FileBrowserControlHeight, scopeHeight),
+      )
+    )
+    panel.branchButton.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset,
+        FileBrowserControlInset,
+        contentWidth,
+        min(FileBrowserControlHeight, branchHeight),
       )
     )
 
@@ -1202,6 +1290,8 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
     filterField = nimkit.newTextField()
     scopeMenu = nimkit.newMenu("Files Shown")
     scopeButton = nimkit.newPopupMenuButton(tree.displayMode().title(), scopeMenu)
+    branchButton =
+      nimkit.newPopupMenuButton("Git branch", nimkit.newMenu("Git branches"))
     closeFilterButton = newSearchButton("×", symbol = true)
     promptLabel = KosmoFileFilterPromptLabel()
   promptLabel.initLabelFields("Filter Files")
@@ -1210,6 +1300,7 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
     fileTree: tree,
     filterField: filterField,
     scopeButton: scopeButton,
+    branchButton: branchButton,
     closeFilterButton: closeFilterButton,
     expressionButton: newExpressionButton(),
     errorLabel: nimkit.newStatusLabel(""),
@@ -1236,6 +1327,12 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
   result.addSubview(result.expressionButton)
   result.addSubview(result.errorLabel)
   result.addSubview(scopeButton)
+  result.addSubview(branchButton)
+  branchButton.hidden = true
+  tree.onGitStatus = proc(snapshot: nimkit.GitStatusSnapshot) =
+    discard snapshot
+    if not panel.isNil:
+      panel[].updateBranches()
   discard result.withProtocol(KosmoFileBrowserPanelCommands)
   discard result.withProtocol(KosmoFileBrowserPanelMenuCommands)
   discard result.withProtocol(KosmoFileBrowserPanelLayout)

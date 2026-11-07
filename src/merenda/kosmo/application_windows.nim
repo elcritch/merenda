@@ -1585,6 +1585,42 @@ proc newKosmoApplication*(
   fileTree.onItemAction = proc(path: string, action: FileTreeItemAction) =
     if not frontend.isNil:
       frontend[].performFileTreeAction(path, action)
+  let branchManager = manager.unsafeWeakRef()
+  fileBrowserPanel.onSelectBranch = proc(root, branch: string) =
+    if frontend.isNil or branchManager.isNil:
+      return
+    for existing in branchManager[].frontends:
+      for tab in existing.dockController.editor.tabs():
+        if tab.modified:
+          let alert = nimkit.newAlert(
+            "Cannot switch branch",
+            "Save or close unsaved editor changes before switching branches.",
+          )
+          defer:
+            alert.window.close()
+          discard frontend[].application.runModal(alert)
+          return
+    discard fileTree.switchBranch(root, branch)
+  fileTree.onBranchSwitched = proc(root, branch: string, code: int, output: string) =
+    if frontend.isNil or branchManager.isNil:
+      return
+    for existing in branchManager[].frontends:
+      for tab in existing.dockController.editor.tabs():
+        if tab.filePath.isSome:
+          let path = absolutePath(
+            tab.filePath.get, existing.dockController.editor.workingDirectory
+          )
+          if fileExists(path):
+            existing.dockController.editor.reloadUnmodifiedFile(path)
+      existing.fileTree.refresh()
+      discard existing.fileTree.refreshGitStatus()
+      for group in existing.dockController.groups:
+        group.editorView.refresh()
+    if code != 0:
+      let alert = nimkit.newAlert("Could not switch branch", output.strip())
+      defer:
+        alert.window.close()
+      discard frontend[].application.runModal(alert)
   searchPanel.onOpenResult = proc(
       match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) =

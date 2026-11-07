@@ -45,6 +45,48 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
           return true
 
 suite "Kosmo file tree interactions":
+  test "branch selector displays Git branches above the file tree":
+    let root = createTempDir("kosmo-branch-selector-", "")
+    let tree = newKosmoFileTree(root)
+    let panel = newKosmoFileBrowserPanel(tree)
+    let window = newWindow("Git branches", rect(0, 0, 280, 320))
+    defer:
+      window.close()
+      removeDir(root)
+    window.setContentView(panel)
+    check panel.branchButton.hidden
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: root,
+        isRepository: true,
+        branch: "main",
+        branches: @["main", "feature"],
+      )
+    )
+    panel.layoutSubtreeIfNeeded()
+    check not panel.branchButton.hidden
+    check panel.branchButton.title == "main"
+    check panel.branchButton.frame().maxY <= tree.frame().minY
+    require panel.branchButton.menu().items().len == 2
+    check panel.branchButton.menu()[0].state == bsOn
+    check panel.branchButton.menu()[1].title == "feature"
+    var selectedRoot, selectedBranch: string
+    panel.onSelectBranch = proc(root, branch: string) =
+      selectedRoot = root
+      selectedBranch = branch
+    panel.branchButton.popupPresentation = ppInline
+    panel.branchButton.openPopup()
+    let popup = panel.popupIn()
+    require not popup.isNil
+    let index = popup.choiceIndex("feature")
+    require index >= 0
+    let itemBounds = popup.popupListItemRect(popup.bounds(), index)
+    check window.clickAt(popup.pointToWindow(itemBounds.center()))
+    check selectedRoot == root
+    check selectedBranch == "feature"
+    check tree.removeRootPath(root)
+    check panel.branchButton.hidden
+
   test "h j k l navigate the focused tree exactly like arrow keys":
     let root = createTempDir("kosmo-tree-navigation-", "")
     let folder = root / "folder"
