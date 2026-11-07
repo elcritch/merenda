@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show and switch Git branches from the Kosmo file browser.
 - Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
