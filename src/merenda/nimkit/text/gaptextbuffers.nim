@@ -26,6 +26,17 @@ type
     xBeforeRuneLength: int
     xIndexCache: ref GapTextIndexCache
 
+func gapTextBufferPayload*(
+    buffer: GapTextBuffer
+): tuple[bytes: int, indexIdentity: pointer, indexBytes: int] =
+  ## Existing logical text and index payload, without constructing an index.
+  result.bytes = buffer.xBefore.len + buffer.xAfter.len
+  if not buffer.xIndexCache.isNil:
+    result.indexIdentity = cast[pointer](buffer.xIndexCache)
+    result.indexBytes =
+      buffer.xIndexCache.runeByteOffsets.len * sizeof(ByteOffset) +
+      buffer.xIndexCache.lineStarts.len * sizeof(RuneIndex)
+
 func toInt(index: RuneIndex): int {.inline.} =
   int(index)
 

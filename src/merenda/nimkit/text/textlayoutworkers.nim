@@ -21,6 +21,8 @@ type
     arrangement*: GlyphArrangement
     snapshot*: TextLayoutSnapshot
     snapshotThreadId*: int
+    failed*: bool
+    errorMessage*: string
 
   TextLayoutSnapshotBuilder* = proc(
     arrangement: var GlyphArrangement,
@@ -37,8 +39,7 @@ proc requestTextLayout*(
   worker: AgentProxy[TextLayoutWorker],
   generation: uint64,
   layoutRect: Rect,
-  source: string,
-  runs: seq[TextAttributeRun],
+  source: ConstPtr[TextLayoutSource],
   style: TextStyle,
   alignment: TextAlignment,
   wraps: bool,
@@ -54,25 +55,27 @@ proc requestTextLayout(
     worker: TextLayoutWorker,
     generation: uint64,
     layoutRect: Rect,
-    source: string,
-    runs: seq[TextAttributeRun],
+    source: ConstPtr[TextLayoutSource],
     style: TextStyle,
     alignment: TextAlignment,
     wraps: bool,
     containers: seq[TextContainer],
     buildSnapshot: bool,
 ) {.slot.} =
-  var
-    ownedSource = source
-    ownedRuns = runs
-    layoutResult = TextLayoutWorkerResult(generation: generation)
-  let storage = newTextStorage(move ownedSource, move ownedRuns)
-  layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
-  if buildSnapshot and not worker.snapshotBuilder.isNil:
-    layoutResult.snapshot = worker.snapshotBuilder(
-      layoutResult.arrangement, storage, containers, style, alignment
-    )
-    layoutResult.snapshotThreadId = getThreadId()
+  var layoutResult = TextLayoutWorkerResult(generation: generation)
+  try:
+    let storage = newTextLayoutStorage(source[])
+    layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
+    if buildSnapshot and not worker.snapshotBuilder.isNil:
+      layoutResult.snapshot = worker.snapshotBuilder(
+        layoutResult.arrangement, storage, containers, style, alignment
+      )
+      layoutResult.snapshotThreadId = getThreadId()
+  except CatchableError as error:
+    layoutResult.failed = true
+    layoutResult.errorMessage = error.msg
+    layoutResult.arrangement = GlyphArrangement()
+    layoutResult.snapshot = TextLayoutSnapshot()
   emit worker.textLayoutFinished(newSharedPtr(unsafeIsolate(move layoutResult)))
 
 proc newTextLayoutWorker*(

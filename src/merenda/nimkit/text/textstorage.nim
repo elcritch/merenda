@@ -1,5 +1,7 @@
 import std/[algorithm, heapqueue, options, unicode]
 
+from figdraw import SystemTypeface
+
 import sigils/core
 import sigils/selectors
 import ../foundation/undomanagers
@@ -35,6 +37,20 @@ type
     # successive streamed edits move only the runs between changed ranges.
     before, after: seq[TextStyleRun]
 
+  TextRunBuilder* = object
+    ## Compact, value-owned attributed runs assembled before storage creation.
+    runs: seq[TextStyleRun]
+    styles: seq[TextAttributes]
+
+  TextLayoutSource* = object
+    ## Detached value data for background layout; contains no storage references.
+    bytes: string
+    runs: TextStyleRuns
+    styles: seq[TextAttributes]
+    styleUses: seq[int]
+    freeStyles: seq[uint32]
+    overlappingRuns: bool
+
   TextStyledSpan* = object
     source*: TextSnapshot
     byteStart*: int
@@ -65,6 +81,15 @@ type
 
   TextGapStorage* = ref object of TextStorage
     xGapBuffer: GapTextBuffer
+
+  TextSourceSegment = object
+    parentStartRune, localEndRune: uint32
+
+  TextRangeStorage = ref object of TextStorage
+    # A captured immutable snapshot remains authoritative until a character edit.
+    xParent: TextSnapshot
+    xParentStartRune, xParentStartByte, xParentEndByte, xRangeLength: int
+    xSegments: seq[TextSourceSegment] # Empty for the single-range fast path.
 
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
@@ -308,10 +333,25 @@ method replaceStorageText*(
     replaceStop = clamped.maxIndex
     startByte = snapshot.byteOffset(replaceStart)
     stopByte = snapshot.byteOffset(replaceStop)
-  storage.xSnapshot = newTextSnapshot(
-    snapshot.bytes[0 ..< startByte] & text &
-      snapshot.bytes[stopByte ..< snapshot.byteLength]
-  )
+  let
+    suffixLength = snapshot.byteLength - stopByte
+    retainedLength = startByte + suffixLength
+  if text.len > high(int) - retainedLength:
+    raise newException(OverflowDefect, "replacement text is too large")
+  # Keep snapshot and text alive until every segment has been copied; text may
+  # borrow the old snapshot.
+  var replacement = newStringUninit(retainedLength + text.len)
+  if startByte > 0:
+    copyMem(addr replacement[0], unsafeAddr snapshot.bytes[0], startByte)
+  if text.len > 0:
+    copyMem(addr replacement[startByte], unsafeAddr text[0], text.len)
+  if suffixLength > 0:
+    copyMem(
+      addr replacement[startByte + text.len],
+      unsafeAddr snapshot.bytes[stopByte],
+      suffixLength,
+    )
+  storage.xSnapshot = newTextSnapshot(replacement)
 
 method replaceStorageText*(storage: TextGapStorage, range: TextRange, text: string) =
   storage.xGapBuffer.replace(range, text)
@@ -356,6 +396,171 @@ method storageParagraphRange*(
 method storageParagraphRange*(storage: TextGapStorage, range: TextRange): TextRange =
   storage.xGapBuffer.paragraphRange(range)
 
+iterator rangeByteSpans(
+    storage: TextRangeStorage, range: TextRange
+): tuple[first, last: int] =
+  let clamped = clampTextRange(storage.xRangeLength, range)
+  if clamped.length > 0:
+    if storage.xSegments.len == 0:
+      if clamped.location == 0 and int(clamped.length) == storage.xRangeLength:
+        yield (storage.xParentStartByte, storage.xParentEndByte)
+      else:
+        yield (
+          storage.xParent.byteOffset(storage.xParentStartRune + int(clamped.location)),
+          storage.xParent.byteOffset(storage.xParentStartRune + clamped.maxIndex),
+        )
+    else:
+      let start = int(clamped.location)
+      var
+        low = 0
+        high = storage.xSegments.len
+      while low < high:
+        let middle = (low + high) div 2
+        if int(storage.xSegments[middle].localEndRune) <= start:
+          low = middle + 1
+        else:
+          high = middle
+      var index = low
+      while index < storage.xSegments.len:
+        let
+          segment = storage.xSegments[index]
+          localStart =
+            if index == 0:
+              0
+            else:
+              int(storage.xSegments[index - 1].localEndRune)
+          localEnd = int(segment.localEndRune)
+          first = max(start, localStart)
+          last = min(clamped.maxIndex, localEnd)
+        if first < last:
+          let parentStart = int(segment.parentStartRune)
+          yield (
+            storage.xParent.byteOffset(parentStart + first - localStart),
+            storage.xParent.byteOffset(parentStart + last - localStart),
+          )
+        if localEnd >= clamped.maxIndex:
+          break
+        inc index
+
+iterator rangeRunes(storage: TextRangeStorage): Rune =
+  for span in storage.rangeByteSpans(initTextRange(0, storage.xRangeLength)):
+    if span.last > span.first:
+      for rune in storage.xParent.bytes.toOpenArray(span.first, span.last - 1).runes:
+        yield rune
+
+iterator rangeLineBreaks(storage: TextRangeStorage): bool =
+  # Match TextSnapshot's byte-width traversal, including truncated UTF-8.
+  when defined(useNativeDynlib):
+    let source = storage.xParent.bytes
+  else:
+    template source(): untyped =
+      storage.xParent.bytes
+
+  for span in storage.rangeByteSpans(initTextRange(0, storage.xRangeLength)):
+    var position = span.first
+    while position < span.last:
+      let newline = source[position] == '\n'
+      position = min(position + max(runeLenAt(source, position), 1), span.last)
+      yield newline
+
+proc rangeSubstring(storage: TextRangeStorage, range: TextRange): string =
+  var size = 0
+  for span in storage.rangeByteSpans(range):
+    size += span.last - span.first
+  if size > 0:
+    result = newString(size)
+    var output = 0
+    for span in storage.rangeByteSpans(range):
+      let count = span.last - span.first
+      if count > 0:
+        copyMem(
+          addr result[output], unsafeAddr storage.xParent.bytes[span.first], count
+        )
+        output += count
+
+method storageLength*(storage: TextRangeStorage): int =
+  if storage.xParent.isNil: storage.xSnapshot.runeLength else: storage.xRangeLength
+
+method storageString*(storage: TextRangeStorage): string =
+  if storage.xParent.isNil:
+    return procCall storageString(TextStorage(storage))
+  if storage.xSnapshot != nil:
+    return storage.xSnapshot.bytes
+  storage.rangeSubstring(initTextRange(0, storage.xRangeLength))
+
+method storageSnapshot(storage: TextRangeStorage): TextSnapshot =
+  if storage.xSnapshot.isNil:
+    storage.xSnapshot = newTextSnapshot(storage.storageString())
+  storage.xSnapshot
+
+method storageSubstring*(storage: TextRangeStorage, range: TextRange): string =
+  if storage.xParent.isNil:
+    return procCall storageSubstring(TextStorage(storage), range)
+  storage.rangeSubstring(range)
+
+method setStorageString*(storage: TextRangeStorage, value: string) =
+  storage.xSnapshot = newTextSnapshot(value)
+  storage.xParent = nil
+  storage.xSegments.setLen(0)
+
+method restoreStorageText(storage: TextRangeStorage, snapshot: TextStorage) =
+  storage.xSnapshot = snapshot.storageSnapshot()
+  storage.xParent = nil
+  storage.xSegments.setLen(0)
+
+method replaceStorageText*(storage: TextRangeStorage, range: TextRange, text: string) =
+  discard storage.storageSnapshot()
+  storage.xParent = nil
+  storage.xSegments.setLen(0)
+  procCall replaceStorageText(TextStorage(storage), range, text)
+
+method storageLineCount*(storage: TextRangeStorage): int =
+  if storage.xParent.isNil:
+    return procCall storageLineCount(TextStorage(storage))
+  result = 1
+  for newline in storage.rangeLineBreaks:
+    if newline:
+      inc result
+
+method storageLineRange*(storage: TextRangeStorage, line: int): TextRange =
+  if storage.xParent.isNil:
+    return procCall storageLineRange(TextStorage(storage), line)
+  let target = max(line, 0)
+  var
+    currentLine = 0
+    start = 0
+    index = 0
+  for newline in storage.rangeLineBreaks:
+    inc index
+    if newline:
+      if currentLine == target:
+        return initTextRange(start, index - start)
+      inc currentLine
+      start = index
+  if currentLine == target:
+    return initTextRange(start, storage.xRangeLength - start)
+  initTextRange(storage.xRangeLength, 0)
+
+method storageParagraphRange*(storage: TextRangeStorage, range: TextRange): TextRange =
+  if storage.xParent.isNil:
+    return procCall storageParagraphRange(TextStorage(storage), range)
+  let
+    clamped = clampTextRange(storage.xRangeLength, range)
+    startTarget = int(clamped.location)
+    stopTarget = clamped.maxIndex
+  var
+    start = 0
+    stop = storage.xRangeLength
+    index = 0
+  for rune in storage.rangeRunes:
+    if index < startTarget and rune == Rune('\n'):
+      start = index + 1
+    elif index >= stopTarget and rune == Rune('\n'):
+      stop = index + 1
+      break
+    inc index
+  initTextRange(start, stop - start)
+
 proc notifyCommittedEdit(storage: TextStorage, edit: TextStorageEdit) =
   storage.dispatchDidEdit(edit)
   if storage.xHasPendingEdit:
@@ -389,6 +594,60 @@ proc endEditing*(storage: TextStorage) =
   dec storage.xEditingDepth
   if storage.xEditingDepth == 0:
     storage.processEditing()
+
+func len*(builder: TextRunBuilder): int =
+  builder.runs.len
+
+func rangeAt*(builder: TextRunBuilder, index: int): TextRange =
+  ## Return a run's range without materializing its attributes.
+  builder.runs[index].range
+
+func `[]`*(builder: TextRunBuilder, index: int): TextAttributeRun =
+  let run = builder.runs[index]
+  TextAttributeRun(range: run.range, attributes: builder.styles[int(run.styleId)])
+
+iterator items*(builder: TextRunBuilder): TextAttributeRun =
+  for run in builder.runs:
+    yield
+      TextAttributeRun(range: run.range, attributes: builder.styles[int(run.styleId)])
+
+proc internStyle(builder: var TextRunBuilder, attributes: TextAttributes): uint32 =
+  for index, existing in builder.styles:
+    if existing == attributes:
+      return index.uint32
+  result = builder.styles.len.uint32
+  builder.styles.add attributes
+
+proc addRun(builder: var TextRunBuilder, range: TextRange, styleId: uint32) =
+  if builder.runs.len > 0 and builder.runs[^1].styleId == styleId and
+      builder.runs[^1].range.maxIndex == int(range.location):
+    builder.runs[^1].range.length =
+      (int(builder.runs[^1].range.length) + int(range.length)).Natural
+  else:
+    builder.runs.add TextStyleRun(range: range, styleId: styleId)
+
+proc add*(builder: var TextRunBuilder, range: TextRange, attributes: TextAttributes) =
+  ## Append a run, coalescing contiguous runs with equal attributes.
+  if builder.runs.len > 0 and builder.runs[^1].range.maxIndex == int(range.location) and
+      builder.styles[int(builder.runs[^1].styleId)] == attributes:
+    builder.runs[^1].range.length =
+      (int(builder.runs[^1].range.length) + int(range.length)).Natural
+  else:
+    builder.addRun(range, builder.internStyle(attributes))
+
+proc append*(builder: var TextRunBuilder, source: TextRunBuilder, offset: int) =
+  ## Append another builder's runs, shifting their rune locations by offset.
+  ## The source must be a different builder.
+  if (addr builder) == (unsafeAddr source):
+    raise newException(ValueError, "cannot append a run builder to itself")
+  var ids = newSeq[uint32](source.styles.len)
+  for index, attributes in source.styles:
+    ids[index] = builder.internStyle(attributes)
+  for run in source.runs:
+    builder.addRun(
+      initTextRange(int(run.range.location) + offset, int(run.range.length)),
+      ids[int(run.styleId)],
+    )
 
 proc styleId(storage: TextStorage, attributes: TextAttributes): uint32 =
   for index, existing in storage.xStyles:
@@ -629,6 +888,232 @@ proc newTextStorage*(
     )
   result.normalizeRuns()
 
+proc newTextStorage*(value: sink string, runs: sink TextRunBuilder): TextStorage =
+  ## Creates storage directly from compact attributed runs.
+  ## Runs are normalized and clamped without emitting edit events.
+  result = TextStorage()
+  discard result.withProto()
+  result.xSnapshot = newTextSnapshot(value)
+  result.xRuns = TextStyleRuns(before: runs.runs)
+  result.xStyles = runs.styles
+  result.xStyleUses = newSeq[int](result.xStyles.len)
+  result.xMaterialized = true
+  if result.xSnapshot.runeLength > 0 and result.xRuns.len == 0:
+    result.xRuns.add result.styleRun(
+      initTextRange(0, result.xSnapshot.runeLength), defaultTextAttributes()
+    )
+  result.normalizeRuns()
+
+proc newRangeStorage(
+    snapshot: TextSnapshot, length: int, styles: TextStorage
+): TextRangeStorage =
+  result = TextRangeStorage(
+    xParent: snapshot,
+    xRangeLength: length,
+    xRuns: styles.xRuns,
+    xStyles: styles.xStyles,
+    xStyleUses: styles.xStyleUses,
+    xFreeStyles: styles.xFreeStyles,
+    xUnusedStyles: styles.xUnusedStyles,
+    xOverlappingRuns: styles.xOverlappingRuns,
+    xMaterialized: true,
+  )
+  discard result.withProto()
+
+proc newTextRangeStorage*(
+    snapshot: TextSnapshot, range: TextRange, styles: TextStorage
+): TextStorage =
+  ## Capture an immutable snapshot range with independent local styles. The
+  ## supplied styles cover local positions and must have the same rune length.
+  ## Out-of-range coordinates or mismatched lengths raise ValueError. Callers
+  ## adopting existing text must first verify byte-for-byte identity.
+  if snapshot.isNil or styles.isNil:
+    raise newException(ValueError, "range storage requires a snapshot and styles")
+  styles.materialize()
+  let
+    start = int(range.location)
+    length = int(range.length)
+    total = snapshot.runeLength
+  if start > total or length > total - start or styles.storageLength() != length:
+    raise newException(ValueError, "invalid range or style storage length")
+  let storage = newRangeStorage(snapshot, length, styles)
+  storage.xParentStartRune = start
+  storage.xParentStartByte = snapshot.byteOffset(start)
+  storage.xParentEndByte = snapshot.byteOffset(start + length)
+  result = storage
+
+func estimatedTextSegmentMetadataBytes*(segmentCount: Natural): Natural =
+  ## Estimated logical segment-map payload, excluding allocator overhead.
+  ## Empty and single-piece views use the existing inline range representation.
+  if segmentCount > 1:
+    if segmentCount > (high(int) - sizeof(int)) div sizeof(TextSourceSegment):
+      return high(int)
+    result = sizeof(int) + segmentCount * sizeof(TextSourceSegment)
+
+proc newTextSegmentStorage*(
+    snapshot: TextSnapshot, segments: openArray[TextRange], styles: TextStorage
+): TextStorage =
+  ## Capture ordered snapshot pieces with independent local styles. Empty pieces
+  ## are ignored; source ranges may overlap or be reordered. For multiple
+  ## pieces, each must contain valid UTF-8 so joins preserve decoding semantics.
+  ## Invalid ranges, unsafe UTF-8, 4 GiB limits, or a mismatched style length
+  ## raise ValueError. Callers adopting existing text must verify byte identity.
+  if snapshot.isNil or styles.isNil:
+    raise newException(ValueError, "segment storage requires a snapshot and styles")
+  let total = snapshot.runeLength
+  var
+    runeTotal, byteTotal: uint64
+    nonempty = 0
+    onlyRange: TextRange
+  for segment in segments:
+    let
+      start = int(segment.location)
+      length = int(segment.length)
+    if start > total or length > total - start:
+      raise newException(ValueError, "invalid segment range")
+    if length > 0:
+      let
+        firstByte = snapshot.byteOffset(start)
+        lastByte = snapshot.byteOffset(start + length)
+      runeTotal += uint64(length)
+      byteTotal += uint64(lastByte - firstByte)
+      if runeTotal > uint64(high(uint32)) or byteTotal > uint64(high(uint32)):
+        raise newException(ValueError, "segment storage exceeds 4 GiB")
+      onlyRange = segment
+      inc nonempty
+  styles.materialize()
+  if uint64(styles.storageLength()) != runeTotal:
+    raise newException(ValueError, "mismatched segment style storage length")
+  if nonempty == 0:
+    return newTextRangeStorage(snapshot, initTextRange(0, 0), styles)
+  if nonempty == 1:
+    return newTextRangeStorage(snapshot, onlyRange, styles)
+
+  template source(): untyped =
+    snapshot.bytes
+
+  var
+    localEnd: uint32
+    mapped = newSeqOfCap[TextSourceSegment](nonempty)
+  for segment in segments:
+    if segment.length > 0:
+      let
+        start = int(segment.location)
+        firstByte = snapshot.byteOffset(start)
+        lastByte = snapshot.byteOffset(segment.maxIndex)
+      if lastByte <= firstByte or
+          source.toOpenArray(firstByte, lastByte - 1).validateUtf8 >= 0:
+        raise newException(ValueError, "segment contains invalid UTF-8")
+      localEnd += uint32(segment.length)
+      mapped.add TextSourceSegment(
+        parentStartRune: uint32(start), localEndRune: localEnd
+      )
+  let storage = newRangeStorage(snapshot, int(runeTotal), styles)
+  storage.xSegments = move mapped
+  result = storage
+
+proc discardTextRangeStorageMaterialization*(storage: TextStorage) =
+  ## Release a range's cached local snapshot; returned snapshots remain valid.
+  if storage of TextRangeStorage:
+    let rangeStorage = TextRangeStorage(storage)
+    if not rangeStorage.xParent.isNil:
+      rangeStorage.xSnapshot = nil
+
+when defined(merendaTests):
+  proc textStorageHasSnapshotForTest*(storage: TextStorage): bool =
+    not storage.isNil and not storage.xSnapshot.isNil
+
+  proc textRangeStorageStateForTest*(
+      storage: TextStorage, snapshot: TextSnapshot
+  ): tuple[sharesSource, materialized: bool] =
+    if storage of TextRangeStorage:
+      let rangeStorage = TextRangeStorage(storage)
+      result.sharesSource = rangeStorage.xParent == snapshot
+      result.materialized = not rangeStorage.xSnapshot.isNil
+
+proc addTypefaceDescriptorPayload*(
+    estimate: var TextPayloadEstimate, face: SystemTypeface
+) =
+  ## Count descriptor values only; native font resources are not included.
+  estimate.addTextPayloadBytes(face.file.path.len)
+  estimate.addTextPayloadBytes(face.variations.len * sizeof(face.variations[0]))
+  for variation in face.variations:
+    estimate.addTextPayloadBytes(variation.tag.len)
+
+proc addTextAttributesPayload*(
+    estimate: var TextPayloadEstimate, attributes: TextAttributes
+) =
+  ## Count dynamic attribute payload; the caller counts the containing object.
+  estimate.addTextPayloadBytes(attributes.fontName.len)
+  estimate.addTypefaceDescriptorPayload(attributes.fontFace)
+  estimate.addTextPayloadBytes(string(attributes.language).len)
+  estimate.addTextPayloadBytes(
+    attributes.paragraphStyle.tabStops.len * sizeof(TextTabStop)
+  )
+  estimate.addTextPayloadBytes(attributes.link.len)
+  estimate.addTextPayloadBytes(attributes.attachment.identifier.len)
+  estimate.addTextPayloadBytes(attributes.attachment.contentType.len)
+  estimate.addTextPayloadBytes(attributes.attachment.fileName.len)
+  estimate.addTextPayloadBytes(attributes.attachment.fileUrl.len)
+  estimate.addTextPayloadBytes(
+    attributes.attachment.metadata.len * sizeof(TextMetadataItem)
+  )
+  for item in attributes.attachment.metadata:
+    estimate.addTextPayloadBytes(item.key.len)
+    estimate.addTextPayloadBytes(item.value.len)
+
+proc addTextStoragePayload*(estimate: var TextPayloadEstimate, storage: TextStorage) =
+  ## Add existing logical payload without materializing storage or indexes.
+  ## Shared snapshots and indexes are counted once per estimate. The estimate
+  ## is incomplete: custom state, delegates, undo history and external resources
+  ## are not traversed, so incomplete is always set for a non-nil storage.
+  if storage.isNil:
+    return
+  estimate.incomplete = true
+  if not estimate.claimTextPayloadOwner(tpoStorage, cast[pointer](storage)):
+    return
+  estimate.addTextPayloadBytes(storage.xRuns.before.len * sizeof(TextStyleRun))
+  estimate.addTextPayloadBytes(storage.xRuns.after.len * sizeof(TextStyleRun))
+  estimate.addTextPayloadBytes(storage.xStyles.len * sizeof(TextAttributes))
+  estimate.addTextPayloadBytes(storage.xStyleUses.len * sizeof(int))
+  estimate.addTextPayloadBytes(storage.xFreeStyles.len * sizeof(uint32))
+  estimate.addTextPayloadBytes(storage.xUnusedStyles.len * sizeof(uint32))
+  for index in 0 ..< storage.xStyles.len:
+    estimate.addTextAttributesPayload(storage.xStyles[index])
+  estimate.addTextSnapshotPayload(storage.xSnapshot)
+  if storage of TextRangeStorage:
+    let ranged = TextRangeStorage(storage)
+    estimate.addTextPayloadBytes(ranged.xSegments.len * sizeof(TextSourceSegment))
+    estimate.addTextSnapshotPayload(ranged.xParent)
+  elif storage of TextGapStorage:
+    let gap = TextGapStorage(storage).xGapBuffer.gapTextBufferPayload()
+    estimate.addTextPayloadBytes(gap.bytes)
+    if estimate.claimTextPayloadOwner(tpoGapIndex, gap.indexIdentity):
+      estimate.addTextPayloadBytes(gap.indexBytes)
+
+proc textLayoutSource*(storage: TextStorage): TextLayoutSource =
+  ## Copy the interned representation before transferring it to a worker.
+  if not storage.isNil:
+    storage.materialize()
+    result.bytes = storage.storageString()
+    result.runs = storage.xRuns
+    result.styles = storage.xStyles
+    result.styleUses = storage.xStyleUses
+    result.freeStyles = storage.xFreeStyles
+    result.overlappingRuns = storage.xOverlappingRuns
+
+proc newTextLayoutStorage*(source: TextLayoutSource): TextStorage =
+  ## Reconstruct worker-owned storage without expanding and re-interning styles.
+  result = TextStorage()
+  discard result.withProto()
+  result.xSnapshot = newTextSnapshot(source.bytes)
+  result.xRuns = source.runs
+  result.xStyles = source.styles
+  result.xStyleUses = source.styleUses
+  result.xFreeStyles = source.freeStyles
+  result.xOverlappingRuns = source.overlappingRuns
+  result.xMaterialized = true
+
 proc initTextGapStorageFields*(
     storage: TextGapStorage, value = "", attributes = defaultTextAttributes()
 ) =
@@ -678,6 +1163,10 @@ method newEmptyStorageCopy*(storage: TextStorage): TextStorage {.base.} =
 method newEmptyStorageCopy*(storage: TextGapStorage): TextStorage =
   newTextGapStorage()
 
+method newEmptyStorageCopy*(storage: TextRangeStorage): TextStorage =
+  result = TextRangeStorage()
+  result.initTextStorageFields()
+
 method copyStorageTextTo*(storage: TextStorage, copy: TextStorage) {.base.} =
   copy.xSnapshot = storage.xSnapshot
 
@@ -685,6 +1174,16 @@ method copyStorageTextTo*(storage: TextGapStorage, copy: TextStorage) =
   let gapCopy = TextGapStorage(copy)
   gapCopy.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
   gapCopy.xSnapshot = storage.xSnapshot
+
+method copyStorageTextTo*(storage: TextRangeStorage, copy: TextStorage) =
+  let rangeCopy = TextRangeStorage(copy)
+  rangeCopy.xSnapshot = storage.xSnapshot
+  rangeCopy.xParent = storage.xParent
+  rangeCopy.xParentStartRune = storage.xParentStartRune
+  rangeCopy.xParentStartByte = storage.xParentStartByte
+  rangeCopy.xParentEndByte = storage.xParentEndByte
+  rangeCopy.xRangeLength = storage.xRangeLength
+  rangeCopy.xSegments = storage.xSegments
 
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   storage.materialize()

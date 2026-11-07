@@ -19,7 +19,8 @@ type
     root*: markdownParser.Document
     workerThreadId*: int
     errorMessage*: string
-    codes*: seq[MarkdownCodeSource]
+    codeIndices*: seq[int]
+    codeCount*: int
 
   MarkdownHighlightBatch* = object
     generation*: uint64
@@ -39,16 +40,20 @@ type
 proc collectCodeBlocks(
     token: markdownParser.Token,
     codes: var seq[MarkdownCodeSource],
-    seen: var Table[MarkdownCodeSource, bool],
+    indices: var seq[int],
+    seen: var Table[MarkdownCodeSource, int],
 ) =
   if token of markdownParser.CodeBlock:
     let code = markdownParser.CodeBlock(token)
     let key = (source: code.doc.strip(chars = {'\n'}), language: code.info)
-    if not seen.hasKey(key):
-      seen[key] = true
+    var index = seen.getOrDefault(key, -1)
+    if index < 0:
+      index = codes.len
+      seen[key] = index
       codes.add key
+    indices.add index
   for child in token.children:
-    child.collectCodeBlocks(codes, seen)
+    child.collectCodeBlocks(codes, indices, seen)
 
 func isCommonMarkConfig(config: markdownParser.MarkdownConfig): bool =
   let
@@ -166,11 +171,16 @@ proc markdownHighlightReady*(
   worker: MarkdownParseWorker, batch: sink MarkdownHighlightBatch
 ) {.signal.}
 
+proc markdownHighlightCancelled*(
+  worker: MarkdownParseWorker, generation: uint64
+) {.signal.}
+
 proc cancelMarkdownHighlight(worker: MarkdownParseWorker, generation: uint64) {.slot.} =
   if worker.generation == generation:
     worker.codes.setLen(0)
     worker.highlightJob = default(MatterHighlightJob)
     worker.codeStarted = false
+  emit worker.markdownHighlightCancelled(generation)
 
 proc continueMarkdownHighlight(
     worker: MarkdownParseWorker, generation: uint64
@@ -230,11 +240,11 @@ proc requestMarkdownParse(
         markdownParser.initGfmConfig(escape = escape, keepHtml = keepHtml)
     parseResult.root = source.parseMarkdownRoot(config)
     if highlightMatter:
-      var seen: Table[MarkdownCodeSource, bool]
-      parseResult.root.collectCodeBlocks(parseResult.codes, seen)
-      # Retain only value descriptors; the AST is transferred without aliases.
-      worker.codes = parseResult.codes
+      var seen: Table[MarkdownCodeSource, int]
+      parseResult.root.collectCodeBlocks(worker.codes, parseResult.codeIndices, seen)
+      parseResult.codeCount = worker.codes.len
   except CatchableError as error:
+    worker.codes.setLen(0)
     parseResult.errorMessage = error.msg
   # The parser created this entire graph on the worker and retains no aliases
   # after this signal. Transfer that one ownership unit back to the view thread.

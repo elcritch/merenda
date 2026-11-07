@@ -28,6 +28,11 @@ suite "nimkit synedit views":
     check spans.syntaxTokenAt(8) == stcIdentifier
     check malformed.syntaxTokenAt(4) == stcKeyword
 
+  test "token spans outlive temporary source text":
+    let spans = synEditTokenSpans("é".repeat(2) & " let value = 1", langNim)
+    check spans.syntaxTokenAt(3) == stcKeyword
+    check spans.syntaxTokenAt(7) == stcIdentifier
+
   test "tokenizer classifies Nim source spans":
     let source = """
 proc answer*(): int =

@@ -8,6 +8,7 @@ when defined(nimkitOwnershipTests):
   import nimkit/gaptextbuffers
   import nimkit/textstorage
   import nimkit/textlayout
+  import nimkit/textruneutils
   import nimkit/renderfragments
   import nimkit/threading
 else:
@@ -89,6 +90,7 @@ else:
   import nimkit/texteditors
   import nimkit/textfields
   import nimkit/textlayout
+  import nimkit/textruneutils
   import nimkit/textstorage
   import nimkit/textviews
   import nimkit/theme

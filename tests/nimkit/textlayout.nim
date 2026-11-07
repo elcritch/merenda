@@ -2,11 +2,12 @@ import std/[hashes, monotimes, options, os, sets, strutils, times, unicode, unit
 
 import sigils/core
 import sigils/threads
-from figdraw import len, `[]`, utf8RunesFromText, sameUtf8Runes
+from figdraw import GlyphArrangement, len, `[]`, utf8RunesFromText, sameUtf8Runes
 from threading/smartptrs import `[]`
 import merenda/nimkit/foundation/mainthreadwork
 
 import merenda/nimkit
+import merenda/nimkit/text/textlayoutworkers
 
 const TextLayoutEpsilon = 0.01'f32
 
@@ -23,6 +24,10 @@ type
     containerInvalidations: int
     completions: int
     geometryChanges: int
+    retired: int
+    retiredGeneration: uint64
+    retiredFailed: bool
+    retiredError: string
     lastRanges: seq[TextRange]
     lastInvalidations: seq[TextLayoutInvalidation]
     lastContainers: seq[TextContainer]
@@ -67,6 +72,14 @@ protocol TextStorageSignalSpyEvents from TextStorageSignalSpy:
 
 protocol TextLayoutSignalSpyEvents from TextLayoutSignalSpy:
   includes TextLayoutEvents
+
+  proc backgroundLayoutRetired(
+      spy: TextLayoutSignalSpy, generation: uint64, failed: bool, errorMessage: string
+  ) {.slot.} =
+    inc spy.retired
+    spy.retiredGeneration = generation
+    spy.retiredFailed = failed
+    spy.retiredError = errorMessage
 
   proc layoutDidInvalidate(spy: TextLayoutSignalSpy, ranges: seq[TextRange]) {.slot.} =
     inc spy.invalidations
@@ -492,6 +505,30 @@ proc newContractBackend(charWidth = 10.0'f32, lineHeight = 12.0'f32): ContractBa
   result = ContractBackend(charWidth: charWidth, lineHeight: lineHeight)
   discard result.withProtocol(ContractBackendProtocol)
 
+proc testSnapshotBuilder(
+    arrangement: var GlyphArrangement,
+    storage: TextStorage,
+    containers: seq[TextContainer],
+    style: TextStyle,
+    alignment: TextAlignment,
+): TextLayoutSnapshot {.nimcall.} =
+  discard arrangement
+  discard containers
+  discard style
+  discard alignment
+  let text = storage.stringValue()
+  if text == "fail":
+    raise newException(ValueError, "")
+  result.textHash = hash(text)
+
+proc waitForBackgroundDispatch(manager: TextLayoutManager): bool =
+  let deadline = getMonoTime() + initDuration(seconds = 10)
+  while not manager.hasInFlightBackgroundLayout() and getMonoTime() < deadline:
+    discard drainMainThreadWork()
+    if not manager.hasInFlightBackgroundLayout():
+      sleep(1)
+  manager.hasInFlightBackgroundLayout()
+
 proc waitForBackgroundSnapshot(manager: TextLayoutManager): bool =
   let deadline = getMonoTime() + initDuration(seconds = 10)
   while manager.isBackgroundLayoutPending() and getMonoTime() < deadline:
@@ -502,16 +539,123 @@ proc waitForBackgroundSnapshot(manager: TextLayoutManager): bool =
   not manager.isBackgroundLayoutPending()
 
 suite "nimkit text layout":
+  test "payload accounting reads existing layouts without scheduling work":
+    let
+      storage = newTextStorage("payload αβ😀")
+      manager = newTextLayoutManager(storage, initTextContainer(initSize(120, 300)))
+    check not manager.hasValidLayout()
+    var before: TextPayloadEstimate
+    before.addTextLayoutPayload(manager)
+    check not manager.hasValidLayout()
+    check manager.snapshotBuildThreadId() == 0
+    let beforeBytes = before.bytes
+    before.addTextLayoutPayload(manager)
+    check before.bytes == beforeBytes
+    check before.incomplete
+    discard manager.layoutSnapshot()
+    check manager.hasValidLayout()
+    var after: TextPayloadEstimate
+    after.addTextLayoutPayload(manager)
+    check after.bytes > beforeBytes
+    let layoutBytes = after.bytes
+    after.addTextLayoutPayload(manager)
+    check after.bytes == layoutBytes
+    # The source exposed by the layout has already been counted by identity.
+    after.addUtf8RunesPayload(manager.sourceRunes())
+    check after.bytes == layoutBytes
+
+  when defined(merendaTests):
+    test "fresh uncached requests receive a terminal result":
+      let
+        manager = newTextLayoutManager(
+          newTextStorage("ready"), initTextContainer(initSize(120, 300))
+        )
+        spy = newTextLayoutSignalSpy()
+      spy.observeProtocol(manager, TextLayoutEvents)
+      manager.setBackgroundSnapshotBuilderForTest(testSnapshotBuilder)
+      manager.usesBackgroundLayout = true
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      require manager.waitForBackgroundDispatch()
+      check manager.hasInFlightBackgroundLayout()
+      require manager.waitForBackgroundSnapshot()
+      check spy.retired == 1
+      check not spy.retiredFailed
+      check manager.layoutSnapshot().textHash == hash("ready")
+
+    test "retirement tickets exclude later scheduled and in-flight work":
+      let manager = newTextLayoutManager(
+        newTextStorage("ticket"), initTextContainer(initSize(120, 300))
+      )
+      manager.setBackgroundSnapshotBuilderForTest(testSnapshotBuilder)
+      manager.usesBackgroundLayout = true
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      let scheduled = manager.retireBackgroundLayoutWork()
+      check manager.isBackgroundLayoutRetirementPending(scheduled)
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      discard drainMainThreadWork()
+      check not manager.isBackgroundLayoutRetirementPending(scheduled)
+      check manager.isBackgroundLayoutPending()
+      require manager.waitForBackgroundDispatch()
+      let dispatched = manager.retireBackgroundLayoutWork()
+      check manager.isBackgroundLayoutRetirementPending(dispatched)
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      let deadline = getMonoTime() + initDuration(seconds = 10)
+      while manager.isBackgroundLayoutRetirementPending(dispatched) and
+          getMonoTime() < deadline:
+        discard drainMainThreadWork()
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        sleep(1)
+      check not manager.isBackgroundLayoutRetirementPending(dispatched)
+      check manager.isBackgroundLayoutPending()
+      require manager.waitForBackgroundSnapshot()
+      check manager.layoutSnapshot().textHash == hash("ticket")
+
+    test "failed background work retires once and preserves cached layout":
+      let
+        storage = newTextStorage("initial")
+        manager = newTextLayoutManager(storage, initTextContainer(initSize(150, 300)))
+        spy = newTextLayoutSignalSpy()
+      spy.observeProtocol(manager, TextLayoutEvents)
+      manager.setBackgroundSnapshotBuilderForTest(testSnapshotBuilder)
+      let cached = manager.layoutSnapshot()
+      manager.usesBackgroundLayout = true
+      storage.stringValue = "fail"
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      require manager.waitForBackgroundDispatch()
+      require manager.waitForBackgroundSnapshot()
+      check not manager.hasInFlightBackgroundLayout()
+      check spy.retired == 1
+      check spy.retiredFailed
+      check spy.retiredError == ""
+      check manager.layoutSnapshot().textHash == cached.textHash
+      discard drainMainThreadWork()
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      check spy.retired == 1
+      check not manager.isBackgroundLayoutPending()
+
+      let failedGeneration = spy.retiredGeneration
+      storage.stringValue = "recovered"
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      require manager.waitForBackgroundDispatch()
+      manager.deliverBackgroundLayoutResultForTest(
+        TextLayoutWorkerResult(generation: failedGeneration, failed: true)
+      )
+      check manager.hasInFlightBackgroundLayout()
+      check spy.retired == 1
+      require manager.waitForBackgroundSnapshot()
+      check spy.retired == 2
+      check not spy.retiredFailed
+      check manager.layoutSnapshot().textHash == hash("recovered")
+
   test "worker snapshots match synchronous Unicode wrapping and container geometry":
     for source in ["", "αβ\n\nZ\n", repeat("hello κόσμος ", 30) & "\n"]:
       for wraps in [false, true]:
-        let containers =
-          @[
-            initTextContainer(initSize(120, 60), insets(3), wraps = wraps),
-            initTextContainer(
-              initSize(120, 4000), insets(3), wraps = wraps, origin = initPoint(150, 0)
-            ),
-          ]
+        let containers = @[
+          initTextContainer(initSize(120, 60), insets(3), wraps = wraps),
+          initTextContainer(
+            initSize(120, 4000), insets(3), wraps = wraps, origin = initPoint(150, 0)
+          ),
+        ]
         let storage = newTextStorage(source)
         let synchronous = newTextLayoutManager(storage, containers[0])
         synchronous.textContainers = containers
@@ -530,6 +674,53 @@ suite "nimkit text layout":
         check actual.containerRects == expected.containerRects
         check actual.usedRect == expected.usedRect
         check actual.contentSize == expected.contentSize
+
+  test "background layout accepts missing storage":
+    let manager =
+      newTextLayoutManager(nil, initTextContainer(initSize(120, 200), wraps = true))
+    manager.usesBackgroundLayout = true
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    require manager.waitForBackgroundSnapshot()
+    let expected = newTextLayoutManager(
+        nil, initTextContainer(initSize(120, 200), wraps = true)
+      )
+      .layoutSnapshot()
+    check manager.layoutSnapshot().lineFragments == expected.lineFragments
+
+  test "background reflows use the current attributed source after edits":
+    let storage = newTextStorage(repeat("κόσμος text ", 30))
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 24
+    storage.setAttributes(initTextRange(2, 8), emphasis)
+    let background = newTextLayoutManager(
+      storage, initTextContainer(initSize(180, 4000), wraps = true)
+    )
+    background.usesBackgroundLayout = true
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    for width in [95.0'f32, 140.0'f32]:
+      let container = initTextContainer(initSize(width, 4000), wraps = true)
+      background.textContainer = container
+      background.requestBackgroundLayout(allowUncachedLayout = true)
+      require background.waitForBackgroundSnapshot()
+      let expected = newTextLayoutManager(storage, container).layoutSnapshot()
+      check background.layoutSnapshot().layoutHash == expected.layoutHash
+      check background.layoutSnapshot().lineFragments == expected.lineFragments
+    emphasis.fontSize = 32
+    storage.setAttributes(initTextRange(2, 8), emphasis)
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    let styledExpected =
+      newTextLayoutManager(storage, background.textContainer()).layoutSnapshot()
+    check background.layoutSnapshot().layoutHash == styledExpected.layoutHash
+    check background.layoutSnapshot().lineFragments == styledExpected.lineFragments
+    storage.stringValue = "changed αβγ text"
+    background.requestBackgroundLayout(allowUncachedLayout = true)
+    require background.waitForBackgroundSnapshot()
+    let expected =
+      newTextLayoutManager(storage, background.textContainer()).layoutSnapshot()
+    check background.layoutSnapshot().textHash == expected.textHash
+    check background.layoutSnapshot().lineFragments == expected.lineFragments
 
   test "background layout keeps snapshot delegate calls on the owning thread":
     let manager = newTextLayoutManager(
@@ -1079,6 +1270,37 @@ suite "nimkit text layout":
     check snapshot.lineFragments.len > 1
     check foundWrapped
 
+  test "mixed wrapping and clipping preserve Unicode paragraph geometry":
+    let
+      first = "α one two three four five six seven eight"
+      clipped = "猫 clipped code payload that extends far beyond the viewport"
+      last = "😀 nine ten eleven twelve thirteen fourteen"
+      storage = newTextStorage(first & "\n" & clipped & "\n" & last)
+      clippedStart = first.runeLen + 1
+      lastStart = clippedStart + clipped.runeLen + 1
+      firstRange = initTextRange(0, first.runeLen)
+      clippedRange = initTextRange(clippedStart, clipped.runeLen)
+      lastRange = initTextRange(lastStart, last.runeLen)
+    var attributes = storage.attributesAt(clippedStart)
+    attributes.paragraphStyle.lineBreakMode = tlbmClipping
+    storage.setAttributes(clippedRange, attributes)
+    let
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(100, 800), insets(0), wraps = true)
+      )
+      firstRects = manager.selectionRects(firstRange)
+      clippedRects = manager.selectionRects(clippedRange)
+      lastRects = manager.selectionRects(lastRange)
+    check firstRects.len > 1
+    require clippedRects.len == 1
+    check clippedRects[0].size.width > 100
+    check lastRects.len > 1
+    for range in [firstRange, clippedRange, lastRange]:
+      let glyphs = manager.glyphRangeForTextRange(range)
+      let recovered = manager.textRangeForGlyphRange(glyphs)
+      check int(recovered.location) <= int(range.location)
+      check recovered.maxIndex >= range.maxIndex
+
   test "wrapped content size follows the visual layout extent":
     let
       storage =
@@ -1345,8 +1567,25 @@ suite "nimkit text layout":
     storage.replace(initTextRange(0, 1), "x")
     check storage.hasPendingEdit()
     check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "\t")
+    check gpControl in manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "é")
+    check gpControl notin manager.glyphProperties(initGlyphIndex(0))
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    storage.replace(initTextRange(0, 1), "\xFF")
+    check gpControl notin manager.glyphProperties(initGlyphIndex(0))
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    check manager.glyphProperties(initGlyphIndex(10000)) == {gpNull}
+    # The shaping backend rejects malformed UTF-8; restore valid text before reflow.
+    storage.replace(initTextRange(0, 1), "é")
     storage.endEditing()
     check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+
+  test "glyph properties without storage are null":
+    let manager = newTextLayoutManager(
+      nil, initTextContainer(initSize(220.0, 100.0), insets(4.0), wraps = false)
+    )
+    check manager.glyphProperties(initGlyphIndex(0)) == {gpNull}
 
   test "temporary attributes and invalidation APIs are observable":
     let

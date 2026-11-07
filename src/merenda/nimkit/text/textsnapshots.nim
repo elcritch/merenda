@@ -1,6 +1,6 @@
 ## Immutable UTF-8 text with sparse rune and line indexes.
 
-import std/unicode
+import std/[sets, unicode]
 
 import figdraw
 
@@ -8,11 +8,67 @@ import ./texttypes
 
 const LineCheckpointStride = 64
 
-type TextSnapshot* = ref object
-  xSource: Utf8Runes
-  xLineCount: int
-  xLineRunes: seq[int]
-  xLineBytes: seq[int]
+type
+  TextPayloadOwnerKind* = enum
+    tpoStorage
+    tpoSnapshot
+    tpoUtf8Source
+    tpoLayoutManager
+    tpoLayout
+    tpoGapIndex
+    tpoImage
+    tpoImagePixels
+
+  TextPayloadEstimate* = object
+    ## Logical live payload length, not allocator capacity or resident memory.
+    ## Unknown native, custom, font and image resources make it incomplete.
+    bytes*: uint64
+    incomplete*: bool
+    seen: HashSet[tuple[kind: TextPayloadOwnerKind, identity: pointer]]
+
+  TextSnapshot* = ref object
+    xSource: Utf8Runes
+    xLineCount: int
+    xLineRunes: seq[int]
+    xLineBytes: seq[int]
+
+proc claimTextPayloadOwner*(
+    estimate: var TextPayloadEstimate, kind: TextPayloadOwnerKind, identity: pointer
+): bool =
+  ## Identity is borrowed and does not retain its owner. Keep all accounted
+  ## owners alive throughout the accounting pass.
+  if identity.isNil:
+    return
+  if estimate.seen.len == 0:
+    estimate.seen = initHashSet[tuple[kind: TextPayloadOwnerKind, identity: pointer]]()
+  let key = (kind, identity)
+  if key notin estimate.seen:
+    estimate.seen.incl key
+    result = true
+
+proc addTextPayloadBytes*(estimate: var TextPayloadEstimate, bytes: int) =
+  if bytes > 0:
+    let amount = uint64(bytes)
+    if high(uint64) - estimate.bytes < amount:
+      estimate.bytes = high(uint64)
+      estimate.incomplete = true
+    else:
+      estimate.bytes += amount
+
+proc addUtf8RunesPayload*(estimate: var TextPayloadEstimate, source: Utf8Runes) =
+  ## Count a source and its sparse rune checkpoints once by shared identity.
+  if estimate.claimTextPayloadOwner(tpoUtf8Source, cast[pointer](source)):
+    estimate.addTextPayloadBytes(source.byteLength)
+    estimate.addTextPayloadBytes(source.runeCheckpointCount * sizeof(uint32))
+
+proc addTextSnapshotPayload*(
+    estimate: var TextPayloadEstimate, snapshot: TextSnapshot
+) =
+  ## Count existing source and line indexes without creating a snapshot or text.
+  if estimate.claimTextPayloadOwner(tpoSnapshot, cast[pointer](snapshot)):
+    estimate.addTextPayloadBytes(snapshot.xLineRunes.len * sizeof(int))
+    estimate.addTextPayloadBytes(snapshot.xLineBytes.len * sizeof(int))
+    estimate.addUtf8RunesPayload(snapshot.xSource)
 
 when defined(useNativeDynlib):
   func bytes*(snapshot: TextSnapshot): string =

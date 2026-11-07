@@ -358,6 +358,7 @@ proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   let index = controller.groups.find(group)
   if index >= 0:
     controller.groups.delete(index)
+  controller.scheduleMarkdownPreviewReconcile()
   let host = controller.hostForWorkspace(group.workspace)
   if not host.isNil and group.workspace.len == 0 and not host.primary and
       not host.window.isClosed():

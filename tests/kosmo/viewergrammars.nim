@@ -9,12 +9,10 @@ const
   SqlGrammarPath = "syntaxes/sql.tmLanguage.json"
   SqlHelperPath = "syntaxes/helper.tmLanguage.json"
   SqlSource = "SELECT 'κόσμος' FROM records;"
-  SqlGrammar =
-    """
+  SqlGrammar = """
 {"scopeName":"source.sql","patterns":[{"include":"source.viewer-sql-helper"}]}
 """
-  SqlHelper =
-    """
+  SqlHelper = """
 {"scopeName":"source.viewer-sql-helper","patterns":[
   {"name":"keyword.control.sql","match":"\\b(SELECT|FROM)\\b"},
   {"name":"string.quoted.single.sql","begin":"'","end":"'"}
@@ -32,13 +30,12 @@ proc installSqlFixture(grammarDirectory: string): string =
     sourceCommit: "0123456789abcdef0123456789abcdef01234567",
     extensions: @[".sql", ".query.sql"],
     fileNames: @["Queryfile"],
-    grammarFiles:
-      @[
-        VscodeGrammarFile(
-          path: SqlGrammarPath, scopeName: "source.sql", languageId: "sql"
-        ),
-        VscodeGrammarFile(path: SqlHelperPath, scopeName: "source.viewer-sql-helper"),
-      ],
+    grammarFiles: @[
+      VscodeGrammarFile(
+        path: SqlGrammarPath, scopeName: "source.sql", languageId: "sql"
+      ),
+      VscodeGrammarFile(path: SqlHelperPath, scopeName: "source.viewer-sql-helper"),
+    ],
   )
   installVscodeGrammar(
     candidate,
@@ -78,8 +75,8 @@ suite "Kosmo installed viewer grammars":
     check cache.matterSyntaxHighlighterBounded(SqlSource, "sql").spans.syntaxTokenAt(0) ==
       stcKeyword
     check cache
-    .matterSyntaxHighlighterBounded(SqlSource, "source.sql").spans
-    .syntaxTokenAt(0) == stcKeyword
+      .matterSyntaxHighlighterBounded(SqlSource, "source.sql").spans
+      .syntaxTokenAt(0) == stcKeyword
 
     let preview = newMarkdownView("```sql\n" & SqlSource & "\n```")
     require preview.waitForMarkdownParsing()
@@ -88,16 +85,15 @@ suite "Kosmo installed viewer grammars":
 
     let github = newKosmoGitHubPanel(
       GitHubSnapshot(
-        items:
-          @[
-            GitHubItem(
-              kind: ghikIssue,
-              number: 1,
-              title: "SQL",
-              body: preview.markdown(),
-              state: "OPEN",
-            )
-          ]
+        items: @[
+          GitHubItem(
+            kind: ghikIssue,
+            number: 1,
+            title: "SQL",
+            body: preview.markdown(),
+            state: "OPEN",
+          )
+        ]
       )
     )
     defer:
@@ -129,8 +125,8 @@ suite "Kosmo installed viewer grammars":
       let byteIndex = rendered.find(needle) + 1
       require byteIndex > 0
       check text
-      .textStorage()
-      .attributesAt(rendered[0 ..< byteIndex].runeLen).foregroundColor ==
+        .textStorage()
+        .attributesAt(rendered[0 ..< byteIndex].runeLen).foregroundColor ==
         diff.markdownView.markdownStyle().syntaxTokenColors[stcKeyword]
 
     # Updating sources must invalidate a compiled grammar as well as a cached miss.
@@ -176,7 +172,9 @@ suite "Kosmo installed viewer grammars":
       require frontend.openPath(path)
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
       previews.add frontend.editorPane.markdownView
-    let cachedPreview = frontend.editorPane.markdownView
+    let
+      cachedPreview = frontend.editorPane.markdownView
+      cachedTab = frontend.documentTabs.selectedDocumentTabIdentifier
     let diff = newKosmoGitDiffPanel(
       parseGitDiff(
         "diff --git a/query.sql b/query.sql\n@@ -0,0 +1 @@\n+" & SqlSource & "\n"
@@ -193,8 +191,18 @@ suite "Kosmo installed viewer grammars":
       )
     )
     require diff.waitForDiff()
+    require frontend.documentTabs.selectDocumentTabWithIdentifier(cachedTab)
+    require cachedPreview.waitForMarkdownParsing()
+    let originalOwner = cachedPreview.markdownDocumentOwner()
+    require not originalOwner.isNil
     discard installSqlFixture(defaultKosmoVscodeGrammarDirectory())
+    let previousGrammarRevision = frontend.editorView.editor.viewerGrammarRevision()
     frontend.reloadInstalledVscodeGrammars()
+    check frontend.editorView.editor.viewerGrammarRevision() ==
+      previousGrammarRevision + 1
+    require cachedPreview.waitForMarkdownParsing()
+    require not cachedPreview.markdownDocumentOwner().isNil
+    check cachedPreview.markdownDocumentOwner() != originalOwner
     for preview in previews:
       preview.checkSqlColors()
     require diff.waitForDiff()
@@ -205,16 +213,15 @@ suite "Kosmo installed viewer grammars":
     # A new viewer also reads installed grammars without a manual reload.
     let github = newKosmoGitHubPanel(
       GitHubSnapshot(
-        items:
-          @[
-            GitHubItem(
-              kind: ghikIssue,
-              number: 1,
-              title: "SQL",
-              body: cachedPreview.markdown(),
-              state: "OPEN",
-            )
-          ]
+        items: @[
+          GitHubItem(
+            kind: ghikIssue,
+            number: 1,
+            title: "SQL",
+            body: cachedPreview.markdown(),
+            state: "OPEN",
+          )
+        ]
       )
     )
     defer:

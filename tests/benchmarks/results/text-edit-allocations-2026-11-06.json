@@ -1,0 +1,529 @@
+{
+  "title": "TextView undo history and single-allocation replacement: matched allocation traces",
+  "platform": "macOS 15.7.9 arm64; Nim 2.4.0",
+  "workload": "One fresh process per case. An 8 MiB ASCII source is held alive; the TextView receives single-character insertions. Styled cases change font size on half the source. Undo and redo cases replay all 32 edits.",
+  "method": "MALLOC stack logging enabled before process launch. At the post-operation checkpoint, leaks --fullStackHistory --outputGraph=<file> <pid> and malloc_history <file> -highWaterMark -callTree -invert -ignoreThreads -consolidateAllBySymbol and without -highWaterMark. Each case is one traced sample. Apple tool units are preserved. The tracked capture driver reproduces the checkpoint and keeps a bounded wait and cleanup.",
+  "limitations": [
+    "Logged heap plus VM excludes allocations without stack records and differs from process RSS.",
+    "One traced sample per case; logging changes timing and memory.",
+    "The delta undo implementation reduces retained history but reconstructs whole flat text on replay; single-allocation replacement reduces that transient traffic but does not eliminate it."
+  ],
+  "harness": {
+    "path": "tests/benchmarks/textundogroupallocationprobe.nim",
+    "sha256": "32e6c6d4d9881a7d675b9d5ce9668e60c8adbdb44a8dc38af1d51a0a7491c06c",
+    "temporaryBuildPath": "tests/undoprofile_temp.nim",
+    "temporaryModulePath": "src/merenda/nimkit/text/textviews_profile_baseline.nim"
+  },
+  "compiler": "Nim 2.4.0; nim c -d:release -d:useMalloc; same Atlas deps, config, module paths and harness. Both clean-cache nim ic builds failed with the IC rescheduling error; both variants were rebuilt with the classic backend.",
+  "buildCommand": "Copy the specified TextView source to src/merenda/nimkit/text/textviews_profile_baseline.nim, copy the exact harness to tests/undoprofile_temp.nim, then run nim c -d:release -d:useMalloc --nimcache:<isolated-cache> --out:<binary> tests/undoprofile_temp.nim. For singleAllocation, use the delta worktree and replace only TextStorage with git show 32a30471:src/merenda/nimkit/text/textstorage.nim.",
+  "variants": {
+    "original": {
+      "sourceRevision": "22b437c2 (0bca8cb5 parent)",
+      "textViewSha256": "e875def87bcd02f3cec1257abf9b98bbc44b7b699ee041af320b0b608ff23a82",
+      "textStorageSha256": "8c319164b27b61d870dda3d18699e2597d28319b599e452423014c4ba66f1a1b",
+      "binaryPath": "/tmp/merenda-undodelta-final-before",
+      "binarySha256": "531d94000a059f8b9353c092f42c72d547e9108d5e4c95b2912aea86c827b9a9"
+    },
+    "delta": {
+      "sourceRevision": "0bca8cb5",
+      "textViewSha256": "8719831e66dc8f16242c5ad24ddb429c5c4f93818462b3fe6def2395060f0507",
+      "textStorageSha256": "8c319164b27b61d870dda3d18699e2597d28319b599e452423014c4ba66f1a1b",
+      "binaryPath": "/tmp/merenda-undodelta-final-after",
+      "binarySha256": "15d52c34b058f717bc9e435d6f16b6854a906fe504f84f29564567c86acf11de"
+    },
+    "singleAllocation": {
+      "sourceRevision": "0bca8cb5 plus TextStorage from 32a30471",
+      "textViewSha256": "8719831e66dc8f16242c5ad24ddb429c5c4f93818462b3fe6def2395060f0507",
+      "textStorageSha256": "99e3eb36f0f5beb3e48d0e22a4af460070b1e237cc3d98cf23e8d0b9a7636c89",
+      "binaryPath": "/tmp/merenda-replacement-after",
+      "binarySha256": "4c3fdff78f80f45d634e5eb29619c49fcfaa5237659f0694c714267632a27d08"
+    }
+  },
+  "captureDriver": "tests/benchmarks/capture_allocations.py",
+  "samples": [
+    {
+      "variant": "delta",
+      "editCount": 1,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=1 undo=false phase=edit styled=false length=8388609",
+        "source still live=8388608 document length=8388609"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-1-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-1-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-1-disabled-edit-plain-live.txt",
+      "peakHeapVm": "63.9 MB",
+      "currentHeapVm": "47.7 MB",
+      "cumulativeHeapVm": "119.5 MB",
+      "allocationEvents": "434,780",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 1,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=1 undo=true phase=edit styled=false length=8388609",
+        "source still live=8388608 document length=8388609"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-1-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-1-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-1-enabled-edit-plain-live.txt",
+      "peakHeapVm": "63.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "119.5 MB",
+      "allocationEvents": "434,885",
+      "liveCallTreeTotal": "34698 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 128,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=128 undo=false phase=edit styled=false length=8388736",
+        "source still live=8388608 document length=8388736"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-128-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-128-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-128-disabled-edit-plain-live.txt",
+      "peakHeapVm": "63.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "2.13 GB",
+      "allocationEvents": "444,719",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 128,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=128 undo=true phase=edit styled=false length=8388736",
+        "source still live=8388608 document length=8388736"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-128-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-128-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-128-enabled-edit-plain-live.txt",
+      "peakHeapVm": "64.2 MB",
+      "currentHeapVm": "48.1 MB",
+      "cumulativeHeapVm": "2.13 GB",
+      "allocationEvents": "457,381",
+      "liveCallTreeTotal": "38889 (51.7M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 32,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=false phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-32-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-disabled-edit-plain-live.txt",
+      "peakHeapVm": "63.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "621.5 MB",
+      "allocationEvents": "437,204",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-plain-live.txt",
+      "peakHeapVm": "64 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "621.8 MB",
+      "allocationEvents": "440,404",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "styled",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=true length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-styled.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-styled-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-edit-styled-live.txt",
+      "peakHeapVm": "64 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "621.8 MB",
+      "allocationEvents": "440,451",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "redo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=redo styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-redo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-redo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-redo-plain-live.txt",
+      "peakHeapVm": "64 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "1.62 GB",
+      "allocationEvents": "446,756",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "delta",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "undo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=undo styled=false length=8388608",
+        "source still live=8388608 document length=8388608"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-undo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-undo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-after-32-enabled-undo-plain-live.txt",
+      "peakHeapVm": "64 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "1.11 GB",
+      "allocationEvents": "443,429",
+      "liveCallTreeTotal": "35720 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "original",
+      "editCount": 32,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=false phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-before-32-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-disabled-edit-plain-live.txt",
+      "peakHeapVm": "63.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "621.4 MB",
+      "allocationEvents": "437,199",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "original",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-plain-live.txt",
+      "peakHeapVm": "317.8 MB",
+      "currentHeapVm": "309.8 MB",
+      "cumulativeHeapVm": "621.6 MB",
+      "allocationEvents": "438,777",
+      "liveCallTreeTotal": "35676 (315M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "original",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "styled",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=true length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-styled.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-styled-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-edit-styled-live.txt",
+      "peakHeapVm": "317.8 MB",
+      "currentHeapVm": "309.9 MB",
+      "cumulativeHeapVm": "621.6 MB",
+      "allocationEvents": "438,852",
+      "liveCallTreeTotal": "35676 (315M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "original",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "redo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=redo styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-redo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-redo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-redo-plain-live.txt",
+      "peakHeapVm": "317.8 MB",
+      "currentHeapVm": "309.8 MB",
+      "cumulativeHeapVm": "621.9 MB",
+      "allocationEvents": "442,384",
+      "liveCallTreeTotal": "35674 (315M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "original",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "undo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=undo styled=false length=8388608",
+        "source still live=8388608 document length=8388608"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-undo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-undo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-final-before-32-enabled-undo-plain-live.txt",
+      "peakHeapVm": "317.8 MB",
+      "currentHeapVm": "309.8 MB",
+      "cumulativeHeapVm": "621.7 MB",
+      "allocationEvents": "440,577",
+      "liveCallTreeTotal": "35674 (315M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 1,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=1 undo=false phase=edit styled=false length=8388609",
+        "source still live=8388608 document length=8388609"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-disabled-edit-plain-live.txt",
+      "peakHeapVm": "55.9 MB",
+      "currentHeapVm": "47.7 MB",
+      "cumulativeHeapVm": "111.5 MB",
+      "allocationEvents": "434,774",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 1,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=1 undo=true phase=edit styled=false length=8388609",
+        "source still live=8388608 document length=8388609"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-1-enabled-edit-plain-live.txt",
+      "peakHeapVm": "55.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "111.5 MB",
+      "allocationEvents": "434,869",
+      "liveCallTreeTotal": "34698 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 128,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=128 undo=false phase=edit styled=false length=8388736",
+        "source still live=8388608 document length=8388736"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-disabled-edit-plain-live.txt",
+      "peakHeapVm": "55.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "1.13 GB",
+      "allocationEvents": "444,571",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 128,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=128 undo=true phase=edit styled=false length=8388736",
+        "source still live=8388608 document length=8388736"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-128-enabled-edit-plain-live.txt",
+      "peakHeapVm": "56.3 MB",
+      "currentHeapVm": "48.1 MB",
+      "cumulativeHeapVm": "1.13 GB",
+      "allocationEvents": "457,274",
+      "liveCallTreeTotal": "38889 (51.7M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 32,
+      "undo": "disabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=false phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-disabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-disabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-disabled-edit-plain-live.txt",
+      "peakHeapVm": "55.9 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "365.4 MB",
+      "allocationEvents": "437,174",
+      "liveCallTreeTotal": "34651 (51.4M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-plain-live.txt",
+      "peakHeapVm": "56 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "365.8 MB",
+      "allocationEvents": "440,379",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "edit",
+      "style": "styled",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=edit styled=true length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-styled.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-styled-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-edit-styled-live.txt",
+      "peakHeapVm": "56 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "365.8 MB",
+      "allocationEvents": "440,419",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "redo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=redo styled=false length=8388640",
+        "source still live=8388608 document length=8388640"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-redo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-redo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-redo-plain-live.txt",
+      "peakHeapVm": "56 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "890.2 MB",
+      "allocationEvents": "446,659",
+      "liveCallTreeTotal": "35721 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    },
+    {
+      "variant": "singleAllocation",
+      "editCount": 32,
+      "undo": "enabled",
+      "operation": "undo",
+      "style": "plain",
+      "checkpoint": [
+        "checkpoint edits=32 undo=true phase=undo styled=false length=8388608",
+        "source still live=8388608 document length=8388608"
+      ],
+      "graphPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-undo-plain.memgraph",
+      "highReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-undo-plain-high.txt",
+      "liveReportPath": "/tmp/merenda-utf8-profile/undo-replacement-after-32-enabled-undo-plain-live.txt",
+      "peakHeapVm": "56 MB",
+      "currentHeapVm": "47.8 MB",
+      "cumulativeHeapVm": "628 MB",
+      "allocationEvents": "443,361",
+      "liveCallTreeTotal": "35720 (51.5M)",
+      "noStackBlocks": "729   total size: 168K",
+      "noStackVm": null
+    }
+  ],
+  "relatedHistoricalData": "tests/benchmarks/results/textundo-allocations-2026-11-06.json contains explicitly labeled intermediate and grouped-refinement comparisons."
+}

@@ -17,6 +17,7 @@ import ../foundation/selectors
 import ../foundation/urls
 import ./textlayout
 import ./textstorage
+import ./textsnapshots
 import ./textruneutils
 import ./texttypes
 import ../themes
@@ -39,6 +40,9 @@ type
   TextViewFlags = set[TextViewFlag]
 
   TextUndoRecord = object
+    isDelta: bool
+    position: int
+    removed, inserted: TextStorage
     storageBefore: TextStorage
     storageAfter: TextStorage
     selectionBefore: TextRange
@@ -194,6 +198,8 @@ type
     xMarkedUndoStorage: TextStorage
     xMarkedUndoSelection: TextRange
     xUndoStack: seq[TextUndoRecord]
+    xUndoHead: TextStorage
+    xOwnsUndoStorage: bool
     xRedoStack: seq[TextUndoRecord]
     xUndoGroupingDepth: Natural
     xGroupedUndoBefore: TextStorage
@@ -462,6 +468,7 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   let
     previousValue = textView.textViewStringValue()
     previousSelection = textView.textViewSelectedRange()
+  textView.xOwnsUndoStorage = false
   textView.xTextStorage =
     if storage.isNil:
       newTextStorage()
@@ -578,6 +585,7 @@ proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
     textView.xFlags.excl tvAllowsUndo
     textView.xUndoStack.setLen(0)
     textView.xRedoStack.setLen(0)
+    textView.xUndoHead = nil
     textView.xMarkedUndoStorage = nil
     textView.xGroupedUndoBefore = nil
     textView.xHasGroupedUndo = false
@@ -1031,6 +1039,101 @@ proc clearMarkedText(textView: TextView) =
   textView.xMarkedUndoStorage = nil
   textView.xMarkedUndoSelection = initTextRange(0, 0)
 
+proc denseUndoRuns(storage: TextStorage): bool =
+  var stop = 0
+  for run in storage.runs(initTextRange(0, storage.len)):
+    if int(run.range.location) != stop or run.range.length == 0:
+      return false
+    stop = run.range.maxIndex
+  stop == storage.len
+
+proc sameUndoContent(first, second: TextStorage): bool =
+  if first.len != second.len or not first.sameStorageText(second) or
+      not first.denseUndoRuns() or not second.denseUndoRuns():
+    return false
+  for run in first.runs(initTextRange(0, first.len)):
+    let other = second.attributeRunAt(int(run.range.location))
+    if run.range != other.range or run.attributes != other.attributes:
+      return false
+  true
+
+proc sameUndoSegment(
+    first: TextStorage, firstStart: int, second: TextStorage, secondStart, length: int
+): bool =
+  let
+    firstSnapshot = first.textSnapshot()
+    secondSnapshot = second.textSnapshot()
+    firstByte = firstSnapshot.byteOffset(firstStart)
+    secondByte = secondSnapshot.byteOffset(secondStart)
+    firstEnd = firstSnapshot.byteOffset(firstStart + length)
+    secondEnd = secondSnapshot.byteOffset(secondStart + length)
+    byteCount = firstEnd - firstByte
+  if byteCount != secondEnd - secondByte:
+    return false
+  if byteCount > 0 and
+      not equalMem(
+        unsafeAddr firstSnapshot.bytes[firstByte],
+        unsafeAddr secondSnapshot.bytes[secondByte],
+        byteCount,
+      ):
+    return false
+  var offset = 0
+  while offset < length:
+    let
+      firstRun = first.attributeRunAt(firstStart + offset)
+      secondRun = second.attributeRunAt(secondStart + offset)
+    if firstRun.attributes != secondRun.attributes:
+      return false
+    let step = min(
+      length - offset,
+      min(
+        firstRun.range.maxIndex - firstStart - offset,
+        secondRun.range.maxIndex - secondStart - offset,
+      ),
+    )
+    if step <= 0:
+      return false
+    offset += step
+  true
+
+proc matchesUndoEdit(
+    before, after: TextStorage, range: TextRange, inserted: TextStorage
+): bool =
+  let
+    start = int(range.location)
+    tailLength = before.len - range.maxIndex
+  if after.len != before.len - int(range.length) + inserted.len or
+      not after.denseUndoRuns():
+    return false
+  before.sameUndoSegment(0, after, 0, start) and
+    inserted.sameUndoSegment(0, after, start, inserted.len) and
+    before.sameUndoSegment(range.maxIndex, after, start + inserted.len, tailLength)
+
+proc undoDeltaStorage(
+    source: TextStorage, record: TextUndoRecord, backwards: bool
+): TextStorage =
+  result = source.copyTextStorage()
+  let
+    removed = if backwards: record.inserted else: record.removed
+    inserted = if backwards: record.removed else: record.inserted
+  result.replace(initTextRange(record.position, removed.len), inserted)
+
+proc materializeUndoHistory(textView: TextView) =
+  ## Break a delta chain into independent snapshots before an unrecorded change
+  ## or a snapshot-only operation creates a discontinuity in history.
+  if textView.xUndoHead.isNil:
+    return
+  var cursor = textView.xUndoHead
+  for index in countdown(textView.xUndoStack.high, 0):
+    if textView.xUndoStack[index].isDelta:
+      let before = cursor.undoDeltaStorage(textView.xUndoStack[index], true)
+      textView.xUndoStack[index].storageBefore = before
+      textView.xUndoStack[index].storageAfter = cursor
+      textView.xUndoStack[index].isDelta = false
+      textView.xUndoStack[index].removed = nil
+      textView.xUndoStack[index].inserted = nil
+    cursor = textView.xUndoStack[index].storageBefore
+
 proc recordUndo(
     textView: TextView,
     before: TextStorage,
@@ -1047,14 +1150,23 @@ proc recordUndo(
     return
   if before.sameStorageText(textView.xTextStorage) and beforeSelection == afterSelection:
     return
+  textView.xRedoStack.setLen(0)
+  var hasDeltas = false
+  for record in textView.xUndoStack:
+    if record.isDelta:
+      hasDeltas = true
+      break
+  if hasDeltas and
+      (not textView.xOwnsUndoStorage or not textView.xUndoHead.sameUndoContent(before)):
+    textView.materializeUndoHistory()
   let after = textView.xTextStorage.copyTextStorage()
+  textView.xUndoHead = after
   textView.xUndoStack.add TextUndoRecord(
     storageBefore: before,
     storageAfter: after,
     selectionBefore: beforeSelection,
     selectionAfter: afterSelection,
   )
-  textView.xRedoStack.setLen(0)
 
 proc beginUndoGrouping*(textView: TextView) =
   inc textView.xUndoGroupingDepth
@@ -1130,6 +1242,7 @@ proc replaceRange(
     record = true,
     clearMark = true,
     captureMarkedUndo = false,
+    localInsertion = false,
 ): TextReplaceResult {.discardable.} =
   if not textView.editable:
     return
@@ -1147,9 +1260,31 @@ proc replaceRange(
     needsUndo =
       record and textView.allowsUndo and not textView.xApplyingUndo and
       (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo)
+  var deltaCandidate =
+    needsUndo and localInsertion and textView.xOwnsUndoStorage and
+    textView.xUndoGroupingDepth == 0 and not textView.xHasMarkedText and
+    not captureMarkedUndo and textView.xTextStorage.undoManager().isNil and
+    textView.xTextStorage.delegate().isNil and textView.xTextStorage.denseUndoRuns() and
+    inserted.denseUndoRuns()
+  if deltaCandidate and not textView.xUndoHead.isNil and
+      not textView.xUndoHead.sameUndoContent(textView.xTextStorage):
+    deltaCandidate = false
+  let
+    storageBeforeEdit = textView.xTextStorage
+    undoHeadBefore = textView.xUndoHead
     before =
       if needsUndo:
         textView.xTextStorage.copyTextStorage()
+      else:
+        nil
+    removed =
+      if deltaCandidate:
+        textView.xTextStorage.sliceTextStorage(clamped)
+      else:
+        nil
+    insertedCopy =
+      if deltaCandidate:
+        inserted.copyTextStorage()
       else:
         nil
   if captureMarkedUndo and textView.allowsUndo and not textView.xApplyingUndo:
@@ -1164,7 +1299,29 @@ proc replaceRange(
     initTextRange(int(clamped.location), insertedLength), valueChanged
   )
   if record and (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo):
-    textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
+    let afterSelection = textView.textViewSelectedRange()
+    if deltaCandidate and textView.allowsUndo and textView.xOwnsUndoStorage and
+        textView.xTextStorage == storageBeforeEdit and
+        textView.xUndoHead == undoHeadBefore and
+        textView.xTextStorage.undoManager().isNil and
+        textView.xTextStorage.delegate().isNil and
+        (valueChanged or beforeSelection != afterSelection):
+      let patch = TextUndoRecord(
+        isDelta: true,
+        position: int(clamped.location),
+        removed: removed,
+        inserted: insertedCopy,
+        selectionBefore: beforeSelection,
+        selectionAfter: afterSelection,
+      )
+      if before.matchesUndoEdit(textView.xTextStorage, clamped, insertedCopy):
+        textView.xUndoHead = textView.xTextStorage.copyTextStorage()
+        textView.xUndoStack.add patch
+        textView.xRedoStack.setLen(0)
+      else:
+        textView.recordUndo(before, beforeSelection, afterSelection)
+    else:
+      textView.recordUndo(before, beforeSelection, afterSelection)
   result.valueChanged = valueChanged
 
 proc replaceRange(
@@ -1182,6 +1339,7 @@ proc replaceRange(
     record = record,
     clearMark = clearMark,
     captureMarkedUndo = captureMarkedUndo,
+    localInsertion = true,
   )
 
 proc foldedSearchText(text: string): string =
@@ -1224,22 +1382,35 @@ proc applySmartInsert(
   result = insertion
   if not textView.xSmartInsertDelete or insertion.len == 0:
     return
-  let insertedRunes = utf8RunesForText(insertion)
-  if insertedRunes.len == 0:
+  var
+    firstWord = false
+    lastWord = false
+    hasRune = false
+  for rune in insertion.runes:
+    if not hasRune:
+      firstWord = rune.isWordRune
+      hasRune = true
+    lastWord = rune.isWordRune
+  if not hasRune:
     return
   let
-    textRunes = utf8RunesForText(textView.textViewStringValue())
+    source = textView.textViewStringValue()
     start = int(selected.location)
     stop = selected.maxIndex
   var
-    prefix = ""
-    suffix = ""
-  if start > 0 and start <= textRunes.len and textRunes[start - 1].isWordRune and
-      insertedRunes[0].isWordRune:
-    prefix = " "
-  if stop < textRunes.len and insertedRunes[insertedRunes.len - 1].isWordRune and
-      textRunes[stop].isWordRune:
-    suffix = " "
+    previousWord = false
+    nextWord = false
+    index = 0
+  for rune in source.runes:
+    if index == start - 1:
+      previousWord = rune.isWordRune
+    if index == stop:
+      nextWord = rune.isWordRune
+      break
+    inc index
+  let
+    prefix = if start > 0 and previousWord and firstWord: " " else: ""
+    suffix = if nextWord and lastWord: " " else: ""
   result = prefix & insertion & suffix
 
 proc preparedInsertion(
@@ -2172,7 +2343,13 @@ proc undoText*(textView: TextView): bool =
   if textView.xUndoStack.len == 0:
     return false
   let record = textView.xUndoStack.pop()
-  textView.applyUndoRecord(record.storageBefore, record.selectionBefore)
+  let before =
+    if record.isDelta:
+      textView.xUndoHead.undoDeltaStorage(record, true)
+    else:
+      record.storageBefore
+  textView.applyUndoRecord(before, record.selectionBefore)
+  textView.xUndoHead = before
   textView.xRedoStack.add record
   true
 
@@ -2180,7 +2357,13 @@ proc redoText*(textView: TextView): bool =
   if textView.xRedoStack.len == 0:
     return false
   let record = textView.xRedoStack.pop()
-  textView.applyUndoRecord(record.storageAfter, record.selectionAfter)
+  let after =
+    if record.isDelta:
+      textView.xUndoHead.undoDeltaStorage(record, false)
+    else:
+      record.storageAfter
+  textView.applyUndoRecord(after, record.selectionAfter)
+  textView.xUndoHead = after
   textView.xUndoStack.add record
   true
 
@@ -3485,6 +3668,7 @@ proc initTextViewFields*(
 ) =
   initViewFields(textView, frame)
   textView.xTextStorage = newTextStorage(value)
+  textView.xOwnsUndoStorage = true
   textView.xTextContainer =
     initTextContainer(widthTracksTextView = true, heightTracksTextView = true)
   textView.xLayoutManager =

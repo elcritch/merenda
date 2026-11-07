@@ -318,7 +318,7 @@ func syntaxTokenClass(token: SynEditTokenClass): SyntaxTokenClass =
 
 type
   SynEditHighlightBuffer = object
-    source: string
+    source: ptr string
     spans: seq[SynEditTokenSpan]
 
   GeneralTokenizer = object
@@ -329,20 +329,20 @@ type
     state: SynEditTokenClass
 
 proc len(buffer: ptr SynEditHighlightBuffer): int {.inline.} =
-  buffer[].source.len
+  buffer[].source[].len
 
 proc `[]`(buffer: ptr SynEditHighlightBuffer, index: int): char {.inline.} =
   if index < 0 or index >= buffer.len:
     '\L'
   else:
-    buffer[].source[index]
+    buffer[].source[][index]
 
 proc addStyleRange(
     buffer: var SynEditHighlightBuffer, start, stop: int, token: SynEditTokenClass
 ) =
   let
-    first = max(0, min(start, buffer.source.len))
-    last = max(first, min(stop, buffer.source.len))
+    first = max(0, min(start, buffer.source[].len))
+    last = max(first, min(stop, buffer.source[].len))
   if last <= first:
     return
   if buffer.spans.len > 0 and buffer.spans[^1].token == token and
@@ -351,9 +351,6 @@ proc addStyleRange(
       (buffer.spans[^1].range.length.int + last - first).Natural
   else:
     buffer.spans.add span(first, last, token)
-
-proc initHighlightBuffer(text: string): SynEditHighlightBuffer =
-  result.source = text
 
 proc nimKeywordToken(identifier: string): SynEditTokenClass =
   if identifier.isKeyword(NimKeywords):
@@ -1076,15 +1073,15 @@ proc highlightMarkdown(buffer: var SynEditHighlightBuffer, first, last: int) =
     insideFence = false
     fenceLanguage = langNone
     pos = first
-  while pos > 0 and buffer.source[pos - 1] != '\L':
+  while pos > 0 and buffer.source[][pos - 1] != '\L':
     dec pos
   while pos <= last:
     let lineStart = pos
     var lineEnd = pos
-    while lineEnd <= last and buffer.source[lineEnd] != '\L':
+    while lineEnd <= last and buffer.source[][lineEnd] != '\L':
       inc lineEnd
 
-    let lineText = buffer.source[lineStart ..< lineEnd]
+    let lineText = buffer.source[][lineStart ..< lineEnd]
     let stripped = lineText.strip(leading = true, trailing = false)
     if stripped.startsWith("```") or stripped.startsWith("~~~"):
       buffer.addStyleRange(
@@ -1127,7 +1124,7 @@ proc addByteSpan(
     spans.add span(startRune, stopRune, token)
 
 proc tokenSpans(buffer: SynEditHighlightBuffer, text: string): seq[SynEditTokenSpan] =
-  if buffer.source.len == 0:
+  if buffer.source[].len == 0:
     return
   var
     cursor: TextByteCursor
@@ -1144,7 +1141,8 @@ proc tokenSpans(buffer: SynEditHighlightBuffer, text: string): seq[SynEditTokenS
 proc internalTokenSpans(text: string, language: SourceLanguage): seq[SynEditTokenSpan] =
   if text.len == 0:
     return
-  var buffer = initHighlightBuffer(text)
+  # The tokenizer and conversion finish before this borrowed parameter returns.
+  var buffer = SynEditHighlightBuffer(source: unsafeAddr text)
   if language == langMarkdown:
     buffer.highlightMarkdown(0, text.high)
   elif language != langNone:

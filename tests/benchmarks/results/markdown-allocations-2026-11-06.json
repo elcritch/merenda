@@ -1,0 +1,312 @@
+{
+  "baselineRevision": "24896588",
+  "currentRevision": "8cd707d5 plus uncommitted UTF-8 changes including gap-source fix",
+  "platform": "macOS 15.7.9 arm64",
+  "method": "One fresh process per case, classic Nim c -d:release --mm:arc, identical dependencies and checkpoint harness; MallocStackLogging=1, paused after storage or first render; leaks --fullStackHistory --outputGraph=<file> <pid>, malloc_history <file> -highWaterMark -callTree -invert -ignoreThreads -consolidateAllBySymbol and without -highWaterMark. Units reported by Apple malloc_history as MB/M/GB are preserved verbatim; its no-stack blocks and VM regions are separate.",
+  "limitations": [
+    "One traced run per case; logging overhead and allocation scheduling perturb memory and timings.",
+    "malloc_history reports a dynamically-enabled logging warning with 816 pre-existing unstacked blocks for storage and 805 blocks plus 9 VM regions for view; totals exclude unstacked allocations.",
+    "Process heap/RSS/high-water are separate from logged live allocation heap and VM, and do not identify retained objects.",
+    "Graphs and full call trees are local artifacts in /tmp/merenda-utf8-profile; graph files include full stack history and are not checked into the repository.",
+    "Per-sample targetStages includes measurements after the graph checkpoint (such as resized); these later stages are not represented in the captured graph.",
+    "Instruments Allocations launch failed to attach on this machine; dtrace required root access. Memory graphs were captured with same-user Apple leaks and MallocStackLogging instead."
+  ],
+  "samples": [
+    {
+      "mode": "storage",
+      "count": 2000,
+      "version": "before",
+      "graph": "/tmp/merenda-utf8-profile/storage-2000-before.memgraph",
+      "liveReport": "/tmp/merenda-utf8-profile/storage-2000-before-live.txt",
+      "highReport": "/tmp/merenda-utf8-profile/storage-2000-before-high.txt",
+      "peakLiveHeapVm": "88.2 MB",
+      "currentLiveHeapVm": "1.5 MB",
+      "cumulativeHeapVm": "583.9 MB",
+      "allocationEvents": "2,267,490",
+      "deallocationEvents": "2,266,720",
+      "liveCallTreeTotal": "757 (1.59M)",
+      "peakCallTreeTotal": "132876 (88.2M)",
+      "noStackBlocks": "816   total size: 183K",
+      "noStackVm": null,
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 746352,
+          "rssBytes": 7815168,
+          "peakRssBytes": 7815168,
+          "elapsedMs": 1
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2611024,
+          "rssBytes": 53411840,
+          "peakRssBytes": 105316352,
+          "elapsedMs": 1433
+        }
+      ],
+      "notablePeakStack": {
+        "blocks": 7994,
+        "size": "67.4M",
+        "stack": "markdownviews::tableRunes -> prepareSeqAddUninit -> system::alignedRealloc"
+      },
+      "capturedAt": "storage",
+      "binarySha256": "23ee0b15aaf6c7d8dbd55c6fb686bd45be39ae2670d9ad5350c185cf076eda6f"
+    },
+    {
+      "mode": "storage",
+      "count": 2000,
+      "version": "after",
+      "graph": "/tmp/merenda-utf8-profile/storage-2000-after.memgraph",
+      "liveReport": "/tmp/merenda-utf8-profile/storage-2000-after-live.txt",
+      "highReport": "/tmp/merenda-utf8-profile/storage-2000-after-high.txt",
+      "peakLiveHeapVm": "28.9 MB",
+      "currentLiveHeapVm": "1.5 MB",
+      "cumulativeHeapVm": "276.3 MB",
+      "allocationEvents": "2,111,186",
+      "deallocationEvents": "2,110,395",
+      "liveCallTreeTotal": "757 (1.59M)",
+      "peakCallTreeTotal": "94799 (28.9M)",
+      "noStackBlocks": "816   total size: 183K",
+      "noStackVm": null,
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 746352,
+          "rssBytes": 7815168,
+          "peakRssBytes": 7815168,
+          "elapsedMs": 1
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 9812816,
+          "rssBytes": 58556416,
+          "peakRssBytes": 58556416,
+          "elapsedMs": 2659
+        }
+      ],
+      "notablePeakStacks": [
+        {
+          "blocks": 1,
+          "size": "11.8M",
+          "stack": "markdownviews::renderTable -> markdownviews::add(string, attributes) -> prepareSeqAddUninit -> system::alignedRealloc"
+        },
+        {
+          "blocks": 1,
+          "size": "11.8M",
+          "stack": "markdownviews::add(builder, rendered) -> prepareSeqAddUninit -> system::alignedRealloc"
+        }
+      ],
+      "capturedAt": "storage",
+      "binarySha256": "6e6f869d74e467e27ea54d34d05a52b8d7955efdd0b96966004f62ed089ad266"
+    },
+    {
+      "mode": "view",
+      "count": 500,
+      "version": "before",
+      "graph": "/tmp/merenda-utf8-profile/view-500-before.memgraph",
+      "liveReport": "/tmp/merenda-utf8-profile/view-500-before-live.txt",
+      "highReport": "/tmp/merenda-utf8-profile/view-500-before-high.txt",
+      "peakLiveHeapVm": "293.5 MB",
+      "currentLiveHeapVm": "228.3 MB",
+      "cumulativeHeapVm": "43.49 GB",
+      "allocationEvents": "3,804,098",
+      "deallocationEvents": "3,736,122",
+      "liveCallTreeTotal": "67929 (229M)",
+      "peakCallTreeTotal": "71939 (294M)",
+      "noStackBlocks": "805   total size: 70K",
+      "noStackVm": "9   total size: 160K",
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 506736,
+          "rssBytes": 9011200,
+          "peakRssBytes": 9027584,
+          "elapsedMs": 1
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 254230848,
+          "rssBytes": 492044288,
+          "peakRssBytes": 492044288,
+          "elapsedMs": 12241
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 255440416,
+          "rssBytes": 492191744,
+          "peakRssBytes": 492191744,
+          "elapsedMs": 12275
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 353212896,
+          "rssBytes": 627998720,
+          "peakRssBytes": 627998720,
+          "elapsedMs": 25197
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 315041680,
+          "rssBytes": 637304832,
+          "peakRssBytes": 637304832,
+          "elapsedMs": 25244
+        }
+      ],
+      "notableLiveStack": {
+        "blocks": 10,
+        "size": "78.5M",
+        "stack": "harfbuzzy::resolveFallbacks -> initHarfbuzzFontInfos -> initHarfbuzzTypeface -> initBlob -> hb_blob_create -> hb_blob_t::try_make_writable"
+      },
+      "capturedAt": "firstRender",
+      "binarySha256": "23ee0b15aaf6c7d8dbd55c6fb686bd45be39ae2670d9ad5350c185cf076eda6f"
+    },
+    {
+      "mode": "view",
+      "count": 500,
+      "version": "after",
+      "graph": "/tmp/merenda-utf8-profile/view-500-after.memgraph",
+      "liveReport": "/tmp/merenda-utf8-profile/view-500-after-live.txt",
+      "highReport": "/tmp/merenda-utf8-profile/view-500-after-high.txt",
+      "peakLiveHeapVm": "284.3 MB",
+      "currentLiveHeapVm": "228.3 MB",
+      "cumulativeHeapVm": "43.4 GB",
+      "allocationEvents": "3,761,713",
+      "deallocationEvents": "3,693,731",
+      "liveCallTreeTotal": "67934 (229M)",
+      "peakCallTreeTotal": "69938 (284M)",
+      "noStackBlocks": "805   total size: 70K",
+      "noStackVm": "9   total size: 160K",
+      "targetStages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 489840,
+          "rssBytes": 8667136,
+          "peakRssBytes": 8667136,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 242968656,
+          "rssBytes": 462028800,
+          "peakRssBytes": 462028800,
+          "elapsedMs": 7557
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 243307824,
+          "rssBytes": 462438400,
+          "peakRssBytes": 462438400,
+          "elapsedMs": 7597
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 348908272,
+          "rssBytes": 589365248,
+          "peakRssBytes": 589365248,
+          "elapsedMs": 18344
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 308610208,
+          "rssBytes": 598736896,
+          "peakRssBytes": 598736896,
+          "elapsedMs": 18394
+        }
+      ],
+      "notableLiveStack": {
+        "blocks": 10,
+        "size": "78.5M",
+        "stack": "harfbuzzy::resolveFallbacks -> initHarfbuzzFontInfos -> initHarfbuzzTypeface -> initBlob -> hb_blob_create -> hb_blob_t::try_make_writable"
+      },
+      "capturedAt": "firstRender",
+      "binarySha256": "6e6f869d74e467e27ea54d34d05a52b8d7955efdd0b96966004f62ed089ad266"
+    }
+  ],
+  "checkpointHarnessSha256": "40cc040bc837f2e8ebee9f68031837c3b8c3d32797bcb17501bde574ba24ed68",
+  "sourceFilesSha256": {
+    "before": {
+      "src/merenda/nimkit/text/markdownviews.nim": "472acd148f87bff47e1d0b01e3de7f20ffff205551c6355044b2d6dc618a146f",
+      "src/merenda/nimkit/text/textlayout.nim": "de7fa28c29b44ced3361b49c1907e3bb7c5bd66c280d86ac66d9c25cc6428c05",
+      "src/merenda/nimkit/text/textlayoutworkers.nim": "0b820f927d017e61c2e3519a046207713669f808e522952482e13341566be54f",
+      "src/merenda/nimkit/text/textstorage.nim": "ae6807b7669b18995509cc67cd214a336cffeb20a064840d1916cfc5425b0eca"
+    },
+    "after": {
+      "src/merenda/nimkit/text/markdownviews.nim": "55fb62e4afe2f848e50ca67e3113b89c7ca543c5b562410551a073ea04d4312b",
+      "src/merenda/nimkit/text/textlayout.nim": "6661b51307d820cc9669a8895999f7506bf1ec98b34d429590aeb44e7ed60177",
+      "src/merenda/nimkit/text/textlayoutworkers.nim": "50d187b0de767fe523661ad8b45d682633e80c905e4d47e6d2f8eaf63a4d0e82",
+      "src/merenda/nimkit/text/textstorage.nim": "afb3c7f056644eec03f47a25f2585fc3e423699a4e7d4e2503956ccb690d8570"
+    }
+  },
+  "checkpointHarness": "tests/benchmarks/markdownallocationprobe.nim",
+  "captureDriver": "tests/benchmarks/capture_allocations.py"
+}

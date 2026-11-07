@@ -478,6 +478,20 @@ proc canCombineLineBreakLayouts(wrapped, unwrapped: GlyphArrangement): bool =
     wrapped.positions.len == unwrapped.positions.len and
     wrapped.selectionRects.len == unwrapped.selectionRects.len
 
+proc appendParagraphLayout(
+    target: var GlyphArrangement,
+    visited: var seq[bool],
+    lines: openArray[Slice[int]],
+    source: GlyphArrangement,
+) =
+  for line in lines:
+    target.lines.add line
+    for glyphIndex in line:
+      target.arrangedGlyphs[glyphIndex] = source.arrangedGlyphs[glyphIndex]
+      target.positions[glyphIndex] = source.positions[glyphIndex]
+      target.selectionRects[glyphIndex] = source.selectionRects[glyphIndex]
+      visited[glyphIndex] = true
+
 proc mixedLineBreakLayout(
     wrapped, unwrapped: GlyphArrangement, storage: TextStorage
 ): GlyphArrangement =
@@ -498,19 +512,10 @@ proc mixedLineBreakLayout(
   var visited = newSeq[bool](wrapped.arrangedGlyphs.len)
 
   for paragraphIndex, mode in modes:
-    let selectedLines =
-      if mode == tlbmClipping:
-        unwrappedLines[paragraphIndex]
-      else:
-        wrappedLines[paragraphIndex]
-    let source = if mode == tlbmClipping: unwrapped else: wrapped
-    for line in selectedLines:
-      result.lines.add line
-      for glyphIndex in line:
-        result.arrangedGlyphs[glyphIndex] = source.arrangedGlyphs[glyphIndex]
-        result.positions[glyphIndex] = source.positions[glyphIndex]
-        result.selectionRects[glyphIndex] = source.selectionRects[glyphIndex]
-        visited[glyphIndex] = true
+    if mode == tlbmClipping:
+      result.appendParagraphLayout(visited, unwrappedLines[paragraphIndex], unwrapped)
+    else:
+      result.appendParagraphLayout(visited, wrappedLines[paragraphIndex], wrapped)
 
   for wasVisited in visited:
     if not wasVisited:

@@ -1,4 +1,4 @@
-import std/[algorithm, hashes, options, sets, unicode]
+import std/[algorithm, hashes, isolation, options, sets, unicode]
 
 import sigils/[core, threads]
 import threading/smartptrs
@@ -10,6 +10,7 @@ import ../foundation/mainthreadwork
 import ../foundation/selectors
 import ../responder/responders
 import ./textstorage
+import ./textsnapshots
 import ./textlayoutworkers
 import ./textlayouttypes
 export textlayouttypes
@@ -39,6 +40,10 @@ type
     snapshot*: TextLayoutSnapshot
     arrangement: GlyphArrangement
     fontRefs: seq[FontRef]
+
+  TextLayoutRetirementTicket* = object
+    scheduled: uint64
+    inFlight: uint64
 
   TextLayoutManager* = ref object of DynamicAgent
     xTextStorage: TextStorage
@@ -70,7 +75,9 @@ type
     xCanUseBackgroundLayout: bool
     xBackgroundGeneration: uint64
     xPendingBackgroundGeneration: uint64
-    xBackgroundSchedulePending: bool
+    xBackgroundScheduleId: uint64
+    xNextBackgroundScheduleId: uint64
+    xOutstandingBackgroundSchedules: seq[uint64]
     xBackgroundWorker: AgentProxy[TextLayoutWorker]
     xSnapshotThreadId: int
 
@@ -78,6 +85,78 @@ proc xLayout(manager: TextLayoutManager): lent GlyphArrangement {.inline.} =
   if manager.xSharedLayout.isNil:
     return manager.xMutableLayout
   return manager.xSharedLayout[]
+
+proc addContainerPayload(estimate: var TextPayloadEstimate, container: TextContainer) =
+  estimate.addTextPayloadBytes(container.exclusionPaths.len * sizeof(Rect))
+
+proc addArrangementPayload(
+    estimate: var TextPayloadEstimate, layout: GlyphArrangement
+) =
+  # Immutable glyph-range views can themselves point at a shared arrangement.
+  if not layout.shared.isNil:
+    let identity = cast[pointer](unsafeAddr(layout.shared[]))
+    if estimate.claimTextPayloadOwner(tpoLayout, identity):
+      estimate.addArrangementPayload(layout.shared[])
+  estimate.addTextPayloadBytes(layout.lines.len * sizeof(Slice[int]))
+  estimate.addTextPayloadBytes(layout.spans.len * sizeof(Slice[int]))
+  estimate.addTextPayloadBytes(layout.fonts.len * sizeof(GlyphFont))
+  estimate.addTextPayloadBytes(layout.spanColors.len * sizeof(Fill))
+  estimate.addTextPayloadBytes(layout.arrangedGlyphs.len * sizeof(ArrangedGlyph))
+  estimate.addTextPayloadBytes(layout.positions.len * sizeof(layout.positions[0]))
+  estimate.addTextPayloadBytes(layout.selectionRects.len * sizeof(Rect))
+  estimate.addUtf8RunesPayload(layout.sourceRunes)
+  estimate.addUtf8RunesPayload(layout.runes)
+
+proc addTextLayoutPayload*(
+    estimate: var TextPayloadEstimate, manager: TextLayoutManager
+) =
+  ## Count existing logical layout payload without performing layout or copying
+  ## glyph arrays. Storage is counted separately by addTextStoragePayload.
+  ## Fonts, native resources and custom backend/client state remain unknown.
+  if manager.isNil:
+    return
+  estimate.incomplete = true
+  if not estimate.claimTextPayloadOwner(tpoLayoutManager, cast[pointer](manager)):
+    return
+  estimate.addArrangementPayload(manager.xMutableLayout)
+  if not manager.xSharedLayout.isNil:
+    let identity = cast[pointer](unsafeAddr(manager.xSharedLayout[]))
+    if estimate.claimTextPayloadOwner(tpoLayout, identity):
+      estimate.addArrangementPayload(manager.xSharedLayout[])
+  estimate.addTextPayloadBytes(manager.xFontRefs.len * sizeof(FontRef))
+  estimate.addContainerPayload(manager.xTextContainer)
+  estimate.addTextPayloadBytes(manager.xTextContainers.len * sizeof(TextContainer))
+  for index in 0 ..< manager.xTextContainers.len:
+    estimate.addContainerPayload(manager.xTextContainers[index])
+  estimate.addTextPayloadBytes(manager.xSnapshot.containers.len * sizeof(TextContainer))
+  for index in 0 ..< manager.xSnapshot.containers.len:
+    estimate.addContainerPayload(manager.xSnapshot.containers[index])
+  estimate.addTextPayloadBytes(manager.xSnapshot.containerRects.len * sizeof(Rect))
+  estimate.addTextPayloadBytes(
+    manager.xSnapshot.lineFragments.len * sizeof(TextLineFragment)
+  )
+  estimate.addTextPayloadBytes(manager.xInvalidatedRanges.len * sizeof(TextRange))
+  estimate.addTextPayloadBytes(manager.xInvalidatedGlyphRanges.len * sizeof(GlyphRange))
+  estimate.addTextPayloadBytes(
+    manager.xInvalidatedContainers.len * sizeof(TextContainerIndex)
+  )
+  estimate.addTextPayloadBytes(
+    manager.xInvalidations.len * sizeof(TextLayoutInvalidation)
+  )
+  estimate.addTextPayloadBytes(
+    manager.xGlyphProperties.len * sizeof(TextGlyphPropertyRun)
+  )
+  estimate.addTextPayloadBytes(
+    manager.xTemporaryAttributes.len * sizeof(TextAttributeRun)
+  )
+  for index in 0 ..< manager.xTemporaryAttributes.len:
+    estimate.addTextAttributesPayload(manager.xTemporaryAttributes[index].attributes)
+  estimate.addTextPayloadBytes(manager.xTextStyle.fontName.len)
+  estimate.addTextPayloadBytes(string(manager.xTextStyle.language).len)
+  estimate.addTypefaceDescriptorPayload(manager.xTextStyle.fontFace)
+  estimate.addTypefaceDescriptorPayload(manager.xTextStyle.italicFontFace)
+  estimate.addTypefaceDescriptorPayload(manager.xTextStyle.boldFontFace)
+  estimate.addTypefaceDescriptorPayload(manager.xTextStyle.boldItalicFontFace)
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
@@ -117,6 +196,12 @@ proc updateLayout*(manager: TextLayoutManager)
 proc textRangeForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): TextRange
 
 protocol TextLayoutEvents:
+  proc backgroundLayoutWorkProgress*(manager: TextLayoutManager) {.signal.}
+
+  proc backgroundLayoutRetired*(
+    manager: TextLayoutManager, generation: uint64, failed: bool, errorMessage: string
+  ) {.signal.}
+
   proc layoutDidInvalidate*(
     manager: TextLayoutManager, ranges: seq[TextRange]
   ) {.signal.}
@@ -562,16 +647,28 @@ proc initTextLayoutManagerFields*(
   manager.xBackend = newFigDrawTextTypesetter()
   manager.observeTextStorage(storage)
 
-proc ensureBackgroundWorker(manager: TextLayoutManager) =
-  if not manager.xBackgroundWorker.isNil:
-    return
-  manager.xBackgroundWorker = newTextLayoutWorker(workerLayoutSnapshot)
+proc installBackgroundWorker(
+    manager: TextLayoutManager, snapshotBuilder: TextLayoutSnapshotBuilder
+) =
+  manager.xBackgroundWorker = newTextLayoutWorker(snapshotBuilder)
   connectThreaded(
     manager.xBackgroundWorker,
     textLayoutFinished,
     manager,
     TextLayoutManager.completeBackgroundTextLayout(),
   )
+
+proc ensureBackgroundWorker(manager: TextLayoutManager) =
+  if manager.xBackgroundWorker.isNil:
+    manager.installBackgroundWorker(workerLayoutSnapshot)
+
+when defined(merendaTests):
+  proc setBackgroundSnapshotBuilderForTest*(
+      manager: TextLayoutManager, builder: TextLayoutSnapshotBuilder
+  ) =
+    if not manager.xBackgroundWorker.isNil:
+      raise newException(ValueError, "background worker already exists")
+    manager.installBackgroundWorker(builder)
 
 proc newTextLayoutManager*(
     storage: TextStorage = nil,
@@ -728,9 +825,37 @@ proc `usesBackgroundLayout=`*(manager: TextLayoutManager, value: bool) =
   if not value:
     manager.xCanUseBackgroundLayout = false
 
+proc hasInFlightBackgroundLayout*(manager: TextLayoutManager): bool =
+  ## Whether a source-bearing background request awaits its terminal result.
+  not manager.isNil and manager.xPendingBackgroundGeneration != 0
+
+proc retireBackgroundLayoutWork*(
+    manager: TextLayoutManager
+): TextLayoutRetirementTicket =
+  ## Invalidate current work and capture only the requests that must drain.
+  if manager.isNil:
+    return
+  result.scheduled = manager.xBackgroundScheduleId
+  result.inFlight = manager.xPendingBackgroundGeneration
+  manager.xBackgroundScheduleId = 0
+  inc manager.xBackgroundGeneration
+  manager.xCanUseBackgroundLayout = false
+
+proc isBackgroundLayoutRetirementPending*(
+    manager: TextLayoutManager, ticket: TextLayoutRetirementTicket
+): bool =
+  ## Test the captured work independently of later requests on this manager.
+  if manager.isNil:
+    return
+  (
+    ticket.scheduled != 0 and ticket.scheduled in manager.xOutstandingBackgroundSchedules
+  ) or (
+    ticket.inFlight != 0 and ticket.inFlight == manager.xPendingBackgroundGeneration
+  )
+
 proc isBackgroundLayoutPending*(manager: TextLayoutManager): bool =
   ## Return whether a cached layout is visible while replacement reflow is pending.
-  manager.xBackgroundSchedulePending or manager.xPendingBackgroundGeneration != 0 or
+  manager.xBackgroundScheduleId != 0 or manager.xPendingBackgroundGeneration != 0 or
     (not manager.xHasLayout and manager.xCanUseBackgroundLayout)
 
 proc allowsNonContiguousLayout*(manager: TextLayoutManager): bool =
@@ -1106,27 +1231,20 @@ proc startBackgroundTextLayout(manager: TextLayoutManager) =
   if manager.xPendingBackgroundGeneration != 0:
     return
   manager.ensureBackgroundWorker()
+  if manager.xBackgroundGeneration == 0:
+    inc manager.xBackgroundGeneration
   let
     request = manager.layoutRequest()
     containers = request.effectiveContainers()
     layoutRect = containers.virtualLayoutRect()
     generation = manager.xBackgroundGeneration
-    source =
-      if request.storage.isNil:
-        ""
-      else:
-        request.storage.stringValue()
-    runs =
-      if request.storage.isNil:
-        @[]
-      else:
-        request.storage.attributeRuns()
+  var sourceValue = request.storage.textLayoutSource()
+  let source = newConstPtr(unsafeIsolate(move sourceValue))
   manager.xPendingBackgroundGeneration = generation
   emit manager.xBackgroundWorker.requestTextLayout(
     generation,
     layoutRect,
     source,
-    runs,
     request.style,
     request.alignment,
     request.wraps or containers.anyContainerWraps(),
@@ -1136,16 +1254,27 @@ proc startBackgroundTextLayout(manager: TextLayoutManager) =
   )
 
 proc scheduleBackgroundTextLayout(manager: TextLayoutManager) =
-  if manager.xPendingBackgroundGeneration != 0 or manager.xBackgroundSchedulePending:
+  if manager.xPendingBackgroundGeneration != 0 or manager.xBackgroundScheduleId != 0:
     return
-  manager.xBackgroundSchedulePending = true
+  inc manager.xNextBackgroundScheduleId
+  if manager.xNextBackgroundScheduleId == 0:
+    inc manager.xNextBackgroundScheduleId
+  let scheduleId = manager.xNextBackgroundScheduleId
+  manager.xBackgroundScheduleId = scheduleId
+  manager.xOutstandingBackgroundSchedules.add scheduleId
   var
     observedGeneration = manager.xBackgroundGeneration
     stableFrames = 0
   scheduleMainThreadWork(
     proc(): bool =
-      if not manager.xUsesBackgroundLayout or not manager.xCanUseBackgroundLayout:
-        manager.xBackgroundSchedulePending = false
+      if manager.xBackgroundScheduleId != scheduleId or not manager.xUsesBackgroundLayout or
+          not manager.xCanUseBackgroundLayout:
+        if manager.xBackgroundScheduleId == scheduleId:
+          manager.xBackgroundScheduleId = 0
+        let index = manager.xOutstandingBackgroundSchedules.find(scheduleId)
+        if index >= 0:
+          manager.xOutstandingBackgroundSchedules.delete(index)
+        emit manager.backgroundLayoutWorkProgress()
         return
       if observedGeneration != manager.xBackgroundGeneration:
         observedGeneration = manager.xBackgroundGeneration
@@ -1154,21 +1283,41 @@ proc scheduleBackgroundTextLayout(manager: TextLayoutManager) =
       inc stableFrames
       if stableFrames < 2:
         return true
-      manager.xBackgroundSchedulePending = false
+      manager.xBackgroundScheduleId = 0
+      let index = manager.xOutstandingBackgroundSchedules.find(scheduleId)
+      if index >= 0:
+        manager.xOutstandingBackgroundSchedules.delete(index)
       manager.startBackgroundTextLayout()
+      emit manager.backgroundLayoutWorkProgress()
   )
 
 proc completeBackgroundTextLayout(
     manager: TextLayoutManager, layoutResultBox: SharedPtr[TextLayoutWorkerResult]
 ) {.slot.} =
   var layoutResult = move layoutResultBox[]
-  if layoutResult.generation == manager.xPendingBackgroundGeneration:
-    manager.xPendingBackgroundGeneration = 0
+  let retired =
+    layoutResult.generation == manager.xPendingBackgroundGeneration and
+    manager.xPendingBackgroundGeneration != 0
+  if not retired:
+    return
+  manager.xPendingBackgroundGeneration = 0
+  defer:
+    emit manager.backgroundLayoutRetired(
+      layoutResult.generation, layoutResult.failed, layoutResult.errorMessage
+    )
+    emit manager.backgroundLayoutWorkProgress()
   if layoutResult.generation != manager.xBackgroundGeneration or
       not manager.xUsesBackgroundLayout or not manager.xCanUseBackgroundLayout:
     if manager.xUsesBackgroundLayout and manager.xCanUseBackgroundLayout and
         manager.xPendingBackgroundGeneration == 0:
       manager.scheduleBackgroundTextLayout()
+    return
+
+  if layoutResult.failed:
+    # Keep a previously completed layout visible, but do not automatically
+    # retry this failed generation or apply its partial worker output.
+    manager.xHasLayout = manager.xHasCachedLayout
+    manager.xCanUseBackgroundLayout = false
     return
 
   manager.xLayoutRect = manager.effectiveContainers().virtualLayoutRect()
@@ -1188,6 +1337,12 @@ proc completeBackgroundTextLayout(
       snapshot = manager.snapshotFromCurrentLayout()
       arrangement = move manager.xMutableLayout
     manager.finishLayout(move arrangement, move snapshot, move fontRefs)
+
+when defined(merendaTests):
+  proc deliverBackgroundLayoutResultForTest*(
+      manager: TextLayoutManager, layoutResult: sink TextLayoutWorkerResult
+  ) =
+    manager.completeBackgroundTextLayout(newSharedPtr(unsafeIsolate(layoutResult)))
 
 proc defaultUpdateLayout(manager: TextLayoutManager) =
   manager.applyClientInputs()
@@ -1671,16 +1826,27 @@ proc defaultGlyphProperties(
   if manager.xTextStorage.isNil:
     return
 
-  var text: Utf8Runes
+  let index = int(textRange.location)
+  var
+    value: Rune
+    found = false
   if manager.xHasLayout and not manager.xTextStorage.hasPendingEdit() and
       not manager.xLayout.sourceRunes.isNil:
-    text = manager.xLayout.sourceRunes
+    let text = manager.xLayout.sourceRunes
+    if index < text.len:
+      value = text[index]
+      found = true
   else:
-    text = utf8RunesForText(manager.xTextStorage.stringValue())
-  let index = int(textRange.location)
-  if index < 0 or index >= text.len:
+    var position = 0
+    for rune in manager.xTextStorage.stringValue().runes:
+      if position == index:
+        value = rune
+        found = true
+        break
+      inc position
+  if not found:
     return {gpNull}
-  case text[index]
+  case value
   of Rune('\n'), Rune('\r'), Rune('\t'):
     result.incl gpControl
   of Rune(' '):

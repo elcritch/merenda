@@ -1,20 +1,54 @@
 # TODO: Reduce text memory in NimKit and Kosmo
 
-Source review: 2026-09-23. This file tracks remaining work. Completed changes
-are summarized in [CHANGES.md](CHANGES.md); their measured results are below.
+Source review and profiling: 2026-11-06, against Merenda `24896588` and the same
+Atlas dependency tree. The first implementation batches are committed separately
+on `utf8-memory-followups`; current allocation profiles and historical results
+are distinguished below. Completed changes are summarized in [CHANGES.md](CHANGES.md).
 NimKit stores UTF-8 in shared immutable snapshots with sparse indexes and
 compact style IDs. Editing ranges remain rune-based; tokenizer and layout
 endpoints can use byte ranges. Build further optimizations on these facilities.
+
+Accept changes that reduce rich-text memory or keep it effectively unchanged
+while making the UTF-8 API more consistent. Verify equivalent text workloads
+before and after each change; investigate increases in retained heap or peak
+memory rather than assuming fewer copies imply lower total memory. Use Markdown
+views and attributed-text reflows to exercise the public text APIs.
+
+## Current status
+
+The UTF-8/storage foundation and all four checked layout-resource changes below
+are implemented. Most remaining reductions in source, undo, worker, and preview
+memory are still open. Checkbox counts are not an estimate of implementation
+effort: this document already excluded much of the completed foundation.
+
+| Area | Status from current source |
+| --- | --- |
+| Shared UTF-8 snapshots, sparse indexes, compact style IDs | Implemented; retain existing behavior |
+| Shared glyph-range layouts and viewport drawing | Four listed tasks complete; full layout still retained |
+| SynEdit incremental tokenization | Single-line fast path only; multiline/custom paths still open |
+| SynEdit tokenizer source ownership | Scoped borrow implemented; an 8 MiB copy is absent in allocation stacks |
+| Background layout requests | Compact interned payload implemented; source caching deferred pending a reliable memory benefit |
+| Edit history | Attributed deltas for ordinary internal-storage edits; conservative snapshot fallbacks and budget work remain |
+| Markdown tables and embedded storage | UTF-8 cell ranges and compact styles implemented; compatible child text shares immutable parent segments |
+| Markdown preview lifecycle | Compatible panes share parsed documents; inactive previews and offscreen child views can release reconstructible state under a soft byte budget |
+| Terminal search | Compact row/exception mapping implemented on this branch; full search text and match list remain |
+| Kosmo Matter | Streaming columns and latest-request handoff implemented; broader source reuse and aggregate byte budgets remain open |
+| Git Diff | Patch ownership duplication remains; existing payload/cache limits are retained |
+
+Implementation on branch `utf8-memory-followups` also covers compact builder
+styles, borrowed tokenization input, streaming text queries, Matter column
+mapping, ordinary edit-history deltas, and unchanged-preview version gating.
+The detailed checklist records validation and remaining work below.
 
 ## Priorities
 
 | Priority | Work | Main benefit |
 | --- | --- | --- |
-| 1 | Stream Kosmo terminal search | Avoid expanding all scrollback into coordinate records |
-| 2 | Preserve snapshots across layout worker requests | Avoid source copies and expanded attribute runs |
-| 2 | Compact Markdown tables and share embedded text | Reduce render peaks and duplicate retained text |
+| 1 | Stream/bound Kosmo terminal search | Avoid a full search subject and unbounded match list |
+| 2 | Measure compact layout payload reuse | Verify reflow allocation savings and revision-overlap memory |
+| 2 | Measure embedded-view allocator and native costs further | Explain process-memory variation despite smaller logical payloads |
 | 2 | Reduce Kosmo Matter and Git Diff source duplication | Bound worker and document working sets |
-| 3 | Use edit deltas/chunks and share layout geometry | Larger structural reductions for long documents |
+| 3 | Extend undo deltas/budgets and evaluate chunks | Larger structural reductions for long documents |
 
 Priorities are estimates from the code paths, not measured rankings. Distinguish
 retained memory, transient peak memory, and allocation traffic when evaluating
@@ -43,10 +77,13 @@ applySyntaxHighlightingForEdit and the built-in tokenizer cache.
 Evidence: [syneditviews.nim](src/merenda/nimkit/text/syneditviews.nim),
 SynEditHighlightBuffer and tokenSpans.
 
-- [ ] Check whether `SynEditHighlightBuffer.source` still copies the input
-  string. The 8 MiB tokenizer sample retains about 8 MiB after conversion;
-  borrow the source through tokenizer parameters if this is the remaining copy,
-  and remeasure without introducing an unsafe pointer lifetime.
+- [x] Inspect source ownership: the previous `SynEditHighlightBuffer.source`
+  assignment copied an owning string under ARC.
+- [x] Borrow the source for synchronous tokenization and byte-to-rune span
+  conversion. The buffer is local to `internalTokenSpans` and cannot outlive the
+  source parameter; returned spans own no source references. Dynamic temporary
+  input and malformed UTF-8 coverage pass. ARC expansion and allocator stacks
+  confirm removal of the 8 MiB copy; retained allocation size is unchanged.
 
 ## Preserve compact input across background layout
 
@@ -55,17 +92,31 @@ startBackgroundTextLayout;
 [textlayoutworkers.nim](src/merenda/nimkit/text/textlayoutworkers.nim),
 requestTextLayout.
 
-- [ ] Replace the worker request's string plus seq[TextAttributeRun] with
-  immutable source, compact runs, and an immutable style table. The caller
-  exports stringValue() and expands every stored style ID through
-  attributeRuns(); the worker copies these into locals and rebuilds storage,
-  indexes, and style interning.
-- [ ] Define safe ownership for the complete payload. Ordinary ARC ref sharing
+- [x] Replace the worker request's string plus seq[TextAttributeRun] with
+  a detached compact value payload. The implementation on this branch carries
+  UTF-8 bytes, style-ID runs, and an interned style table via `TextLayoutSource`;
+  worker storage is reconstructed without expanded runs or style re-interning.
+- [x] Define safe ownership for the complete payload. Ordinary ARC ref sharing
   across threads is not made safe merely by immutable bytes. Use the project's
-  transfer/shared-owner facilities, or one deliberate worker-owned copy per
-  character revision that can be reused across reflows.
-- [ ] Reuse worker source state for width/style-only changes. Retain the existing
-  one-pending-request/coalescing behavior and stale-generation checks.
+  transfer/shared-owner facilities. This branch transfers detached values via
+  `ConstPtr`, releases the payload after processing, and retains worker-local
+  storage.
+- [ ] Reuse worker source state for width-only reflows only after demonstrating
+  a reliable memory benefit. A token-based cache was profiled and removed from
+  the selected implementation: live heap was close to baseline, but RSS peaks
+  were variable and did not establish an improvement. The selected version
+  transfers compact data and constructs worker-local storage for every request.
+  Preserve one-pending-request coalescing and stale-generation checks.
+- [x] Measure the selected compact payload across repeated width reflows and a
+  style revision; keep raw samples in
+  [text-reflow-memory-2026-11-06.json](tests/benchmarks/results/text-reflow-memory-2026-11-06.json).
+  Live heap remained close to baseline. UTF-8 indexes are rebuilt in worker-local
+  storage, not transferred from the UI. This is not shared snapshot identity
+  across threads, and source caching remains deferred.
+- [x] Avoid populating a gap storage's cached text snapshot when preparing a
+  worker payload. `storageString()` preserves custom overrides and avoids
+  retaining another full UI-side UTF-8 buffer. An 8 MiB gap-source control
+  benchmark confirms the extra cache costs about 8.36 MiB of retained heap.
 
 ## Reduce edit-history storage with deltas or shared chunks
 
@@ -74,101 +125,186 @@ xMarkedUndoStorage, and grouped undo;
 [textstorage.nim](src/merenda/nimkit/text/textstorage.nim), replaceStorageText
 and applySnapshot.
 
-- [ ] Store removed/inserted text, affected style ranges, and selection state
-  in undo records instead of entire before/after storages.
+- [x] Store removed/inserted text, affected style ranges, and selection state
+  for ordinary string edits to internally owned base storage. Validate text,
+  style and storage identity across callbacks before accepting a delta.
+  Adjacent grouped edits preserve earlier compatible deltas, and discarded
+  redo history is released before any fallback materialization.
+- [ ] Extend deltas where safe beyond ordinary internal-storage edits.
+  Grouped/IME edits, attributed insertion, external/gap/custom storage,
+  overlapping or sparse styles, and undo-manager/delegate paths conservatively
+  retain snapshots. Preserve their existing behavior and observer semantics.
 - [ ] Coalesce typing and composition edits, and support an undo byte budget.
+  Explicit `beginUndoGrouping`/`endUndoGrouping` and marked-text grouping already
+  exist; they still record complete `storageBefore`/`storageAfter` values.
 - [ ] Evaluate persistent chunks or a piece table for large editable documents.
   Sharing snapshots makes copies of an unchanged revision cheap; it does not
   share unchanged portions between character revisions. Ordinary replacement
-  still slices/concatenates a complete new string and rebuilds its indexes.
+  still builds a complete new string and rebuilds its indexes.
+- [x] Reduce flat replacement temporaries without changing backend dispatch or
+  snapshot aliasing. Replacement copies prefix, insertion and suffix directly
+  into one final buffer, with overflow/empty guards and retained input owners.
+  The shared NimKit runner and focused ASan/UBSan checks pass both backends
+  and borrowed-input cases.
 - [ ] Keep gap storage's compact mutable representation where useful; switching
   every TextView to gap storage alone does not solve history copies.
+
+Matched allocator traces over an 8 MiB source show 32 ordinary edits reducing
+logged current heap/VM from 309.8 MB to 47.8 MB with deltas and peak from
+317.8 MB to 64 MB. The subsequent single-buffer replacement keeps current at
+47.8 MB, lowers peak to 56 MB, and reduces cumulative allocation from 621.8 MB
+to 365.8 MB. Undo-disabled controls also retain 47.8 MB, with peak falling from
+63.9 MB to 55.9 MB.
+
+Replay still reconstructs flat strings. Single-buffer replacement reduces
+cumulative allocation for 32 edits plus undo from 1.11 GB to 628 MB, and plus
+redo from 1.62 GB to 890.2 MB. Snapshot history used about 622 MB cumulatively
+for these workloads, so undo replay is close but redo still allocates more;
+persistent chunks remain a separate structural task. These are single traced
+samples in Apple tool units, not document-only sizes or RSS. See the
+[matched edit allocation evidence](tests/benchmarks/results/text-edit-allocations-2026-11-06.json).
 
 ## Compact Markdown table rendering
 
 Evidence: [markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
-MarkdownTableRune, tableRunes, wrapTableCell, and renderTable.
+MarkdownTableCell, wrapTableCell, and renderTable.
 
-- [ ] Represent cell text as UTF-8 plus style runs/IDs, attachments as sparse
-  ranges, and wrapped lines as boundaries into cell text.
-- [ ] Remove full TextAttributes, image references, and image sizes from each
-  ordinary rune. Wrapping currently builds nested sequences of these records
-  for cells, words, and lines.
-- [ ] Build overflowing table storage independently or from a shared range.
-  Constructing storage from builder.text/builder.runs before sliceTextStorage
-  currently copies/indexes the entire rendered prefix just to extract a table.
+- [x] Represent cell text as UTF-8 plus style runs, attachments as sparse
+  ranges, and wrapped words as boundaries into cell text. Full attributes remain
+  once per style run, so builder-wide style interning remains a separate task
+  below.
+- [x] Remove full TextAttributes, image references, and image sizes from each
+  ordinary rune. This branch removes `MarkdownTableRune` and stores word ranges
+  in wrapped lines.
+- [x] Build overflowing table storage independently. This branch slices only
+  table bytes and clips relevant runs before constructing storage, avoiding
+  full-prefix storage/index construction.
 
 These per-rune table records are rendering temporaries, not permanently retained
 by MarkdownView. The primary gain is lower rendering/resize peak memory and
-allocation traffic; embedded table storage is a separate retained cost.
+allocation traffic. Compatible embedded table storage now shares immutable
+parent segments; unmatched content retains an independent fallback.
 
 ## Share Markdown children and budget preview caches
 
 Evidence: [markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
 MarkdownBuilder, code-block rendering, xMarkdownRoot, and xMatterHighlights;
 [markdownparsing.nim](src/merenda/nimkit/text/markdownparsing.nim),
-highlightCodeBlocks;
+continueMarkdownHighlight;
 [application_editor.nim](src/merenda/kosmo/application_editor.nim),
 syncSelectedEditorContent and markdownViewForBuffer.
 
-- [ ] Add immutable storage range views for embedded code/table text. Code
-  blocks retain child storage and append the same bytes into the main document.
-  Include a stable style table and range origin in the view; borrowing mutable
-  storage style IDs is insufficient.
-- [ ] Intern builder attributes while building instead of keeping full
-  TextAttributeRun payloads until final storage construction.
-- [ ] Key code-block highlights by document generation and block ID/range,
-  with optional collision-checked content deduplication. The current table
-  retains complete code strings in (source, language) keys alongside the AST
-  and rendered storages. Return borrowed spans when their lifetime allows it.
-- [ ] Lazily materialize embedded layouts, and consider releasing reconstructible
-  AST/render state for inactive previews. Preserve heading folding and resize
-  behavior that currently reuse the AST.
-- [ ] Budget Kosmo Markdown previews by retained bytes as well as count. A
-  three-preview limit already exists; three large ASTs, layouts, images, and
-  storages can still be expensive, especially across panes.
-- [ ] Gate preview synchronization by Moe buffer content version before calling
+- [x] Share immutable source ranges for embedded code/table text when their
+  complete mapped content matches the parent. Segmented ranges cover nested
+  quote and list prefixes; unsafe or mismatched mappings retain the independent
+  storage fallback. Child-local styles and edits remain independent.
+- [x] Intern builder attributes while building instead of keeping full
+  TextAttributeRun payloads until final storage construction. `TextRunBuilder`
+  transfers compact runs and a stable palette into storage; builder merges
+  remap styles once, and range-only lookups do not copy attributes. The separate
+  builder batch passes the shared NimKit runner and allocation verification.
+- [x] Key code-block highlights by generation-scoped AST block identity.
+  The parse worker deduplicates equal source/language pairs with full equality,
+  then sends compact per-block indices; the view retains token identities and
+  neutral spans rather than complete source/language keys. Worker-owned source
+  strings remain until their highlight job completes or is cancelled. In a
+  2,883,958-byte, 16-unique-block structure-only fixture, three untraced paired
+  runs had median live malloc heap 86,230,608 → 83,000,656 bytes. The traced
+  baseline retains 32 tuple-string copies / 3.00M under parse completion;
+  the new pointer-index table retains 2.00K. Rendering and highlighting were
+  deliberately still queued; this does not claim a whole-view saving or reduced
+  parser allocation traffic. See [key memory evidence](tests/benchmarks/results/markdown-code-keys-memory-2026-11-06.json).
+- [ ] Return borrowed highlight spans when their lifetime permits it.
+- [x] Lazily create embedded code/table views and their secondary layouts near
+  the buffered viewport. Fitting code blocks reuse parent geometry without
+  creating an embedded view. See `layoutMarkdownCodeBlocks`,
+  `layoutMarkdownCodeBlock`, and `layoutMarkdownTables`, plus the existing tests
+  "fitting code blocks do not allocate embedded text views" and "offscreen code
+  and table scroll views are created near the viewport" in
+  [markdownviews.nim](tests/nimkit/markdownviews.nim).
+- [x] Release inactive preview render state and offscreen embedded views while
+  preserving folds, selection and scroll state. Pending parser and layout work
+  remains charged through retirement receipts until acknowledgement.
+- [x] Add a controller-wide soft retained-payload budget alongside the existing
+  per-pane count limit. Visible previews and pending work remain pinned; unknown
+  native, shared font and renderer resources are explicitly incomplete, so this
+  is not an RSS or hard process-memory cap.
+- [x] Gate preview synchronization by Moe buffer content version before calling
   bufferText(). It builds a complete string before markdown= can reject an
-  unchanged value. Share immutable document data across panes where feasible.
+  unchanged value. Six focused tests cover refresh, selection, style, reload,
+  and close/reopen behavior. Allocator stacks show 120 source-extraction
+  allocations / 9,004,480 bytes across 20 unchanged refreshes before the gate
+  and none after initial setup with the gate. Global traced peak stays
+  183.8 MB; this isolates extraction rather than full-preview layout costs.
+- [x] Share built-in Markdown source, AST and neutral Matter spans between
+  compatible panes using an explicit per-document owner. Custom parser and
+  highlighter paths retain independent behavior.
 
 ## Stream Kosmo terminal search
 
 Evidence: [terminalsearch.nim](src/merenda/kosmo/terminalsearch.nim),
-TerminalSearchGlyph, terminalSearchGlyphs, and terminalSearchMatches.
+TerminalSearchSnapshot, terminalSearchSnapshot, and terminalSearchMatches.
 
+- [x] Replace per-character glyph-coordinate records with compact mappings.
+  This branch retains UTF-8 search text, one record per row, and sparse exceptions
+  for wide/combining cells. The eight terminal-search tests pass, including
+  combining cells, regex boundaries, and refreshed output.
 - [ ] Search line/cell iterators directly with a streaming matcher and only
-  enough source-coordinate history for a match. Each query builds a sequence
-  containing a rune and two terminal positions for every character in the
-  entire screen and scrollback, including blank cells.
+  enough source-coordinate history for a match. The current regex/literal
+  adapter still requires a complete search subject, including blank cells.
 - [ ] Decode compact scrollback incrementally instead of keeping an expanded
   coordinate record for every rune. Retain only matched ranges, or offer a
   bounded/lazy match index for queries with very many matches.
-- [ ] Preserve matching across soft wraps, hard newlines, wide-cell continuation
+- [x] Preserve matching across soft wraps, hard newlines, wide-cell continuation
   markers, combining sequences, and case normalization. Invalidate results on
-  scrollback eviction/reset so row coordinates remain meaningful.
+  scrollback eviction/reset so row coordinates remain meaningful. Navigation
+  refreshes the search snapshot before revealing a match; matching still uses
+  the existing normalization/search implementation.
 
 This is separate from terminal rendering, which already stores only viewport
-rows in MonoText; the search path is what expands the whole history.
+rows in MonoText. Compact mapping removes dense coordinates but the search
+subject still spans the whole history.
 
 ## Reduce Kosmo Matter request and line allocations
 
 Evidence: [moe.nim](src/merenda/kosmo/moe.nim), scheduleMatterHighlighting;
 [matterworkers.nim](src/merenda/kosmo/matterworkers.nim), requestMatterHighlight,
-highlightMatter, runeColumns, and addLineSegments.
+continueMatterHighlight, runeColumns, and addLineSegments.
 
+- [x] Iterate line ranges and materialize only the current tokenizer line.
+  `MatterHighlightJob` keeps `source` and `lineStart`; `continueMatterHighlight`
+  searches for the next newline and slices one line per iteration, with bounded
+  batches and cancellation checks. It no longer splits the full document into
+  a retained sequence of line strings.
 - [ ] Reuse an immutable source per buffer content version, or send changed
-  lines with lexical-state checkpoints. Each new request calls getTextString()
-  and the worker then splits the full source into owned line strings. Iterate
-  line ranges and materialize only the current tokenizer line if its API
-  requires a string.
-- [ ] Coalesce superseded requests before transferring their source payloads
-  and bound queued source bytes. Cancellation already exists and prevents
-  stale work from publishing, but an enqueued cancelled request still owns its
-  payload until consumed. Keep buffer/version checks and worker-local grammar
-  state.
-- [ ] Convert sorted Matter span endpoints to rune columns with a cursor instead
-  of allocating runeColumns per line. This is lower priority than the
-  whole-document maps: parsing already has a 1,024-byte line limit and a deadline.
+  lines with lexical-state checkpoints. `scheduleMatterHighlighting` still
+  calls `getTextString()` for each new request and transfers a full source;
+  current-line iteration does not eliminate this payload.
+- [x] Coalesce superseded requests before transferring their source payloads.
+  Each Matter controller queues the latest metadata per buffer and allows one
+  handoff in flight, acknowledged even after cancellation or grammar failure.
+  Moe supplies the handoff from its existing matching-version fallback snapshot;
+  pending provider requests retain zero source bytes. Source extraction and
+  immediate fallback remapping still happen on each scheduled edit. Owner-thread
+  callbacks stay off the worker; detached values cross the thread boundary.
+  Forty-five focused Matter/Markdown tests pass, including supersession,
+  fairness, missing/throwing providers, grammar errors, and reentrant close.
+  Three matched 8 MiB single-handoff pairs keep completed live heap effectively
+  flat (16.14 to 16.16 MiB) and median peak RSS flat (51.70 to 51.73 MiB).
+  This fixture does not cover full Moe fallback extraction or edit bursts;
+  intermediate request-return RSS differs with asynchronous timing. See
+  [handoff samples](tests/benchmarks/results/matter-handoff-memory-2026-11-06.json).
+- [ ] Add an aggregate byte budget/admission policy for concrete-string
+  callers and worker sources across open buffers. Concrete pending requests now
+  retain at most one source per buffer; neither their total bytes nor one
+  individually large in-flight source has an absolute cap. Controllers are
+  independent per editor. Preserve existing fallback coloring and completion
+  semantics when designing backpressure.
+- [x] Convert Matter byte endpoints to rune columns with a monotonic cursor
+  instead of allocating `runeColumns` per line. Preserve interior-byte,
+  truncated-sequence, empty-span and fallback behavior. The parser's 1,024-byte
+  limit did not bound the previous map: skipped oversized lines still allocated
+  eight bytes per source byte. All 36 focused Matter tests pass.
 
 Kosmo's main editor uses Moe buffers; NimKit TextStorage improvements do not
 automatically change this path. Keep any upstream buffer redesign separate.
@@ -189,7 +325,7 @@ GitDiffSection, GitDiffHighlightKey, patch completion, and mergeSectionIntoSnaps
   limits, and section/view-pool limits should remain; this is not an unbounded
   cache discovery.
 
-## Reuse snapshots in text helpers and native queries
+## Reuse snapshots in text helpers
 
 Evidence: [textruneutils.nim](src/merenda/nimkit/text/textruneutils.nim),
 utf8RunesForText; [textviews.nim](src/merenda/nimkit/text/textviews.nim),
@@ -197,14 +333,26 @@ applySmartInsert; [textlayout.nim](src/merenda/nimkit/text/textlayout.nim),
 defaultGlyphProperties;
 [textsnapshots.nim](src/merenda/nimkit/text/textsnapshots.nim), bytes and lineRange.
 
-- [ ] Pass the storage's existing snapshot to word, smart-insertion, and pending
-  layout queries instead of stringValue() followed by another UTF-8 copy and
-  index build. Preserve the helper's malformed-input replacement semantics;
-  direct source reuse needs equivalent semantics or a cached normalized view.
-- [ ] Add byte-range operations across the native facade. Its snapshot bytes
-  accessor returns a whole owned string, whereas the static path borrows it.
-  Substrings and repeated native queries should not materialize the entire
-  source just to inspect a short range. Keep native ownership/lifetime explicit.
+- [x] Stream word-boundary string queries and pending-layout glyph-property
+  lookups without constructing another complete UTF-8 buffer/index. Keep the
+  existing indexed overloads and the existing storage string-query boundary;
+  this avoids changing gap storage retention or subclass overrides. The shared
+  runner verifies Unicode/malformed parity, including 300 seeded random byte
+  strings, plus pending-layout control/out-of-range/nil cases.
+- [x] Remove full-source indexed construction in smart insertion using streaming
+  neighbor queries through the existing string accessor. The insertion scan
+  keeps only its first/last rune classification; the source scan stops after
+  the right neighbor. The full string accessor remains, with no new gap snapshot
+  cache or bypass of custom overrides. The shared NimKit runner passes 500
+  seeded malformed/NUL comparisons to the old indexed implementation, explicit
+  Unicode/boundary cases, gap storage, and overridden string access.
+  Matched allocator traces over 8 MiB reduce peak heap/VM from 63.9 MB to
+  55.9 MB for a small insertion near the beginning, middle, or end, with retained
+  memory unchanged at 47.7 MB. A 1 MiB insertion lowers peak from 68.9 MB to
+  61.9 MB and retains 49.7 MB in both versions; smart-disabled controls remain
+  unchanged. Paired output lengths and checksums match. These are single traced
+  samples in Apple tool units, not full-document layout profiles. See
+  [smart-insertion allocation evidence](tests/benchmarks/results/text-smart-insertion-allocations-2026-11-06.json).
 
 ## Share layout resources and remove redundant glyph geometry
 
@@ -269,17 +417,156 @@ code borrow the arrangement and restores layout time to the main-branch range.
 - [ ] Measure source bytes, styles/runs, undo history, worker payloads, layouts,
   and render replicas independently, including peak overlap between generations.
 - [ ] Measure allocation scaling through both backends, including partial-run
-  fallback and static/native facade paths. Preserve the existing source-identity,
-  width-changing case conversion, control-filtering, and empty-input regression
-  tests added by the FigDraw follow-up.
-- [ ] Extend native-facade coverage for UTF-8 lookup, iteration, slicing, equality,
-  and source-span layout, including allocation behavior at the ABI boundary.
+  fallback on the supported Pixie/Harfbuzzy paths. Preserve the existing
+  source-identity, width-changing case conversion, control-filtering, and
+  empty-input regression tests added by the FigDraw follow-up.
+
+Existing behavioral coverage includes UTF-8 lookup/ranges, compact style updates,
+source identity, and shared layout ownership in `tests/nimkit/textstorage.nim`,
+`tests/nimkit/textlayout.nim`, and FigDraw's `tests/tfontutils.nim`. These tests do
+not replace the allocation and retained-byte measurements above.
 
 Keep rune-based public APIs and intentional compatibility conversions. Rich
 per-cell/per-rune records need purpose-built compaction rather than mechanical
 replacement with Utf8Runes.
 
-## Measurements from completed changes
+## Allocation verification for the current feature sets
+
+The following measurements use matched before/after binaries, the same Atlas
+dependencies, and classic `nim c -d:release --mm:arc` on macOS arm64. Component
+validation uses the repository's `nim ic` shared runners. Allocation profiles use
+`MallocStackLogging`, `leaks --fullStackHistory --outputGraph`, and
+`malloc_history -highWaterMark -callTree`; they identify live allocation stacks,
+unlike process RSS alone.
+
+| Workload and captured checkpoint | Logged live allocations, before → after | Logged peak, before → after | Cumulative allocation bytes, before → after |
+| --- | ---: | ---: | ---: |
+| 2,000-row Markdown table, attributed storage constructed | 1.5 MB → 1.5 MB | 88.2 MB → 28.9 MB | 583.9 MB → 276.3 MB |
+| 500-row table view, earlier table-compaction batch (historical) | 228.3 MB → 228.3 MB | 293.5 MB → 284.3 MB | 43.49 GB → 43.4 GB |
+| 500-row table view, current mixed-layout copy fix | 228.4 MB → 228.4 MB | 284.3 MB → 281.5 MB | 43.38 GB → 1.09 GB |
+| SynEdit, tokenize 8 MiB of spaces | 8.2 MB → 8.2 MB | 16.2 MB → 8.2 MB | 17.6 MB → 9.6 MB |
+| 2,000-row table, compact table cells → compact builder styles | 1.59M → 1.59M | 28.9 MB → 13.7 MB | 276.3 MB → 227.7 MB |
+
+These are Apple tool-reported heap/VM units, preserved as reported, not converted
+to MiB. Each allocation-stack profile is one traced process; logging changes
+allocation timing and excludes some startup blocks without recorded stacks. The
+paired storage call trees both contain 757 live blocks / 1.59M, plus the same
+816 unstacked blocks / 183K. Capturing after the first render does not include
+the later resize phase in that graph's peak.
+
+The old `tableRunes` allocation stack accounts for 7,994 blocks / 67.4M at the
+storage-construction peak. After its removal, expanded builder attribute-run
+arrays were the next large stacks. The separate builder-interning batch removes
+those arrays and further lowers the peak to 13.7 MB; allocation event count
+increases slightly while cumulative allocated bytes decrease. Its retained
+checkpoint has 756 blocks / 1.59M versus 757 / 1.59M before. The old SynEdit stack contains an 8.00M `nimAsgnStrV2` allocation under
+`internalTokenSpans`; that allocation is absent after the scoped borrow.
+
+Full Markdown view profiles retain the same 10 HarfBuzz fallback-font blob
+allocations / 78.5M before and after. They are a substantial existing rich-text
+cost, not a saving from the UTF-8 changes.
+
+The earlier table-view row is historical: its 43.4 GB cumulative figure is
+superseded by the focused mixed-layout fix in the following row. The pinned
+current-baseline event history attributes 4,015 requests of 9,867,768 bytes
+each to copies of the full arranged-glyph sequence; the per-paragraph choice
+of wrapped or clipped layout copied the complete arrangement. Passing the
+chosen arrangement by reference removes those repeated copies. The independently
+summed event request sizes need not equal the tool's cumulative header because
+VM and realloc accounting differ; neither figure means those bytes remained
+resident or were necessarily physically copied. One separate arrangement
+initialization copy remains. At the measured first-render checkpoint, logged
+live heap and VM remain 228.4 MB; retained fonts, theme data, and layout are
+still substantial process-wide costs, not solely the Markdown document.
+Three additional untraced paired processes reached first render in a median
+3,363 → 2,341 ms from workload start; the resize checkpoint was 6,595 →
+4,555 ms. Median first-render live malloc heap was 230.83 → 231.95 MiB,
+and resize heap was 328.72 → 327.70 MiB. These small variations and changes
+in RSS are not proof that retained memory is identical across workloads.
+
+The later shared-owner fixture applies two 2,883,958-byte document structures
+without running their queued rendering or highlighting. Across three alternating
+fresh-process pairs, median live malloc heap was 103,391,168 → 83,827,616 bytes.
+One logged pair reported current heap+VM 88.4 → 72.2 MB, high-water 96.6 →
+80.4 MB and cumulative requests 8.42 → 4.27 GB. These are structure-only
+measurements, not completed-view or exact document-object sizes.
+
+In a separate three-document Kosmo fixture with a nonempty installed grammar,
+the baseline retained three previews and the changed build used a configured
+zero-byte soft budget to retain the same active preview. Median live malloc
+heap was 486,869,952 → 316,819,728 bytes; this does not predict savings from the
+default budget or bound process RSS. For a smaller quoted/overflow embedded
+fixture, the offscreen child count changed from one to zero; the median heap
+difference was small relative to run variation and recreating the child added
+some allocation on return. In one logged first-render pair, current and
+high-water heap+VM both matched at the displayed precision (114.9 and 127.6 MB);
+cumulative requests were 473.5 → 473.6 MB. An untraced ten-cycle check
+plateaued within each process, while its absolute process heaps already differed
+at first render and after release. The initial RSS ordering reversed in a
+separate ABBA run. These checks do not establish a universal RSS non-regression
+or a cause for native/allocator variation. The final matched 500-row
+first-render trace retained the earlier
+rounded logged values of 228.4 MB current, 281.5 MB high-water and 1.09 GB
+cumulative requests; it is one traced sample, not a general no-growth claim.
+
+Raw process and allocation summaries, build/source hashes, commands, checkpoint
+details, and limitations:
+
+- [Shared Markdown owner, embedded views, and preview budget samples](tests/benchmarks/results/markdown-sharing-memory-2026-11-07.json).
+- [Markdown allocation stacks](tests/benchmarks/results/markdown-allocations-2026-11-06.json).
+- [SynEdit allocation stacks](tests/benchmarks/results/synedit-allocations-2026-11-06.json).
+- [Compact builder allocation stacks](tests/benchmarks/results/markdown-builder-allocations-2026-11-06.json).
+- [Mixed-layout churn allocation stacks](tests/benchmarks/results/markdown-layout-churn-2026-11-06.json).
+- [Markdown fresh-process samples](tests/benchmarks/results/markdown-memory-2026-11-06.json):
+  nine storage and nine prose/code control runs per version, three table-view
+  runs per version. RSS peaks vary; they are not a count of retained text objects.
+- [Attributed-text reflows](tests/benchmarks/results/text-reflow-memory-2026-11-06.json).
+- [Streaming boundary queries](tests/benchmarks/results/text-boundary-memory-2026-11-06.json):
+  three paired processes over 32 MiB UTF-8, with identical query checksums.
+  Median peak RSS is 133.41 MiB for the explicit prior indexed path versus
+  35.91 MiB streaming; live heap after queries is 32.90 versus 32.24 MiB. This
+  uses old/new modes in one binary, not separate baseline checkouts.
+- [Gap-source cache control](tests/benchmarks/results/text-gap-source-memory-2026-11-06.json):
+  an explicit precache mode reproduces a regression caught in the uncommitted
+  worker prototype, not the original baseline. Both modes use the fixed binary.
+- [Matter fallback-line mapping](tests/benchmarks/results/matter-line-memory-2026-11-06.json):
+  three matched fresh-process pairs on an 8 MiB line. Median peak RSS falls
+  from 115.95 MiB to 51.78 MiB; post-completion live heap stays 16.15 MiB and
+  the final rune column is identical.
+- [Matched edit and undo history](tests/benchmarks/results/text-edit-allocations-2026-11-06.json):
+  compare original history, final attributed deltas, and single-buffer
+  replacement with identical harnesses and dependency trees. Retention and peak
+  fall; flat replay still costs allocation traffic, as detailed above.
+- [Earlier undo experiments](tests/benchmarks/results/textundo-allocations-2026-11-06.json):
+  explicitly labeled intermediate results and a separate grouped comparison
+  isolate the refinement that preserves prior deltas across adjacent groups.
+- [Unchanged Markdown previews](tests/benchmarks/results/kosmo-preview-allocations-2026-11-06.json):
+  full event-history attribution isolates removed source-extraction allocations;
+  initial preview construction and global peak remain present.
+- [Matter source handoff](tests/benchmarks/results/matter-handoff-memory-2026-11-06.json):
+  three matched fresh-process pairs keep one-source peak and completed live
+  memory effectively flat; queue-byte tests separately prove superseded provider
+  requests retain no source payload.
+- [Smart insertion](tests/benchmarks/results/text-smart-insertion-allocations-2026-11-06.json):
+  ten matched traces cover three insertion positions, a large insertion, and a
+  smart-disabled control. Peak and allocation traffic fall; retained memory
+  and paired output checksums stay unchanged.
+
+Reproduce checkpoint captures using the tracked probes and driver described in
+[ALLOCATION-PROFILING.md](tests/benchmarks/ALLOCATION-PROFILING.md).
+
+The measured first batches reduce temporary allocation and keep retained rich
+text allocations unchanged at these checkpoints. Keep this as an acceptance
+criterion for subsequent work, rather than extrapolating it to unmeasured APIs.
+
+Validation after the latest feature batches: the complete shared NimKit runner
+passes 1,433 tests, 69 selected Kosmo Matter/Markdown, pane and split tests
+pass, and the example bundle compiles with `nim ic` without running it. Eight
+focused owner-lifetime and reentrancy cases also pass ASan/UBSan with leak
+detection disabled. This is component and example coverage, not a full Kosmo or
+integration-suite result.
+
+## Historical measurements from completed changes
 
 The text-editing profiles compared Merenda `dd933623` with `172eedf1` in three
 standalone release/ARC runs per build on macOS, using the same static FigDraw

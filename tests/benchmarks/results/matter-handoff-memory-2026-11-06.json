@@ -1,0 +1,329 @@
+{
+  "measurement": "Three alternating fresh processes per version. Same 8 MiB retained source, one oversized-line request and completion; before uses concrete API, after provider API. Provider-ready stage checks fixture retention. Live malloc heap, current RSS, process high-water RSS. This is a standalone worker fixture; it does not model Moe fallback extraction or edit bursts.",
+  "baselineRevision": "32a30471 with matched current textviews.nim",
+  "afterRevision": "32a30471 with queue/provider and matched current textviews.nim",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0 nim ic -d:release --mm:arc; same dependencies and repository config",
+  "benchmarkSha256": "af5de3fca617a51455259c2756e79c15561b2405d3b357933c93e108bd0ac950",
+  "textviewsSha256": "347c2bedb967a679daeaf2aa24698e7a4c73a0c89c4e3818814fb2699e88ad25",
+  "samples": [
+    {
+      "version": "before",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18694144,
+          "peakRssBytes": 18726912
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16875184,
+          "rssBytes": 20152320,
+          "peakRssBytes": 20168704
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33687328,
+          "rssBytes": 28590080,
+          "peakRssBytes": 28688384
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16930784,
+          "rssBytes": 54525952,
+          "peakRssBytes": 54525952
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18677760,
+          "peakRssBytes": 18677760
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16891360,
+          "rssBytes": 20185088,
+          "peakRssBytes": 20185088
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33703504,
+          "rssBytes": 37076992,
+          "peakRssBytes": 37076992
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16946960,
+          "rssBytes": 54509568,
+          "peakRssBytes": 54509568
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16832080,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16873648,
+          "rssBytes": 19857408,
+          "peakRssBytes": 19857408
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33685792,
+          "rssBytes": 28278784,
+          "peakRssBytes": 28295168
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16929248,
+          "rssBytes": 54214656,
+          "peakRssBytes": 54214656
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16832080,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16881632,
+          "rssBytes": 19857408,
+          "peakRssBytes": 19857408
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33693776,
+          "rssBytes": 36732928,
+          "peakRssBytes": 36732928
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16945424,
+          "rssBytes": 54214656,
+          "peakRssBytes": 54247424
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16832080,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16873648,
+          "rssBytes": 19841024,
+          "peakRssBytes": 19841024
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33685792,
+          "rssBytes": 28262400,
+          "peakRssBytes": 28311552
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16929248,
+          "rssBytes": 54198272,
+          "peakRssBytes": 54198272
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16832080,
+          "rssBytes": 18530304,
+          "peakRssBytes": 18530304
+        },
+        {
+          "stage": "providerReady",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16881632,
+          "rssBytes": 19857408,
+          "peakRssBytes": 19857408
+        },
+        {
+          "stage": "requested",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 33693776,
+          "rssBytes": 36732928,
+          "peakRssBytes": 36732928
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16937232,
+          "rssBytes": 54165504,
+          "peakRssBytes": 54165504
+        }
+      ]
+    }
+  ],
+  "binarySha256": {
+    "before": "f1ceda20b3710584ebc817c4bfaea9272b2779ebf799f76124ba55cd1a454eb5",
+    "after": "5be5c6bbcf7202f22ca452f28ec682a60b2721614e17156732b2fbee7a57f5e1"
+  },
+  "sourceSha256": {
+    "before": {
+      "matterworkers": "4ce7e521d0163fdfe3c05fce42f6d456cd7744bb92723d95e3c4678c54290de9",
+      "moe": "79b44cea426c51b8ef4153c011dfc8f58da846e88edbd861d26fb0d429f53ef8"
+    },
+    "after": {
+      "matterworkers": "dbebf683b8f0b2d69d596fe48c5cb063cfd3a48b2a0b6690786336ca74453d23",
+      "moe": "95e248e67e45be2ccb0ce0776fc41169e1025a2a2d7d10adf8b36edc1866bb08"
+    }
+  },
+  "medians": [
+    {
+      "stage": "source",
+      "before": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16832080,
+        "rssBytes": 18563072,
+        "peakRssBytes": 18563072
+      },
+      "after": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16832080,
+        "rssBytes": 18563072,
+        "peakRssBytes": 18563072
+      }
+    },
+    {
+      "stage": "providerReady",
+      "before": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16873648,
+        "rssBytes": 19857408,
+        "peakRssBytes": 19857408
+      },
+      "after": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16881632,
+        "rssBytes": 19857408,
+        "peakRssBytes": 19857408
+      }
+    },
+    {
+      "stage": "requested",
+      "before": {
+        "sourceBytes": 8388608,
+        "heapBytes": 33685792,
+        "rssBytes": 28278784,
+        "peakRssBytes": 28311552
+      },
+      "after": {
+        "sourceBytes": 8388608,
+        "heapBytes": 33693776,
+        "rssBytes": 36732928,
+        "peakRssBytes": 36732928
+      }
+    },
+    {
+      "stage": "completed",
+      "before": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16929248,
+        "rssBytes": 54214656,
+        "peakRssBytes": 54214656
+      },
+      "after": {
+        "sourceBytes": 8388608,
+        "heapBytes": 16945424,
+        "rssBytes": 54214656,
+        "peakRssBytes": 54247424
+      }
+    }
+  ],
+  "buildCommands": {
+    "before": "nim ic -d:release --nimcache:/tmp/merenda-matter-before-cache --out:/tmp/merenda-handoff-before tests/benchmarks/matterhandoffmemory.nim",
+    "after": "nim ic -d:release --nimcache:/tmp/merenda-gap-source-nimcache --out:/tmp/merenda-handoff-after tests/benchmarks/matterhandoffmemory.nim"
+  },
+  "sampleCommands": {
+    "before": [
+      "/tmp/merenda-handoff-before",
+      "8388608"
+    ],
+    "after": [
+      "/tmp/merenda-handoff-after",
+      "8388608"
+    ]
+  }
+}

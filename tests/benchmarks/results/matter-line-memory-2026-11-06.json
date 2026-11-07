@@ -1,0 +1,150 @@
+{
+  "measurement": "Three alternating fresh processes per version; 8 MiB ASCII source in a single line exceeds 1 KiB Matter parser budget and exercises the plain fallback. Live malloc heap, current RSS and process high-water RSS. Result verifies final rune column.",
+  "baselineRevision": "820179a9",
+  "afterRevision": "820179a9 plus uncommitted Matter byte/rune cursor",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0 nim ic -d:release --mm:arc; same dependencies and repository config",
+  "benchmarkSha256": "971c0bc79519f6a46d83896d746ef9b9780ae8a769cd4288b3d0078687e76c56",
+  "samples": [
+    {
+      "version": "before",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18595840
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16930784,
+          "rssBytes": 121569280,
+          "peakRssBytes": 121585664
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18530304,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16938976,
+          "rssBytes": 54345728,
+          "peakRssBytes": 54378496
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18595840
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16934880,
+          "rssBytes": 121421824,
+          "peakRssBytes": 121421824
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18530304,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16936416,
+          "rssBytes": 54296576,
+          "peakRssBytes": 54296576
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18563072,
+          "peakRssBytes": 18595840
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16938976,
+          "rssBytes": 121552896,
+          "peakRssBytes": 121585664
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "stage": "source",
+          "sourceBytes": 8388608,
+          "lastColumn": -1,
+          "heapBytes": 16833616,
+          "rssBytes": 18530304,
+          "peakRssBytes": 18563072
+        },
+        {
+          "stage": "completed",
+          "sourceBytes": 8388608,
+          "lastColumn": 8388607,
+          "heapBytes": 16930784,
+          "rssBytes": 54280192,
+          "peakRssBytes": 54296576
+        }
+      ]
+    }
+  ],
+  "sourceSha256": {
+    "before": "858900b93a0b625d12604d94dfbb035814ed8995d10d85b696047bbaff53acba",
+    "after": "4ce7e521d0163fdfe3c05fce42f6d456cd7744bb92723d95e3c4678c54290de9"
+  },
+  "commands": [
+    "nim ic -d:release --mm:arc --nimcache:<isolated-cache> --out:<binary> tests/benchmarks/matterlinememory.nim",
+    "<binary> 8388608"
+  ]
+}

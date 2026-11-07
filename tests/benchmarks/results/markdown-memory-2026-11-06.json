@@ -1,0 +1,2398 @@
+{
+  "baselineRevision": "24896588",
+  "afterRevision": "8cd707d5 plus uncommitted UTF-8 changes",
+  "platform": "macOS 15.7.9 arm64",
+  "compiler": "Nim 2.4.0, nim c -d:release --mm:arc; repository config; same deps",
+  "benchmarkSha256": "03683e496653606c8b54743c4bab95ff9db584727195ecc4aa11dd7aeff71392",
+  "nimCfgSha256": "fa0104ed6d19539b720e95d42480275adcacebc2363d680b37597139f0a15111",
+  "measurement": "Fresh processes, alternating before/after; live malloc-zone heap, RSS and process high-water RSS; no GPU/native window",
+  "samples": [
+    {
+      "version": "before",
+      "sample": 1,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-before",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6438912,
+          "peakRssBytes": 6438912,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 241869472,
+          "rssBytes": 414793728,
+          "peakRssBytes": 414793728,
+          "elapsedMs": 3165
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 243061120,
+          "rssBytes": 415137792,
+          "peakRssBytes": 415137792,
+          "elapsedMs": 3170
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 349335360,
+          "rssBytes": 540966912,
+          "peakRssBytes": 540983296,
+          "elapsedMs": 6130
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 307774192,
+          "rssBytes": 540983296,
+          "peakRssBytes": 540983296,
+          "elapsedMs": 6132
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-before",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6438912,
+          "peakRssBytes": 6438912,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 240432800,
+          "rssBytes": 410419200,
+          "peakRssBytes": 410419200,
+          "elapsedMs": 3452
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 241596288,
+          "rssBytes": 411729920,
+          "peakRssBytes": 411729920,
+          "elapsedMs": 3457
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 352751936,
+          "rssBytes": 563003392,
+          "peakRssBytes": 563003392,
+          "elapsedMs": 6736
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 311376112,
+          "rssBytes": 563019776,
+          "peakRssBytes": 563019776,
+          "elapsedMs": 6737
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-before",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6438912,
+          "peakRssBytes": 6438912,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 241761440,
+          "rssBytes": 397049856,
+          "peakRssBytes": 397049856,
+          "elapsedMs": 3448
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 242953088,
+          "rssBytes": 397246464,
+          "peakRssBytes": 397246464,
+          "elapsedMs": 3453
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 355311936,
+          "rssBytes": 560676864,
+          "peakRssBytes": 560676864,
+          "elapsedMs": 6606
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 308985072,
+          "rssBytes": 560693248,
+          "peakRssBytes": 560693248,
+          "elapsedMs": 6608
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-after-c",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 244288736,
+          "rssBytes": 458833920,
+          "peakRssBytes": 458833920,
+          "elapsedMs": 4442
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 245480384,
+          "rssBytes": 459079680,
+          "peakRssBytes": 459079680,
+          "elapsedMs": 4447
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 348286336,
+          "rssBytes": 584515584,
+          "peakRssBytes": 584515584,
+          "elapsedMs": 7937
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 310908720,
+          "rssBytes": 584531968,
+          "peakRssBytes": 584531968,
+          "elapsedMs": 7938
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-after-c",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 242954400,
+          "rssBytes": 399048704,
+          "peakRssBytes": 399048704,
+          "elapsedMs": 3548
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 244146048,
+          "rssBytes": 400326656,
+          "peakRssBytes": 400326656,
+          "elapsedMs": 3553
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 345599808,
+          "rssBytes": 521502720,
+          "peakRssBytes": 521502720,
+          "elapsedMs": 6699
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 308825328,
+          "rssBytes": 521519104,
+          "peakRssBytes": 521519104,
+          "elapsedMs": 6701
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "command": [
+        "/tmp/merenda-utf8-profile/markdown-after-c",
+        "table",
+        "view",
+        "500"
+      ],
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "source",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 488304,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "layout",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 240272544,
+          "rssBytes": 389169152,
+          "peakRssBytes": 389169152,
+          "elapsedMs": 3346
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 241465216,
+          "rssBytes": 390348800,
+          "peakRssBytes": 390348800,
+          "elapsedMs": 3351
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "resized",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 90107,
+          "heapBytes": 345347392,
+          "rssBytes": 510689280,
+          "peakRssBytes": 510689280,
+          "elapsedMs": 6761
+        },
+        {
+          "workload": "table",
+          "mode": "view",
+          "stage": "released",
+          "count": 500,
+          "sourceBytes": 52371,
+          "renderedRunes": 0,
+          "heapBytes": 307185904,
+          "rssBytes": 510705664,
+          "peakRssBytes": 510705664,
+          "elapsedMs": 6762
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "version": "before",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 751984,
+          "rssBytes": 6914048,
+          "peakRssBytes": 6914048,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 9096528,
+          "rssBytes": 55296000,
+          "peakRssBytes": 102072320,
+          "elapsedMs": 179
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 9152848,
+          "rssBytes": 53952512,
+          "peakRssBytes": 53952512,
+          "elapsedMs": 145
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 3709264,
+          "rssBytes": 67715072,
+          "peakRssBytes": 105021440,
+          "elapsedMs": 177
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 138
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 47546368,
+          "peakRssBytes": 101646336,
+          "elapsedMs": 171
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 139
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 4,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 47546368,
+          "peakRssBytes": 101646336,
+          "elapsedMs": 172
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 4,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 137
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 5,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 47546368,
+          "peakRssBytes": 101646336,
+          "elapsedMs": 171
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 5,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 138
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 6,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 47546368,
+          "peakRssBytes": 101646336,
+          "elapsedMs": 171
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 6,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 9582928,
+          "rssBytes": 55377920,
+          "peakRssBytes": 55377920,
+          "elapsedMs": 156
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 7,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 3981648,
+          "rssBytes": 83001344,
+          "peakRssBytes": 105758720,
+          "elapsedMs": 174
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 7,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 43974656,
+          "peakRssBytes": 43974656,
+          "elapsedMs": 138
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 8,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2058064,
+          "rssBytes": 47546368,
+          "peakRssBytes": 101646336,
+          "elapsedMs": 170
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 8,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2518864,
+          "rssBytes": 50708480,
+          "peakRssBytes": 50708480,
+          "elapsedMs": 138
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 9,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6684672,
+          "peakRssBytes": 6684672,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2289488,
+          "rssBytes": 47611904,
+          "peakRssBytes": 101695488,
+          "elapsedMs": 170
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 9,
+      "stages": [
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "source",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 0,
+          "heapBytes": 750448,
+          "rssBytes": 6668288,
+          "peakRssBytes": 6668288,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "table",
+          "mode": "storage",
+          "stage": "storage",
+          "count": 2000,
+          "sourceBytes": 211871,
+          "renderedRunes": 146163,
+          "heapBytes": 2785616,
+          "rssBytes": 52084736,
+          "peakRssBytes": 52084736,
+          "elapsedMs": 145
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257579568,
+          "rssBytes": 340148224,
+          "peakRssBytes": 340148224,
+          "elapsedMs": 857
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258521184,
+          "rssBytes": 343474176,
+          "peakRssBytes": 343474176,
+          "elapsedMs": 859
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 348559984,
+          "rssBytes": 429637632,
+          "peakRssBytes": 429637632,
+          "elapsedMs": 1316
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331949392,
+          "rssBytes": 429654016,
+          "peakRssBytes": 429654016,
+          "elapsedMs": 1319
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 1,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 477040,
+          "rssBytes": 6619136,
+          "peakRssBytes": 6619136,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257682480,
+          "rssBytes": 351272960,
+          "peakRssBytes": 351272960,
+          "elapsedMs": 1014
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258624096,
+          "rssBytes": 351354880,
+          "peakRssBytes": 351354880,
+          "elapsedMs": 1016
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347901552,
+          "rssBytes": 454443008,
+          "peakRssBytes": 454443008,
+          "elapsedMs": 1328
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331938640,
+          "rssBytes": 454459392,
+          "peakRssBytes": 454459392,
+          "elapsedMs": 1330
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256856176,
+          "rssBytes": 338722816,
+          "peakRssBytes": 338722816,
+          "elapsedMs": 1017
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257778848,
+          "rssBytes": 338821120,
+          "peakRssBytes": 338821120,
+          "elapsedMs": 1018
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347787440,
+          "rssBytes": 433242112,
+          "peakRssBytes": 433242112,
+          "elapsedMs": 1330
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331131792,
+          "rssBytes": 433258496,
+          "peakRssBytes": 433258496,
+          "elapsedMs": 1332
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 2,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257242160,
+          "rssBytes": 356548608,
+          "peakRssBytes": 356548608,
+          "elapsedMs": 1024
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258183776,
+          "rssBytes": 357089280,
+          "peakRssBytes": 357089280,
+          "elapsedMs": 1025
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347634288,
+          "rssBytes": 452902912,
+          "peakRssBytes": 452902912,
+          "elapsedMs": 1394
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331756880,
+          "rssBytes": 452919296,
+          "peakRssBytes": 452919296,
+          "elapsedMs": 1396
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256686640,
+          "rssBytes": 341491712,
+          "peakRssBytes": 341491712,
+          "elapsedMs": 1038
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257609312,
+          "rssBytes": 342622208,
+          "peakRssBytes": 342622208,
+          "elapsedMs": 1040
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347086960,
+          "rssBytes": 442318848,
+          "peakRssBytes": 442318848,
+          "elapsedMs": 1349
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331123024,
+          "rssBytes": 442335232,
+          "peakRssBytes": 442335232,
+          "elapsedMs": 1351
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 3,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256941104,
+          "rssBytes": 346734592,
+          "peakRssBytes": 346734592,
+          "elapsedMs": 893
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257882720,
+          "rssBytes": 346849280,
+          "peakRssBytes": 346849280,
+          "elapsedMs": 895
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347373680,
+          "rssBytes": 443039744,
+          "peakRssBytes": 443039744,
+          "elapsedMs": 1207
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331435344,
+          "rssBytes": 443088896,
+          "peakRssBytes": 443088896,
+          "elapsedMs": 1209
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 4,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258706992,
+          "rssBytes": 334479360,
+          "peakRssBytes": 334479360,
+          "elapsedMs": 877
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 259648608,
+          "rssBytes": 335085568,
+          "peakRssBytes": 335085568,
+          "elapsedMs": 879
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 348322416,
+          "rssBytes": 433422336,
+          "peakRssBytes": 433422336,
+          "elapsedMs": 1185
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 332217168,
+          "rssBytes": 433438720,
+          "peakRssBytes": 433438720,
+          "elapsedMs": 1187
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 4,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256928368,
+          "rssBytes": 355860480,
+          "peakRssBytes": 355860480,
+          "elapsedMs": 895
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257844384,
+          "rssBytes": 356024320,
+          "peakRssBytes": 356024320,
+          "elapsedMs": 896
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347284656,
+          "rssBytes": 444710912,
+          "peakRssBytes": 444710912,
+          "elapsedMs": 1215
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331186064,
+          "rssBytes": 444727296,
+          "peakRssBytes": 444727296,
+          "elapsedMs": 1217
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 5,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256772656,
+          "rssBytes": 334118912,
+          "peakRssBytes": 334118912,
+          "elapsedMs": 880
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257688672,
+          "rssBytes": 335904768,
+          "peakRssBytes": 335904768,
+          "elapsedMs": 882
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347815024,
+          "rssBytes": 433209344,
+          "peakRssBytes": 433209344,
+          "elapsedMs": 1327
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331233616,
+          "rssBytes": 433225728,
+          "peakRssBytes": 433225728,
+          "elapsedMs": 1329
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 5,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256763952,
+          "rssBytes": 328433664,
+          "peakRssBytes": 328433664,
+          "elapsedMs": 882
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257705568,
+          "rssBytes": 329056256,
+          "peakRssBytes": 329056256,
+          "elapsedMs": 884
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347653232,
+          "rssBytes": 427016192,
+          "peakRssBytes": 427016192,
+          "elapsedMs": 1192
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330872144,
+          "rssBytes": 427032576,
+          "peakRssBytes": 427032576,
+          "elapsedMs": 1194
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 6,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257262640,
+          "rssBytes": 337559552,
+          "peakRssBytes": 337559552,
+          "elapsedMs": 880
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258178656,
+          "rssBytes": 337674240,
+          "peakRssBytes": 337674240,
+          "elapsedMs": 881
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 348646000,
+          "rssBytes": 439287808,
+          "peakRssBytes": 439287808,
+          "elapsedMs": 1321
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331961168,
+          "rssBytes": 439304192,
+          "peakRssBytes": 439304192,
+          "elapsedMs": 1322
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 6,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258305072,
+          "rssBytes": 339181568,
+          "peakRssBytes": 339181568,
+          "elapsedMs": 747
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 259226720,
+          "rssBytes": 342114304,
+          "peakRssBytes": 342114304,
+          "elapsedMs": 749
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 349120112,
+          "rssBytes": 438616064,
+          "peakRssBytes": 438616064,
+          "elapsedMs": 1057
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 332585808,
+          "rssBytes": 438632448,
+          "peakRssBytes": 438632448,
+          "elapsedMs": 1058
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 7,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257135152,
+          "rssBytes": 331497472,
+          "peakRssBytes": 331497472,
+          "elapsedMs": 869
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258076768,
+          "rssBytes": 331595776,
+          "peakRssBytes": 331595776,
+          "elapsedMs": 871
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347307120,
+          "rssBytes": 421265408,
+          "peakRssBytes": 421265408,
+          "elapsedMs": 1175
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330680656,
+          "rssBytes": 421281792,
+          "peakRssBytes": 421281792,
+          "elapsedMs": 1177
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 7,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 258347056,
+          "rssBytes": 348684288,
+          "peakRssBytes": 348684288,
+          "elapsedMs": 909
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 259288672,
+          "rssBytes": 349028352,
+          "peakRssBytes": 349028352,
+          "elapsedMs": 911
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 348522608,
+          "rssBytes": 443318272,
+          "peakRssBytes": 443318272,
+          "elapsedMs": 1221
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331796304,
+          "rssBytes": 443367424,
+          "peakRssBytes": 443367424,
+          "elapsedMs": 1223
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 8,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256582192,
+          "rssBytes": 334708736,
+          "peakRssBytes": 334708736,
+          "elapsedMs": 747
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257523808,
+          "rssBytes": 335364096,
+          "peakRssBytes": 335364096,
+          "elapsedMs": 749
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347962480,
+          "rssBytes": 444153856,
+          "peakRssBytes": 444153856,
+          "elapsedMs": 1101
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331454800,
+          "rssBytes": 444219392,
+          "peakRssBytes": 444219392,
+          "elapsedMs": 1103
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 8,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256669744,
+          "rssBytes": 339296256,
+          "peakRssBytes": 339296256,
+          "elapsedMs": 767
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257591392,
+          "rssBytes": 341655552,
+          "peakRssBytes": 341655552,
+          "elapsedMs": 769
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 347812976,
+          "rssBytes": 442269696,
+          "peakRssBytes": 442269696,
+          "elapsedMs": 1077
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330872656,
+          "rssBytes": 442302464,
+          "peakRssBytes": 442302464,
+          "elapsedMs": 1079
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "sample": 9,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6422528,
+          "peakRssBytes": 6422528,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256494640,
+          "rssBytes": 346800128,
+          "peakRssBytes": 346800128,
+          "elapsedMs": 875
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257410656,
+          "rssBytes": 346914816,
+          "peakRssBytes": 346914816,
+          "elapsedMs": 876
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 346797680,
+          "rssBytes": 442155008,
+          "peakRssBytes": 442155008,
+          "elapsedMs": 1186
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 331040592,
+          "rssBytes": 442171392,
+          "peakRssBytes": 442171392,
+          "elapsedMs": 1188
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "sample": 9,
+      "stages": [
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "source",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 475504,
+          "rssBytes": 6406144,
+          "peakRssBytes": 6406144,
+          "elapsedMs": 0
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "layout",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 256566320,
+          "rssBytes": 339001344,
+          "peakRssBytes": 339001344,
+          "elapsedMs": 1030
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "firstRender",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 257482336,
+          "rssBytes": 339558400,
+          "peakRssBytes": 339558400,
+          "elapsedMs": 1032
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "resized",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 21296,
+          "heapBytes": 346606192,
+          "rssBytes": 429441024,
+          "peakRssBytes": 429441024,
+          "elapsedMs": 1342
+        },
+        {
+          "workload": "prose",
+          "mode": "view",
+          "stage": "released",
+          "count": 250,
+          "sourceBytes": 31300,
+          "renderedRunes": 0,
+          "heapBytes": 330931024,
+          "rssBytes": 429457408,
+          "peakRssBytes": 429457408,
+          "elapsedMs": 1344
+        }
+      ]
+    }
+  ],
+  "medians": [
+    {
+      "workload": "table",
+      "mode": "storage",
+      "count": 2000,
+      "stage": "storage",
+      "before": {
+        "sourceBytes": 211871,
+        "renderedRunes": 146163,
+        "heapBytes": 2058064,
+        "rssBytes": 47546368,
+        "peakRssBytes": 101646336,
+        "elapsedMs": 171
+      },
+      "after": {
+        "sourceBytes": 211871,
+        "renderedRunes": 146163,
+        "heapBytes": 2058064,
+        "rssBytes": 43974656,
+        "peakRssBytes": 43974656,
+        "elapsedMs": 138
+      }
+    },
+    {
+      "workload": "table",
+      "mode": "view",
+      "count": 500,
+      "stage": "layout",
+      "before": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 241761440,
+        "rssBytes": 410419200,
+        "peakRssBytes": 410419200,
+        "elapsedMs": 3448
+      },
+      "after": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 242954400,
+        "rssBytes": 399048704,
+        "peakRssBytes": 399048704,
+        "elapsedMs": 3548
+      }
+    },
+    {
+      "workload": "table",
+      "mode": "view",
+      "count": 500,
+      "stage": "firstRender",
+      "before": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 242953088,
+        "rssBytes": 411729920,
+        "peakRssBytes": 411729920,
+        "elapsedMs": 3453
+      },
+      "after": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 244146048,
+        "rssBytes": 400326656,
+        "peakRssBytes": 400326656,
+        "elapsedMs": 3553
+      }
+    },
+    {
+      "workload": "table",
+      "mode": "view",
+      "count": 500,
+      "stage": "resized",
+      "before": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 352751936,
+        "rssBytes": 560676864,
+        "peakRssBytes": 560676864,
+        "elapsedMs": 6606
+      },
+      "after": {
+        "sourceBytes": 52371,
+        "renderedRunes": 90107,
+        "heapBytes": 345599808,
+        "rssBytes": 521502720,
+        "peakRssBytes": 521502720,
+        "elapsedMs": 6761
+      }
+    },
+    {
+      "workload": "table",
+      "mode": "view",
+      "count": 500,
+      "stage": "released",
+      "before": {
+        "sourceBytes": 52371,
+        "renderedRunes": 0,
+        "heapBytes": 308985072,
+        "rssBytes": 560693248,
+        "peakRssBytes": 560693248,
+        "elapsedMs": 6608
+      },
+      "after": {
+        "sourceBytes": 52371,
+        "renderedRunes": 0,
+        "heapBytes": 308825328,
+        "rssBytes": 521519104,
+        "peakRssBytes": 521519104,
+        "elapsedMs": 6762
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "layout",
+      "before": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 256856176,
+        "rssBytes": 337559552,
+        "peakRssBytes": 337559552,
+        "elapsedMs": 877
+      },
+      "after": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 256941104,
+        "rssBytes": 346734592,
+        "peakRssBytes": 346734592,
+        "elapsedMs": 895
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "firstRender",
+      "before": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 257778848,
+        "rssBytes": 337674240,
+        "peakRssBytes": 337674240,
+        "elapsedMs": 879
+      },
+      "after": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 257882720,
+        "rssBytes": 346849280,
+        "peakRssBytes": 346849280,
+        "elapsedMs": 896
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "resized",
+      "before": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 347815024,
+        "rssBytes": 433422336,
+        "peakRssBytes": 433422336,
+        "elapsedMs": 1316
+      },
+      "after": {
+        "sourceBytes": 31300,
+        "renderedRunes": 21296,
+        "heapBytes": 347653232,
+        "rssBytes": 443039744,
+        "peakRssBytes": 443039744,
+        "elapsedMs": 1215
+      }
+    },
+    {
+      "workload": "prose",
+      "mode": "view",
+      "count": 250,
+      "stage": "released",
+      "before": {
+        "sourceBytes": 31300,
+        "renderedRunes": 0,
+        "heapBytes": 331233616,
+        "rssBytes": 433438720,
+        "peakRssBytes": 433438720,
+        "elapsedMs": 1319
+      },
+      "after": {
+        "sourceBytes": 31300,
+        "renderedRunes": 0,
+        "heapBytes": 331435344,
+        "rssBytes": 443088896,
+        "peakRssBytes": 443088896,
+        "elapsedMs": 1217
+      }
+    }
+  ],
+  "workerPayloadStrategy": "Detached compact payload per request; no worker source cache",
+  "dependencies": {
+    "figdraw": "3f31bc3355103303dff19def582795985b0bbfbf",
+    "markdown": "c8e8cd8800d4e6a8349241321b24c753be8733c4",
+    "sigils": "5190b389ef7448adfc591924d80ad3a971e3487b",
+    "threading": "c5a39a039f24d48ba9503dcb9a0aee68a0fbb36d"
+  },
+  "sourceFilesSha256": {
+    "src/merenda/nimkit/text/markdownviews.nim": "55fb62e4afe2f848e50ca67e3113b89c7ca543c5b562410551a073ea04d4312b",
+    "src/merenda/nimkit/text/textlayout.nim": "6661b51307d820cc9669a8895999f7506bf1ec98b34d429590aeb44e7ed60177",
+    "src/merenda/nimkit/text/textlayoutworkers.nim": "50d187b0de767fe523661ad8b45d682633e80c905e4d47e6d2f8eaf63a4d0e82",
+    "src/merenda/nimkit/text/textstorage.nim": "ddff81643f920f0758c2305ef5224301e798b6308522ee845f93b85516a3065c"
+  },
+  "notes": [
+    "Live heap includes all malloc zones and global state, not only text objects.",
+    "Process peak RSS includes transient allocations and retained allocator pages.",
+    "Markdown storage uses nine fresh runs per version; view cases use three. Reflow uses three.",
+    "Syntax highlighting is disabled; builds use repository test configuration and runtime text backend selection.",
+    "No native window or GPU renderer is created.",
+    "Prose view now uses nine fresh alternating samples per version; retained resized and peak values are process observations, not object sizes."
+  ]
+}

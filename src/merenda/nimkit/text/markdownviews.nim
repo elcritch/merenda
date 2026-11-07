@@ -8,12 +8,15 @@
 ## images use linked alt text.
 
 import
-  std/[algorithm, lists, math, monotimes, os, sets, strutils, tables, times, unicode]
+  std/[
+    algorithm, atomics, lists, math, monotimes, os, sets, strutils, tables, times,
+    unicode,
+  ]
 
 import std/hashes
 from pkg/pixie import resize
 
-from figdraw import SystemTypeface, len, pairs
+from figdraw import SystemTypeface, Utf8Runes, len, pairs, `[]`
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
@@ -24,6 +27,7 @@ from ../app/windows import Window, firstResponder, makeFirstResponder
 import ../containers/outlineviews
 import ../controls/buttons
 import ../drawing
+import ../foundation/backrefs
 import ../foundation/events
 import ../foundation/mainthreadwork
 import ../foundation/selectors
@@ -41,6 +45,8 @@ import ./syntaxhighlighting
 import ./texteditors
 import ./textbytecursors
 import ./textstorage
+import ./textlayout
+import ./textsnapshots
 import ./texttypes
 
 export texteditors
@@ -138,7 +144,7 @@ type
   MarkdownCodeBlockPresentation = object
     range: TextRange
     storage: TextStorage
-    code: MarkdownCodeSource
+    sourceSlices: seq[MarkdownCodeSlice]
     codeStart: int
     codeIndex: int
     codeAttributes: TextAttributes
@@ -152,10 +158,18 @@ type
     rangeLayout: MarkdownRangeLayout
     contentSize: Size
     contentSizeValid: bool
+    fittedLayoutHash: int
+    fittedViewportRight: float32
+    fittedRightPadding: float32
+    hasFittedLayout: bool
+    savedSelection: seq[TextRange]
+    savedOffset: Point
+    hasSavedState: bool
 
   MarkdownTablePresentation = object
     range: TextRange
     storage: TextStorage
+    sourceSlices: seq[MarkdownCodeSlice]
     overflowing: bool
 
   MarkdownTableScrollPresentation = object
@@ -166,6 +180,9 @@ type
     rangeLayout: MarkdownRangeLayout
     contentSize: Size
     contentSizeValid: bool
+    savedSelection: seq[TextRange]
+    savedOffset: Point
+    hasSavedState: bool
 
   MarkdownHeadingPresentation = object
     identifier: string
@@ -192,6 +209,7 @@ type
 
   MarkdownTextView = ref object of TextView
     markdownView: WeakRef[MarkdownView]
+    markdownCostOwner: BackRef[MarkdownView]
     codeBlockStyle: MarkdownBlockStyle
     markdownImages: seq[MarkdownImagePresentation]
     markdownCodeBlocks: seq[MarkdownCodeBlockScrollPresentation]
@@ -201,6 +219,7 @@ type
     markdownEmbeddedViewport: Rect
     hasMarkdownEmbeddedViewport: bool
     markdownViewportLayoutPending: bool
+    markdownEvictionRetryPending: bool
 
   MarkdownDocument = object
     storage: TextStorage
@@ -215,7 +234,7 @@ type
   MarkdownBuilder = object
     text: string
     runeLength: int
-    runs: seq[TextAttributeRun]
+    runs: TextRunBuilder
     codeBlocks: seq[MarkdownCodeBlockPresentation]
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
@@ -223,6 +242,8 @@ type
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
     syntaxHighlighter: SyntaxHighlighter
+    codeIndex: proc(token: markdownParser.Token): int {.closure.}
+    cachedCodeSpans: proc(index: int): seq[SyntaxTokenSpan] {.closure.}
     tableColumnLimit: int
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
@@ -237,16 +258,20 @@ type
     mtaCenter
     mtaRight
 
-  MarkdownTableRune = object
-    value: Rune
-    attributes: TextAttributes
-    image: ImageResource
-    imageDisplaySize: Size
-
   MarkdownTableCell = object
-    content: seq[MarkdownTableRune]
+    content: Utf8Runes
+    runs: TextRunBuilder
+    images: seq[MarkdownImagePresentation]
     alignment: MarkdownTableAlignment
     paddingAttributes: TextAttributes
+
+  MarkdownTableWord = object
+    start, stop: int
+    space: int # Index of the last whitespace preceding this word, or -1.
+
+  MarkdownTableLine = object
+    words: seq[MarkdownTableWord]
+    width: int
 
   MarkdownTableRow = object
     cells: seq[MarkdownTableCell]
@@ -268,7 +293,67 @@ type
     chunkCount: int
     maximumChunkDuration: Duration
 
+  MarkdownViewState* = object
+    ## Lightweight state retained independently of parsed content and layout.
+    collapsedHeadingIds*, knownHeadingIds*, headingIdentifiers*: seq[string]
+    selection*: TextRange
+    scrollOffset*: Point
+    hasState*: bool
+
+  MarkdownStateRetainedCost* = object
+    bytes*: uint64
+    incomplete*: bool
+
+  MarkdownOwnerRetention* = object
+    ownerId*, bytes*: uint64
+    incomplete*, pending*: bool
+
+  MarkdownRetainedCost* = object
+    ownerId*, ownerBytes*, viewBytes*: uint64
+    ownerIncomplete*, viewIncomplete*: bool
+
+  MarkdownGrammarContext = ref object
+    sources: seq[MatterGrammarSource]
+    bytes: uint64
+
+  MarkdownDocumentOwner* = ref object of DynamicAgent
+    ## UI-thread owner of one immutable Markdown source and its neutral parse.
+    xId: uint64
+    xAstBytes, xGrammarBytes, xHighlightBytes: uint64
+    xSource: string
+    xDialect: MarkdownParseDialect
+    xEscape, xKeepHtml: bool
+    xGrammarContext: MarkdownGrammarContext
+    xRoot: markdownParser.Document
+    xCodeIndices: Table[pointer, int]
+    xHighlights: seq[seq[SyntaxTokenSpan]]
+    xWorker: AgentProxy[MarkdownParseWorker]
+    xSubscribers: seq[BackRef[MarkdownView]]
+    xOwnerBackRefs: BackRefSet[MarkdownDocumentOwner]
+    xPending, xStarted, xCancelRequested, xHasBatch, xHighlightStarted: bool
+    xPendingBatch: MarkdownHighlightBatch
+    xGeneration: uint64
+    xWorkerThreadId: int
+    xError: string
+
+  MarkdownRetirementItem = object
+    manager: TextLayoutManager
+    ticket: TextLayoutRetirementTicket
+
+  MarkdownRetirement* = ref object of Agent
+    ## Holds work captured at suspension until the owning thread observes its reply.
+    xItems: seq[MarkdownRetirementItem]
+    xView: MarkdownView
+    xParseGeneration: uint64
+    xHighlightGenerations: seq[uint64]
+    xParseAwaitingCancel: bool
+    xBytes: uint64
+    xPending: bool
+
   MarkdownView* = ref object of TextEditor ## Scrollable, selectable Markdown document.
+    xDocumentOwner: MarkdownDocumentOwner
+    xStandaloneAstBytes: uint64
+    xOwnerBackRefs: BackRefSet[MarkdownView]
     xMarkdown: string
     xMarkdownHeadingIdentifiers: seq[string]
     xMarkdownRootHeadingIdentifiers: seq[string]
@@ -276,9 +361,11 @@ type
     xMarkdownConfig: MarkdownParserConfig
     xMarkdownRoot: markdownParser.Document
     xMarkdownRootGeneration: uint64
+    xMarkdownCommittedGeneration: uint64
     xMarkdownParseWorker: AgentProxy[MarkdownParseWorker]
     xMarkdownGeneration: uint64
-    xActiveMarkdownGeneration: uint64
+    xActiveMarkdownGeneration, xActiveParseBytes, xActiveHighlightBytes: uint64
+    xRetiringHighlights: seq[tuple[generation, bytes: uint64]]
     xPendingMarkdownCompletionGeneration: uint64
     xMarkdownParseWorkerThreadId: int
     xMarkdownParseError: string
@@ -288,9 +375,10 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
-    xMatterGrammarSources: seq[MatterGrammarSource]
+    xGrammarContext: MarkdownGrammarContext
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
-    xMatterCodeIndices: Table[MarkdownCodeSource, int]
+    xMatterCodeIndices: Table[pointer, int]
+      ## Non-owning token identities, valid only while xMarkdownRoot is retained.
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
     xMarkdownCodePresentationIndices: seq[seq[int]]
     xActiveMarkdownHighlightGeneration: uint64
@@ -310,6 +398,9 @@ type
     xMarkdownTableResizeDeadline: MonoTime
     xMarkdownNavigationItems: seq[MarkdownNavigationItem]
     xPendingMarkdownHeadingSelection: string
+    xPendingRestoredState: MarkdownViewState
+    xPendingRestoreGeneration, xRestoreToken: uint64
+    xSuspended: bool
 
 const
   MarkdownRenderBlocksPerChunk = 16
@@ -320,9 +411,21 @@ const
 var
   defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
   inFlightMarkdownViews {.threadvar.}: seq[MarkdownView]
+  inFlightMarkdownOwners {.threadvar.}: seq[MarkdownDocumentOwner]
+  inFlightMarkdownRetirements {.threadvar.}: seq[MarkdownRetirement]
+  nextMarkdownOwnerId: Atomic[uint64]
 
 proc renderCurrentMarkdownDocument(view: MarkdownView)
 proc revealMarkdownNavigationRange(view: MarkdownView, range: TextRange)
+proc startMarkdownOwner(owner: MarkdownDocumentOwner)
+proc detachMarkdownOwner(view: MarkdownView)
+proc applySharedMarkdownColors(view: MarkdownView)
+proc startSharedMarkdownHighlight(view: MarkdownView)
+
+func markdownSource(view: MarkdownView): lent string =
+  if view.xDocumentOwner.isNil:
+    return view.xMarkdown
+  return view.xDocumentOwner.xSource
 
 func headingCollapsed(view: MarkdownView, headingIdentifier: string): bool =
   not view.isNil and headingIdentifier in view.xCollapsedMarkdownHeadings
@@ -552,6 +655,180 @@ proc resolvedConfig(config: MarkdownParserConfig): MarkdownParserConfig =
   else:
     config
 
+proc markdownOwnerRetentionDidChange*(owner: MarkdownDocumentOwner) {.signal.}
+proc markdownRetainedCostDidChange*(view: MarkdownView) {.signal.}
+proc markdownRetirementDidChange*(receipt: MarkdownRetirement) {.signal.}
+
+func isMarkdownRetirementPending*(receipt: MarkdownRetirement): bool =
+  not receipt.isNil and receipt.xPending
+
+func retainedMarkdownRetirementCost*(
+    receipt: MarkdownRetirement
+): MarkdownStateRetainedCost =
+  if not receipt.isNil and receipt.xPending:
+    result.bytes = receipt.xBytes
+    result.incomplete = true
+
+proc newMarkdownGrammarContext(
+    sources: sink seq[MatterGrammarSource]
+): MarkdownGrammarContext =
+  result = MarkdownGrammarContext(sources: sources)
+  for index in 0 ..< result.sources.len:
+    let grammar {.cursor.} = result.sources[index]
+    result.bytes +=
+      uint64(
+        grammar.path.len + grammar.content.len + grammar.scopeName.len +
+          grammar.languageId.len
+      )
+    for item in grammar.extensions:
+      result.bytes += uint64(item.len + sizeof(string))
+    for item in grammar.fileNames:
+      result.bytes += uint64(item.len + sizeof(string))
+
+proc newMarkdownDocumentOwner*(
+    source: sink string,
+    config: MarkdownParserConfig = nil,
+    grammarSources: sink seq[MatterGrammarSource] = @[],
+): MarkdownDocumentOwner =
+  ## Create a UI-thread document identity for built-in Markdown and Matter.
+  ## Raises ValueError for a custom parser configuration.
+  let resolved = config.resolvedConfig()
+  var dialect: MarkdownParseDialect
+  if not resolved.builtInMarkdownDialect(dialect):
+    raise newException(ValueError, "shared Markdown requires a built-in parser")
+  result = MarkdownDocumentOwner(
+    xId: nextMarkdownOwnerId.fetchAdd(1'u64, moRelaxed) + 1'u64,
+    xSource: source,
+    xDialect: dialect,
+    xEscape: resolved.escape,
+    xKeepHtml: resolved.keepHtml,
+    xGrammarContext: newMarkdownGrammarContext(grammarSources),
+    xWorkerThreadId: -1,
+  )
+  result.xGrammarBytes = result.xGrammarContext.bytes
+
+func markdownOwnerId*(owner: MarkdownDocumentOwner): uint64 =
+  ## Opaque process-unique identity; zero means no shared owner.
+  if owner.isNil: 0'u64 else: owner.xId
+
+func retainedMarkdownViewStateCost*(
+    state: MarkdownViewState
+): MarkdownStateRetainedCost =
+  ## Return a nonallocating logical lower bound; capacities are not included.
+  result.incomplete = true
+  result.bytes = uint64(sizeof(MarkdownViewState))
+  for identifier in state.collapsedHeadingIds:
+    result.bytes += uint64(sizeof(string) + identifier.len)
+  for identifier in state.knownHeadingIds:
+    result.bytes += uint64(sizeof(string) + identifier.len)
+  for identifier in state.headingIdentifiers:
+    result.bytes += uint64(sizeof(string) + identifier.len)
+
+proc markdownAstPayload(token: markdownParser.Token): uint64 =
+  if token.isNil:
+    return
+  result = uint64(sizeof(token[]) + token.doc.len)
+  if token of markdownParser.CodeBlock:
+    result += uint64(markdownParser.CodeBlock(token).info.len)
+  if token of markdownParser.Paragraph:
+    result += uint64(markdownParser.Paragraph(token).trailing.len)
+  if token of markdownParser.Blockquote:
+    let quote = markdownParser.Blockquote(token)
+    for chunk in quote.chunks:
+      if not chunk.isNil:
+        result += uint64(sizeof(chunk[]) + chunk.doc.len)
+  for child in token.children:
+    result += uint64(sizeof(pointer) * 3) + markdownAstPayload(child)
+
+proc markdownOwnerRetention*(owner: MarkdownDocumentOwner): MarkdownOwnerRetention =
+  ## Estimate currently known logical payload without materializing resources.
+  ## Unknown allocator capacity, AST, workers and native assets are incomplete.
+  if owner.isNil:
+    return
+  result.ownerId = owner.xId
+  result.pending = owner.xPending
+  result.incomplete = true
+  result.bytes = uint64(sizeof(owner[]) + owner.xSource.len)
+  result.bytes += owner.xAstBytes + owner.xGrammarBytes + owner.xHighlightBytes
+  result.bytes += uint64(owner.xCodeIndices.len * (sizeof(pointer) + sizeof(int)))
+  result.bytes += uint64(owner.xHighlights.len * sizeof(seq[SyntaxTokenSpan]))
+  if owner.xHasBatch:
+    result.bytes += uint64(owner.xPendingBatch.spans.len * sizeof(SyntaxTokenSpan))
+  if owner.xPending:
+    # Request transfer owns an independent source while work is in flight.
+    result.bytes += uint64(owner.xSource.len)
+
+proc addMarkdownImagePayload(estimate: var TextPayloadEstimate, image: ImageResource) =
+  if image.isNil or not estimate.claimTextPayloadOwner(tpoImage, cast[pointer](image)):
+    return
+  let payload = image.imageResourcePayload()
+  estimate.addTextPayloadBytes(payload.descriptorBytes)
+  if estimate.claimTextPayloadOwner(tpoImagePixels, payload.pixelIdentity):
+    estimate.addTextPayloadBytes(payload.pixelBytes)
+  estimate.incomplete = estimate.incomplete or payload.incomplete
+
+proc retainedMarkdownCost*(view: MarkdownView): MarkdownRetainedCost =
+  ## Report logical owner and view lower bounds without materializing text.
+  if view.isNil:
+    return
+  result.viewIncomplete = true
+  result.viewBytes =
+    uint64(sizeof(view[]) + view.xMarkdown.len) + view.xStandaloneAstBytes
+  if view.xDocumentOwner.isNil and not view.xGrammarContext.isNil:
+    result.viewBytes += view.xGrammarContext.bytes
+  var payload: TextPayloadEstimate
+  let textView = MarkdownTextView(view.textView())
+  payload.addTextStoragePayload(view.textStorage())
+  payload.addTextLayoutPayload(textView.layoutManager())
+  for index in 0 ..< view.xMarkdownCodePresentations.len:
+    let presentation {.cursor.} = view.xMarkdownCodePresentations[index]
+    payload.addTextStoragePayload(presentation.storage)
+    payload.addTextPayloadBytes(presentation.slices.len * sizeof(MarkdownCodeSlice))
+  for index in 0 ..< textView.markdownCodeBlocks.len:
+    let presentation {.cursor.} = textView.markdownCodeBlocks[index]
+    payload.addTextStoragePayload(presentation.storage)
+    payload.addTextPayloadBytes(presentation.savedSelection.len * sizeof(TextRange))
+    if not presentation.textView.isNil:
+      payload.addTextLayoutPayload(presentation.textView.layoutManager())
+  for index in 0 ..< textView.markdownTables.len:
+    let table {.cursor.} = textView.markdownTables[index]
+    payload.addTextStoragePayload(table.storage)
+    payload.addTextPayloadBytes(table.savedSelection.len * sizeof(TextRange))
+    if not table.textView.isNil:
+      payload.addTextLayoutPayload(table.textView.layoutManager())
+  payload.addTextPayloadBytes(
+    view.xMarkdownCodePresentations.len * sizeof(MarkdownCodeBlockPresentation)
+  )
+  payload.addTextPayloadBytes(
+    textView.markdownCodeBlocks.len * sizeof(MarkdownCodeBlockScrollPresentation)
+  )
+  payload.addTextPayloadBytes(
+    textView.markdownTables.len * sizeof(MarkdownTableScrollPresentation)
+  )
+  payload.addTextPayloadBytes(
+    textView.markdownImages.len * sizeof(MarkdownImagePresentation)
+  )
+  for index in 0 ..< textView.markdownImages.len:
+    let presentation {.cursor.} = textView.markdownImages[index]
+    payload.addMarkdownImagePayload(presentation.image)
+  for key, image in view.xImageCache:
+    payload.addTextPayloadBytes(key.len + sizeof(string))
+    payload.addMarkdownImagePayload(image)
+  payload.addTextPayloadBytes(
+    view.xMarkdownNavigationItems.len * sizeof(MarkdownNavigationItem)
+  )
+  result.viewBytes += payload.bytes
+  result.viewIncomplete = result.viewIncomplete or payload.incomplete
+  if not view.xDocumentOwner.isNil:
+    let owner = view.xDocumentOwner.markdownOwnerRetention()
+    result.ownerId = owner.ownerId
+    result.ownerBytes = owner.bytes
+    result.ownerIncomplete = owner.incomplete
+  for id in view.xCollapsedMarkdownHeadings:
+    result.viewBytes += uint64(id.len + sizeof(string))
+  for id in view.xKnownMarkdownHeadings:
+    result.viewBytes += uint64(id.len + sizeof(string))
+
 func scaledDown(size, maximumSize: Size): Size =
   if size.width <= 0.0'f32 or size.height <= 0.0'f32:
     return
@@ -674,14 +951,7 @@ proc add(builder: var MarkdownBuilder, value: string, attributes: TextAttributes
   let start = builder.runeLength
   builder.text.add value
   builder.runeLength += length
-  if builder.runs.len > 0 and builder.runs[^1].attributes == attributes and
-      builder.runs[^1].range.maxIndex == start:
-    builder.runs[^1].range.length =
-      (int(builder.runs[^1].range.length) + length).Natural
-  else:
-    builder.runs.add TextAttributeRun(
-      range: initTextRange(start, length), attributes: attributes
-    )
+  builder.runs.add(initTextRange(start, length), attributes)
 
 proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
   if builder.text.len == 0 or builder.text.endsWith("\n\n"):
@@ -697,22 +967,14 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   builder.imageUrls.add(rendered.imageUrls)
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
-  for run in rendered.runs:
-    let shifted = TextAttributeRun(
-      range: initTextRange(offset + int(run.range.location), int(run.range.length)),
-      attributes: run.attributes,
-    )
-    if builder.runs.len > 0 and builder.runs[^1].attributes == shifted.attributes and
-        builder.runs[^1].range.maxIndex == int(shifted.range.location):
-      builder.runs[^1].range.length =
-        (int(builder.runs[^1].range.length) + int(shifted.range.length)).Natural
-    else:
-      builder.runs.add shifted
+  builder.runs.append(rendered.runs, offset)
   for presentation in rendered.codeBlocks.mitems:
     var shifted = move presentation
     shifted.range =
       initTextRange(offset + int(shifted.range.location), int(shifted.range.length))
     for slice in shifted.slices.mitems:
+      slice.documentStart += offset
+    for slice in shifted.sourceSlices.mitems:
       slice.documentStart += offset
     builder.codeBlocks.add shifted
   for presentation in rendered.images:
@@ -726,6 +988,8 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
     shifted.range = initTextRange(
       offset + int(presentation.range.location), int(presentation.range.length)
     )
+    for slice in shifted.sourceSlices.mitems:
+      slice.documentStart += offset
     builder.tables.add shifted
   for presentation in rendered.headings:
     var shifted = presentation
@@ -1037,43 +1301,33 @@ func tableAlignment(cell: markdownParser.Token): MarkdownTableAlignment =
   of "right": mtaRight
   else: mtaLeft
 
-proc tableRunes(rendered: MarkdownBuilder): seq[MarkdownTableRune] =
-  let runes = utf8RunesForText(rendered.text)
-  var
-    runIndex = 0
-    imageIndex = 0
-  for index, value in runes:
-    while runIndex < rendered.runs.high and
-        index >= rendered.runs[runIndex].range.maxIndex:
-      inc runIndex
-    while imageIndex < rendered.images.len and
-        rendered.images[imageIndex].range.maxIndex <= index:
-      inc imageIndex
-    var tableRune = MarkdownTableRune(
-      value: value,
-      attributes:
-        if runIndex < rendered.runs.len:
-          rendered.runs[runIndex].attributes
-        else:
-          rendered.style.bodyAttributes(),
-    )
-    if imageIndex < rendered.images.len and
-        int(rendered.images[imageIndex].range.location) <= index and
-        rendered.images[imageIndex].range.maxIndex > index:
-      tableRune.image = rendered.images[imageIndex].image
-      tableRune.imageDisplaySize = rendered.images[imageIndex].displaySize
-    result.add tableRune
+func tableAttributes(cell: MarkdownTableCell, index: int): TextAttributes =
+  var low = 0
+  var high = cell.runs.len
+  while low < high:
+    let middle = (low + high) div 2
+    if cell.runs.rangeAt(middle).maxIndex <= index:
+      low = middle + 1
+    else:
+      high = middle
+  if low < cell.runs.len:
+    cell.runs[low].attributes
+  else:
+    cell.paddingAttributes
 
-func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
+func tableWhitespace(cell: MarkdownTableCell, index: int, value: Rune): bool =
+  value.isWhiteSpace and not cell.tableAttributes(index).hasAttachment
+
+func naturalTableCellWidth(cell: MarkdownTableCell): int =
   var
     lineWidth = 0
     pendingSpace = false
-  for unit in content:
-    if unit.value == Rune('\n'):
+  for index, value in cell.content:
+    if value == Rune('\n'):
       result = max(result, lineWidth)
       lineWidth = 0
       pendingSpace = false
-    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
+    elif cell.tableWhitespace(index, value):
       pendingSpace = lineWidth > 0
     else:
       if pendingSpace:
@@ -1082,72 +1336,56 @@ func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
       pendingSpace = false
   max(result, lineWidth)
 
-func minimumTableCellWidth(content: openArray[MarkdownTableRune]): int =
+func minimumTableCellWidth(cell: MarkdownTableCell): int =
   var wordWidth = 0
-  for unit in content:
-    if unit.value == Rune('\n') or
-        (unit.value.isWhiteSpace and not unit.attributes.hasAttachment):
+  for index, value in cell.content:
+    if value == Rune('\n') or cell.tableWhitespace(index, value):
       result = max(result, wordWidth)
       wordWidth = 0
     else:
       inc wordWidth
   result = max(result, wordWidth)
   result =
-    max(result, min(content.naturalTableCellWidth(), MarkdownTablePreferredCellWidth))
-
-proc finishTableLine(
-    lines: var seq[seq[MarkdownTableRune]],
-    line: var seq[MarkdownTableRune],
-    hasPendingSpace: var bool,
-) =
-  lines.add move line
-  line = @[]
-  hasPendingSpace = false
+    max(result, min(cell.naturalTableCellWidth(), MarkdownTablePreferredCellWidth))
 
 proc appendTableWord(
-    lines: var seq[seq[MarkdownTableRune]],
-    line: var seq[MarkdownTableRune],
-    word: var seq[MarkdownTableRune],
-    pendingSpace: MarkdownTableRune,
-    hasPendingSpace: var bool,
-    limit: int,
+    lines: var seq[MarkdownTableLine],
+    line: var MarkdownTableLine,
+    start, stop, pendingSpace, limit: int,
 ) =
-  if word.len == 0:
+  if start >= stop:
     return
-  let spacing = if line.len > 0 and hasPendingSpace: 1 else: 0
-  if line.len > 0 and line.len + spacing + word.len > limit:
-    lines.finishTableLine(line, hasPendingSpace)
+  let spacing = if line.width > 0 and pendingSpace >= 0: 1 else: 0
+  if line.width > 0 and line.width + spacing + stop - start > limit:
+    lines.add move line
+    line = MarkdownTableLine()
+  let space = if line.width > 0: pendingSpace else: -1
+  line.words.add MarkdownTableWord(start: start, stop: stop, space: space)
+  line.width += stop - start + (if space >= 0: 1 else: 0)
 
-  if line.len > 0 and hasPendingSpace:
-    line.add pendingSpace
-  line.add word
-  word = @[]
-  hasPendingSpace = false
-
-proc wrapTableCell(
-    content: openArray[MarkdownTableRune], width: int
-): seq[seq[MarkdownTableRune]] =
+proc wrapTableCell(cell: MarkdownTableCell, width: int): seq[MarkdownTableLine] =
   let limit = max(width, 1)
   var
-    line: seq[MarkdownTableRune]
-    word: seq[MarkdownTableRune]
-    pendingSpace: MarkdownTableRune
-    hasPendingSpace = false
-
-  for unit in content:
-    if unit.value == Rune('\n'):
-      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-      result.finishTableLine(line, hasPendingSpace)
-    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
-      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-      if line.len > 0:
-        pendingSpace = unit
-        pendingSpace.value = Rune(' ')
-        hasPendingSpace = true
-    else:
-      word.add unit
-  result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
-  if line.len > 0 or result.len == 0:
+    line: MarkdownTableLine
+    wordStart = -1
+    pendingSpace = -1
+  for index, value in cell.content:
+    if value == Rune('\n') or cell.tableWhitespace(index, value):
+      if wordStart >= 0:
+        result.appendTableWord(line, wordStart, index, pendingSpace, limit)
+        wordStart = -1
+        pendingSpace = -1
+      if value == Rune('\n'):
+        result.add move line
+        line = MarkdownTableLine()
+        pendingSpace = -1
+      elif line.width > 0:
+        pendingSpace = index
+    elif wordStart < 0:
+      wordStart = index
+  if wordStart >= 0:
+    result.appendTableWord(line, wordStart, cell.content.len, pendingSpace, limit)
+  if line.width > 0 or result.len == 0:
     result.add move line
 
 func fittedTableWidths(
@@ -1216,27 +1454,15 @@ func fittedTableWidths(
     if not distributed:
       break
 
-proc addTableRunes(
-    builder: var MarkdownBuilder, content: openArray[MarkdownTableRune]
-) =
-  for unit in content:
-    let start = builder.runeLength
-    builder.add($unit.value, unit.attributes)
-    if not unit.image.isNil:
-      builder.images.add MarkdownImagePresentation(
-        range: initTextRange(start, 1),
-        image: unit.image,
-        displaySize: unit.imageDisplaySize,
-      )
-
 proc addTableCellLine(
     builder: var MarkdownBuilder,
-    line: openArray[MarkdownTableRune],
+    cell: MarkdownTableCell,
+    line: MarkdownTableLine,
     width: int,
     alignment: MarkdownTableAlignment,
     paddingAttributes: TextAttributes,
 ) =
-  let padding = max(width - line.len, 0)
+  let padding = max(width - line.width, 0)
   var leftPadding, rightPadding: int
   case alignment
   of mtaLeft:
@@ -1248,7 +1474,22 @@ proc addTableCellLine(
     leftPadding = padding
   if leftPadding > 0:
     builder.add(" ".repeat(leftPadding), paddingAttributes)
-  builder.addTableRunes(line)
+  for word in line.words:
+    if word.space >= 0:
+      builder.add(" ", cell.tableAttributes(word.space))
+    for index in word.start ..< word.stop:
+      let
+        start = builder.runeLength
+        attributes = cell.tableAttributes(index)
+      builder.add($cell.content[index], attributes)
+      if attributes.hasAttachment:
+        for image in cell.images:
+          if int(image.range.location) <= index and image.range.maxIndex > index:
+            builder.images.add MarkdownImagePresentation(
+              range: initTextRange(start, 1),
+              image: image.image,
+              displaySize: image.displaySize,
+            )
   if rightPadding > 0:
     builder.add(" ".repeat(rightPadding), paddingAttributes)
 
@@ -1279,12 +1520,16 @@ proc renderTable(
           imageLoader: builder.imageLoader,
           imageContentTypeLoader: builder.imageContentTypeLoader,
           syntaxHighlighter: builder.syntaxHighlighter,
+          codeIndex: builder.codeIndex,
+          cachedCodeSpans: builder.cachedCodeSpans,
           tableColumnLimit: builder.tableColumnLimit,
         )
         renderedCell.renderInlineChildren(cell, rowAttributes)
         builder.imageUrls.add(renderedCell.imageUrls)
         renderedRow.cells.add MarkdownTableCell(
-          content: renderedCell.tableRunes(),
+          content: utf8RunesForText(renderedCell.text),
+          runs: move renderedCell.runs,
+          images: move renderedCell.images,
           alignment: cell.tableAlignment(),
           paddingAttributes: rowAttributes,
         )
@@ -1301,10 +1546,8 @@ proc renderTable(
     minimumWidths = newSeq[int](columnCount)
   for row in rows:
     for index, cell in row.cells:
-      naturalWidths[index] =
-        max(naturalWidths[index], cell.content.naturalTableCellWidth())
-      minimumWidths[index] =
-        max(minimumWidths[index], cell.content.minimumTableCellWidth())
+      naturalWidths[index] = max(naturalWidths[index], cell.naturalTableCellWidth())
+      minimumWidths[index] = max(minimumWidths[index], cell.minimumTableCellWidth())
   let widths = naturalWidths.fittedTableWidths(
     minimumWidths,
     if builder.tableColumnLimit > 0:
@@ -1315,7 +1558,10 @@ proc renderTable(
   var tableColumnWidth = MarkdownTableSeparatorWidth * (columnCount - 1)
   for width in widths:
     tableColumnWidth += width
-  let tableStart = builder.runeLength
+  let
+    tableStart = builder.runeLength
+    tableStartByte = builder.text.len
+    tableStartRun = max(builder.runs.len - 1, 0)
   var separatorAttributes = tableAttributes
   separatorAttributes.foregroundColor = builder.style.ruleColor
 
@@ -1323,14 +1569,14 @@ proc renderTable(
     if rowIndex > 0:
       builder.add("\n", tableAttributes)
     var
-      wrappedCells = newSeq[seq[seq[MarkdownTableRune]]](columnCount)
+      wrappedCells = newSeq[seq[MarkdownTableLine]](columnCount)
       rowHeight = 1
     for index in 0 ..< columnCount:
       if index < row.cells.len:
-        wrappedCells[index] = row.cells[index].content.wrapTableCell(widths[index])
+        wrappedCells[index] = row.cells[index].wrapTableCell(widths[index])
         rowHeight = max(rowHeight, wrappedCells[index].len)
       else:
-        wrappedCells[index] = @[newSeq[MarkdownTableRune]()]
+        wrappedCells[index] = @[MarkdownTableLine()]
 
     for lineIndex in 0 ..< rowHeight:
       if lineIndex > 0:
@@ -1351,8 +1597,9 @@ proc renderTable(
               row.cells[columnIndex].paddingAttributes
             else:
               tableAttributes
-        if lineExists:
+        if lineExists and cellExists:
           builder.addTableCellLine(
+            row.cells[columnIndex],
             wrappedCells[columnIndex][lineIndex],
             widths[columnIndex],
             alignment,
@@ -1372,8 +1619,18 @@ proc renderTable(
   var presentation =
     MarkdownTablePresentation(range: tableRange, overflowing: overflowing)
   if overflowing:
-    presentation.storage =
-      newTextStorage(builder.text, builder.runs).sliceTextStorage(tableRange)
+    var tableRuns: TextRunBuilder
+    for index in tableStartRun ..< builder.runs.len:
+      let
+        run = builder.runs[index]
+        start = max(int(run.range.location), tableStart)
+        stop = min(run.range.maxIndex, builder.runeLength)
+      if stop > start:
+        tableRuns.add(initTextRange(start - tableStart, stop - start), run.attributes)
+    presentation.storage = newTextStorage(builder.text[tableStartByte .. ^1], tableRuns)
+    presentation.sourceSlices.add MarkdownCodeSlice(
+      sourceRange: initTextRange(0, int(tableRange.length)), documentStart: tableStart
+    )
   builder.tables.add move presentation
   builder.hasTables = true
 
@@ -1389,6 +1646,8 @@ proc renderContainerChild(
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
+    codeIndex: builder.codeIndex,
+    cachedCodeSpans: builder.cachedCodeSpans,
     tableColumnLimit: builder.tableColumnLimit,
     headingIdentifier: headingIdentifier,
     sectionIdentifier: builder.sectionIdentifier,
@@ -1481,6 +1740,8 @@ proc renderBlockquote(
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
+    codeIndex: builder.codeIndex,
+    cachedCodeSpans: builder.cachedCodeSpans,
     tableColumnLimit: builder.tableColumnLimit,
     sectionIdentifier: builder.sectionIdentifier,
   )
@@ -1523,6 +1784,7 @@ proc renderBlockquote(
       stop = segments.quoteDestination(mapped.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
     mapped.slices = mapped.slices.quoteCodeSlices(segments)
+    mapped.sourceSlices = mapped.sourceSlices.quoteCodeSlices(segments)
     builder.codeBlocks.add mapped
   for presentation in quoted.images:
     var mapped = presentation
@@ -1537,6 +1799,7 @@ proc renderBlockquote(
       start = segments.quoteDestination(int(presentation.range.location))
       stop = segments.quoteDestination(presentation.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
+    mapped.sourceSlices = mapped.sourceSlices.quoteCodeSlices(segments)
     builder.tables.add mapped
   for item in quoted.navigationItems:
     var mapped = item
@@ -1548,15 +1811,22 @@ proc renderBlockquote(
   builder.hasTables = builder.hasTables or quoted.hasTables
 
 proc addHighlightedCode(
-    builder: var MarkdownBuilder, source, language: string, attributes: TextAttributes
+    builder: var MarkdownBuilder,
+    source, language: string,
+    attributes: TextAttributes,
+    codeIndex: int,
 ) =
-  if source.len == 0 or language.len == 0 or builder.syntaxHighlighter.isNil:
+  if source.len == 0 or language.len == 0 or
+      (builder.syntaxHighlighter.isNil and builder.cachedCodeSpans.isNil):
     builder.add(source, attributes)
     return
 
   var spans: seq[SyntaxTokenSpan]
   try:
-    spans = builder.syntaxHighlighter(source, language)
+    if not builder.cachedCodeSpans.isNil:
+      spans = builder.cachedCodeSpans(codeIndex)
+    else:
+      spans = builder.syntaxHighlighter(source, language)
   except CatchableError:
     builder.add(source, attributes)
     return
@@ -1640,6 +1910,8 @@ proc renderBlock(
       imageLoader: builder.imageLoader,
       imageContentTypeLoader: builder.imageContentTypeLoader,
       syntaxHighlighter: builder.syntaxHighlighter,
+      codeIndex: builder.codeIndex,
+      cachedCodeSpans: builder.cachedCodeSpans,
       tableColumnLimit: builder.tableColumnLimit,
     )
     var codeAttributes = renderedCode.style.codeAttributes(attributes)
@@ -1653,15 +1925,25 @@ proc renderBlock(
     let
       codeSource = (source: code.doc.strip(chars = {'\n'}), language: code.info)
       codeStart = renderedCode.runeLength
+      codeIndex =
+        if builder.codeIndex.isNil:
+          -1
+        else:
+          builder.codeIndex(code)
     renderedCode.addHighlightedCode(
-      codeSource.source, codeSource.language, codeAttributes
+      codeSource.source, codeSource.language, codeAttributes, codeIndex
     )
     if renderedCode.runeLength > 0:
       var presentation = MarkdownCodeBlockPresentation(
         range: initTextRange(0, renderedCode.runeLength),
         storage: newTextStorage(renderedCode.text, renderedCode.runs),
-        code: codeSource,
+        sourceSlices: @[
+          MarkdownCodeSlice(
+            sourceRange: initTextRange(0, renderedCode.runeLength), documentStart: 0
+          )
+        ],
         codeStart: codeStart,
+        codeIndex: codeIndex,
         codeAttributes: codeAttributes,
       )
       let codeLength = renderedCode.runeLength - codeStart
@@ -1693,6 +1975,51 @@ proc renderBlock(
   else:
     builder.add(token.doc, attributes)
 
+proc sharedEmbeddedStorage(
+    parent: TextSnapshot, storage: TextStorage, slices: openArray[MarkdownCodeSlice]
+): TextStorage =
+  ## Adopt only a complete, byte-identical map; preserve the old storage on failure.
+  result = storage
+  if storage.isNil or slices.len == 0:
+    return
+  let local = storage.textSnapshot()
+  if local.byteLength <= estimatedTextSegmentMetadataBytes(slices.len) + 128:
+    return
+  template parentBytes(): untyped =
+    parent.bytes
+
+  template localBytes(): untyped =
+    local.bytes
+
+  var
+    localRune = 0
+    ranges = newSeqOfCap[TextRange](slices.len)
+  for slice in slices:
+    let count = int(slice.sourceRange.length)
+    if int(slice.sourceRange.location) != localRune or count <= 0 or
+        localRune > local.runeLength or count > local.runeLength - localRune or
+        slice.documentStart < 0 or slice.documentStart > parent.runeLength or
+        count > parent.runeLength - slice.documentStart:
+      return
+    let
+      parentStart = parent.byteOffset(slice.documentStart)
+      parentEnd = parent.byteOffset(slice.documentStart + count)
+      localStart = local.byteOffset(localRune)
+      localEnd = local.byteOffset(localRune + count)
+    if parentEnd - parentStart != localEnd - localStart:
+      return
+    for index in 0 ..< parentEnd - parentStart:
+      if parentBytes[parentStart + index] != localBytes[localStart + index]:
+        return
+    ranges.add initTextRange(slice.documentStart, count)
+    localRune += count
+  if localRune != local.runeLength:
+    return
+  try:
+    result = newTextSegmentStorage(parent, ranges, storage)
+  except ValueError:
+    discard
+
 proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
   result = MarkdownDocument(
     storage: newTextStorage(builder.text, builder.runs),
@@ -1704,6 +2031,15 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     navigationItems: builder.navigationItems,
     hasTables: builder.hasTables,
   )
+  let parent = result.storage.textSnapshot()
+  for codeBlock in result.codeBlocks.mitems:
+    codeBlock.storage =
+      sharedEmbeddedStorage(parent, codeBlock.storage, codeBlock.sourceSlices)
+    codeBlock.sourceSlices.setLen(0)
+  for table in result.tables.mitems:
+    if not table.storage.isNil:
+      table.storage = sharedEmbeddedStorage(parent, table.storage, table.sourceSlices)
+    table.sourceSlices.setLen(0)
 
 proc parseMarkdownRoot(
     source: string, config: MarkdownParserConfig
@@ -1886,6 +2222,8 @@ proc ensureMarkdownCodeBlockView(
   )
   presentation.scrollView = embedded.scrollView
   presentation.textView = embedded.textView
+  if presentation.hasSavedState:
+    presentation.textView.selectedRanges = presentation.savedSelection
   presentation.scrollView.setHiddenFromLayout(true)
   textView.addSubview(presentation.scrollView)
 
@@ -1899,7 +2237,66 @@ proc ensureMarkdownTableView(
   )
   presentation.scrollView = embedded.scrollView
   presentation.textView = embedded.textView
+  if presentation.hasSavedState:
+    presentation.textView.selectedRanges = presentation.savedSelection
   textView.addSubview(presentation.scrollView)
+
+proc retryMarkdownEmbeddedEviction(textView: MarkdownTextView) =
+  if textView.markdownEvictionRetryPending:
+    return
+  textView.markdownEvictionRetryPending = true
+  scheduleMainThreadWork(
+    proc(): bool =
+      let
+        visible = textView.visibleRect().verticallyBuffered()
+        codeRight =
+          textView.bounds().maxX - max(textView.codeBlockStyle.outlineWidth, 0.0'f32)
+      var waiting = false
+      for index in 0 ..< textView.markdownCodeBlocks.len:
+        let item {.cursor.} = textView.markdownCodeBlocks[index]
+        if not item.textView.isNil and (
+          item.rangeLayout.rect.intersection(visible).isEmpty or
+          item.rangeLayout.rect.maxX +
+          max(textView.codeBlockStyle.padding.right, 0.0'f32) <= codeRight
+        ) and item.textView.layoutManager().isBackgroundLayoutPending():
+          waiting = true
+      for index in 0 ..< textView.markdownTables.len:
+        let item {.cursor.} = textView.markdownTables[index]
+        if not item.textView.isNil and
+            item.rangeLayout.rect.intersection(visible).isEmpty and
+            item.textView.layoutManager().isBackgroundLayoutPending():
+          waiting = true
+      textView.setNeedsLayout()
+      if waiting:
+        return true
+      textView.markdownEvictionRetryPending = false
+      textView.hasMarkdownEmbeddedViewport = false
+      false
+  )
+
+proc markdownEmbeddedViewFocused(scrollView: ScrollView): bool =
+  let owner = scrollView.window()
+  if owner of Window:
+    let focused = Window(owner).firstResponder()
+    return focused of View and scrollView.containsView(View(focused))
+
+template evictMarkdownEmbedded(textView: MarkdownTextView, presentation: untyped) =
+  if not presentation.scrollView.isNil:
+    presentation.scrollView.setHiddenFromLayout(true)
+    if presentation.textView.layoutManager().isBackgroundLayoutPending():
+      textView.retryMarkdownEmbeddedEviction()
+    elif not presentation.scrollView.markdownEmbeddedViewFocused():
+      presentation.savedSelection = presentation.textView.selectedRanges()
+      presentation.savedOffset = presentation.scrollView.contentOffset()
+      presentation.hasSavedState = true
+      presentation.scrollView.removeFromSuperview()
+      presentation.scrollView = nil
+      presentation.textView = nil
+      presentation.contentSizeValid = false
+      presentation.storage.discardTextRangeStorageMaterialization()
+      let owner = textView.markdownCostOwner.target()
+      if not owner.isNil:
+        emit owner.markdownRetainedCostDidChange()
 
 proc layoutMarkdownCodeBlock(
     textView: MarkdownTextView,
@@ -1910,6 +2307,13 @@ proc layoutMarkdownCodeBlock(
   let codeRect = presentation.rangeLayout.rect
   if codeRect.isEmpty:
     return
+  if presentation.hasFittedLayout and
+      presentation.fittedLayoutHash == presentation.rangeLayout.layoutHash and
+      presentation.fittedViewportRight == viewportRight and
+      presentation.fittedRightPadding == rightPadding:
+    textView.evictMarkdownEmbedded(presentation)
+    return
+  presentation.hasFittedLayout = false
   # The parent already measured these unwrapped lines. Only allocate and lay out
   # a second text view when a horizontal viewport is actually necessary.
   if presentation.scrollView.isNil and
@@ -1939,11 +2343,22 @@ proc layoutMarkdownCodeBlock(
         scrollView.scrollerThickness()
       else:
         0.0'f32
+  if not overflowing:
+    presentation.hasFittedLayout = true
+    presentation.fittedLayoutHash = presentation.rangeLayout.layoutHash
+    presentation.fittedViewportRight = viewportRight
+    presentation.fittedRightPadding = rightPadding
+    textView.evictMarkdownEmbedded(presentation)
+    return
   scrollView.setFrameFromLayout(
     rect(codeOrigin.x, codeOrigin.y, viewportWidth, codeHeight + scrollerHeight)
   )
   codeTextView.setFrameFromLayout(rect(0.0'f32, 0.0'f32, documentWidth, codeHeight))
   scrollView.tile()
+  if presentation.hasSavedState:
+    scrollView.contentOffset = presentation.savedOffset
+    presentation.hasSavedState = false
+    presentation.savedSelection.setLen(0)
   scrollView.setHiddenFromLayout(not overflowing)
 
 proc layoutMarkdownCodeBlocks(
@@ -1957,8 +2372,7 @@ proc layoutMarkdownCodeBlocks(
   for presentation in textView.markdownCodeBlocks.mitems:
     presentation.rangeLayout.resolveMarkdownRangeLayout(presentation.range, snapshot)
     if presentation.rangeLayout.rect.intersection(bufferedVisible).isEmpty:
-      if not presentation.scrollView.isNil:
-        presentation.scrollView.setHiddenFromLayout(true)
+      textView.evictMarkdownEmbedded(presentation)
     else:
       textView.layoutMarkdownCodeBlock(presentation, viewportRight, style.padding.right)
 
@@ -1972,8 +2386,7 @@ proc layoutMarkdownTables(
     presentation.rangeLayout.resolveMarkdownRangeLayout(presentation.range, snapshot)
     let tableRect = presentation.rangeLayout.rect
     if tableRect.intersection(bufferedVisible).isEmpty:
-      if not presentation.scrollView.isNil:
-        presentation.scrollView.setHiddenFromLayout(true)
+      textView.evictMarkdownEmbedded(presentation)
     elif not tableRect.isEmpty:
       textView.ensureMarkdownTableView(presentation)
       let
@@ -2004,6 +2417,10 @@ proc layoutMarkdownTables(
         rect(0.0'f32, 0.0'f32, documentWidth, tableHeight)
       )
       scrollView.tile()
+      if presentation.hasSavedState:
+        scrollView.contentOffset = presentation.savedOffset
+        presentation.hasSavedState = false
+        presentation.savedSelection.setLen(0)
       scrollView.setHiddenFromLayout(false)
 
 proc layoutMarkdownHeadings(textView: MarkdownTextView, snapshot: TextLayoutSnapshot) =
@@ -2114,11 +2531,24 @@ proc installMarkdownTables(
   textView.hasMarkdownEmbeddedViewport = false
   textView.setNeedsLayout()
 
+when defined(merendaTests):
+  proc markdownEmbeddedStoragesForTest*(
+      view: MarkdownView
+  ): tuple[code, tables: seq[TextStorage]] =
+    for item in view.xMarkdownCodePresentations:
+      result.code.add item.storage
+    let textView = MarkdownTextView(view.textView())
+    for item in textView.markdownTables:
+      result.tables.add item.storage
+
 proc markdownTextLayoutDidComplete(
     textView: MarkdownTextView, snapshot: TextLayoutSnapshot
 ) {.slot.} =
   discard snapshot
   textView.setNeedsLayout()
+  let view = textView.markdownCostOwner.target()
+  if not view.isNil:
+    emit view.markdownRetainedCostDidChange()
 
 func containsRect(outer, inner: Rect): bool =
   inner.minX >= outer.minX and inner.maxX <= outer.maxX and inner.minY >= outer.minY and
@@ -2244,10 +2674,13 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
     view.textStorage = document.storage
   textView.installMarkdownHeadings(document.headings)
   view.xMarkdownCodePresentations = move document.codeBlocks
-  view.xMarkdownCodePresentationIndices = newSeq[seq[int]](view.xMatterHighlights.len)
+  let codeCount =
+    if view.xDocumentOwner.isNil:
+      view.xMatterHighlights.len
+    else:
+      view.xDocumentOwner.xHighlights.len
+  view.xMarkdownCodePresentationIndices = newSeq[seq[int]](codeCount)
   for index, presentation in view.xMarkdownCodePresentations.mpairs:
-    presentation.codeIndex = view.xMatterCodeIndices.getOrDefault(presentation.code, -1)
-    presentation.code = default(MarkdownCodeSource)
     if presentation.codeIndex >= 0:
       view.xMarkdownCodePresentationIndices[presentation.codeIndex].add index
   textView.installMarkdownCodeBlocks(view.xMarkdownCodePresentations)
@@ -2261,6 +2694,7 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
         break
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
+  emit view.markdownRetainedCostDidChange()
 
 proc applyMarkdownStyle(view: MarkdownView) =
   view.textInsets = view.xMarkdownStyle.documentInsets
@@ -2391,9 +2825,10 @@ proc retainMarkdownViewForParsing(view: MarkdownView) =
       return
   inFlightMarkdownViews.add view
 
-proc releaseMarkdownViewAfterParsing(view: MarkdownView) =
+proc takeMarkdownViewLease(view: MarkdownView): MarkdownView =
   for index, inFlightView in inFlightMarkdownViews:
     if inFlightView == view:
+      result = move inFlightMarkdownViews[index]
       inFlightMarkdownViews.delete(index)
       break
 
@@ -2409,13 +2844,20 @@ proc clearMarkdownImageLoaders(builder: var MarkdownBuilder) =
   builder.imageContentTypeLoader = nil
 
 proc finishMarkdownWork(view: MarkdownView) =
-  if view.xActiveMarkdownGeneration == 0 and view.xActiveMarkdownHighlightGeneration == 0:
-    view.releaseMarkdownViewAfterParsing()
-    if view.xActiveMarkdownRenderGeneration == 0 and
-        view.xPendingMarkdownCompletionGeneration == view.xMarkdownRootGeneration and
-        view.xPendingMarkdownCompletionGeneration == view.xMarkdownGeneration:
-      view.xPendingMarkdownCompletionGeneration = 0
-      emit view.markdownDidFinishParsing(view.xMarkdownParseWorkerThreadId)
+  if view.xActiveMarkdownGeneration == 0 and view.xActiveMarkdownHighlightGeneration == 0 and
+      view.xRetiringHighlights.len == 0:
+    var lease = view.takeMarkdownViewLease()
+    if lease.isNil:
+      lease = view
+    if not lease.xDocumentOwner.isNil:
+      lease.xMarkdownParseWorker = nil
+    if not lease.xDocumentOwner.isNil and lease.xDocumentOwner.xPending:
+      return
+    if lease.xActiveMarkdownRenderGeneration == 0 and
+        lease.xPendingMarkdownCompletionGeneration == lease.xMarkdownRootGeneration and
+        lease.xPendingMarkdownCompletionGeneration == lease.xMarkdownGeneration:
+      lease.xPendingMarkdownCompletionGeneration = 0
+      emit lease.markdownDidFinishParsing(lease.xMarkdownParseWorkerThreadId)
 
 proc applyMarkdownCodeColors(
     view: MarkdownView, codeIndex: int, spans: openArray[SyntaxTokenSpan]
@@ -2561,15 +3003,25 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
   let
     rootGeneration = job.rootGeneration
     document = toMarkdownDocument(move job.builder)
+    ownerId = view.xDocumentOwner.markdownOwnerId()
   view.xActiveMarkdownRenderGeneration = 0
   view.applyMarkdownDocument(document)
+  if generation != view.xMarkdownRenderGeneration or view.xSuspended or
+      rootGeneration != view.xMarkdownGeneration or
+      view.xDocumentOwner.markdownOwnerId() != ownerId:
+    return
+  if rootGeneration == view.xMarkdownGeneration and not view.xSuspended:
+    view.xMarkdownCommittedGeneration = rootGeneration
+  if not view.xDocumentOwner.isNil:
+    view.applySharedMarkdownColors()
+    view.startSharedMarkdownHighlight()
   let chunkDuration = getMonoTime() - chunkStarted
   if chunkDuration > job.maximumChunkDuration:
     job.maximumChunkDuration = chunkDuration
   view.xMarkdownRenderChunkCount = job.chunkCount
   view.xMarkdownMaximumRenderChunkDuration = job.maximumChunkDuration
 
-  if generation == view.xMarkdownRenderGeneration and
+  if view.xDocumentOwner.isNil and generation == view.xMarkdownRenderGeneration and
       rootGeneration == view.xActiveMarkdownHighlightGeneration and
       not view.xMarkdownHighlightStarted:
     view.xMarkdownHighlightStarted = true
@@ -2577,16 +3029,29 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
   view.finishMarkdownWork()
 
 proc scheduleMarkdownRendering(view: MarkdownView) =
-  var highlighter = view.xSyntaxHighlighter
-  var dialect: MarkdownParseDialect
+  var
+    highlighter = view.xSyntaxHighlighter
+    codeIndex: proc(token: markdownParser.Token): int {.closure.}
+    cachedCodeSpans: proc(index: int): seq[SyntaxTokenSpan] {.closure.}
+    dialect: MarkdownParseDialect
   if highlighter == SyntaxHighlighter(matterSyntaxHighlighter) and
       view.xMarkdownConfig.builtInMarkdownDialect(dialect):
     let weakView = view.unsafeWeakRef()
-    highlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
-      if not weakView.isNil:
-        let index = weakView[].xMatterCodeIndices.getOrDefault((source, language), -1)
-        if index >= 0:
-          result = weakView[].xMatterHighlights[index]
+    highlighter = nil
+    codeIndex = proc(token: markdownParser.Token): int =
+      if weakView.isNil:
+        return -1
+      if weakView[].xDocumentOwner.isNil:
+        weakView[].xMatterCodeIndices.getOrDefault(cast[pointer](token), -1)
+      else:
+        weakView[].xDocumentOwner.xCodeIndices.getOrDefault(cast[pointer](token), -1)
+    cachedCodeSpans = proc(index: int): seq[SyntaxTokenSpan] =
+      if not weakView.isNil and index >= 0:
+        if weakView[].xDocumentOwner.isNil:
+          if index < weakView[].xMatterHighlights.len:
+            result = weakView[].xMatterHighlights[index]
+        elif index < weakView[].xDocumentOwner.xHighlights.len:
+          result = weakView[].xDocumentOwner.xHighlights[index]
   inc view.xMarkdownRenderGeneration
   let
     generation = view.xMarkdownRenderGeneration
@@ -2601,6 +3066,8 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
     builder: MarkdownBuilder(
       style: view.xMarkdownStyle,
       syntaxHighlighter: highlighter,
+      codeIndex: codeIndex,
+      cachedCodeSpans: cachedCodeSpans,
       tableColumnLimit: tableColumnLimit,
       headingDisclosureIndent: MarkdownHeadingDisclosureIndent,
     ),
@@ -2618,6 +3085,273 @@ proc cancelMarkdownRendering(view: MarkdownView) =
   view.xActiveMarkdownRenderGeneration = 0
   view.xMarkdownRenderJob = default(MarkdownRenderJob)
 
+proc indexMarkdownCodeBlocks(
+    token: markdownParser.Token,
+    indices: openArray[int],
+    ordinal: var int,
+    byToken: var Table[pointer, int],
+) =
+  if token of markdownParser.CodeBlock:
+    if ordinal < indices.len:
+      byToken[cast[pointer](token)] = indices[ordinal]
+    inc ordinal
+  for child in token.children:
+    child.indexMarkdownCodeBlocks(indices, ordinal, byToken)
+
+proc retainMarkdownOwner(owner: MarkdownDocumentOwner) =
+  for retained in inFlightMarkdownOwners:
+    if retained == owner:
+      return
+  inFlightMarkdownOwners.add owner
+
+proc takeMarkdownOwnerLease(owner: MarkdownDocumentOwner): MarkdownDocumentOwner =
+  for index, retained in inFlightMarkdownOwners:
+    if retained == owner:
+      result = move inFlightMarkdownOwners[index]
+      inFlightMarkdownOwners.delete(index)
+      break
+
+proc hasMarkdownSubscribers(owner: MarkdownDocumentOwner): bool =
+  for subscriber in owner.xSubscribers:
+    let view = subscriber.target()
+    if not view.isNil and view.xDocumentOwner == owner:
+      return true
+
+proc cancelOrphanedMarkdownOwner(owner: MarkdownDocumentOwner): bool =
+  if not owner.xPending or owner.xCancelRequested or owner.hasMarkdownSubscribers():
+    return
+  owner.xCancelRequested = true
+  owner.xHasBatch = false
+  owner.xPendingBatch = default(MarkdownHighlightBatch)
+  emit owner.xWorker.cancelMarkdownHighlight(owner.xGeneration)
+  true
+
+proc notifyMarkdownOwnerCost(owner: MarkdownDocumentOwner) =
+  let subscribers = owner.xSubscribers
+  emit owner.markdownOwnerRetentionDidChange()
+  for subscriber in subscribers:
+    let view = subscriber.target()
+    if not view.isNil and view.xDocumentOwner == owner:
+      emit view.markdownRetainedCostDidChange()
+
+proc applySharedMarkdownColors(view: MarkdownView) =
+  if view.xDocumentOwner.isNil:
+    return
+  for index, spans in view.xDocumentOwner.xHighlights:
+    view.applyMarkdownCodeColors(index, spans)
+
+proc startSharedMarkdownHighlight(view: MarkdownView) =
+  let owner = view.xDocumentOwner
+  if owner.isNil or not owner.xPending or owner.xCancelRequested or
+      owner.xHighlightStarted or owner.xHighlights.len == 0:
+    return
+  owner.xHighlightStarted = true
+  emit owner.xWorker.continueMarkdownHighlight(owner.xGeneration)
+
+proc installSharedMarkdownRoot(view: MarkdownView, owner: MarkdownDocumentOwner) =
+  if view.xDocumentOwner != owner:
+    return
+  view.xMarkdownParseWorkerThreadId = owner.xWorkerThreadId
+  view.xMarkdownParseError = owner.xError
+  if owner.xError.len > 0:
+    view.xPendingMarkdownCompletionGeneration = 0
+    emit view.markdownDidFinishParsing(owner.xWorkerThreadId)
+    return
+  view.xMarkdownRoot = owner.xRoot
+  view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
+  view.xMarkdownRootGeneration = view.xMarkdownGeneration
+  view.xPendingMarkdownCompletionGeneration = view.xMarkdownGeneration
+  view.scheduleMarkdownRendering()
+
+proc finishMarkdownOwner(owner: MarkdownDocumentOwner) =
+  # Threaded signal receivers are borrowed. Keep an owned reference while a
+  # notification may release the final external subscriber or registry entry.
+  var lease = owner.takeMarkdownOwnerLease()
+  if lease.isNil:
+    lease = owner
+  lease.xPending = false
+  let subscribers = lease.xSubscribers
+  lease.notifyMarkdownOwnerCost()
+  for subscriber in subscribers:
+    let view = subscriber.target()
+    if not view.isNil and view.xDocumentOwner == lease:
+      view.finishMarkdownWork()
+
+proc ownerMarkdownParseFinished(
+    owner: MarkdownDocumentOwner, parsed: sink MarkdownParseResult
+) {.slot.} =
+  if parsed.generation != owner.xGeneration or not owner.xPending:
+    return
+  if owner.xCancelRequested:
+    return
+  owner.xWorkerThreadId = parsed.workerThreadId
+  owner.xError = parsed.errorMessage
+  if parsed.errorMessage.len == 0:
+    owner.xRoot = move parsed.root
+    owner.xAstBytes = markdownAstPayload(owner.xRoot)
+    owner.xHighlightBytes = 0
+    owner.xCodeIndices.clear()
+    owner.xHighlights = newSeq[seq[SyntaxTokenSpan]](parsed.codeCount)
+    var ordinal = 0
+    owner.xRoot.indexMarkdownCodeBlocks(parsed.codeIndices, ordinal, owner.xCodeIndices)
+  let subscribers = owner.xSubscribers
+  for subscriber in subscribers:
+    let view = subscriber.target()
+    if not view.isNil and view.xDocumentOwner == owner:
+      view.installSharedMarkdownRoot(owner)
+  owner.notifyMarkdownOwnerCost()
+  if owner.xCancelRequested or not owner.xPending:
+    return
+  if parsed.errorMessage.len > 0 or parsed.codeCount == 0:
+    owner.finishMarkdownOwner()
+  elif owner.cancelOrphanedMarkdownOwner():
+    return
+
+proc ownerMarkdownHighlightReady(
+    owner: MarkdownDocumentOwner, batch: sink MarkdownHighlightBatch
+) {.slot.} =
+  if not owner.xPending or owner.xCancelRequested or
+      batch.generation != owner.xGeneration:
+    return
+  if owner.cancelOrphanedMarkdownOwner():
+    return
+  owner.xPendingBatch = batch
+  owner.xHasBatch = true
+  var weakOwner: BackRef[MarkdownDocumentOwner]
+  weakOwner.set(owner, owner.xOwnerBackRefs)
+  scheduleMainThreadWork(
+    proc(): bool =
+      let current = weakOwner.target()
+      if current.isNil or not current.xPending or current.xCancelRequested or
+          not current.xHasBatch:
+        return false
+      if current.cancelOrphanedMarkdownOwner():
+        return false
+      let ready = move current.xPendingBatch
+      current.xHasBatch = false
+      if ready.generation != current.xGeneration:
+        return false
+      if ready.codeIndex >= 0 and ready.codeIndex < current.xHighlights.len:
+        current.xHighlights[ready.codeIndex].add ready.spans
+        current.xHighlightBytes += uint64(ready.spans.len * sizeof(SyntaxTokenSpan))
+        let subscribers = current.xSubscribers
+        for subscriber in subscribers:
+          let view = subscriber.target()
+          if not view.isNil and view.xDocumentOwner == current and
+              view.xActiveMarkdownRenderGeneration == 0:
+            view.applyMarkdownCodeColors(ready.codeIndex, ready.spans)
+      current.notifyMarkdownOwnerCost()
+      if current.xCancelRequested or not current.xPending:
+        return false
+      if ready.finished:
+        current.finishMarkdownOwner()
+      else:
+        emit current.xWorker.continueMarkdownHighlight(current.xGeneration)
+      false
+  )
+
+proc ownerMarkdownHighlightCancelled(
+    owner: MarkdownDocumentOwner, generation: uint64
+) {.slot.} =
+  if generation != owner.xGeneration or not owner.xCancelRequested:
+    return
+  let lease = owner.takeMarkdownOwnerLease()
+  if lease.isNil:
+    return
+  lease.xCancelRequested = false
+  lease.xStarted = false
+  lease.xRoot = nil
+  lease.xAstBytes = 0
+  lease.xHighlightBytes = 0
+  lease.xCodeIndices.clear()
+  lease.xHighlights.setLen(0)
+  lease.finishMarkdownOwner()
+  if lease.hasMarkdownSubscribers():
+    lease.startMarkdownOwner()
+
+proc startMarkdownOwner(owner: MarkdownDocumentOwner) =
+  if owner.isNil or owner.xStarted or not owner.hasMarkdownSubscribers():
+    return
+  if owner.xWorker.isNil:
+    owner.xWorker = newMarkdownParseWorker()
+    connectThreaded(
+      owner.xWorker,
+      markdownParseFinished,
+      owner,
+      MarkdownDocumentOwner.ownerMarkdownParseFinished(),
+    )
+    connectThreaded(
+      owner.xWorker,
+      markdownHighlightReady,
+      owner,
+      MarkdownDocumentOwner.ownerMarkdownHighlightReady(),
+    )
+    connectThreaded(
+      owner.xWorker,
+      markdownHighlightCancelled,
+      owner,
+      MarkdownDocumentOwner.ownerMarkdownHighlightCancelled(),
+    )
+  owner.xStarted = true
+  owner.xPending = true
+  owner.xCancelRequested = false
+  owner.xHighlightStarted = false
+  inc owner.xGeneration
+  owner.retainMarkdownOwner()
+  emit owner.xWorker.requestMarkdownParse(
+    owner.xGeneration, owner.xSource, owner.xDialect, owner.xEscape, owner.xKeepHtml,
+    true, owner.xGrammarContext.sources,
+  )
+  owner.notifyMarkdownOwnerCost()
+
+proc detachMarkdownOwner(view: MarkdownView) =
+  if view.isNil or view.xDocumentOwner.isNil:
+    return
+  let owner = view.xDocumentOwner
+  view.xDocumentOwner = nil
+  var index = owner.xSubscribers.high
+  while index >= 0:
+    let subscriber = owner.xSubscribers[index].target()
+    if subscriber.isNil or subscriber == view:
+      owner.xSubscribers.delete(index)
+    dec index
+  discard owner.cancelOrphanedMarkdownOwner()
+  owner.notifyMarkdownOwnerCost()
+
+proc markRetiredMarkdownParse(view: MarkdownView, generation: uint64, hasCodes: bool) =
+  for receipt in inFlightMarkdownRetirements:
+    if receipt.xView == view and receipt.xParseGeneration == generation:
+      if hasCodes:
+        receipt.xParseAwaitingCancel = true
+      else:
+        receipt.xParseGeneration = 0
+
+proc markRetiredMarkdownCancellation(view: MarkdownView, generation: uint64) {.slot.} =
+  for receipt in inFlightMarkdownRetirements:
+    if receipt.xView == view:
+      let index = receipt.xHighlightGenerations.find(generation)
+      if index >= 0:
+        receipt.xHighlightGenerations.delete(index)
+      if receipt.xParseGeneration == generation and receipt.xParseAwaitingCancel:
+        receipt.xParseGeneration = 0
+        receipt.xParseAwaitingCancel = false
+  var index = view.xRetiringHighlights.high
+  while index >= 0:
+    if view.xRetiringHighlights[index].generation == generation:
+      view.xRetiringHighlights.delete(index)
+    dec index
+  view.finishMarkdownWork()
+
+proc requestMarkdownHighlightCancellation(
+    view: MarkdownView, generation, bytes: uint64
+) =
+  for pending in view.xRetiringHighlights:
+    if pending.generation == generation:
+      return
+  view.xRetiringHighlights.add (generation, bytes)
+  view.retainMarkdownViewForParsing()
+  emit view.xMarkdownParseWorker.cancelMarkdownHighlight(generation)
+
 proc completeMarkdownParse(
     view: MarkdownView, parseResult: sink MarkdownParseResult
 ) {.slot.} =
@@ -2625,22 +3359,35 @@ proc completeMarkdownParse(
     return
 
   view.xActiveMarkdownGeneration = 0
+  let parseBytes = view.xActiveParseBytes
+  view.xActiveParseBytes = 0
+  view.markRetiredMarkdownParse(parseResult.generation, parseResult.codeCount > 0)
+  if not view.xDocumentOwner.isNil:
+    if parseResult.codeCount > 0:
+      view.requestMarkdownHighlightCancellation(parseResult.generation, parseBytes)
+    view.finishMarkdownWork()
+    return
   if parseResult.generation == view.xMarkdownGeneration:
     view.xMarkdownParseWorkerThreadId = parseResult.workerThreadId
     view.xMarkdownParseError = parseResult.errorMessage
     if parseResult.errorMessage.len == 0:
       view.xMarkdownRoot = move parseResult.root
+      view.xStandaloneAstBytes = markdownAstPayload(view.xMarkdownRoot)
       view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
       view.xMatterCodeIndices.clear()
-      view.xMatterHighlights = newSeq[seq[SyntaxTokenSpan]](parseResult.codes.len)
-      for index, code in parseResult.codes:
-        view.xMatterCodeIndices[code] = index
-      if parseResult.codes.len > 0:
-        if view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+      view.xMatterHighlights.setLen(0)
+      if view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+        view.xMatterHighlights = newSeq[seq[SyntaxTokenSpan]](parseResult.codeCount)
+        var codeOrdinal = 0
+        view.xMarkdownRoot.indexMarkdownCodeBlocks(
+          parseResult.codeIndices, codeOrdinal, view.xMatterCodeIndices
+        )
+        if parseResult.codeCount > 0:
           view.xActiveMarkdownHighlightGeneration = parseResult.generation
+          view.xActiveHighlightBytes = parseBytes
           view.xMarkdownHighlightStarted = false
-        else:
-          emit view.xMarkdownParseWorker.cancelMarkdownHighlight(parseResult.generation)
+      elif parseResult.codeCount > 0:
+        view.requestMarkdownHighlightCancellation(parseResult.generation, parseBytes)
       view.xMarkdownRootGeneration = parseResult.generation
       view.xPendingMarkdownCompletionGeneration = parseResult.generation
       view.scheduleMarkdownRendering()
@@ -2648,6 +3395,8 @@ proc completeMarkdownParse(
       view.xPendingMarkdownCompletionGeneration = 0
       emit view.markdownDidFinishParsing(parseResult.workerThreadId)
   if parseResult.generation != view.xMarkdownGeneration:
+    if parseResult.codeCount > 0:
+      view.requestMarkdownHighlightCancellation(parseResult.generation, parseBytes)
     view.startLatestMarkdownParse()
   view.finishMarkdownWork()
 
@@ -2668,9 +3417,16 @@ proc ensureMarkdownParseWorker(view: MarkdownView) =
     view,
     MarkdownView.receiveMarkdownHighlight(),
   )
+  connectThreaded(
+    view.xMarkdownParseWorker,
+    markdownHighlightCancelled,
+    view,
+    MarkdownView.markRetiredMarkdownCancellation(),
+  )
 
 proc startLatestMarkdownParse(view: MarkdownView) =
-  if view.xActiveMarkdownGeneration != 0:
+  if view.xSuspended or not view.xDocumentOwner.isNil or
+      view.xActiveMarkdownGeneration != 0:
     return
 
   var dialect: MarkdownParseDialect
@@ -2678,19 +3434,34 @@ proc startLatestMarkdownParse(view: MarkdownView) =
     view.ensureMarkdownParseWorker()
     view.retainMarkdownViewForParsing()
     view.xActiveMarkdownGeneration = view.xMarkdownGeneration
+    view.xActiveParseBytes = uint64(view.markdownSource().len)
+    for index in 0 ..< view.xGrammarContext.sources.len:
+      let grammar {.cursor.} = view.xGrammarContext.sources[index]
+      view.xActiveParseBytes +=
+        uint64(
+          grammar.path.len + grammar.content.len + grammar.scopeName.len +
+            grammar.languageId.len
+        )
+      for item in grammar.extensions:
+        view.xActiveParseBytes += uint64(item.len)
+      for item in grammar.fileNames:
+        view.xActiveParseBytes += uint64(item.len)
     emit view.xMarkdownParseWorker.requestMarkdownParse(
       view.xActiveMarkdownGeneration,
-      view.xMarkdown,
+      view.markdownSource(),
       dialect,
       view.xMarkdownConfig.escape,
       view.xMarkdownConfig.keepHtml,
       view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
-      view.xMatterGrammarSources,
+      view.xGrammarContext.sources,
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
     # their existing behavior rather than sharing or attempting to clone them.
-    view.xMarkdownRoot = view.xMarkdown.parseMarkdownRoot(view.xMarkdownConfig)
+    view.xMatterCodeIndices.clear()
+    view.xMatterHighlights.setLen(0)
+    view.xMarkdownRoot = view.markdownSource().parseMarkdownRoot(view.xMarkdownConfig)
+    view.xStandaloneAstBytes = markdownAstPayload(view.xMarkdownRoot)
     view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
     view.xMarkdownRootGeneration = view.xMarkdownGeneration
     view.xMarkdownParseWorkerThreadId = -1
@@ -2700,9 +3471,10 @@ proc startLatestMarkdownParse(view: MarkdownView) =
 
 proc cancelMarkdownColors(view: MarkdownView) =
   if view.xActiveMarkdownHighlightGeneration != 0:
-    emit view.xMarkdownParseWorker.cancelMarkdownHighlight(
-      view.xActiveMarkdownHighlightGeneration
+    view.requestMarkdownHighlightCancellation(
+      view.xActiveMarkdownHighlightGeneration, view.xActiveHighlightBytes
     )
+    view.xActiveHighlightBytes = 0
     view.xActiveMarkdownHighlightGeneration = 0
 
 proc scheduleMarkdownParse(view: MarkdownView) =
@@ -2715,7 +3487,8 @@ proc scheduleMarkdownParse(view: MarkdownView) =
   view.finishMarkdownWork()
 
 proc renderCurrentMarkdownDocument(view: MarkdownView) =
-  view.scheduleMarkdownRendering()
+  if not view.xSuspended and not view.xMarkdownRoot.isNil:
+    view.scheduleMarkdownRendering()
 
 func isMarkdownRendering*(view: MarkdownView): bool =
   ## Return whether incremental rendering or table resize reflow is pending.
@@ -2726,12 +3499,28 @@ func isMarkdownParsing*(view: MarkdownView): bool =
   ## Return whether structure parsing, code coloring or rendering is in progress.
   not view.isNil and (
     view.xActiveMarkdownGeneration != 0 or view.xActiveMarkdownHighlightGeneration != 0 or
+    (not view.xDocumentOwner.isNil and view.xDocumentOwner.xPending) or
     view.isMarkdownRendering()
   )
 
 func isMarkdownLayoutPending*(view: MarkdownView): bool =
-  ## Return whether resize reflow is finishing on a text-layout worker.
-  not view.isNil and view.textView().layoutManager().isBackgroundLayoutPending()
+  ## Return whether existing main or embedded layout work is pending.
+  if view.isNil:
+    return
+  let textView = MarkdownTextView(view.textView())
+  if textView.markdownViewportLayoutPending or textView.markdownEvictionRetryPending or
+      textView.layoutManager().isBackgroundLayoutPending():
+    return true
+  for index in 0 ..< textView.markdownCodeBlocks.len:
+    let presentation {.cursor.} = textView.markdownCodeBlocks[index]
+    if not presentation.textView.isNil and
+        presentation.textView.layoutManager().isBackgroundLayoutPending():
+      return true
+  for index in 0 ..< textView.markdownTables.len:
+    let presentation {.cursor.} = textView.markdownTables[index]
+    if not presentation.textView.isNil and
+        presentation.textView.layoutManager().isBackgroundLayoutPending():
+      return true
 
 func markdownRenderChunkCount*(view: MarkdownView): int =
   ## Return the number of chunks used by the current or last completed render.
@@ -2947,7 +3736,291 @@ protocol MarkdownViewKeyEquivalents of ResponderCommandDispatchProtocol:
 
 proc markdown*(view: MarkdownView): string =
   ## Returns the source Markdown last rendered by `view`.
-  view.xMarkdown
+  view.markdownSource()
+
+func markdownDocumentOwner*(view: MarkdownView): MarkdownDocumentOwner =
+  ## Return the currently attached shared owner, if any.
+  if not view.isNil:
+    result = view.xDocumentOwner
+
+func borrowedMarkdownSource*(owner: MarkdownDocumentOwner): lent string =
+  ## Borrow the immutable source while the owner remains alive.
+  doAssert not owner.isNil
+  owner.xSource
+
+proc canAdoptMarkdownDocument*(view: MarkdownView, owner: MarkdownDocumentOwner): bool =
+  ## Test parser and grammar compatibility without changing the view.
+  ## Owners awaiting cancellation acknowledgement cannot be adopted.
+  if view.isNil or owner.isNil or owner.xCancelRequested or
+      view.xSyntaxHighlighter != SyntaxHighlighter(matterSyntaxHighlighter):
+    return
+  var dialect: MarkdownParseDialect
+  if not view.xMarkdownConfig.builtInMarkdownDialect(dialect):
+    return
+  dialect == owner.xDialect and view.xMarkdownConfig.escape == owner.xEscape and
+    view.xMarkdownConfig.keepHtml == owner.xKeepHtml and
+    view.xGrammarContext.sources == owner.xGrammarContext.sources
+
+proc attachMarkdownDocument(
+    view: MarkdownView, owner: MarkdownDocumentOwner, preserveState: bool
+): bool =
+  if not view.canAdoptMarkdownDocument(owner):
+    return
+  if view.xDocumentOwner == owner:
+    return true
+  if not preserveState:
+    inc view.xRestoreToken
+  let invocation = view.xRestoreToken
+  view.cancelMarkdownColors()
+  view.cancelMarkdownRendering()
+  view.detachMarkdownOwner()
+  if view.xRestoreToken != invocation:
+    return
+  if not preserveState:
+    view.xMarkdownHeadingIdentifiers.setLen(0)
+    view.xCollapsedMarkdownHeadings.clear()
+    view.xKnownMarkdownHeadings.clear()
+  inc view.xMarkdownGeneration
+  view.xSuspended = false
+  view.xMarkdown = ""
+  view.xMatterCodeIndices.clear()
+  view.xMatterHighlights.setLen(0)
+  view.xMarkdownRoot = nil
+  view.xStandaloneAstBytes = 0
+  view.xMarkdownParseError.setLen(0)
+  view.xGrammarContext = owner.xGrammarContext
+  view.xDocumentOwner = owner
+  var subscriber: BackRef[MarkdownView]
+  subscriber.set(view, view.xOwnerBackRefs)
+  owner.xSubscribers.add subscriber
+  if owner.xStarted and not owner.xRoot.isNil:
+    view.installSharedMarkdownRoot(owner)
+  elif owner.xStarted and not owner.xPending and owner.xError.len > 0:
+    view.installSharedMarkdownRoot(owner)
+  else:
+    owner.startMarkdownOwner()
+  if view.xRestoreToken != invocation or view.xDocumentOwner != owner:
+    return
+  view.finishMarkdownWork()
+  if view.xRestoreToken != invocation or view.xDocumentOwner != owner:
+    return
+  emit view.markdownRetainedCostDidChange()
+  view.xRestoreToken == invocation and view.xDocumentOwner == owner
+
+proc adoptMarkdownDocument*(view: MarkdownView, owner: MarkdownDocumentOwner): bool =
+  ## Attach a compatible owner; incompatible requests leave the view untouched.
+  view.attachMarkdownDocument(owner, false)
+
+proc captureMarkdownViewState*(view: MarkdownView): MarkdownViewState =
+  ## Capture folds, selection and scroll without retaining document payload.
+  if view.isNil:
+    return
+  if view.xMarkdownCommittedGeneration != view.xMarkdownGeneration:
+    if view.xPendingRestoreGeneration == view.xMarkdownGeneration and
+        view.xPendingRestoredState.hasState:
+      return view.xPendingRestoredState
+    result.headingIdentifiers = view.xMarkdownHeadingIdentifiers
+    return
+  result.hasState = true
+  result.headingIdentifiers = view.xMarkdownHeadingIdentifiers
+  for id in view.xCollapsedMarkdownHeadings:
+    result.collapsedHeadingIds.add id
+  for id in view.xKnownMarkdownHeadings:
+    result.knownHeadingIds.add id
+  result.selection = view.textView().selectedRange()
+  result.scrollOffset = view.scrollView().contentOffset()
+
+proc suspendMarkdownImpl(view: MarkdownView): MarkdownViewState
+
+proc startMarkdownRetirement(view: MarkdownView): MarkdownRetirement =
+  let textView = MarkdownTextView(view.textView())
+  result = MarkdownRetirement(xBytes: view.retainedMarkdownCost().viewBytes)
+  if not view.xDocumentOwner.isNil and not view.xGrammarContext.isNil:
+    # The receipt may outlive its owner while retaining a standalone view.
+    result.xBytes += view.xGrammarContext.bytes
+  template capture(managerValue: TextLayoutManager) =
+    block:
+      let manager = managerValue
+      if not manager.isNil:
+        let ticket = manager.retireBackgroundLayoutWork()
+        if manager.isBackgroundLayoutRetirementPending(ticket):
+          result.xItems.add MarkdownRetirementItem(manager: manager, ticket: ticket)
+
+  capture(textView.layoutManager())
+  for presentation in textView.markdownCodeBlocks:
+    if not presentation.textView.isNil:
+      capture(presentation.textView.layoutManager())
+  for presentation in textView.markdownTables:
+    if not presentation.textView.isNil:
+      capture(presentation.textView.layoutManager())
+  result.xParseGeneration = view.xActiveMarkdownGeneration
+  result.xBytes += view.xActiveParseBytes
+  if view.xActiveMarkdownHighlightGeneration != 0:
+    result.xHighlightGenerations.add view.xActiveMarkdownHighlightGeneration
+    result.xBytes += view.xActiveHighlightBytes
+  for pending in view.xRetiringHighlights:
+    result.xHighlightGenerations.add pending.generation
+    result.xBytes += pending.bytes
+  if result.xParseGeneration != 0 or result.xHighlightGenerations.len != 0:
+    result.xView = view
+  if result.xItems.len == 0 and result.xView.isNil:
+    return nil
+  result.xPending = true
+  inFlightMarkdownRetirements.add result
+  let receipt = result
+  scheduleMainThreadWork(
+    proc(): bool =
+      var index = receipt.xItems.high
+      while index >= 0:
+        let item = receipt.xItems[index]
+        if not item.manager.isBackgroundLayoutRetirementPending(item.ticket):
+          receipt.xItems.delete(index)
+        dec index
+      if receipt.xParseGeneration == 0 and receipt.xHighlightGenerations.len == 0:
+        receipt.xView = nil
+      if receipt.xItems.len > 0 or not receipt.xView.isNil:
+        return true
+      receipt.xPending = false
+      for index, pending in inFlightMarkdownRetirements:
+        if pending == receipt:
+          inFlightMarkdownRetirements.delete(index)
+          break
+      emit receipt.markdownRetirementDidChange()
+      false
+  )
+
+proc suspendMarkdown*(
+    view: MarkdownView, receipt: var MarkdownRetirement
+): MarkdownViewState =
+  ## Release reconstructible resources; `receipt` tracks captured worker work.
+  if view.isNil:
+    receipt = nil
+    return
+  receipt = view.startMarkdownRetirement()
+  result = view.suspendMarkdownImpl()
+
+proc suspendMarkdownImpl(view: MarkdownView): MarkdownViewState =
+  ## Release reconstructible document/view resources and return lightweight state.
+  if view.isNil:
+    return
+  result = view.captureMarkdownViewState()
+  inc view.xRestoreToken
+  let invocation = view.xRestoreToken
+  view.xSuspended = true
+  inc view.xMarkdownGeneration
+  view.cancelMarkdownColors()
+  view.cancelMarkdownRendering()
+  view.detachMarkdownOwner()
+  if view.xRestoreToken != invocation or not view.xSuspended:
+    return
+  view.xMarkdown = ""
+  view.xMarkdownRoot = nil
+  view.xStandaloneAstBytes = 0
+  view.xMarkdownHeadingIdentifiers.setLen(0)
+  view.xMarkdownRootHeadingIdentifiers.setLen(0)
+  view.xMatterCodeIndices.clear()
+  view.xMatterHighlights.setLen(0)
+  view.xCollapsedMarkdownHeadings.clear()
+  view.xKnownMarkdownHeadings.clear()
+  view.xImageCache.clear()
+  view.xImageMediaTypes.clear()
+  view.xPendingUrlAssets.clear()
+  view.xPendingRestoredState = default(MarkdownViewState)
+  view.xPendingRestoreGeneration = 0
+  view.applyMarkdownDocument(MarkdownDocument(storage: newTextStorage()))
+  emit view.markdownRetainedCostDidChange()
+
+proc suspendMarkdown*(view: MarkdownView): MarkdownViewState =
+  ## Suspend and internally retain any worker retirement until acknowledgement.
+  var receipt: MarkdownRetirement
+  view.suspendMarkdown(receipt)
+
+proc restoreMarkdownState(view: MarkdownView, state: MarkdownViewState) =
+  inc view.xRestoreToken
+  view.xPendingRestoredState = state
+  view.xPendingRestoreGeneration = view.xMarkdownGeneration
+  if not state.hasState:
+    return
+  var weakView: BackRef[MarkdownView]
+  weakView.set(view, view.xOwnerBackRefs)
+  let
+    generation = view.xPendingRestoreGeneration
+    token = view.xRestoreToken
+    ownerId = view.xDocumentOwner.markdownOwnerId()
+  scheduleMainThreadWork(
+    proc(): bool =
+      let current = weakView.target()
+      template valid(): bool =
+        not current.isNil and not current.xSuspended and
+          current.xPendingRestoreGeneration == generation and
+          current.xMarkdownGeneration == generation and current.xRestoreToken == token and
+          current.xDocumentOwner.markdownOwnerId() == ownerId
+
+      if not valid():
+        return false
+      if current.xMarkdownParseError.len > 0:
+        current.xPendingRestoreGeneration = 0
+        current.xPendingRestoredState = default(MarkdownViewState)
+        return false
+      if current.xMarkdownRootGeneration != generation or current.isMarkdownRendering():
+        return true
+      current.layoutSubtreeIfNeeded()
+      if not valid():
+        return false
+      if current.isMarkdownLayoutPending():
+        return true
+      let selection = current.xPendingRestoredState.selection
+      current.textView().selectedRange = selection
+      if not valid():
+        return false
+      let offset = current.xPendingRestoredState.scrollOffset
+      current.scrollView().scrollTo(offset)
+      if not valid():
+        return false
+      current.xPendingRestoredState = default(MarkdownViewState)
+      current.xPendingRestoreGeneration = 0
+      emit current.markdownRetainedCostDidChange()
+      false
+  )
+
+proc applyMarkdownFolds(view: MarkdownView, state: MarkdownViewState) =
+  view.xCollapsedMarkdownHeadings.clear()
+  view.xKnownMarkdownHeadings.clear()
+  view.xMarkdownHeadingIdentifiers = state.headingIdentifiers
+  if state.hasState:
+    for id in state.collapsedHeadingIds:
+      view.xCollapsedMarkdownHeadings.incl id
+    for id in state.knownHeadingIds:
+      view.xKnownMarkdownHeadings.incl id
+
+proc resumeMarkdown*(
+    view: MarkdownView, owner: MarkdownDocumentOwner, state: MarkdownViewState
+): bool =
+  ## Resume a compatible document and restore state after its matching layout.
+  if not view.canAdoptMarkdownDocument(owner):
+    return
+  inc view.xRestoreToken
+  let invocation = view.xRestoreToken
+  let headingIdsChanged = view.xMarkdownHeadingIdentifiers != state.headingIdentifiers
+  view.applyMarkdownFolds(state)
+  let wasAttached = view.xDocumentOwner == owner
+  if not view.attachMarkdownDocument(owner, true):
+    return
+  if view.xRestoreToken != invocation or view.xDocumentOwner != owner or view.xSuspended:
+    return
+  if wasAttached and (state.hasState or headingIdsChanged):
+    view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
+    view.renderCurrentMarkdownDocument()
+    if view.xRestoreToken != invocation or view.xDocumentOwner != owner or
+        view.xSuspended:
+      return
+  view.restoreMarkdownState(state)
+  true
+
+proc detachMarkdownOwnerPreservingSource(view: MarkdownView) =
+  if not view.xDocumentOwner.isNil:
+    view.xMarkdown = view.xDocumentOwner.xSource
+    view.detachMarkdownOwner()
 
 proc headingsToggleOnClick*(view: MarkdownView): bool =
   ## Whether heading text participates in the section disclosure click target.
@@ -2976,7 +4049,14 @@ proc updateMarkdown*(
   ## `initiallyCollapsedHeadings` supplies defaults for previously unseen explicit
   ## heading identifiers. Preserved state includes headings temporarily filtered out.
   let identifiers = @headingIdentifiers
-  if view.xMarkdown == source and view.xMarkdownHeadingIdentifiers == identifiers:
+  if not view.xSuspended and view.markdownSource() == source and
+      view.xMarkdownHeadingIdentifiers == identifiers:
+    return
+  inc view.xRestoreToken
+  let invocation = view.xRestoreToken
+  view.xSuspended = false
+  view.detachMarkdownOwner()
+  if view.xRestoreToken != invocation:
     return
   view.xPendingUrlAssets.clear()
   if not preserveHeadingState:
@@ -2992,6 +4072,32 @@ proc updateMarkdown*(
   view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source
   view.scheduleMarkdownParse()
+
+proc resumeMarkdown*(
+    view: MarkdownView, source: sink string, state: MarkdownViewState
+): bool =
+  ## Resume a standalone document, including custom parser/highlighter views.
+  if view.isNil:
+    return
+  inc view.xRestoreToken
+  let invocation = view.xRestoreToken
+  view.detachMarkdownOwnerPreservingSource()
+  if view.xRestoreToken != invocation or not view.xDocumentOwner.isNil:
+    return
+  let sameSource = not view.xSuspended and view.markdownSource() == source
+  let headingIdsChanged = view.xMarkdownHeadingIdentifiers != state.headingIdentifiers
+  view.applyMarkdownFolds(state)
+  view.updateMarkdown(source, state.headingIdentifiers, preserveHeadingState = true)
+  let expected = invocation + (if sameSource: 0'u64 else: 1'u64)
+  if view.xRestoreToken != expected or not view.xDocumentOwner.isNil or view.xSuspended:
+    return
+  if sameSource and (state.hasState or headingIdsChanged):
+    view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
+    view.renderCurrentMarkdownDocument()
+    if view.xRestoreToken != expected or not view.xDocumentOwner.isNil or view.xSuspended:
+      return
+  view.restoreMarkdownState(state)
+  true
 
 proc `markdown=`*(view: MarkdownView, source: string) =
   ## Replaces the document, resetting section state when the source changes.
@@ -3048,21 +4154,28 @@ proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
 
 proc matterGrammarSources*(view: MarkdownView): seq[MatterGrammarSource] =
   ## Return application grammars used by the background fenced-code classifier.
-  view.xMatterGrammarSources
+  view.xGrammarContext.sources
 
 proc `matterGrammarSources=`*(view: MarkdownView, sources: seq[MatterGrammarSource]) =
   ## Replace application grammars and rehighlight the current Markdown document.
-  if view.xMatterGrammarSources != sources:
-    view.xMatterGrammarSources = sources
+  if view.xGrammarContext.sources != sources:
+    view.detachMarkdownOwnerPreservingSource()
+    view.xGrammarContext = newMarkdownGrammarContext(sources)
     view.scheduleMarkdownParse()
 
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.
+  if not view.xDocumentOwner.isNil:
+    if highlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+      return
+    view.detachMarkdownOwnerPreservingSource()
   view.xSyntaxHighlighter = highlighter
   if highlighter == SyntaxHighlighter(matterSyntaxHighlighter):
     view.scheduleMarkdownParse()
   else:
     view.cancelMarkdownColors()
+    view.xMatterCodeIndices.clear()
+    view.xMatterHighlights.setLen(0)
     view.renderCurrentMarkdownDocument()
     view.finishMarkdownWork()
 
@@ -3091,6 +4204,7 @@ proc `markdownConfig=`*(view: MarkdownView, config: MarkdownParserConfig) =
   let resolved = config.resolvedConfig()
   if view.xMarkdownConfig == resolved:
     return
+  view.detachMarkdownOwnerPreservingSource()
   view.xPendingUrlAssets.clear()
   view.xMarkdownConfig = resolved
   view.scheduleMarkdownParse()
@@ -3118,6 +4232,7 @@ proc initMarkdownViewFields*(
     view, frame = frame, richText = true, wraps = true, textView = textView
   )
   textView.markdownView = view.unsafeWeakRef()
+  textView.markdownCostOwner.set(view, view.xOwnerBackRefs)
   view.xMarkdownStyle = style
   view.xMarkdownConfig = config.resolvedConfig()
   view.xMarkdownRoot = markdownParser.Document()
@@ -3127,6 +4242,7 @@ proc initMarkdownViewFields*(
   view.xImageLoader = imageLoader
   view.xUrlAssetLoader = urlAssetLoader
   view.xSyntaxHighlighter = syntaxHighlighter
+  view.xGrammarContext = newMarkdownGrammarContext(@[])
   view.xImageCache = initTable[string, ImageResource]()
   view.xImageMediaTypes = initTable[string, string]()
   view.xPendingUrlAssets = initTable[string, UrlAssetHandle]()

@@ -56,6 +56,11 @@ suite "Kosmo terminal search":
     terminal.findNext()
     check terminal.selection().anchor.row == 19
     check terminal.scrollPosition() == 0
+    session.processOutput("\r\nhit 20")
+    session.waitForCommands()
+    terminal.findNext()
+    check terminal.searchMatchCount() == 3
+    check terminal.selection().anchor.row == 20
 
   test "Reni matches keep Unicode cells and cross wrapped output":
     let session = newTerminalViewSession(columns = 6, rows = 4)
@@ -80,6 +85,62 @@ suite "Kosmo terminal search":
     check terminalSearchMatches(session, "", regularExpression = true).len == 0
     expect TextSearchError:
       discard terminalSearchMatches(session, "[", regularExpression = true)
+
+  test "positions account for combining cells, wide cells, and hard line breaks":
+    let session = newTerminalViewSession(columns = 10, rows = 3)
+    session.processOutput("a猫e\u0301z\r\nnext")
+    session.waitForCommands()
+
+    for (query, expected) in [
+      (
+        "猫",
+        TerminalSelection(
+          anchor: initTerminalPosition(0, 1), extent: initTerminalPosition(0, 3)
+        ),
+      ),
+      (
+        "\u0301",
+        TerminalSelection(
+          anchor: initTerminalPosition(0, 3), extent: initTerminalPosition(0, 4)
+        ),
+      ),
+      (
+        "z",
+        TerminalSelection(
+          anchor: initTerminalPosition(0, 4), extent: initTerminalPosition(0, 5)
+        ),
+      ),
+      (
+        "next",
+        TerminalSelection(
+          anchor: initTerminalPosition(1, 0), extent: initTerminalPosition(1, 4)
+        ),
+      ),
+    ]:
+      let matches = terminalSearchMatches(session, query)
+      require matches.len == 1
+      check matches[0] == expected
+
+    let combining =
+      terminalSearchMatches(session, r"e\K\x{301}z", regularExpression = true)
+    require combining.len == 1
+    check combining[0] ==
+      TerminalSelection(
+        anchor: initTerminalPosition(0, 3), extent: initTerminalPosition(0, 5)
+      )
+    let endPosition = terminalSearchMatches(session, r"\z", regularExpression = true)
+    require endPosition.len == 1
+    check endPosition[0] ==
+      TerminalSelection(
+        anchor: initTerminalPosition(2, 10), extent: initTerminalPosition(2, 10)
+      )
+
+    let across = terminalSearchMatches(session, r"z +\nnext", regularExpression = true)
+    require across.len == 1
+    check across[0] ==
+      TerminalSelection(
+        anchor: initTerminalPosition(0, 4), extent: initTerminalPosition(1, 4)
+      )
 
   test "terminal expression controls recover from invalid queries":
     let

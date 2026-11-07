@@ -1,0 +1,56 @@
+{
+  "workload": "Dynamically allocated 8 MiB spaces tokenized with langNim, source retained through checkpoint; one span",
+  "method": "One fresh process per binary. MallocStackLogging=1; leaks --fullStackHistory --outputGraph=<file> <pid> at post-tokenization stdin checkpoint; malloc_history <file> -highWaterMark -callTree -invert -ignoreThreads -consolidateAllBySymbol and without -highWaterMark. Apple output units preserved.",
+  "limitations": [
+    "One traced run each; allocator logging affects timing and memory.",
+    "Stack-logged totals exclude allocations without stack records; actual process RSS and heap are different measurements."
+  ],
+  "samples": [
+    {
+      "version": "before",
+      "binary": "/tmp/merenda-synedit-before",
+      "binarySha256": "c0ccdb8088ff8f69a032c146346b434659d4f59ed34702ee61966f82777f4877",
+      "graph": "/tmp/merenda-utf8-profile/synedit-before.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/synedit-before-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/synedit-before-live.txt",
+      "capturedAt": "post-tokenization with source retained",
+      "peakHeapVm": "16.2 MB",
+      "currentHeapVm": "8.2 MB",
+      "cumulativeHeapVm": "17.6 MB",
+      "allocationEvents": "312",
+      "liveCallTreeTotal": "155 (8.22M)",
+      "noStackBlocks": "817   total size: 183K",
+      "notablePeakStack": "1 block / 8.00M: synEditTokenSpans -> internalTokenSpans -> nimAsgnStrV2",
+      "source": {
+        "path": "/tmp/merenda-synedit-before-source.nim",
+        "sha256": "7f7078854a8b1ba5d3bc1c2a259e60775634353c3c25a54f224ea91dc6b4de91"
+      }
+    },
+    {
+      "version": "after",
+      "binary": "/tmp/merenda-synedit-after",
+      "binarySha256": "773ab93dbc2f8d5abe29e69112c416ea433a6ac0ba7f668c80bcade0aae63174",
+      "graph": "/tmp/merenda-utf8-profile/synedit-after.memgraph",
+      "highReport": "/tmp/merenda-utf8-profile/synedit-after-high.txt",
+      "liveReport": "/tmp/merenda-utf8-profile/synedit-after-live.txt",
+      "capturedAt": "post-tokenization with source retained",
+      "peakHeapVm": "8.2 MB",
+      "currentHeapVm": "8.2 MB",
+      "cumulativeHeapVm": "9.6 MB",
+      "allocationEvents": "309",
+      "liveCallTreeTotal": "155 (8.22M)",
+      "noStackBlocks": "817   total size: 183K",
+      "notablePeakStack": "No internalTokenSpans -> nimAsgnStrV2 allocation at peak",
+      "source": {
+        "path": "/tmp/merenda-synedit-after-source.nim",
+        "sha256": "d0bc48f8e3e13e7b9337ed49eec597cdbaa8139516d0c152783a96e7fd2f575a"
+      }
+    }
+  ],
+  "harness": {
+    "path": "/tmp/merenda-synedit-profile-harness.nim",
+    "sha256": "f8bc915df7524c1bedbedaa1ac4dd52d25a169340a21be222bbd8470d9bad1c9",
+    "trackedPath": "tests/benchmarks/syneditallocationprobe.nim"
+  },
+  "captureDriver": "tests/benchmarks/capture_allocations.py"
+}

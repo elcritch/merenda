@@ -3,8 +3,12 @@ import std/[random, strutils, unittest]
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/text/textstorage
+import merenda/nimkit/text/textsnapshots
 
 type
+  OverriddenStringStorage = ref object of TextStorage
+
   StorageEventSpy = ref object of DynamicAgent
     events: seq[string]
     lastEdit: TextStorageEdit
@@ -29,6 +33,9 @@ type
 
   DispatchRecorder = ref object of DynamicAgent
     dispatches: seq[string]
+
+method storageString(storage: OverriddenStringStorage): string =
+  "αβγ"
 
 protocol StorageEventSpySlots from StorageEventSpy:
   includes TextStorageEditingEvents
@@ -139,6 +146,298 @@ proc newDispatchingTextStorage(value: string, recorder: DispatchRecorder): TextS
   result.delegate = DynamicAgent(recorder)
   discard result.withProtocol(RecordingTextStorageDispatchProtocol)
 
+suite "background text source":
+  test "worker source uses the storage text override":
+    let original = OverriddenStringStorage()
+    original.initTextStorageFields("abc")
+    let detached = newTextLayoutStorage(original.textLayoutSource())
+    check detached.stringValue() == "αβγ"
+
+  test "detached interned styles survive edits to the original":
+    let original = newTextStorage("αβγδε")
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 23
+    emphasis.link = "https://example.test/α"
+    original.setAttributes(initTextRange(1, 2), emphasis)
+    let source = original.textLayoutSource()
+    let expectedRuns = original.attributeRuns()
+    original.stringValue = "replacement"
+    let detached = newTextLayoutStorage(source)
+    check detached.stringValue() == "αβγδε"
+    check detached.attributeRuns() == expectedRuns
+    detached.setAttributes(initTextRange(0, 1), emphasis)
+    let second = newTextLayoutStorage(source)
+    check second.attributeRuns() == expectedRuns
+
+suite "range-backed text storage":
+  test "captured source and styles stay independent across edits and eviction":
+    let
+      parent = newTextStorage("pre αβ\nz post")
+      captured = parent.textSnapshot()
+      styles = newTextStorage("αβ\nz")
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 21
+    styles.setAttributes(initTextRange(1, 2), emphasis)
+    let child = newTextRangeStorage(captured, initTextRange(4, 4), styles)
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(captured) == (true, false)
+    check child.len == 4
+    check child.substring(initTextRange(1, 2)) == "β\n"
+    check child.lineCount == 2
+    check child.lineRange(0) == initTextRange(0, 3)
+    check child.lineRange(1) == initTextRange(3, 1)
+    check child.lineRange(2) == initTextRange(4, 0)
+    check child.paragraphRangeForRange(initTextRange(1, 0)) == initTextRange(0, 3)
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(captured) == (true, false)
+    check child.attributeRuns == styles.attributeRuns
+    let oldSnapshot = child.textSnapshot()
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(captured) == (true, true)
+    child.discardTextRangeStorageMaterialization()
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(captured) == (true, false)
+    check oldSnapshot.bytes == "αβ\nz"
+    check child.textSnapshot().bytes == "αβ\nz"
+    parent.stringValue = "changed"
+    styles.setAttributes(initTextRange(1, 2), defaultTextAttributes())
+    check child.stringValue == "αβ\nz"
+    check child.attributesAt(1).fontSize == 21
+    var accent = emphasis
+    accent.link = "new child style"
+    child.setAttributes(initTextRange(0, 1), accent)
+    check styles.attributesAt(0).link == ""
+    check child.attributesAt(0).link == "new child style"
+    let copy = child.copyTextStorage()
+    child.replace(initTextRange(0, 1), "Q")
+    check child.stringValue == "Qβ\nz"
+    check copy.stringValue == "αβ\nz"
+    child.discardTextRangeStorageMaterialization()
+    check child.stringValue == "Qβ\nz"
+    when defined(merendaTests):
+      check not child.textRangeStorageStateForTest(captured).sharesSource
+      check copy.textRangeStorageStateForTest(captured).sharesSource
+
+  test "range-backed snapshots preserve malformed and line semantics":
+    for value in ["", "a\n\nβ\n", "a\xF0z", "é\xE2\x82"]:
+      let
+        parent = newTextStorage("P" & value)
+        baseline = newTextStorage(value)
+        captured = parent.textSnapshot()
+        child = newTextRangeStorage(captured, initTextRange(1, baseline.len), baseline)
+      check child.stringValue == value
+      check child.len == baseline.len
+      check child.lineCount == baseline.lineCount
+      for line in -1 .. baseline.lineCount + 1:
+        check child.lineRange(line) == baseline.lineRange(line)
+      for index in 0 .. baseline.len:
+        check child.paragraphRangeForRange(initTextRange(index, 0)) ==
+          baseline.paragraphRangeForRange(initTextRange(index, 0))
+      when defined(merendaTests):
+        check child.textRangeStorageStateForTest(captured) == (true, false)
+
+  test "range edits support undo without mutating the captured parent":
+    let
+      parent = newTextStorage("before item after")
+      snapshot = parent.textSnapshot()
+      styles = newTextStorage("item")
+      child = newTextRangeStorage(snapshot, initTextRange(7, 4), styles)
+      manager = newUndoManager()
+    defer:
+      manager.clearAll()
+    child.undoManager = manager
+    child.replace(initTextRange(1, 2), "XY")
+    check child.stringValue == "iXYm"
+    check manager.performUndo()
+    check child.stringValue == "item"
+    check manager.performRedo()
+    check child.stringValue == "iXYm"
+    check parent.stringValue == "before item after"
+
+  test "range storage supports slicing, equality, setting and layout":
+    let
+      parent = newTextStorage("left café 😀 right")
+      original = newTextStorage("café 😀")
+      snapshot = parent.textSnapshot()
+      child = newTextRangeStorage(snapshot, initTextRange(5, original.len), original)
+      container = initTextContainer(initSize(90, 1000), wraps = true)
+      expected = newTextLayoutManager(original, container).layoutSnapshot()
+      actual = newTextLayoutManager(child, container).layoutSnapshot()
+    check actual.textHash == expected.textHash
+    check actual.layoutHash == expected.layoutHash
+    check actual.lineFragments == expected.lineFragments
+    check child.sameStorageText(original)
+    check child.sliceTextStorage(initTextRange(3, 3)).stringValue == "é 😀"
+    child.stringValue = "replacement"
+    check child.stringValue == "replacement"
+    check parent.stringValue == "left café 😀 right"
+    child.discardTextRangeStorageMaterialization()
+    check child.stringValue == "replacement"
+
+  test "empty range-storage copies support direct storage hooks":
+    let
+      parent = newTextStorage("prefix item")
+      styles = newTextStorage("item")
+      child = newTextRangeStorage(parent.textSnapshot(), initTextRange(7, 4), styles)
+      empty = child.newEmptyStorageCopy()
+    check empty.storageLength() == 0
+    check empty.storageString() == ""
+    check empty.storageLineCount() == 1
+    check empty.storageLineRange(0) == initTextRange(0, 0)
+    check empty.stringValue() == ""
+    check empty.len == 0
+    check empty.lineRange(0) == initTextRange(0, 0)
+    empty.replace(initTextRange(0, 0), "new")
+    check empty.stringValue() == "new"
+    check child.stringValue() == "item"
+
+  test "segmented storage preserves ordered shared source and local styles":
+    let
+      parent = newTextStorage("xαβ|😀\n|z!")
+      snapshot = parent.textSnapshot()
+      original = newTextStorage("αβ😀\nz")
+      pieces = @[initTextRange(1, 2), initTextRange(4, 2), initTextRange(7, 1)]
+    var emphasis = defaultTextAttributes()
+    emphasis.fontSize = 22
+    original.setAttributes(initTextRange(1, 3), emphasis)
+    let child = newTextSegmentStorage(snapshot, pieces, original)
+    check child.len == original.len
+    check child.substring(initTextRange(1, 3)) == "β😀\n"
+    check child.lineCount == original.lineCount
+    for line in 0 .. 2:
+      check child.lineRange(line) == original.lineRange(line)
+    for index in 0 .. original.len:
+      check child.paragraphRangeForRange(initTextRange(index, 0)) ==
+        original.paragraphRangeForRange(initTextRange(index, 0))
+    check child.attributeRuns == original.attributeRuns
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    let cached = child.textSnapshot()
+    check cached.bytes == "αβ😀\nz"
+    child.discardTextRangeStorageMaterialization()
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    check cached.bytes == "αβ😀\nz"
+    parent.stringValue = "changed"
+    original.setAttributes(initTextRange(1, 3), defaultTextAttributes())
+    check child.attributesAt(1).fontSize == 22
+    let copy = child.copyTextStorage()
+    child.replace(initTextRange(1, 2), "Q")
+    check child.stringValue == "αQ\nz"
+    check copy.stringValue == "αβ😀\nz"
+    when defined(merendaTests):
+      check not child.textRangeStorageStateForTest(snapshot).sharesSource
+      check copy.textRangeStorageStateForTest(snapshot).sharesSource
+
+  test "segmented storage supports reordered pieces and empty ranges":
+    let
+      parent = newTextStorage("xαβ|😀\n|z!")
+      snapshot = parent.textSnapshot()
+      styles = newTextStorage("zαβz")
+      child = newTextSegmentStorage(
+        snapshot,
+        [
+          initTextRange(7, 1),
+          initTextRange(0, 0),
+          initTextRange(1, 2),
+          initTextRange(7, 1),
+        ],
+        styles,
+      )
+    check child.stringValue == "zαβz"
+    check child.substring(initTextRange(1, 2)) == "αβ"
+    check child.substring(initTextRange(2, 2)) == "βz"
+    check estimatedTextSegmentMetadataBytes(1) == 0
+    check estimatedTextSegmentMetadataBytes(3) > 0
+    let empty = newTextSegmentStorage(snapshot, [], newTextStorage())
+    check empty.stringValue == ""
+    check empty.lineCount == 1
+
+  test "segment validation rejects unsafe joins, ranges and byte overflow":
+    let
+      parent = newTextStorage("x\xF0z")
+      snapshot = parent.textSnapshot()
+      malformed = newTextStorage("\xF0z")
+      single = newTextSegmentStorage(snapshot, [initTextRange(1, 1)], malformed)
+    check single.stringValue == "\xF0z"
+    expect ValueError:
+      discard newTextSegmentStorage(
+        snapshot, [initTextRange(1, 1), initTextRange(0, 1)], newTextStorage("xx")
+      )
+    expect ValueError:
+      discard newTextSegmentStorage(snapshot, [initTextRange(3, 0)], newTextStorage())
+    expect ValueError:
+      discard
+        newTextSegmentStorage(snapshot, [initTextRange(0, 1)], newTextStorage("ab"))
+    let large = newTextStorage("😀".repeat(262144)).textSnapshot()
+    var repeated = newSeq[TextRange](4097)
+    for item in repeated.mitems:
+      item = initTextRange(0, 262144)
+    expect ValueError:
+      discard newTextSegmentStorage(large, repeated, newTextStorage())
+
+  test "invalid ranges and style lengths are rejected":
+    let snapshot = newTextStorage("abc").textSnapshot()
+    expect ValueError:
+      discard newTextRangeStorage(snapshot, initTextRange(2, 2), newTextStorage("xx"))
+    expect ValueError:
+      discard newTextRangeStorage(snapshot, initTextRange(0, 2), newTextStorage("x"))
+    expect ValueError:
+      discard newTextRangeStorage(nil, initTextRange(0, 0), newTextStorage())
+
+suite "text payload accounting":
+  test "accounting does not materialize lazy, gap or range storage":
+    let
+      provider = newLazyStorageProvider("deferred")
+      lazy = newLazyTextStorage(provider)
+      gap = newGapTextStorage("gap é")
+      parent = newTextStorage("x".repeat(4096))
+      snapshot = parent.textSnapshot()
+      styles = newTextStorage("x".repeat(100))
+      child = newTextRangeStorage(snapshot, initTextRange(50, 100), styles)
+    var estimate: TextPayloadEstimate
+    estimate.addTextStoragePayload(lazy)
+    check not lazy.isMaterialized
+    check provider.stringRequests == 0
+    check provider.runRequests == 0
+    when defined(merendaTests):
+      check not gap.textStorageHasSnapshotForTest()
+    let beforeGap = estimate.bytes
+    estimate.addTextStoragePayload(gap)
+    check estimate.bytes >= beforeGap + uint64("gap é".len)
+    when defined(merendaTests):
+      check not gap.textStorageHasSnapshotForTest()
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    estimate.addTextStoragePayload(child)
+    let afterChild = estimate.bytes
+    when defined(merendaTests):
+      check child.textRangeStorageStateForTest(snapshot) == (true, false)
+    estimate.addTextStoragePayload(child)
+    check estimate.bytes == afterChild
+    check estimate.incomplete
+    # The parent snapshot is shared with child and must not be charged twice.
+    estimate.addTextStoragePayload(parent)
+    check estimate.bytes - afterChild < 4096'u64
+
+  test "accounting counts an evictable child snapshot separately":
+    let
+      parent = newTextStorage("p".repeat(2048))
+      snapshot = parent.textSnapshot()
+      child = newTextRangeStorage(
+        snapshot, initTextRange(20, 512), newTextStorage("p".repeat(512))
+      )
+    var before: TextPayloadEstimate
+    before.addTextStoragePayload(child)
+    let materialized = child.textSnapshot()
+    var during: TextPayloadEstimate
+    during.addTextStoragePayload(child)
+    check during.bytes >= before.bytes + 512'u64
+    child.discardTextRangeStorageMaterialization()
+    var after: TextPayloadEstimate
+    after.addTextStoragePayload(child)
+    check after.bytes == before.bytes
+    check materialized.bytes.len == 512
+
 suite "nimkit text storage":
   test "text storage revisions advance once per committed editing batch":
     let storage = newTextStorage("abcd")
@@ -183,6 +482,30 @@ suite "nimkit text storage":
     check storage.len == 5
     check storage.substring(initTextRange(1, 2)) == "Lp"
 
+  test "replacement preserves bytes at every boundary in both backends":
+    for (initial, start, length, replacement, expected) in [
+      ("", 0, 0, "", ""),
+      ("abc", 0, 0, "é", "éabc"),
+      ("abc", 3, 0, "😀", "abc😀"),
+      ("abc", 1, 1, "", "ac"),
+      ("abc", 0, 3, "", ""),
+      ("abc", 0, 3, "中", "中"),
+      ("é😀\xffz", 1, 2, "中", "é中z"),
+      ("a\0b", 1, 1, "\0x", "a\0xb"),
+    ]:
+      for storage in [newTextStorage(initial), TextStorage(newTextGapStorage(initial))]:
+        storage.replace(initTextRange(start, length), replacement)
+        check storage.stringValue() == expected
+
+  test "replacement can borrow the source snapshot as input":
+    for storage in [
+      newTextStorage("é😀x"), TextStorage(newTextGapStorage("é😀x"))
+    ]:
+      let snapshot = storage.textSnapshot()
+      storage.replace(initTextRange(1, 1), snapshot.bytes())
+      check storage.stringValue() == "éé😀xx"
+      check snapshot.bytes() == "é😀x"
+
   test "base storage scans UTF-8 lines and paragraphs in rune coordinates":
     let storage = newTextStorage("α\nβeta\n終")
 
@@ -206,6 +529,41 @@ suite "nimkit text storage":
       check run.range == initTextRange(0, 4)
       check run.attributes == accent
     check count == 1
+
+  test "compact run builder preserves normalized storage and shifted styles":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      original = @[
+        TextAttributeRun(range: initTextRange(0, 3), attributes: red),
+        TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+        TextAttributeRun(range: initTextRange(4, 5), attributes: blue),
+      ]
+    var compact: TextRunBuilder
+    for run in original:
+      compact.add(run.range, run.attributes)
+    let
+      expected = newTextStorage("αβγδε", original)
+      actual = newTextStorage("αβγδε", compact)
+    var expectedRuns, actualRuns: seq[TextAttributeRun]
+    for run in expected.runs:
+      expectedRuns.add run
+    for run in actual.runs:
+      actualRuns.add run
+    check actualRuns == expectedRuns
+    for index in 0 ..< actual.len:
+      check actual.attributesAt(index) == expected.attributesAt(index)
+
+    var first, second: TextRunBuilder
+    first.add(initTextRange(0, 1), red)
+    second.add(initTextRange(0, 1), red)
+    second.add(initTextRange(1, 1), blue)
+    first.append(second, 1)
+    check first.len == 2
+    check first[0] == TextAttributeRun(range: initTextRange(0, 2), attributes: red)
+    check first[1] == TextAttributeRun(range: initTextRange(2, 1), attributes: blue)
+    expect ValueError:
+      first.append(first, 0)
 
   test "attribute run lookups preserve Unicode ranges and default gaps":
     let
@@ -275,13 +633,12 @@ suite "nimkit text storage":
     let
       red = defaultTextAttributes(color(0.9, 0.1, 0.2))
       blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
-      source =
-        @[
-          TextAttributeRun(range: initTextRange(1, 4), attributes: red),
-          TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
-          TextAttributeRun(range: initTextRange(4, 3), attributes: blue),
-          TextAttributeRun(range: initTextRange(8, 1), attributes: red),
-        ]
+      source = @[
+        TextAttributeRun(range: initTextRange(1, 4), attributes: red),
+        TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
+        TextAttributeRun(range: initTextRange(4, 3), attributes: blue),
+        TextAttributeRun(range: initTextRange(8, 1), attributes: red),
+      ]
       storage = newTextStorage("aé中😀xyz!w", source)
     var found: seq[TextAttributeRun]
     for run in storage.runs(initTextRange(3, 2)):

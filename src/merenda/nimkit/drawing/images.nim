@@ -21,6 +21,21 @@ type
     xOwned: ImageRef
     xPublished: bool
 
+proc imageResourcePayload*(
+    image: ImageResource
+): tuple[
+  descriptorBytes: int, pixelIdentity: pointer, pixelBytes: int, incomplete: bool
+] =
+  ## Existing logical payload only; native and renderer resources are unknown.
+  ## The pixel identity is borrowed, so keep the image alive while accounting.
+  if image.isNil:
+    return
+  result.descriptorBytes = sizeof(image[]) + image.xName.len + image.xFilePath.len
+  result.incomplete = true
+  if not image.xPixels.isNil:
+    result.pixelIdentity = cast[pointer](image.xPixels)
+    result.pixelBytes = image.xPixels.data.len * sizeof(image.xPixels.data[0])
+
 const
   AutomaticPreloadMaximumArea* = 256 * 256
   MaximumPreloadedImages* = 256

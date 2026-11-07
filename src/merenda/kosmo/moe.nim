@@ -146,6 +146,7 @@ type
     matterSources: seq[moeMatter.MatterGrammarSource]
     matterFileTypes: seq[MatterGrammarFileType]
     viewerSources: seq[matterhighlighting.MatterGrammarSource]
+    viewerGrammarRevision: uint64
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
@@ -608,6 +609,11 @@ proc viewerGrammarSources*(
   if not editor.isNil:
     result = editor.viewerSources
 
+func viewerGrammarRevision*(editor: KosmoEditor): uint64 =
+  ## Identify the currently loaded native-viewer grammar set for this editor.
+  if not editor.isNil:
+    result = editor.viewerGrammarRevision
+
 func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
   var command: KosmoHostCommand
   case r.kind
@@ -961,6 +967,7 @@ proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   editor.matterSources = grammarState.sources
   editor.matterFileTypes = grammarState.fileTypes
   editor.viewerSources = grammarState.viewerSources
+  inc editor.viewerGrammarRevision
   editor.matterHighlighting.close()
   editor.matterHighlighting = nil
   editor.matterRequests.clear()
@@ -1282,6 +1289,14 @@ proc gitWatchRoots*(editor: KosmoEditor): seq[string] =
       if root notin result:
         result.add root
   result.sort()
+
+proc bufferContentVersion*(editor: KosmoEditor, id: KosmoBufferId): Option[int] =
+  ## Return the buffer's monotonic content generation, or none if it is closed.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let buffer = editor.editor.bufferById(id.toMoeBufferId)
+  if buffer.isSome:
+    result = some(buffer.get.contentVersion)
 
 proc bufferText*(editor: KosmoEditor, id: KosmoBufferId): Option[string] =
   ## Return the current in-memory text for a buffer, including unsaved edits.
@@ -2714,8 +2729,18 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
   ## Return the shared asynchronous highlighter, creating it before a frontend
   ## subscribes so completion can invalidate the retained cell grid.
   if not editor.isNil and not editor.editor.isNil and editor.matterHighlighting.isNil:
-    editor.matterHighlighting =
-      newMatterHighlighting(editor.matterSources, editor.matterFileTypes)
+    let fallbackState = editor.matterSyntaxFallback
+    editor.matterHighlighting = newMatterHighlighting(
+      editor.matterSources,
+      editor.matterFileTypes,
+      sourceProvider = proc(bufferId, contentVersion: int): Option[string] =
+        let id = BufferId(bufferId)
+        if not fallbackState.isNil and fallbackState.snapshots.hasKey(id) and
+            fallbackState.snapshots[id].version == contentVersion:
+          some(fallbackState.snapshots[id].text)
+        else:
+          none(string),
+    )
   if not editor.isNil and not editor.editor.isNil:
     result = editor.matterHighlighting
 
@@ -2851,12 +2876,12 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
         editor.matterRequests[buffer.id].contentVersion == buffer.contentVersion and
         not buffer.highlightNeedsUpdate:
       continue
-    let text = buffer.getTextString()
-    editor.matterSyntaxFallback.refreshMatterFallbackSnapshot(buffer, text)
-    let requestId = editor.matterHighlighting.requestMatterHighlight(
+    block:
+      let text = buffer.getTextString()
+      editor.matterSyntaxFallback.refreshMatterFallbackSnapshot(buffer, text)
+    let requestId = editor.matterHighlighting.requestMatterHighlightFromProvider(
       int(buffer.id),
       buffer.contentVersion,
-      text,
       buffer.language,
       if buffer.filePath.isSome: buffer.filePath.get else: "",
     )

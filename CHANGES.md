@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
+  budget, keeping visible previews and pending work pinned and sharing
+  compatible document owners across panes.
+- Share compatible Markdown document parsing and highlighting across views,
+  release inactive embedded views, and preserve preview state while asynchronous
+  work retires safely.
+- Add segmented immutable text-storage views and non-materializing logical
+  payload estimates; report terminal background-layout results and
+  request-specific retirement progress.
+- Avoid copying the entire glyph arrangement for each mixed-wrap paragraph.
+- Keep compact per-block Markdown highlight indices instead of retained
+  source-string lookup keys, while deduplicating identical worker jobs.
+
+- Reduce terminal search coordinate storage to row mappings and sparse wide-cell
+  or combining-cell exceptions while preserving literal and regular-expression
+  searches across screen and scrollback.
+- Transfer compact interned text styles to background layout workers without
+  expanding every style run and re-interning it on the worker.
+- Wrap Markdown table cells using UTF-8 and word ranges instead of per-rune
+  attribute records, and build overflowing table storage from the table alone.
+- Borrow SynEdit tokenizer input during synchronous tokenization instead of
+  retaining a temporary owning string copy.
+- Intern Markdown builder attributes while assembling text and transfer compact
+  style runs into TextStorage without expanding them at the handoff.
+- Stream word-boundary string queries and pending-layout glyph-property lookups
+  without building a second full UTF-8 buffer and sparse index.
+- Map Matter highlight byte endpoints with a small rune cursor, avoiding dense
+  per-byte tables even for oversized lines that skip grammar parsing.
+- Keep attributed edit deltas for normal TextView string edits instead of full
+  document revisions, with compatible snapshot fallbacks for other operations.
+  Adjacent grouped edits preserve earlier deltas; undo/redo reconstruct flat text
+  rather than retaining every revision.
+- Refresh Kosmo Markdown source only when its buffer content version changes,
+  avoiding repeated whole-buffer extraction for unchanged previews.
+- Build replacement TextStorage strings in one buffer, avoiding full prefix and
+  suffix temporaries while preserving rune ranges and snapshot aliasing.
+- Coalesce pending Matter highlight requests per buffer and allow one source
+  handoff per controller at a time. Moe queues metadata against its existing
+  fallback snapshots, preserving immediate fallback colors and cancellation.
+- Stream smart-insertion neighbor checks without constructing full UTF-8 indexes
+  for the document and insertion, preserving malformed input and storage overrides.
+
 - Add NimKit contentthemes: shared palette values, TOML loading, bundled themes,
   and adapters for Markdown, the built-in editor, and terminals. Kosmo keeps all
   Moe engine integration and uses the shared module for content presentation.

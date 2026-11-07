@@ -2,15 +2,46 @@
 import std/[algorithm, monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
+import sigils/threads
 from threading/smartptrs import `[]`
 
 import pkg/pixie
 
 import merenda/nimkit
+import merenda/nimkit/foundation/mainthreadwork
 import ../fixtures/nimbindings
 
-type MarkdownParseCompletionSpy = ref object of Agent
-  completions: int
+type
+  MarkdownParseCompletionSpy = ref object of Agent
+    completions: int
+
+  MarkdownOwnerRetentionSpy = ref object of Agent
+    notifications: int
+
+  MarkdownSelectionSwitchSpy = ref object of Agent
+    view: MarkdownView
+    switched: bool
+
+  MarkdownNestedResumeSpy = ref object of Agent
+    view: MarkdownView
+    owner: MarkdownDocumentOwner
+    state: MarkdownViewState
+    armed, resumed: bool
+
+proc rememberOwnerRetention(spy: MarkdownOwnerRetentionSpy) {.slot.} =
+  inc spy.notifications
+
+proc switchMarkdownOnSelection(
+    spy: MarkdownSelectionSwitchSpy, ranges: seq[TextRange]
+) {.slot.} =
+  if not spy.switched and ranges.len > 0 and ranges[0] == initTextRange(1, 3):
+    spy.switched = true
+    spy.view.markdown = "# Replacement\n\nNew document"
+
+proc resumeDuringCostChange(spy: MarkdownNestedResumeSpy) {.slot.} =
+  if spy.armed:
+    spy.armed = false
+    spy.resumed = spy.view.resumeMarkdown(spy.owner, spy.state)
 
 proc rememberMarkdownParseCompletion(
     spy: MarkdownParseCompletionSpy, workerThreadId: int
@@ -1299,6 +1330,72 @@ fencedToken value
     check view.textStorage().attributesFor("let fresh").foregroundColor ==
       view.markdownStyle.codeColor
 
+  test "repeated nested code blocks retain correct colors across rerenders":
+    let source = """
+# First
+
+```nim
+let shared = 1
+```
+
+> ```nim
+> let shared = 1
+> ```
+
+- ```nim
+  let shared = 1
+  ```
+
+# Folded
+
+```go
+let shared = 1
+```
+"""
+    let view = newMarkdownView(source)
+    require view.waitForMarkdownParsing(60_000)
+
+    proc codeColors(): seq[Color] =
+      let rendered = view.textStorage().stringValue()
+      var offset = 0
+      while offset < rendered.runeLen:
+        let found = rendered.runeSubStr(offset).runeIndexOf("let shared")
+        if found < 0:
+          break
+        offset += found
+        result.add view.textStorage().attributesAt(offset).foregroundColor
+        offset += "let shared".runeLen
+
+    var style = view.markdownStyle()
+    let originalColors = codeColors()
+    require originalColors.len == 4
+    for index in 0 .. 2:
+      check originalColors[index] == style.syntaxTokenColors[stcKeyword]
+    check originalColors[3] != style.syntaxTokenColors[stcKeyword]
+
+    let folded = view.markdownHeadingDisclosure("Folded")
+    require not folded.isNil
+    require folded.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering(60_000)
+    check codeColors().len == 3
+    style.syntaxTokenColors[stcKeyword] = color(0.17, 0.62, 0.29, 1)
+    view.markdownStyle = style
+    require view.waitForMarkdownRendering(60_000)
+    require folded.accessibilityPerformAction(AccessibilityActionExpand)
+    require view.waitForMarkdownRendering(60_000)
+    let restoredColors = codeColors()
+    require restoredColors.len == 4
+    for index in 0 .. 2:
+      check restoredColors[index] == style.syntaxTokenColors[stcKeyword]
+    check restoredColors[3] != style.syntaxTokenColors[stcKeyword]
+
+    var calls: seq[string]
+    view.syntaxHighlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      calls.add language
+    require view.waitForMarkdownParsing(60_000)
+    check calls.count("nim") == 3
+    check calls.count("go") == 1
+
   test "Markdown viewer receives Matter colors from its parse worker":
     let view = newMarkdownView("```nim\nlet obsolete = 1\n```")
     view.markdown = "```go\nfunc main() {}\n```"
@@ -1346,8 +1443,7 @@ mystery value
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let source =
-      """
+    let source = """
 Before `inline`.
 
 ```nim
@@ -1459,7 +1555,7 @@ echo "fenced"
     view.frame = rect(0, 0, 600, 240)
     view.layoutSubtreeIfNeeded()
     discard view.buildRenderScene()
-    check view.codeBlockScrollViews().len == 0
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
 
   test "offscreen code and table scroll views are created near the viewport":
     let source =
@@ -1487,8 +1583,7 @@ echo "fenced"
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
-    let source =
-      """
+    let source = """
 1. Install dependencies:
 
    ```bash
@@ -1609,12 +1704,7 @@ echo "fenced"
     view.frame = rect(0, 0, fittingWidth + 100.0'f32, 320)
     view.layoutSubtreeIfNeeded()
 
-    check view.codeBlockScrollViews().len == 0
-    let hiddenCodeScrollViews = view.codeBlockScrollViews(includeHidden = true)
-    require hiddenCodeScrollViews.len == 2
-    for codeScrollView in hiddenCodeScrollViews:
-      check codeScrollView.horizontalScroller().hidden
-      check codeScrollView.maximumContentOffset().x <= 0.001'f32
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
 
   test "raw inline and block HTML remain inert and visibly muted":
     let
@@ -1662,6 +1752,34 @@ Press <kbd>Enter</kbd>.
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("link").link == "https://example.test"
     check storage.attributesFor("│").foregroundColor == style.ruleColor
+
+  test "GFM table Unicode styling and attachments survive cell wrapping":
+    let image = newImageResourceFromFile(TestImagePath)
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      image
+    let view = newMarkdownView(
+      "| Name | Details |\n| --- | --- |\n" &
+        "| café 😀 | [linked Ω](https://example.test) ![Alt](asset:logo) |",
+      frame = rect(0, 0, 320, 240),
+      imageLoader = loader,
+    )
+    require view.waitForMarkdownParsing()
+    let storage = view.textStorage()
+    check storage.stringValue().contains("café 😀")
+    check storage.attributesFor("linked Ω").link == "https://example.test"
+    var attachments = 0
+    for run in storage.runs:
+      if run.attributes.hasAttachment:
+        inc attachments
+        check run.attributes.attachment.identifier == "markdown-image:asset:logo"
+    check attachments == 1
+    let renders = buildRenders(view)
+    require DefaultDrawLevel in renders
+    var images = 0
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkImage:
+        inc images
+    check images == 1
 
   test "GFM tables share bounded columns and wrap long cells":
     let
@@ -1770,6 +1888,10 @@ Press <kbd>Enter</kbd>.
       localTableRect =
         tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
 
+    check tableTextView.textStorage().stringValue() == rendered.runeSubStr(tableStart)
+    check tableTextView.textStorage().attributesFor("CPU p95") ==
+      view.textStorage().attributesFor("CPU p95")
+
     check paragraphRects.len > 1
     for rect in paragraphRects:
       check rect.maxX <= viewportWidth + 0.001'f32
@@ -1865,8 +1987,7 @@ Press <kbd>Enter</kbd>.
 
   test "GFM tables reflow once the Markdown viewport settles":
     let
-      source =
-        """
+      source = """
 | Mode | Shortcut | Notes |
 | :--- | :------: | :---- |
 | Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |
@@ -2259,3 +2380,505 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(view)
 
     check abs(view.scrollView().documentSize().height - wideDocument.height) <= 0.001'f32
+
+  test "shared Markdown owner survives independent suspension and resumes state":
+    let
+      source = "# Shared\n\nFirst paragraph.\n\n```nim\nlet answer = 42\n```\n"
+      owner = newMarkdownDocumentOwner(source)
+      first = newMarkdownView(frame = rect(0, 0, 480, 320))
+      second = newMarkdownView(frame = rect(0, 0, 480, 320))
+    require first.adoptMarkdownDocument(owner)
+    require second.adoptMarkdownDocument(owner)
+    require first.waitForMarkdownParsing(60_000)
+    require second.waitForMarkdownParsing(60_000)
+    check first.markdownDocumentOwner() == owner
+    check second.markdownDocumentOwner() == owner
+    check first.textStorage().stringValue() == second.textStorage().stringValue()
+    check first.markdownParseError() == ""
+    first.textView().selectedRange = initTextRange(1, 3)
+    let state = first.suspendMarkdown()
+    check first.markdownDocumentOwner().isNil
+    check second.markdownDocumentOwner() == owner
+    require first.resumeMarkdown(owner, state)
+    require first.waitForMarkdownParsing(60_000)
+    require first.waitForMarkdownLayout(60_000)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while first.textView().selectedRange() != initTextRange(1, 3) and
+        getMonoTime() < deadline:
+      discard first.pollMarkdownParsing()
+      sleep(1)
+    check first.textView().selectedRange() == initTextRange(1, 3)
+
+  test "shared Markdown owner cancellation is acknowledged before reuse":
+    let
+      owner = newMarkdownDocumentOwner("# Pending\n\n" & repeat("content ", 20_000))
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    require view.adoptMarkdownDocument(owner)
+    discard view.suspendMarkdown()
+    check not view.adoptMarkdownDocument(owner)
+    let cancellationDeadline = getMonoTime() + initDuration(seconds = 60)
+    while owner.markdownOwnerRetention().pending and getMonoTime() < cancellationDeadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    require not owner.markdownOwnerRetention().pending
+    require view.adoptMarkdownDocument(owner)
+    require view.waitForMarkdownParsing(60_000)
+    check view.markdownParseError() == ""
+    check "Pending" in view.textStorage().stringValue()
+    discard view.suspendMarkdown()
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while owner.markdownOwnerRetention().pending and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check not owner.markdownOwnerRetention().pending
+
+  test "cancel acknowledgement keeps an owner alive after its last handle is dropped":
+    let
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+      spy = MarkdownOwnerRetentionSpy()
+    var owner = newMarkdownDocumentOwner("# Pending\n\n" & repeat("text ", 20_000))
+    owner.connect(markdownOwnerRetentionDidChange, spy, rememberOwnerRetention)
+    require view.adoptMarkdownDocument(owner)
+    discard view.suspendMarkdown()
+    let previous = spy.notifications
+    owner = nil
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while spy.notifications == previous and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check spy.notifications > previous
+
+  test "style and image path changes while suspended apply on resume":
+    let
+      owner = newMarkdownDocumentOwner("# Restored\n\nBody")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    require view.adoptMarkdownDocument(owner)
+    require view.waitForMarkdownParsing(60_000)
+    let state = view.suspendMarkdown()
+    var style = view.markdownStyle()
+    style.headingFontSizes[0] += 2
+    view.markdownStyle = style
+    view.imageBasePath = "/tmp/markdown-resume"
+    require view.resumeMarkdown(owner, state)
+    require view.waitForMarkdownParsing(60_000)
+    check view.imageBasePath() == "/tmp/markdown-resume"
+    check view.textStorage().attributesFor("Restored").fontSize ==
+      style.headingFontSizes[0]
+
+  test "late standalone parse cannot replace a shared document":
+    let
+      view =
+        newMarkdownView(repeat("stale content ", 20_000), frame = rect(0, 0, 480, 320))
+      owner = newMarkdownDocumentOwner("# Current\n\nShared source")
+    require view.adoptMarkdownDocument(owner)
+    require view.waitForMarkdownParsing(60_000)
+    check view.markdown() == "# Current\n\nShared source"
+    check "Current" in view.textStorage().stringValue()
+    check "stale content" notin view.textStorage().stringValue()
+
+  test "Markdown retained cost handles fitting and offscreen embedded blocks":
+    let view = newMarkdownView(
+      "# Content\n\n```nim\nlet small = 1\n```\n\n" &
+        repeat("ordinary paragraph\n\n", 200) &
+        "| left | right |\n| --- | --- |\n| a | b |\n",
+      frame = rect(0, 0, 480, 160),
+    )
+    require view.waitForMarkdownParsing(60_000)
+    let cost = view.retainedMarkdownCost()
+    check cost.viewBytes > 0
+    check cost.viewIncomplete
+
+  test "explicit heading identifiers survive suspension into a new view":
+    let
+      source = "# Section\n\nHidden body\n"
+      first = newMarkdownView(frame = rect(0, 0, 480, 320))
+    first.updateMarkdown(
+      source,
+      headingIdentifiers = ["stable-section"],
+      initiallyCollapsedHeadings = ["stable-section"],
+    )
+    require first.waitForMarkdownParsing(60_000)
+    check "Hidden body" notin first.textStorage().stringValue()
+    let
+      state = first.suspendMarkdown()
+      second = newMarkdownView(frame = rect(0, 0, 480, 320))
+      owner = newMarkdownDocumentOwner(source)
+    check state.headingIdentifiers == @["stable-section"]
+    require second.resumeMarkdown(owner, state)
+    require second.waitForMarkdownParsing(60_000)
+    check "Hidden body" notin second.textStorage().stringValue()
+
+  test "later resume replaces pending selection on the same shared owner":
+    let
+      owner = newMarkdownDocumentOwner("# Title\n\nSome selectable text")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    var first = MarkdownViewState(hasState: true, selection: initTextRange(1, 1))
+    var second = MarkdownViewState(hasState: true, selection: initTextRange(3, 2))
+    require view.resumeMarkdown(owner, first)
+    require view.resumeMarkdown(owner, second)
+    require view.waitForMarkdownParsing(60_000)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textView().selectedRange() != second.selection and
+        getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check view.textView().selectedRange() == second.selection
+
+  test "retirement charges a standalone parse until its worker acknowledges":
+    let source = "# Legacy\n\n```nim\n" & repeat("let value = 42\n", 10_000) & "```\n"
+    let view = newMarkdownView(source, frame = rect(0, 0, 480, 320))
+    var receipt: MarkdownRetirement
+    discard view.suspendMarkdown(receipt)
+    require not receipt.isNil
+    require receipt.isMarkdownRetirementPending()
+    check receipt.retainedMarkdownRetirementCost().bytes >= uint64(source.len)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while receipt.isMarkdownRetirementPending() and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check not receipt.isMarkdownRetirementPending()
+    check receipt.retainedMarkdownRetirementCost().bytes == 0
+
+  test "selection callback changing document invalidates pending restore":
+    let
+      owner = newMarkdownDocumentOwner("# Original\n\nSelectable")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+      spy = MarkdownSelectionSwitchSpy(view: view)
+      state = MarkdownViewState(hasState: true, selection: initTextRange(1, 3))
+    view.textView().connect(textSelectionDidChange, spy, switchMarkdownOnSelection)
+    require view.resumeMarkdown(owner, state)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while not spy.switched and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    require spy.switched
+    require view.waitForMarkdownParsing(60_000)
+    check view.markdown() == "# Replacement\n\nNew document"
+    check "Replacement" in view.textStorage().stringValue()
+
+  test "layout retirement drains captured work after the same view resumes":
+    let
+      source = "# Large\n\n" & repeat("Paragraph with text.\n\n", 500)
+      owner = newMarkdownDocumentOwner(source)
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    require view.adoptMarkdownDocument(owner)
+    require view.waitForMarkdownParsing(60_000)
+    view.textView().layoutManager().requestBackgroundLayout(allowUncachedLayout = true)
+    require view.textView().layoutManager().isBackgroundLayoutPending()
+    var receipt: MarkdownRetirement
+    let state = view.suspendMarkdown(receipt)
+    require not receipt.isNil
+    require receipt.isMarkdownRetirementPending()
+    require view.resumeMarkdown(owner, state)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while receipt.isMarkdownRetirementPending() and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check not receipt.isMarkdownRetirementPending()
+    require view.waitForMarkdownParsing(60_000)
+    check "Large" in view.textStorage().stringValue()
+
+  test "suspending a newly requested source does not save stale visual state":
+    let view = newMarkdownView("# Old\n\nOld text", frame = rect(0, 0, 480, 320))
+    require view.waitForMarkdownParsing(60_000)
+    view.textView().selectedRange = initTextRange(1, 2)
+    view.updateMarkdown("# New\n\nNew text")
+    let state = view.suspendMarkdown()
+    check not state.hasState
+    require view.resumeMarkdown("# New\n\nNew text", state)
+    require view.waitForMarkdownParsing(60_000)
+    check "New text" in view.textStorage().stringValue()
+
+  when defined(merendaTests):
+    test "embedded source ranges preserve full quoted code and table text":
+      let
+        code = "let value = 1\nlet longValue = \"" & repeat("αβxyz", 40) & "\""
+        tableRow = "| " & repeat("long linked words ", 12) & " | second | third |"
+        source =
+          "```nim\n" & code & "\n```\n\n" & "> > ```nim\n> > " &
+          code.replace("\n", "\n> > ") & "\n> > let next = 2\n> > ```\n\n" &
+          "- ```nim\n  " & code.replace("\n", "\n  ") & "\n  ```\n\n" & "> " & tableRow &
+          "\n> | --- | --- | --- |\n> " & tableRow
+        view = newMarkdownView(source, frame = rect(0, 0, 240, 200))
+      require view.waitForMarkdownParsing(60_000)
+      let
+        children = view.markdownEmbeddedStoragesForTest()
+        parent = view.textStorage().textSnapshot()
+      require children.code.len == 3
+      for child in children.code:
+        check child.textRangeStorageStateForTest(parent).sharesSource
+        check child.stringValue().startsWith("[nim]\nlet value")
+        check child.stringValue().contains(code)
+        check child.attributesFor("let value").foregroundColor ==
+          view.markdownStyle.syntaxTokenColors[stcKeyword]
+      require children.tables.len == 1
+      check children.tables[0].textRangeStorageStateForTest(parent).sharesSource
+      check children.tables[0].stringValue().contains("linked")
+      check not children.tables[0].stringValue().contains("│ │")
+
+    test "offscreen embedded layouts release materialization and restore selection":
+      let
+        line = "let value = \"" & repeat("abcdefghij", 25) & "\""
+        source = "```nim\n" & line & "\n```\n\n" & repeat("paragraph\n\n", 120)
+        view = newMarkdownView(source, frame = rect(0, 0, 240, 160))
+      require view.waitForMarkdownParsing(60_000)
+      discard buildRenders(view)
+      require view.waitForMarkdownLayout()
+      view.layoutSubtreeIfNeeded()
+      let initial = view.codeBlockScrollViews()
+      require initial.len == 1
+      let
+        child = TextView(initial[0].documentView())
+        storage = child.textStorage()
+        parent = view.textStorage().textSnapshot()
+      check storage.textRangeStorageStateForTest(parent).sharesSource
+      child.selectedRange = initTextRange(6, 5)
+      initial[0].contentOffset = initPoint(initial[0].maximumContentOffset().x, 0)
+      let savedOffset = initial[0].contentOffset()
+      check savedOffset.x > 0
+      require view.scrollView().maximumContentOffset().y > 0
+      view.scrollView().contentOffset =
+        initPoint(0, view.scrollView().maximumContentOffset().y)
+      discard drainMainThreadWork()
+      view.textView().setNeedsLayout()
+      discard buildRenders(view)
+      view.layoutSubtreeIfNeeded()
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+      check storage.textRangeStorageStateForTest(parent) == (true, false)
+      view.scrollView().contentOffset = initPoint(0, 0)
+      discard drainMainThreadWork()
+      view.textView().setNeedsLayout()
+      discard buildRenders(view)
+      view.layoutSubtreeIfNeeded()
+      let restored = view.codeBlockScrollViews()
+      require restored.len == 1
+      check TextView(restored[0].documentView()).textStorage() == storage
+      check TextView(restored[0].documentView()).selectedRange() == initTextRange(6, 5)
+      check abs(restored[0].contentOffset().x - savedOffset.x) < 0.01'f32
+
+  test "same document resume reapplies changed explicit heading state":
+    let
+      source = "# Section\n\nHidden body\n"
+      state = MarkdownViewState(
+        hasState: true,
+        headingIdentifiers: @["stable-section"],
+        knownHeadingIds: @["stable-section"],
+        collapsedHeadingIds: @["stable-section"],
+      )
+      owner = newMarkdownDocumentOwner(source)
+      shared = newMarkdownView(frame = rect(0, 0, 480, 320))
+      standalone = newMarkdownView(source, frame = rect(0, 0, 480, 320))
+    require shared.adoptMarkdownDocument(owner)
+    require shared.waitForMarkdownParsing(60_000)
+    require standalone.waitForMarkdownParsing(60_000)
+    require shared.resumeMarkdown(owner, state)
+    require standalone.resumeMarkdown(source, state)
+    require shared.waitForMarkdownRendering(60_000)
+    require standalone.waitForMarkdownRendering(60_000)
+    check "Hidden body" notin shared.textStorage().stringValue()
+    check "Hidden body" notin standalone.textStorage().stringValue()
+
+  when defined(merendaTests):
+    test "focused and pending offscreen code views remain until safe to release":
+      let
+        line = "let value = \"" & repeat("wide text", 30) & "\""
+        view = newMarkdownView(
+          "```nim\n" & line & "\n```\n\n" & repeat("paragraph\n\n", 100),
+          frame = rect(0, 0, 240, 160),
+        )
+        window = newWindow("Markdown embedded focus", frame = rect(0, 0, 240, 160))
+      window.setContentView(view)
+      require view.waitForMarkdownParsing(60_000)
+      discard buildRenders(view)
+      require view.waitForMarkdownLayout()
+      view.layoutSubtreeIfNeeded()
+      let scrolls = view.codeBlockScrollViews()
+      require scrolls.len == 1
+      let child = TextView(scrolls[0].documentView())
+      require window.makeFirstResponder(child)
+      view.scrollView().contentOffset =
+        initPoint(0, view.scrollView().maximumContentOffset().y)
+      view.textView().setNeedsLayout()
+      view.layoutSubtreeIfNeeded()
+      check view.codeBlockScrollViews(includeHidden = true).len == 1
+      require window.makeFirstResponder(view.textView())
+      let manager = child.layoutManager()
+      manager.usesBackgroundLayout = true
+      manager.invalidateLayout()
+      manager.requestBackgroundLayout(allowUncachedLayout = true)
+      require manager.isBackgroundLayoutPending()
+      view.textView().setNeedsLayout()
+      view.layoutSubtreeIfNeeded()
+      check view.codeBlockScrollViews(includeHidden = true).len == 1
+      let deadline = getMonoTime() + initDuration(seconds = 10)
+      while view.codeBlockScrollViews(includeHidden = true).len > 0 and
+          getMonoTime() < deadline:
+        discard drainMainThreadWork()
+        discard view.pollMarkdownParsing()
+        view.layoutSubtreeIfNeeded()
+        sleep(1)
+      check not manager.isBackgroundLayoutPending()
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+      check not view.isMarkdownLayoutPending()
+
+    test "streamed colors reach shared code storage while its view is evicted":
+      let
+        line = "let payload = \"" & repeat("abcdefghij", 8) & "\"\n"
+        source =
+          "```nim\n" & line.repeat(160) & "```\n\n" & repeat("paragraph\n\n", 100)
+        view = newMarkdownView(source, frame = rect(0, 0, 240, 160))
+        deadline = getMonoTime() + initDuration(seconds = 60)
+      while view.textStorage().len == 0 and getMonoTime() < deadline:
+        discard view.pollMarkdownParsing()
+        sleep(1)
+      require view.textStorage().len > 0
+      require view.isMarkdownParsing()
+      discard buildRenders(view)
+      view.layoutSubtreeIfNeeded()
+      let scrolls = view.codeBlockScrollViews()
+      require scrolls.len == 1
+      let
+        storage = TextView(scrolls[0].documentView()).textStorage()
+        parent = view.textStorage().textSnapshot()
+      check storage.textRangeStorageStateForTest(parent).sharesSource
+      view.scrollView().contentOffset =
+        initPoint(0, view.scrollView().maximumContentOffset().y)
+      view.textView().setNeedsLayout()
+      view.layoutSubtreeIfNeeded()
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+      require view.waitForMarkdownParsing(60_000)
+      check storage.attributesFor("let payload").foregroundColor ==
+        view.markdownStyle.syntaxTokenColors[stcKeyword]
+      check storage.textRangeStorageStateForTest(parent) == (true, false)
+
+  test "shared owner preserves grammar descriptors across suspension and fallback":
+    let
+      sources = @[
+        MatterGrammarSource(
+          path: "fixture.tmLanguage.json",
+          content: "{\"scopeName\":\"source.fixture\",\"patterns\":[]}",
+          scopeName: "source.fixture",
+          languageId: "fixture",
+          extensions: @["fixture"],
+        )
+      ]
+      source = "# Grammar\n\nBody"
+      first = newMarkdownView(frame = rect(0, 0, 480, 320))
+      second = newMarkdownView(frame = rect(0, 0, 480, 320))
+      owner = newMarkdownDocumentOwner(source, grammarSources = sources)
+    first.matterGrammarSources = sources
+    second.matterGrammarSources = sources
+    require first.adoptMarkdownDocument(owner)
+    require second.adoptMarkdownDocument(owner)
+    require first.waitForMarkdownParsing(60_000)
+    require second.waitForMarkdownParsing(60_000)
+    check first.matterGrammarSources() == sources
+    let state = first.suspendMarkdown()
+    check first.matterGrammarSources() == sources
+    require first.resumeMarkdown(owner, state)
+    first.syntaxHighlighter = nil
+    check first.markdownDocumentOwner().isNil
+    check first.matterGrammarSources() == sources
+    check first.markdown() == source
+
+  when defined(merendaTests):
+    test "fitted embedded code does not recreate layout during repeated resize":
+      let view = newMarkdownView(
+        "Text above.\n\n```nim\nlet short = 3\n```\n\n" & "```nim\nlet longer = \"" &
+          repeat("word", 12) & "\"\n```\n\n" & "A final paragraph.\n",
+        frame = rect(0, 0, 300, 200),
+      )
+      require view.waitForMarkdownParsing(60_000)
+      for width in [220.0'f32, 500.0'f32, 340.0'f32, 600.0'f32]:
+        view.frame = rect(0, 0, width, 200)
+        discard buildRenders(view)
+        discard buildRenders(view)
+        check not view.needsUpdateConstraints
+        check not view.needsLayout
+        check view.layoutFeedbackCycles() == 0
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+
+  test "dropping the final subscriber cancels an unrendered shared document":
+    let
+      owner =
+        newMarkdownDocumentOwner("```nim\n" & repeat("let x = 1\n", 20_000) & "```\n")
+      pump = newMarkdownView()
+    var view = newMarkdownView()
+    require view.waitForMarkdownParsing(60_000)
+    require view.adoptMarkdownDocument(owner)
+    require owner.markdownOwnerRetention().pending
+    view = nil
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while owner.markdownOwnerRetention().pending and getMonoTime() < deadline:
+      discard pump.pollMarkdownParsing()
+      sleep(1)
+    check not owner.markdownOwnerRetention().pending
+
+  test "nested resume during attachment cannot install stale saved state":
+    let
+      firstOwner = newMarkdownDocumentOwner("# First\n\nOld document")
+      secondOwner = newMarkdownDocumentOwner("# Second\n\nNew document")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+      firstState = MarkdownViewState(hasState: true, selection: initTextRange(1, 1))
+      secondState = MarkdownViewState(hasState: true, selection: initTextRange(3, 2))
+      spy = MarkdownNestedResumeSpy(view: view, owner: secondOwner, state: secondState)
+    require view.waitForMarkdownParsing(60_000)
+    view.connect(markdownRetainedCostDidChange, spy, resumeDuringCostChange)
+    spy.armed = true
+    check not view.resumeMarkdown(firstOwner, firstState)
+    require spy.resumed
+    require view.waitForMarkdownParsing(60_000)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textView().selectedRange() != secondState.selection and
+        getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check view.markdownDocumentOwner() == secondOwner
+    check view.textView().selectedRange() == secondState.selection
+
+  test "render completion cannot apply stale work after a nested resume":
+    let
+      firstOwner = newMarkdownDocumentOwner("# First\n\n```nim\nlet x = 1\n```\n")
+      secondOwner = newMarkdownDocumentOwner("# Second\n\nNew content")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+      state = MarkdownViewState(hasState: true, selection: initTextRange(2, 2))
+      spy = MarkdownNestedResumeSpy(view: view, owner: secondOwner, state: state)
+    require view.waitForMarkdownParsing(60_000)
+    require view.resumeMarkdown(firstOwner, MarkdownViewState())
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while not view.isMarkdownRendering() and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(1)
+    require view.isMarkdownRendering()
+    view.connect(markdownRetainedCostDidChange, spy, resumeDuringCostChange)
+    spy.armed = true
+    while not spy.resumed and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    require spy.resumed
+    require view.waitForMarkdownParsing(60_000)
+    check view.markdownDocumentOwner() == secondOwner
+    check "New content" in view.textStorage().stringValue()
+
+  test "nested resume during suspension preserves the newer document":
+    let
+      firstOwner = newMarkdownDocumentOwner("# First\n\nOld content")
+      secondOwner = newMarkdownDocumentOwner("# Second\n\nNew content")
+      view = newMarkdownView(frame = rect(0, 0, 480, 320))
+      state = MarkdownViewState(hasState: true, selection: initTextRange(2, 2))
+      spy = MarkdownNestedResumeSpy(view: view, owner: secondOwner, state: state)
+    require view.waitForMarkdownParsing(60_000)
+    require view.resumeMarkdown(firstOwner, MarkdownViewState())
+    require view.waitForMarkdownParsing(60_000)
+    firstOwner.connect(markdownOwnerRetentionDidChange, spy, resumeDuringCostChange)
+    spy.armed = true
+    discard view.suspendMarkdown()
+    require spy.resumed
+    require view.waitForMarkdownParsing(60_000)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textView().selectedRange() != state.selection and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      sleep(1)
+    check view.markdownDocumentOwner() == secondOwner
+    check "New content" in view.textStorage().stringValue()
+    check view.textView().selectedRange() == state.selection
