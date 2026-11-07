@@ -222,7 +222,12 @@ suite "Kosmo hint mode":
     # Hint markers only cover visible text, so scroll the section into view.
     panel.scrollView.contentOffset = initPoint(0, code.frame().minY)
     panel.layoutSubtreeIfNeeded()
-    require panel.showHintMode(khkLink, khaCopy, KosmoHintActivation())
+    require performKosmoHintModeInChain(
+      panel,
+      KosmoHintModeArgs(
+        kind: khkLink, action: khaCopy, activation: KosmoHintActivation()
+      ),
+    )
     check kosmoHintsVisible(panel.documentView)
     let overlay = panel.documentView.hintOverlayForView()
     let hints = overlay.presentedHints()
@@ -231,6 +236,14 @@ suite "Kosmo hint mode":
     require window.dispatchKeyDown(labelEvent('1'))
     check pasteboard.plainText() == "https://example.com/diff-link"
     check not kosmoHintsVisible(panel.documentView)
+
+  test "hint requests decline on responder chains without a hint surface":
+    let window = newWindow("No hint surface", frame = rect(0, 0, 320, 200))
+    defer:
+      window.close()
+    check not performKosmoHintModeInChain(
+      window.firstResponder(), KosmoHintModeArgs(kind: khkLink, action: khaCopy)
+    )
 
   test "hint keys select labels without event text like real backends":
     let

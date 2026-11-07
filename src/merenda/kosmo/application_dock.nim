@@ -1362,50 +1362,28 @@ proc showHintMode(
     controller: KosmoDockController, kind: KosmoHintKind, action: KosmoHintAction
 ): bool =
   ## Present hint markers on the focused pane's surface for `kind`, running
-  ## `action` on the selected snippet. Surfaces without a hint collector, such
-  ## as sidebar panels and search fields outside panes, return false.
+  ## `action` on the selected snippet. The request travels along the responder
+  ## chain, so surfaces without a hint collector, such as sidebar panels and
+  ## search fields outside panes, decline it.
   if controller.isNil or controller.frontend.isNil:
     return false
   let window = controller.frontend[].application.keyWindow()
   if window.isNil or window.isClosed():
     return false
   let frontend = controller.frontend[]
-  let activation = KosmoHintActivation(
-    openLink: proc(url: string): bool =
-      frontend.application.workspace().openUrl(url).succeeded,
-    openFile: proc(location: nimkit.TerminalFileLocation): bool =
-      frontend.openFileLocation(location),
+  performKosmoHintModeInChain(
+    window.firstResponder(),
+    KosmoHintModeArgs(
+      kind: kind,
+      action: action,
+      activation: KosmoHintActivation(
+        openLink: proc(url: string): bool =
+          frontend.application.workspace().openUrl(url).succeeded,
+        openFile: proc(location: nimkit.TerminalFileLocation): bool =
+          frontend.openFileLocation(location),
+      ),
+    ),
   )
-  let group = controller.activePaneGroup()
-  let workingDirectory =
-    if not group.isNil and not group.editorView.isNil:
-      group.editorView.editor.workingDirectory()
-    else:
-      getCurrentDir()
-  var responder = window.firstResponder()
-  while not responder.isNil:
-    if responder of KosmoTerminalView:
-      let terminal = KosmoTerminalView(responder)
-      var terminalActivation = activation
-      terminalActivation.insertText = proc(text: string): bool =
-        terminal.pasteText(text)
-      return terminal.showHintMode(kind, action, terminalActivation)
-    if responder of KosmoGitDiffPanel:
-      return KosmoGitDiffPanel(responder).showHintMode(kind, action, activation)
-    if responder of KosmoGitHubPanel:
-      let
-        panel = KosmoGitHubPanel(responder)
-        textView = panel.markdownView.textView()
-      return presentKosmoHints(
-        textView, textView.collectTextViewHints(kind, workingDirectory)
-      ) do(hint: KosmoHint):
-        discard runKosmoHintAction(hint, action, activation)
-    if responder of KosmoMarkdownView:
-      return KosmoMarkdownView(responder).showHintMode(kind, action, activation)
-    if responder of KosmoEditorView:
-      return KosmoEditorView(responder).showHintMode(kind, action, activation)
-    responder = responder.nextResponder()
-  false
 
 iterator gitDiffPanels(frontend: KosmoApplication): KosmoGitDiffPanel =
   if not frontend.isNil and not frontend.xClosed and not frontend.dockController.isNil:

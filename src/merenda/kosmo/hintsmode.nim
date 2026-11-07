@@ -6,6 +6,11 @@
 ## the overlay is a transient sibling view, so hint sessions leave editor
 ## state such as Moe registers, language-server hover requests, and completion
 ## popups untouched.
+##
+## Hint requests travel as `KosmoHintModeArgs` along the responder chain:
+## surfaces that collect hints implement `KosmoHintSurfaceProtocol`, and
+## `performKosmoHintModeInChain` presents markers on the first surface that
+## accepts the request, so dispatch sites never check concrete surface types.
 
 import std/[options, strutils, unicode]
 
@@ -45,6 +50,11 @@ type
     openLink*: proc(url: string): bool {.closure.}
     openFile*: proc(location: nimkit.TerminalFileLocation): bool {.closure.}
     insertText*: proc(text: string): bool {.closure.}
+
+  KosmoHintModeArgs* = object ## A hint request performed along the responder chain.
+    kind*: KosmoHintKind
+    action*: KosmoHintAction
+    activation*: KosmoHintActivation
 
   KosmoHintOverlay* = ref object of nimkit.View
     xHints: seq[KosmoHint]
@@ -407,6 +417,26 @@ proc runKosmoHintAction*(
       not activation.openFile.isNil and activation.openFile(hint.fileLocation.get)
     else:
       not activation.openLink.isNil and activation.openLink(hint.text)
+
+protocol KosmoHintSurfaceProtocol:
+  method showKosmoHintMode*(args: KosmoHintModeArgs): bool {.optional.}
+    ## Present hint markers on this surface for the request and return whether
+    ## markers were presented. Only surfaces that collect hints implement it.
+
+proc performKosmoHintModeInChain*(
+    responder: nimkit.Responder, args: KosmoHintModeArgs
+): bool =
+  ## Perform a hint request on `responder` and its responder chain, presenting
+  ## markers on the first surface that collects hints for it. Returns false
+  ## when no surface implements the request or the collecting surface finds no
+  ## matches to present.
+  var current = responder
+  while not current.isNil:
+    let handled = current.trySendLocal(showKosmoHintMode(), args)
+    if handled.isSome:
+      return handled.get()
+    current = current.nextResponder()
+  false
 
 proc kosmoHintInView*(hint: KosmoHint, source, host: nimkit.View): KosmoHint =
   ## Reposition a hint collected on `source` into `host`'s coordinates, for
