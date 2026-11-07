@@ -317,6 +317,15 @@ suite "Kosmo Git diff":
     check not panel.markdownView.scrollView().hasVerticalScroller()
     check panel.markdownView.scrollView().maximumContentOffset().y == 0
     require panel.scrollView.maximumContentOffset().y > 0
+    require window.scrollWheelAt(initPoint(100, 150), deltaY = -0.25)
+    let normalDistance = panel.scrollView.contentOffset().y
+    require normalDistance > 0
+    panel.scrollView.contentOffset = initPoint(0, 0)
+    require window.scrollWheelAt(
+      initPoint(100, 150), deltaY = -0.25, modifiers = {nimkit.kmControl}
+    )
+    check abs(panel.scrollView.contentOffset().y - normalDistance * 3) < 0.01
+    panel.scrollView.contentOffset = initPoint(0, 0)
     require window.scrollWheelAt(initPoint(100, 150), deltaY = -3)
     check panel.scrollView.contentOffset().y > 0
     check panel.markdownView.scrollView().contentOffset().y == 0

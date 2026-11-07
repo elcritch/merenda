@@ -8,6 +8,7 @@ import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
 import ../nimkit/text/searchmatching
 import ./terminalinput
+import ./scrolling
 
 export terminalinput
 
@@ -276,6 +277,11 @@ proc newKosmoTerminalView*(
       if event.kind == nimkit.mtreKeyDown and
           terminalOwner[].interceptTerminalKey(event.keyEvent):
         return true
+      if event.kind == nimkit.mtreScrollWheel and
+          nimkit.kmControl in event.scrollEvent.modifiers:
+        var accelerated = event
+        accelerated.scrollEvent.deltaY *= KosmoControlScrollMultiplier
+        return rawHandler(accelerated)
       result = rawHandler(event)
   discard result.replaceMethod(
     nimkit.didResignFirstResponder(),

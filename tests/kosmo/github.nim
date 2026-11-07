@@ -320,6 +320,18 @@ suite "Kosmo GitHub Markdown viewer":
     panel.layoutSubtreeIfNeeded()
     let scroll = panel.markdownView.scrollView()
     require scroll.maximumContentOffset().y > 64
+    let wheelPoint = scroll.pointToWindow(
+      initPoint(scroll.bounds().size.width / 2, scroll.bounds().size.height / 2)
+    )
+    require window.scrollWheelAt(wheelPoint, deltaY = -0.25)
+    let normalDistance = scroll.contentOffset().y
+    require normalDistance > 0
+    scroll.contentOffset = initPoint(0, 0)
+    require window.scrollWheelAt(
+      wheelPoint, deltaY = -0.25, modifiers = {nimkit.kmControl}
+    )
+    check abs(scroll.contentOffset().y - normalDistance * 3) < 0.01
+    scroll.contentOffset = initPoint(0, 0)
     panel.keyEquivalentHandler = proc(event: KeyEvent): bool =
       event.key == keyF2
     require window.makeFirstResponder(panel.markdownView.textView())

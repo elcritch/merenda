@@ -77,6 +77,12 @@ suite "Kosmo terminal search":
     check window.mouseDownAt(point)
     discard window.mouseUpAt(point)
     check terminal.scrollPosition() == beforeClick
+    check window.scrollWheelAt(point, deltaY = 1)
+    let normalScroll = terminal.scrollPosition() - beforeClick
+    check normalScroll == 1
+    let beforeFastScroll = terminal.scrollPosition()
+    check window.scrollWheelAt(point, deltaY = 1, modifiers = {nimkit.kmControl})
+    check terminal.scrollPosition() - beforeFastScroll == normalScroll * 3
     terminal.findNext()
     check terminal.selection().anchor.row == 19
     check terminal.scrollPosition() == 0

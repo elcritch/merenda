@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accelerate Control-wheel scrolling in Kosmo's terminal and reader tabs.
 - Use GitHub REST endpoints for Kosmo's GitHub view and refresh checks only for
   expanded pull requests.
 - Keep terminal search results in scrollback when clicked and give the current

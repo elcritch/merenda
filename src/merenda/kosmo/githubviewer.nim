@@ -9,6 +9,7 @@ import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./readerpresentation
 import ./themetargets
+import ./scrolling
 
 import ./[github, searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
@@ -445,6 +446,8 @@ proc newKosmoGitHubPanel(
     refreshInterval: initDuration(milliseconds = refreshIntervalMilliseconds),
   )
   result.initViewFields()
+  result.markdownView.scrollView().controlScrollMultiplier =
+    KosmoControlScrollMultiplier
   discard result.withProtocol(GitHubReaderPresentation)
   result.markdownView.matterGrammarSources =
     installedVscodeGrammars().viewerGrammarSources()

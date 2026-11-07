@@ -50,6 +50,7 @@ type
     xAutohidePolicy: ScrollerAutohidePolicy
     xScrollerThickness: float32
     xLineScroll: array[LayoutAxis, float32]
+    xControlScrollMultiplier: float32
     xPageScroll: array[LayoutAxis, float32]
     xBorderType: ScrollViewBorderType
     xDrawsBackground: bool
@@ -674,16 +675,29 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   if result:
     scrollView.contentOffset = nextOffset
 
+func controlScrollMultiplier*(scrollView: ScrollView): float32 =
+  ## The multiplier applied to wheel movement while Control is held.
+  scrollView.xControlScrollMultiplier
+
+proc `controlScrollMultiplier=`*(scrollView: ScrollView, value: float32) =
+  ## Set the Control-wheel multiplier. The default is 1; values must be positive.
+  if not (value > 0.0'f32 and value < float32.high):
+    raise
+      newException(ValueError, "Control scroll multiplier must be positive and finite")
+  scrollView.xControlScrollMultiplier = value
+
 proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
+  let multiplier =
+    if kmControl in event.modifiers: scrollView.xControlScrollMultiplier else: 1.0'f32
   if kmShift in event.modifiers and event.deltaY != 0.0'f32:
     return initPoint(
       (if event.deltaX != 0.0'f32: event.deltaX
-      else: -event.deltaY) * scrollView.xLineScroll[laHorizontal],
+      else: -event.deltaY) * scrollView.xLineScroll[laHorizontal] * multiplier,
       0.0'f32,
     )
   initPoint(
-    event.deltaX * scrollView.xLineScroll[laHorizontal],
-    -event.deltaY * scrollView.xLineScroll[laVertical],
+    event.deltaX * scrollView.xLineScroll[laHorizontal] * multiplier,
+    -event.deltaY * scrollView.xLineScroll[laVertical] * multiplier,
   )
 
 proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
@@ -1182,6 +1196,7 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xScrollerThickness = 12.0'f32
   scrollView.xLineScroll[laHorizontal] = 16.0'f32
   scrollView.xLineScroll[laVertical] = 16.0'f32
+  scrollView.xControlScrollMultiplier = 1.0'f32
   scrollView.xPageScroll[laHorizontal] = 0.0'f32
   scrollView.xPageScroll[laVertical] = 0.0'f32
   scrollView.xBorderType = svbNoBorder

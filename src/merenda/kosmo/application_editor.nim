@@ -4371,6 +4371,7 @@ protocol MarkdownReaderPresentation of KosmoReaderPresentationProtocol:
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  result.scrollView().controlScrollMultiplier = KosmoControlScrollMultiplier
   discard result.withProtocol(MarkdownReaderPresentation)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.previewGrammarRevision = editorView.editor.viewerGrammarRevision()
@@ -4496,6 +4497,7 @@ proc showOutputDocument(view: KosmoEditorView, text: string, keepFocus: bool): b
   let output = nimkit.newTextView(text)
   output.editable = false
   let scroll = nimkit.newScrollView(documentView = output)
+  scroll.controlScrollMultiplier = KosmoControlScrollMultiplier
   let document = newKosmoPaneDocument(
     KosmoOutputTabIdentifier,
     "Command Output",

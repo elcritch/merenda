@@ -23,7 +23,7 @@ import
   ./[
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
     gitdiff, githubviewer, inputtranslation, matterworkers, moe, moehighlighting,
-    panedocuments, panekeys, quickopen, recovery, searchbar, settings,
+    panedocuments, panekeys, quickopen, recovery, scrolling, searchbar, settings,
     shortcutpresentation, shortcuts, terminalsearch, textbackendlogging, viewersearch,
     updater, workspacefiles,
   ]
@@ -61,7 +61,6 @@ const
   KosmoPaneOutlineWidth = 1.0'f32
   KosmoMarkdownControlsHeight = 44.0'f32
   KosmoMarkdownFontSizeIncrement = 1.0'f32
-  KosmoControlScrollMultiplier = 3.0'f32
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
