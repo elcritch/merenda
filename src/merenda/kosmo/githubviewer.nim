@@ -50,6 +50,8 @@ type
     executable: string
     state: GitHubState
     kinds: set[GitHubItemKind]
+    openPullRequests: seq[int]
+    pullRequestSectionCollapsed: bool
     generation: uint64
     loading*: bool
     closed*: bool
@@ -72,6 +74,7 @@ proc readRepository(
   root, executable: string,
   state: GitHubState,
   kinds: set[GitHubItemKind],
+  openPullRequests: seq[int],
   generation: uint64,
   control: SharedPtr[GitHubRequestControl],
 ) {.signal.}
@@ -85,13 +88,19 @@ proc readRepository(
     root, executable: string,
     state: GitHubState,
     kinds: set[GitHubItemKind],
+    openPullRequests: seq[int],
     generation: uint64,
     control: SharedPtr[GitHubRequestControl],
 ) {.slot.} =
   let cancelled = proc(): bool {.gcsafe.} =
     control[].cancelled.load(moAcquire)
   let snapshot = readGitHubSnapshot(
-    root, state, kinds, executable = executable, cancelled = cancelled
+    root,
+    state,
+    kinds,
+    executable = executable,
+    cancelled = cancelled,
+    openPullRequests = openPullRequests,
   )
   if not cancelled():
     emit worker.repositoryFinished(snapshot, generation)
@@ -155,7 +164,13 @@ proc refresh*(panel: KosmoGitHubPanel) =
   panel.loading = true
   panel.syncControls()
   emit panel.worker.readRepository(
-    panel.rootPath, panel.executable, panel.state, panel.kinds, panel.generation,
+    panel.rootPath,
+    panel.executable,
+    panel.state,
+    panel.kinds,
+    (if panel.pullRequestSectionCollapsed: @[]
+    else: panel.openPullRequests),
+    panel.generation,
     panel.control,
   )
 
@@ -204,12 +219,40 @@ proc displayRepository*(panel: KosmoGitHubPanel, rootPath: string) =
   if panel.isNil or panel.closed:
     return
   if panel.rootPath != rootPath:
+    panel.openPullRequests.setLen(0)
+    panel.pullRequestSectionCollapsed = false
     panel.rootPath = rootPath
     panel.applySnapshot(
       GitHubSnapshot(rootPath: rootPath, state: panel.state, kinds: panel.kinds)
     )
   panel.repositoryBacked = true
   panel.refresh()
+
+proc githubHeadingToggled(
+    panel: KosmoGitHubPanel, identifier: string, collapsed: bool
+) {.slot.} =
+  const prefix = "github-pull-requests-"
+  if panel.isNil or panel.closed or not panel.repositoryBacked:
+    return
+  if identifier == "github-pull-requests":
+    panel.pullRequestSectionCollapsed = collapsed
+    if not collapsed and panel.openPullRequests.len > 0:
+      panel.refresh()
+    return
+  if not identifier.startsWith(prefix):
+    return
+  var number: int
+  try:
+    number = parseInt(identifier[prefix.len .. ^1])
+  except ValueError:
+    return
+  let index = panel.openPullRequests.find(number)
+  if collapsed:
+    if index >= 0:
+      panel.openPullRequests.delete(index)
+  elif index < 0:
+    panel.openPullRequests.add number
+    panel.refresh()
 
 proc close*(panel: KosmoGitHubPanel) {.slot.} =
   ## Cancel, terminate, and reap this document's pending gh command.
@@ -452,6 +495,9 @@ proc newKosmoGitHubPanel(
     ,
   )
   result.markdownView.connect(nimkit.markdownDidFinishParsing, result, parsingFinished)
+  result.markdownView.connect(
+    nimkit.markdownHeadingDidToggle, result, githubHeadingToggled
+  )
   result.markdownView.textView().layoutManager().connect(
     nimkit.layoutDidComplete, result, searchLayoutFinished
   )

@@ -24,6 +24,23 @@ proc headingStartingWith(panel: KosmoGitHubPanel, prefix: string): View =
       return child
 
 suite "Kosmo GitHub Markdown viewer":
+  test "REST records distinguish issues and pull requests and preserve PR metadata":
+    let issue =
+      """[{"number":7,"title":"Issue","html_url":"https://github.com/o/r/issues/7","state":"open","body":null,"user":{"login":"alice"},"labels":[{"name":"bug"}],"updated_at":"today"},{"number":8,"pull_request":{},"title":"PR","html_url":"https://github.com/o/r/pull/8","state":"open"}]"""
+    let issues = parseGitHubRestItems(issue, ghikIssue)
+    require issues.len == 1
+    check issues[0].author == "alice"
+    check issues[0].labels == @["bug"]
+    let pull =
+      """[{"number":8,"title":"PR","html_url":"https://github.com/o/r/pull/8","state":"closed","merged_at":"today","draft":true,"head":{"ref":"topic","sha":"abc123"},"base":{"ref":"main"}}]"""
+    let prs = parseGitHubRestItems(pull, ghikPullRequest)
+    require prs.len == 1
+    check prs[0].state == "MERGED"
+    check prs[0].draft
+    check prs[0].headBranch == "topic"
+    check prs[0].headSha == "abc123"
+    check prs[0].jobsPending
+
   test "PR diff links dispatch snapshot metadata separately from browser links":
     let panel = newKosmoGitHubPanel(sampleSnapshot())
     defer:

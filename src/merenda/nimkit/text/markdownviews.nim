@@ -430,6 +430,10 @@ func markdownSource(view: MarkdownView): lent string =
 func headingCollapsed(view: MarkdownView, headingIdentifier: string): bool =
   not view.isNil and headingIdentifier in view.xCollapsedMarkdownHeadings
 
+proc markdownHeadingDidToggle*(
+  view: MarkdownView, identifier: string, collapsed: bool
+) {.signal.}
+
 proc toggleHeading(view: MarkdownView, headingIdentifier: string): bool =
   if view.isNil or headingIdentifier.len == 0:
     return
@@ -441,6 +445,9 @@ proc toggleHeading(view: MarkdownView, headingIdentifier: string): bool =
   if headingIdentifier in textView.markdownHeadingButtons:
     textView.markdownHeadingButtons[headingIdentifier].needsDisplay = true
   view.renderCurrentMarkdownDocument()
+  emit view.markdownHeadingDidToggle(
+    headingIdentifier, view.headingCollapsed(headingIdentifier)
+  )
   true
 
 proc activateDisclosure(button: MarkdownHeadingDisclosureButton): bool =
