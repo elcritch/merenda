@@ -28,6 +28,7 @@ type
     stAqua
     stMacOS
     stMacOSDark
+    stMacOSAdaptive
     stNebula
     stPeachy
     stSynthwave83
@@ -574,6 +575,7 @@ func title(theme: SettingsTheme): string =
   of stAqua: "Aqua"
   of stMacOS: "macOS"
   of stMacOSDark: "macOS Dark"
+  of stMacOSAdaptive: "macOS Adaptive"
   of stNebula: "Nebula"
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
@@ -585,6 +587,7 @@ func themeIdentifier(theme: SettingsTheme): string =
   of stAqua: "aqua"
   of stMacOS: "macos"
   of stMacOSDark: "macos-dark"
+  of stMacOSAdaptive: "macos-adaptive"
   of stNebula: "nebula"
   of stPeachy: "peachy"
   of stSynthwave83: "synthwave83"
@@ -592,14 +595,24 @@ func themeIdentifier(theme: SettingsTheme): string =
 
 func settingsTheme(identifier: string): SettingsTheme =
   case identifier.strip().toLowerAscii()
-  of "aqua": stAqua
-  of "macos", "mac-os", "mac": stMacOS
-  of "macos-dark", "macosdark", "mac-os-dark", "dark-macos": stMacOSDark
-  of "nebula": stNebula
-  of "peachy": stPeachy
-  of "punch": stPunch
-  of "synthwave83", "synthwave-83", "synthwave": stSynthwave83
-  else: stDarkBSD
+  of "aqua":
+    stAqua
+  of "macos", "mac-os", "mac":
+    stMacOS
+  of "macos-dark", "macosdark", "mac-os-dark", "dark-macos":
+    stMacOSDark
+  of "macos-adaptive", "macosadaptive", "mac-os-adaptive", "adaptive", "adaptive-macos":
+    stMacOSAdaptive
+  of "nebula":
+    stNebula
+  of "peachy":
+    stPeachy
+  of "punch":
+    stPunch
+  of "synthwave83", "synthwave-83", "synthwave":
+    stSynthwave83
+  else:
+    stDarkBSD
 
 func hasSettingsBaseline(settings: MerendaSettings): bool =
   settings.theme.len > 0 or settings.appearance.theme.isInitialized
@@ -637,6 +650,8 @@ proc appearance(theme: SettingsTheme): Appearance =
     initAppearance(initMacOSTheme())
   of stMacOSDark:
     initAppearance(initMacOSDarkTheme())
+  of stMacOSAdaptive:
+    initAppearance(initMacOSAdaptiveTheme())
   of stNebula:
     initAppearance(initNebulaTheme())
   of stPeachy:
@@ -1063,6 +1078,7 @@ proc newMerendaSettingsWindow*(
         stAqua.title(),
         stMacOS.title(),
         stMacOSDark.title(),
+        stMacOSAdaptive.title(),
         stNebula.title(),
         stPeachy.title(),
         stSynthwave83.title(),

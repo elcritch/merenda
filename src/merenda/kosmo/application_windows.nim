@@ -252,6 +252,22 @@ func moeThemeSettings(themes: openArray[ContentTheme]): seq[KosmoMoeThemeSetting
       identifier: theme.identifier, name: theme.name, preview: theme.palette
     )
 
+proc refreshAdaptiveChrome(manager: KosmoWindowManager) =
+  ## Recolor the adaptive merenda theme after its source palette changed.
+  if manager.isNil or manager.application.isNil:
+    return
+  if not manager.application.merendaSettingsThemeIdentifier().isAdaptiveMerendaTheme() and
+      not manager.config.merendaTheme.isAdaptiveMerendaTheme():
+    return
+  var appearance = manager.application.effectiveAppearance()
+  let compiled = nimkit.parseCssTheme(
+    nimkit.adaptiveThemeCss(moeThemePalette(manager.config.moeTheme)), appearance.theme
+  )
+  if compiled.diagnostics.len > 0:
+    return
+  appearance.theme = compiled.theme
+  manager.application.setAppearance(appearance)
+
 proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
   ## Apply an available Moe theme and repaint every editor pane.
   if frontend.isNil or frontend.dockController.isNil:
@@ -266,6 +282,7 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
       frontend.statusLabel.text = outcome.message
     if outcome.applied and not frontend.xWindowManager.isNil:
       let manager = frontend.xWindowManager[]
+      let previousMoeTheme = manager.config.moeTheme
       manager.config.moeTheme = identifier
       for target in manager.frontends:
         if target != frontend and not target.xClosed:
@@ -273,6 +290,8 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
           for group in target.dockController.groups:
             group.editorView.refresh()
       discard manager.config.saveKosmoConfig(manager.configPath)
+      if previousMoeTheme != identifier:
+        manager.refreshAdaptiveChrome()
     return outcome.applied
 
 proc applyTerminalTheme(frontend: KosmoApplication, theme: ContentTheme) =
@@ -1043,7 +1062,6 @@ proc newKosmoWindowManager*(
 ): KosmoWindowManager =
   ## Create the owner for all project and file windows in a Kosmo session.
   let config = loadKosmoConfig(configPath)
-  app.configureKosmoApplicationAssets(config, assetCacheDirectory)
   result = KosmoWindowManager(
     application: app,
     keyBindingsPath: keyBindingsPath,
@@ -1051,6 +1069,10 @@ proc newKosmoWindowManager*(
     config: config,
   )
   if not app.isNil:
+    # The adaptive merenda theme follows the editor palette through this provider.
+    let manager = result
+    nimkit.registerAdaptivePaletteProvider proc(): nimkit.ContentThemePalette =
+      moeThemePalette(manager.config.moeTheme)
     if configPath.len > 0:
       let weakManager = result.unsafeWeakRef()
       app.merendaSettingsSaveHandler = proc(settings: nimkit.MerendaSettings): bool =
@@ -1059,6 +1081,7 @@ proc newKosmoWindowManager*(
         weakManager[].saveMerendaSettings(settings)
     else:
       app.merendaSettingsSaveHandler = nil
+  app.configureKosmoApplicationAssets(config, assetCacheDirectory)
 
 func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.

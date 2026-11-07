@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add the macOS Adaptive merenda theme: the macOS Dark structure recolored from
+  a shared content palette such as Catppuccin Mocha. Kosmo registers its
+  selected editor palette, so the window chrome follows the editor theme and
+  recolors live when it changes. Palette types, TOML loading, and discovery
+  moved from `contentthemes` into `contentthemepalettes`; `contentthemes`
+  re-exports them and keeps the view adapters.
+
 - Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft

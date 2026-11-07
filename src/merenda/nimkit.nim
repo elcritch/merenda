@@ -84,6 +84,7 @@ import ./nimkit/text/texttypes
 import ./nimkit/text/textviewintegrations
 import ./nimkit/text/textviews
 import ./nimkit/themes
+import ./nimkit/contentthemepalettes
 import ./nimkit/contentthemes
 import ./nimkit/foundation/types
 import ./nimkit/foundation/undomanagers

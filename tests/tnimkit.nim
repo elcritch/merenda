@@ -13,6 +13,7 @@ when defined(nimkitOwnershipTests):
   import nimkit/threading
 else:
   import nimkit/accessibility
+  import nimkit/adaptivetheme
   import nimkit/animations
   import nimkit/application_icon
   import nimkit/assetcache

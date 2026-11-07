@@ -194,6 +194,14 @@ proc applyKosmoBundledFontDefaults(
   appearance.theme = builder.finish()
   app.setAppearance(appearance)
 
+func isAdaptiveMerendaTheme*(identifier: string): bool =
+  ## Whether a merenda theme identifier selects the palette-following theme.
+  case identifier.strip().toLowerAscii()
+  of "macos-adaptive", "macosadaptive", "mac-os-adaptive", "adaptive", "adaptive-macos":
+    true
+  else:
+    false
+
 proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
   if app.isNil:
     return
@@ -253,6 +261,9 @@ proc configureKosmoApplicationAssets*(
       "macos"
     of "macos-dark", "macosdark", "mac-os-dark", "dark-macos", "modern-macos-dark":
       "macos-dark"
+    of "macos-adaptive", "macosadaptive", "mac-os-adaptive", "adaptive",
+        "adaptive-macos":
+      "macos-adaptive"
     of "nebula", "nebula-glass":
       "nebula"
     of "punch":

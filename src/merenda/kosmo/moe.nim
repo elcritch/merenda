@@ -448,6 +448,19 @@ proc availableMoeThemes*(editor: KosmoEditor): seq[ContentTheme] =
   result.mergeContentThemes([current])
   result.sortContentThemes()
 
+proc standaloneMoeThemes*(): seq[ContentTheme] =
+  ## Discover bundled and user-installed themes without an editor instance.
+  result = discoverContentThemes(bundledMoeThemesDirectory())
+  result.mergeContentThemes(discoverContentThemes(moeThemesDirectory()))
+
+proc moeThemePalette*(identifier: string): ContentThemePalette =
+  ## The shared palette for a Moe theme identifier; the default when unresolved.
+  if identifier.len > 0:
+    for theme in standaloneMoeThemes():
+      if theme.identifier == identifier:
+        return theme.palette
+  initContentPalette()
+
 proc applyMoeTheme*(
     editor: KosmoEditor, theme: ContentTheme
 ): KosmoMoeThemeApplyResult =
