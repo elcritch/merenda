@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
+
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
   budget, keeping visible previews and pending work pinned and sharing
   compatible document owners across panes.

@@ -162,6 +162,7 @@ suite "Kosmo configuration":
     let partial = loadKosmoConfig(path)
     check partial.merendaTheme == "aqua"
     check partial.fileTreeIndentation == 0.0'f32
+    check partial.terminalOptionAsMeta == DefaultTerminalOptionAsMeta
     check parseTerminalInputPolicy(partial.terminalInput) ==
       KosmoTerminalInputPolicy.Hybrid
     check parseTerminalInputPolicy("unrecognized") == KosmoTerminalInputPolicy.Hybrid
@@ -258,6 +259,34 @@ suite "Kosmo configuration":
       reloaded.close()
     let restored = newKosmoApplication(reloaded, monitorsGitStatus = false)
     check not restored.preferEditorPanes()
+
+  test "terminal Option as Meta persists across windows and application instances":
+    let
+      root = createTempDir("kosmo-option-meta-setting-", "")
+      path = root / "config.json"
+      app = newApplication("Option as Meta setting")
+      manager = newKosmoWindowManager(app, configPath = path)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    check loadKosmoConfig(path).terminalOptionAsMeta == DefaultTerminalOptionAsMeta
+    let terminal = newTerminalView()
+    require second.openDocument(
+      newKosmoPaneDocument("kosmo.test.option-meta", "Terminal", terminal)
+    )
+    for enabled in [not DefaultTerminalOptionAsMeta, DefaultTerminalOptionAsMeta]:
+      frontend.terminalOptionAsMeta = enabled
+      check second.terminalOptionAsMeta == enabled
+      check terminal.optionAsMeta == enabled
+      check loadKosmoConfig(path).terminalOptionAsMeta == enabled
+      let reloaded = newKosmoWindowManager(
+        newApplication("Reload Option as Meta"), configPath = path
+      )
+      let restored = newKosmoApplication(reloaded, monitorsGitStatus = false)
+      check restored.terminalOptionAsMeta == enabled
+      reloaded.close()
 
   test "ignores malformed JSON configuration":
     let
