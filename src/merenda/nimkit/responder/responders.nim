@@ -24,6 +24,16 @@ proc `target=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
   else:
     backRef.set(target, target.xBackRefs)
 
+proc `target=`*(backRef: var BackRef[Responder], target: DynamicAgent) =
+  ## Action targets need Responder's zeroing lifetime tracking.
+  if not target.isNil and not (target of Responder):
+    raise newException(ValueError, "Action target must be a Responder")
+  if target.isNil:
+    backRef.clear()
+  else:
+    let responder = Responder(target)
+    backRef.set(responder, responder.xBackRefs)
+
 proc nextResponder*(responder: Responder): Responder
 proc clearNextResponder*(responder: Responder)
 

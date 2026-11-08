@@ -42,6 +42,7 @@ type
     nkUndoStateDidChange
     nkSelectionDidChange
     nkModelMutationDidChange
+    nkApplicationDidStopWithoutWindows
 
   DefaultsChangeKind* = enum
     dckSet
@@ -229,6 +230,8 @@ func notificationName*(kind: NotificationKind): string =
     "nimkit.application.didUnhide"
   of nkApplicationWillTerminate:
     "nimkit.application.willTerminate"
+  of nkApplicationDidStopWithoutWindows:
+    "nimkit.application.didStopWithoutWindows"
   of nkApplicationAppearanceDidChange:
     "nimkit.application.appearanceDidChange"
   of nkWindowDidBecomeKey:

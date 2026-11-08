@@ -1,3 +1,4 @@
+import sigils/cloneutils
 import std/[unicode, unittest]
 
 when defined(macosx):
@@ -116,6 +117,106 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  test "cloning nested menu models preserves retained callback targets":
+    let action = actionSelector("test.nestedModelCallback")
+    var calls = 0
+    proc callback(sender: DynamicAgent) =
+      discard sender
+      inc calls
+
+    var copied: MenuItemModel
+    block:
+      let child = initMenuItemModel(
+        title = "Run", action = action, target = newActionTarget(action, callback)
+      )
+      let parent = initMenuItemModel(title = "Parent", children = [child])
+      copied = clone(parent)
+    require copied.children.len == 1
+    let item = newMenuItem(copied.children[0])
+    check item.perform(nil)
+    check calls == 1
+
+  test "MenuItemModel clones preserve zeroing targets and independent assignment":
+    var model = initMenuItemModel(target = nil)
+    var copied: MenuItemModel
+    block:
+      let target = newResponder()
+      model.target = DynamicAgent(target)
+      copied = clone(model)
+      check copied.target() == DynamicAgent(target)
+      model.target = nil
+      check model.target().isNil
+      check copied.target() == DynamicAgent(target)
+    check copied.target().isNil
+
+  test "menu model round trip retains callback action targets":
+    let
+      menu = newMenu("Actions")
+      action = actionSelector("test.modelCallback")
+    var calls = 0
+    block:
+      let item = newMenuItem("Run", action)
+      item.target = newActionTarget(action) do(sender: DynamicAgent):
+        discard sender
+        inc calls
+      discard menu.addItem(item)
+    menu.itemModels = menu.itemModels()
+    require menu.items().len == 1
+    check menu.items()[0].perform(nil)
+    check calls == 1
+    menu.reloadData()
+    check menu.items()[0].perform(nil)
+    check calls == 2
+
+  test "menu model retains inline callback action target":
+    let action = actionSelector("test.inlineModelCallback")
+    var calls = 0
+    proc callback(sender: DynamicAgent) =
+      discard sender
+      inc calls
+
+    var item: MenuItem
+    block:
+      let model = initMenuItemModel(
+        title = "Run", action = action, target = newActionTarget(action, callback)
+      )
+      item = newMenuItem(model)
+    check item.perform(nil)
+    check calls == 1
+
+  test "menu models do not retain their action targets":
+    var model: MenuItemModel
+    block:
+      let target = newResponder()
+      model = initMenuItemModel(title = "Run", target = target)
+      check model.target() == DynamicAgent(target)
+    check model.target().isNil
+
+  test "menu item does not retain an ordinary responder target":
+    let item = newMenuItem("Run")
+    block:
+      let target = newResponder()
+      item.target = target
+      check item.target() == DynamicAgent(target)
+    check item.target().isNil
+
+  test "action handler is retained until the menu target is replaced":
+    let
+      item = newMenuItem("Run")
+      action = actionSelector("test.menu.handler")
+    var calls = 0
+    var previous: BackRef[Responder]
+    block:
+      item.target = newActionTarget(action) do(sender: DynamicAgent):
+        check sender == DynamicAgent(item)
+        inc calls
+      item.action = action
+      previous.target = Responder(item.target())
+    check item.perform(nil)
+    check calls == 1
+    item.target = DynamicAgent(nil)
+    check previous.isNil
+
   test "open inline menus receive arrows and Enter before the focused view":
     let
       window = newWindow("Menu keyboard routing", frame = rect(0, 0, 400, 300))
@@ -575,12 +676,11 @@ suite "nimkit menus":
         menu = nativeMenus.NativeMenuDescription(
           identity: addr rootIdentity,
           title: "Main",
-          items:
-            @[
-              nativeMenus.NativeMenuItemDescription(
-                title: "File", enabled: true, submenu: child
-              )
-            ],
+          items: @[
+            nativeMenus.NativeMenuItemDescription(
+              title: "File", enabled: true, submenu: child
+            )
+          ],
         )
       var retiredItems: array[20, pointer]
       defer:

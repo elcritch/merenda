@@ -170,7 +170,7 @@ type
     markdownPreviewAccessClock: uint64
     markdownOwners: seq[KosmoMarkdownOwner]
     markdownRetirements: seq[KosmoMarkdownRetirement]
-    markdownBackRefs: nimkit.BackRefSet[KosmoDockController]
+    backRefs: nimkit.BackRefSet[KosmoDockController]
     markdownReconcileScheduled: bool
     markdownCacheClosed: bool
     shortcutBindings: nimkit.KeyBindingTable
@@ -183,6 +183,7 @@ type
     selected: bool
 
   KosmoStatusBar = ref object of nimkit.View
+    dockController: nimkit.BackRef[KosmoDockController]
     label: nimkit.Label
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
@@ -225,7 +226,7 @@ type
     statusBar: KosmoStatusBar
     statusLabel: nimkit.Label
 
-  KosmoWindowManager* = ref object
+  KosmoWindowManager* = ref object of nimkit.Responder
     application*: nimkit.Application
     keyBindingsPath: string
     configPath: string
@@ -268,7 +269,7 @@ type
     xTerminalPalette: nimkit.TerminalPalette
     xTerminalTheme: string
     xRichTextThemes: array[KosmoThemeTarget, ContentTheme]
-    xWindowManager: WeakRef[KosmoWindowManager]
+    xWindowManager: nimkit.BackRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string
     xHasFileBrowser: bool

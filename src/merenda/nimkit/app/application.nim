@@ -1483,7 +1483,9 @@ proc runForFrames*(app: Application, frames: Natural): int =
 proc run*(app: Application) =
   app.xApplicationThreadId = getThreadId()
   app.prepareApplicationEventLoop()
-  var runtime: ThreadRendererRuntime
+  var
+    runtime: ThreadRendererRuntime
+    noVisibleWindows = false
   try:
     if app.usesDedicatedRenderer():
       runtime = newThreadRendererRuntime()
@@ -1499,6 +1501,7 @@ proc run*(app: Application) =
         app.pollApplicationEvents()
         let activeWindows = app.runApplicationFrame()
         if activeWindows == 0:
+          noVisibleWindows = true
           app.xRunning = false
         elif app.xRunning:
           app.waitForApplicationEvents()
@@ -1515,6 +1518,14 @@ proc run*(app: Application) =
       app.stopAnimationClock()
       when defined(merenda.devControl):
         app.stopDevControl()
+      if noVisibleWindows:
+        var hasOpenWindows = false
+        for window in app.xWindows:
+          if not window.isNil and not window.isClosed:
+            hasOpenWindows = true
+            break
+        if not hasOpenWindows:
+          app.postApplicationNotification(nkApplicationDidStopWithoutWindows)
 
 proc stop*(app: Application) =
   app.xRunning = false

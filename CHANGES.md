@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Give convenience-created Kosmo sessions an explicit lifetime through application
+  termination or completion of the event loop with no open windows. Manager links
+  are zeroing, and standard application menus dispatch named manager actions.
+
+- Make control, action-cell, menu-item and item-model responder targets
+  non-owning zeroing references. `ClosureTarget` assignments retain callbacks;
+  statically upcast targets are non-owning. See `docs/design.md` for ownership
+  and model migration details.
+
 - Add the macOS Adaptive merenda theme: the macOS Dark structure recolored from
   a shared content palette such as Catppuccin Mocha. Kosmo registers its
   selected editor palette, so the window chrome follows the editor theme and

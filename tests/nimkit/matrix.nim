@@ -1,3 +1,4 @@
+import sigils/cloneutils
 import std/unittest
 
 import sigils/core
@@ -57,6 +58,19 @@ proc clickCell(window: Window, matrix: Matrix, row, column: int): bool =
   window.mouseDownAt(point) and window.mouseUpAt(point)
 
 suite "nimkit matrix":
+  test "MatrixItemModel clones preserve zeroing targets and independent assignment":
+    var model = initMatrixItemModel(target = nil)
+    var copied: MatrixItemModel
+    block:
+      let target = newResponder()
+      model.target = DynamicAgent(target)
+      copied = clone(model)
+      check copied.target() == DynamicAgent(target)
+      model.target = nil
+      check model.target().isNil
+      check copied.target() == DynamicAgent(target)
+    check copied.target().isNil
+
   test "matrix item models back metadata identity selection and ordering":
     let matrix = newCheckMatrix([], columns = 2)
 
@@ -133,18 +147,25 @@ suite "nimkit matrix":
     check matrix.indexOfMatrixItemIdentifier("published") == 1
     check matrix.selectMatrixItemWithIdentifier("published")
 
-    source.models =
-      @[
-        initMatrixItemModel("published", "Published Updated"),
-        initMatrixItemModel("draft", "Draft"),
-        initMatrixItemModel("archived", "Archived", hidden = true),
-      ]
+    source.models = @[
+      initMatrixItemModel("published", "Published Updated"),
+      initMatrixItemModel("draft", "Draft"),
+      initMatrixItemModel("archived", "Archived", hidden = true),
+    ]
     matrix.reloadData()
 
     check matrix.len == 2
     check matrix.cellAtIndex(0).title == "Published Updated"
     check matrix.selectedItemIdentifier() == "published"
     check matrix.selectedIndex == 0
+
+  test "matrix models do not retain their action targets":
+    var model: MatrixItemModel
+    block:
+      let target = newResponder()
+      model = initMatrixItemModel("run", "Run", target = target)
+      check model.target() == DynamicAgent(target)
+    check model.target().isNil
 
   test "matrix item model actions dispatch from generated cells":
     let
@@ -158,15 +179,16 @@ suite "nimkit matrix":
       check sender == DynamicAgent(matrix)
       inc resetCount
 
-    matrix.matrixItemModels = [
-      initMatrixItemModel("apply", "Apply"),
-      initMatrixItemModel(
-        "reset",
-        "Reset",
-        action = resetAction,
-        target = newActionTarget(resetAction, onReset),
-      ),
-    ]
+    block:
+      matrix.matrixItemModels = [
+        initMatrixItemModel("apply", "Apply"),
+        initMatrixItemModel(
+          "reset",
+          "Reset",
+          action = resetAction,
+          target = newActionTarget(resetAction, onReset),
+        ),
+      ]
     root.addSubview(matrix)
     window.setContentView(root)
 

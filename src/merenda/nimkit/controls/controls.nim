@@ -18,7 +18,8 @@ export cells, objectvalues, views
 type
   Control* = ref object of View
     xCell: Cell
-    xTarget: DynamicAgent
+    xTarget: BackRef[Responder]
+    xOwnedActionTarget: ClosureTarget
     xAction: ActionSelector
     xCurrentEditor: FieldEditor
     xDraggingSession: DraggingSession
@@ -97,7 +98,7 @@ proc syncActionCell(control: Control, cell: Cell) =
   if cell.isNil or not (cell of ActionCell):
     return
   let actionCell = ActionCell(cell)
-  actionCell.setTarget(control.xTarget)
+  actionCell.setTarget(DynamicAgent(control.xTarget.target))
   actionCell.setAction(control.xAction)
 
 proc defaultControlCell(): Cell =
@@ -326,10 +327,11 @@ proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     return ActionCell(selected).target()
-  control.xTarget
+  DynamicAgent(control.xTarget.target)
 
 proc `target=`*(control: Control, target: DynamicAgent) =
-  control.xTarget = target
+  control.xTarget.target = target
+  control.xOwnedActionTarget = nil
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(target)
@@ -582,3 +584,19 @@ proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarg
       target.xCallback(args.sender)
     invocation.setResult(())
   discard result.replaceMethod(action, fn)
+
+proc `target=`*(control: Control, target: ClosureTarget) =
+  ## Closure targets are retained. Ordinary responder targets are non-owning.
+  ## An explicitly upcast ClosureTarget follows the non-owning overload.
+  control.target = DynamicAgent(target)
+  control.xOwnedActionTarget = target
+
+proc setTarget*(cell: ActionCell, target: ClosureTarget) =
+  ## Retain closure targets; ordinary responder targets are non-owning.
+  cell.setRetainedTarget(target)
+
+proc setTarget*(cell: ActionCell, target: typeof(nil)) =
+  cell.setTarget(DynamicAgent(target))
+
+proc `target=`*(control: Control, target: typeof(nil)) =
+  control.target = DynamicAgent(target)

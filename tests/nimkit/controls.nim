@@ -24,6 +24,98 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "back references accept responder and dynamic agent and clear safely":
+    var link: BackRef[Responder]
+    block:
+      let responder = newResponder()
+      link.target = responder
+      check link.target == responder
+      let dynamic = DynamicAgent(responder)
+      link.target = dynamic
+      check link.target == responder
+      expect ValueError:
+        link.target = DynamicAgent()
+      check link.target == responder
+    check link.isNil
+    link.target = DynamicAgent(nil)
+    check link.isNil
+
+  test "rejecting an unsupported target preserves the existing target":
+    let
+      button = newButton("Run")
+      target = newResponder()
+    button.target = target
+    expect ValueError:
+      button.target = DynamicAgent()
+    check button.target() == DynamicAgent(target)
+
+  test "clearing a target during its callback is safe":
+    let
+      button = newButton("Run")
+      action = actionSelector("test.clearDuringAction")
+    var calls = 0
+    button.target = newActionTarget(action) do(sender: DynamicAgent):
+      inc calls
+      Button(sender).target = nil
+    button.action = action
+    check button.sendAction()
+    check calls == 1
+    check button.target().isNil
+
+  test "action cells retain directly assigned closure targets":
+    let
+      cell = newActionCell()
+      action = actionSelector("test.cellClosure")
+    var link: BackRef[Responder]
+    block:
+      cell.setTarget(
+        newActionTarget(action) do(sender: DynamicAgent):
+          discard sender
+      )
+      link.target = Responder(cell.target())
+      check not link.isNil
+    cell.setTarget(nil)
+    check link.isNil
+
+  test "control and its action cell do not retain a responder target":
+    let button = newButton("Run")
+    block:
+      let target = newResponder()
+      button.target = target
+      check button.target() == DynamicAgent(target)
+      check ActionCell(button.cell()).target() == DynamicAgent(target)
+    check button.target().isNil
+    check ActionCell(button.cell()).target().isNil
+
+  test "explicitly upcast closure targets are non-owning":
+    let button = newButton("Run")
+    block:
+      let target = newActionTarget(actionSelector("test.upcast")) do(
+        sender: DynamicAgent
+      ):
+        discard sender
+      button.target = Responder(target)
+      check not button.target().isNil
+    check button.target().isNil
+
+  test "action handler is retained until the target is replaced":
+    let
+      button = newButton("Run")
+      action = actionSelector("test.handler")
+    var calls = 0
+    var previous: BackRef[Responder]
+    block:
+      button.target = newActionTarget(action) do(sender: DynamicAgent):
+        check sender == DynamicAgent(button)
+        inc calls
+      button.action = action
+      previous.target = Responder(button.target())
+    check button.action() == action
+    check button.sendAction()
+    check calls == 1
+    button.target = DynamicAgent(nil)
+    check previous.isNil
+
   test "styled button captions measure and render without changing their title":
     let button = newButton("Save changes", frame = rect(10, 10, 240, 60))
     button.appearance = initAppearance(initPunchTheme())
