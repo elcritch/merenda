@@ -28,16 +28,23 @@ suite "nimkit controls":
     var link: BackRef[Responder]
     block:
       let responder = newResponder()
-      link.target = responder
+      link{} = responder
       check link{} == responder
       let dynamic = DynamicAgent(responder)
-      link.target = dynamic
+      link{} = dynamic
       check link{} == responder
       expect ValueError:
-        link.target = DynamicAgent()
+        link{} = DynamicAgent()
       check link{} == responder
+      link{} = nil
+      check link.isNil
+      link{} = responder
+      var empty: Responder
+      link{} = empty
+      check link.isNil
+      link{} = responder
     check link.isNil
-    link.target = DynamicAgent(nil)
+    link{} = DynamicAgent(nil)
     check link.isNil
 
   test "rejecting an unsupported target preserves the existing target":

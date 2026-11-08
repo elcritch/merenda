@@ -34,7 +34,7 @@ suite "NimKit ARC back references":
     check reference{}.isNil
     block:
       let view = newView()
-      reference.target = view
+      reference{} = view
       check reference{} == view
       retained = reference{}
       check retained == view

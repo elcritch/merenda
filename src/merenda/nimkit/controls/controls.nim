@@ -330,7 +330,7 @@ proc target*(control: Control): DynamicAgent =
   asDynamicAgent(control.xTarget{})
 
 proc `target=`*(control: Control, target: DynamicAgent) =
-  control.xTarget.target = target
+  control.xTarget{} = target
   control.xOwnedActionTarget = nil
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
