@@ -2061,7 +2061,11 @@ proc openCliRequest(
   elif files.len > 0:
     destination = manager.frontendForCliRequest(request.originWindow)
     if destination.isNil:
-      destination = newKosmoApplication(manager, hasFileBrowser = false)
+      # A window opened for files keeps the file browser visible, rooted at the
+      # first file's folder so the tree, search, and quick open cover the file.
+      destination = newKosmoApplication(
+        manager, absolutePath(files[0]).parentDir(), hasFileBrowser = true
+      )
 
   if not destination.isNil:
     for path in files:

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Show the Kosmo file browser when a command-line file request opens a fresh
+  window, such as starting `kosmo <file>`: the new window now keeps its sidebar
+  rooted at the opened file's folder instead of showing only an editor pane.
+
 - Share action-target ownership storage across controls, action cells, menus, and
   item models. Add explicit-receiver action adapters with non-capturing handlers
   and zeroing receiver references; Kosmo settings use these adapters, while
@@ -27,6 +31,7 @@
   expanded pull requests.
 - Keep terminal search results in scrollback when clicked and give the current
   match a high-contrast highlight.
+
 - Add the macOS Adaptive merenda theme: the macOS Dark structure recolored from
   a shared content palette such as Catppuccin Mocha. Kosmo registers its
   selected editor palette, so the window chrome follows the editor theme and
