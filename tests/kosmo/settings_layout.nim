@@ -33,6 +33,29 @@ template checkVisibleText(view: View, expected: openArray[string]) =
       check found
 
 suite "Kosmo settings layout":
+  test "settings action controls do not retain their controller":
+    var observed: BackRef[Responder]
+    var option: Button
+    var changes = 0
+    block:
+      let settings = newKosmoSettingsWindow(
+        optionAsMetaHandler = proc(enabled: bool) =
+          inc changes
+      )
+      observed{} = Responder(settings)
+      option =
+        Button(settings.contentView().viewWithIdentifier(KosmoOptionAsMetaIdentifier))
+      check option.target() of ActionAdapter
+      check not (option.target() of ClosureTarget)
+      check option.sendAction()
+      check changes == 1
+      settings.close()
+      settings.window().close()
+    check observed.isNil
+    check option.target() of ActionAdapter
+    check option.sendAction()
+    check changes == 1
+
   test "uses a compact stable minimum and keeps every page legible":
     let settings = newKosmoSettingsWindow(
       shortcuts = [

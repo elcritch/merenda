@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Share action-target ownership storage across controls, action cells, menus, and
+  item models. Add explicit-receiver action adapters with non-capturing handlers
+  and zeroing receiver references; Kosmo settings use these adapters, while
+  search-bar buttons use named actions on their owning responder.
+  Nimdex settings accept a non-owning `KosmoNimdexSettingsDelegate` instead of
+  separate action and status closure parameters.
+
 - Share the target pointer across each `BackRefSet`; a registry asserts if
   registered with a second target during its lifetime. Read a `BackRef` target
   with `reference{}` or `reference.target`.

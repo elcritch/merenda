@@ -134,9 +134,11 @@ type
     xTerminalInputPolicyChoice: nimkit.ComboBox
     xTerminalInputPolicyHandler: KosmoTerminalInputPolicyHandler
     xTabs: nimkit.TabView
+    xNimdexMode: nimkit.ComboBox
+    xNimdexLocal, xNimdexAddress: nimkit.TextField
+    xNimdexDelegate: nimkit.BackRef[nimkit.Responder]
     xNimdexStatus: nimkit.Label
     xNimdexStatusError: bool
-    xNimdexStatusHandler: proc(): string {.closure.}
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
     xShortcutProfileChoice: nimkit.ComboBox
@@ -159,6 +161,11 @@ type
     xVscodeGrammarSearchStatus: nimkit.Label
     xVscodeGrammarSearchTable: nimkit.TableView
     xVscodeGrammarSearchSource: KosmoVscodeGrammarSearchTableSource
+
+protocol KosmoNimdexSettingsDelegate {.selectorScope: protocol.}:
+  method nimdexSettingsAction*(command: string, connect: bool): string
+
+  method nimdexSettingsStatus*(): string
 
 protocol KosmoShortcutsTableDataSource of nimkit.TableViewDataSource:
   method numberOfRows(
@@ -856,8 +863,7 @@ proc `textMateGrammars=`*(
 
 proc newKosmoSettingsWindow*(
     nimdexCommand = "",
-    nimdexAction: proc(command: string, connect: bool): string {.closure.} = nil,
-    nimdexStatus: proc(): string {.closure.} = nil,
+    nimdexDelegate: nimkit.Responder = nil,
     preferEditorPanes = true,
     preferEditorPanesHandler: proc(enabled: bool) {.closure.} = nil,
     optionAsMeta = nimkit.DefaultTerminalOptionAsMeta,
@@ -889,7 +895,6 @@ proc newKosmoSettingsWindow*(
     textMateGrammarsSource = newKosmoTextMateGrammarsTableSource(textMateGrammars)
     vscodeGrammarSearchSource = newKosmoVscodeGrammarSearchTableSource()
   result = KosmoSettingsWindow(
-    xNimdexStatusHandler: nimdexStatus,
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xGrammarInstaller:
       nimkit.newPanel("Install grammars", nimkit.rect(180, 160, 700, 420)),
@@ -909,6 +914,7 @@ proc newKosmoSettingsWindow*(
     xVscodeGrammarSearchSource: vscodeGrammarSearchSource,
   )
   nimkit.initResponder(result)
+  result.xNimdexDelegate{} = nimdexDelegate
   let
     settings = result
     layout = nimkit.newStackView(nimkit.laVertical)
@@ -992,9 +998,9 @@ proc newKosmoSettingsWindow*(
   vscodeGrammarSearchField.accessibilityLabel = "Search Open VSX language grammars"
   vscodeGrammarSearchButton.identifier = KosmoVscodeGrammarSearchButtonIdentifier
   vscodeGrammarSearchButton.accessibilityLabel = "Search Open VSX"
-  vscodeGrammarSearchButton.target = nimkit.newActionTarget(vscodeGrammarSearchAction) do(
-    sender: nimkit.DynamicAgent
-  ):
+  vscodeGrammarSearchButton.target = nimkit.newActionTarget(
+    vscodeGrammarSearchAction, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     settings.searchVscodeGrammars(sender)
   vscodeGrammarSearchButton.action = vscodeGrammarSearchAction
   vscodeGrammarSearchField.target = vscodeGrammarSearchButton.target
@@ -1002,9 +1008,9 @@ proc newKosmoSettingsWindow*(
   vscodeGrammarInstallButton.identifier = KosmoVscodeGrammarInstallButtonIdentifier
   vscodeGrammarInstallButton.accessibilityLabel = "Install selected Open VSX grammar"
   vscodeGrammarInstallButton.enabled = false
-  vscodeGrammarInstallButton.target = nimkit.newActionTarget(vscodeGrammarInstallAction) do(
-    sender: nimkit.DynamicAgent
-  ):
+  vscodeGrammarInstallButton.target = nimkit.newActionTarget(
+    vscodeGrammarInstallAction, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     settings.installSelectedVscodeGrammar(sender)
   vscodeGrammarInstallButton.action = vscodeGrammarInstallAction
 
@@ -1072,19 +1078,17 @@ proc newKosmoSettingsWindow*(
     "Prefer panes not displaying terminals for editor tabs"
   settings.preferEditorPanes = preferEditorPanes
   preferEditorPanesButton.target = nimkit.newActionTarget(
-    nimkit.actionSelector("kosmo.preferEditorPanesChanged")
-  ) do(sender: nimkit.DynamicAgent):
-    discard sender
+    nimkit.actionSelector("kosmo.preferEditorPanesChanged"), settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     if not settings.xPreferEditorPanesHandler.isNil:
       settings.xPreferEditorPanesHandler(settings.preferEditorPanes())
   preferEditorPanesButton.action =
     nimkit.actionSelector("kosmo.preferEditorPanesChanged")
 
   optionButton.state = if optionAsMeta: nimkit.bsOn else: nimkit.bsOff
-  optionButton.target = nimkit.newActionTarget(optionChanged) do(
-    sender: nimkit.DynamicAgent
+  optionButton.target = nimkit.newActionTarget(optionChanged, settings) do(
+    settings: KosmoSettingsWindow, sender: DynamicAgent
   ):
-    discard sender
     if not settings.xOptionAsMetaHandler.isNil:
       settings.xOptionAsMetaHandler(settings.optionAsMeta())
   optionButton.action = optionChanged
@@ -1092,10 +1096,9 @@ proc newKosmoSettingsWindow*(
   terminalLinksButton.identifier = KosmoTerminalLinksIdentifier
   terminalLinksButton.accessibilityLabel = "Open links from terminal output"
   terminalLinksButton.state = if terminalLinksEnabled: nimkit.bsOn else: nimkit.bsOff
-  terminalLinksButton.target = nimkit.newActionTarget(terminalLinksChanged) do(
-    sender: nimkit.DynamicAgent
+  terminalLinksButton.target = nimkit.newActionTarget(terminalLinksChanged, settings) do(
+    settings: KosmoSettingsWindow, sender: DynamicAgent
   ):
-    discard sender
     if not settings.xTerminalLinksHandler.isNil:
       settings.xTerminalLinksHandler(settings.terminalLinksEnabled())
   terminalLinksButton.action = terminalLinksChanged
@@ -1103,9 +1106,9 @@ proc newKosmoSettingsWindow*(
   terminalInputPolicyChoice.identifier = KosmoTerminalInputPolicyIdentifier
   terminalInputPolicyChoice.accessibilityLabel = "Terminal input policy"
   settings.terminalInputPolicy = terminalInputPolicy
-  terminalInputPolicyChoice.target = nimkit.newActionTarget(terminalInputPolicyChanged) do(
-    sender: nimkit.DynamicAgent
-  ):
+  terminalInputPolicyChoice.target = nimkit.newActionTarget(
+    terminalInputPolicyChanged, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     if not settings.xTerminalInputPolicyHandler.isNil:
       settings.xTerminalInputPolicyHandler(settings.terminalInputPolicy())
   terminalInputPolicyChoice.action = terminalInputPolicyChanged
@@ -1135,10 +1138,9 @@ proc newKosmoSettingsWindow*(
     case shortcutProfile
     of KosmoShortcutProfile.Platform: 0
     of KosmoShortcutProfile.MacOS: 1
-  shortcutProfileChoice.target = nimkit.newActionTarget(shortcutProfileChanged) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
+  shortcutProfileChoice.target = nimkit.newActionTarget(
+    shortcutProfileChanged, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     if not settings.xShortcutProfileHandler.isNil:
       settings.xShortcutProfileHandler(settings.shortcutProfile())
   shortcutProfileChoice.action = shortcutProfileChanged
@@ -1150,10 +1152,9 @@ proc newKosmoSettingsWindow*(
     of KosmoEditorInputPolicy.Vim: 0
     of KosmoEditorInputPolicy.Native: 1
     of KosmoEditorInputPolicy.Hybrid: 2
-  editorInputPolicyChoice.target = nimkit.newActionTarget(editorInputPolicyChanged) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
+  editorInputPolicyChoice.target = nimkit.newActionTarget(
+    editorInputPolicyChanged, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     if not settings.xEditorInputPolicyHandler.isNil:
       settings.xEditorInputPolicyHandler(settings.editorInputPolicy())
   editorInputPolicyChoice.action = editorInputPolicyChanged
@@ -1162,9 +1163,8 @@ proc newKosmoSettingsWindow*(
   forceInputModeButton.accessibilityLabel = "Force input mode"
   forceInputModeButton.state = if forceInputMode: nimkit.bsOn else: nimkit.bsOff
   forceInputModeButton.target = nimkit.newActionTarget(
-    nimkit.actionSelector("kosmo.forceInputModeChanged")
-  ) do(sender: nimkit.DynamicAgent):
-    discard sender
+    nimkit.actionSelector("kosmo.forceInputModeChanged"), settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     if not settings.xForceInputModeHandler.isNil:
       settings.xForceInputModeHandler(settings.forceInputMode())
   forceInputModeButton.action = nimkit.actionSelector("kosmo.forceInputModeChanged")
@@ -1276,28 +1276,25 @@ proc newKosmoSettingsWindow*(
   selectAllThemes.identifier = KosmoSelectAllThemesIdentifier
   selectRichTextThemes.identifier = KosmoSelectRichTextThemesIdentifier
   let selectAllAction = nimkit.actionSelector("kosmo.themes.selectAll")
-  selectAllThemes.target = nimkit.newActionTarget(selectAllAction) do(
-    sender: nimkit.DynamicAgent
+  selectAllThemes.target = nimkit.newActionTarget(selectAllAction, settings) do(
+    settings: KosmoSettingsWindow, sender: DynamicAgent
   ):
-    discard sender
-    themeTargets.selectedIndexes = @[0, 1, 2, 3, 4]
+    settings.xMoeThemesSource.targetsTable.selectedIndexes = @[0, 1, 2, 3, 4]
   selectAllThemes.action = selectAllAction
   let selectRichTextAction = nimkit.actionSelector("kosmo.themes.selectRichText")
-  selectRichTextThemes.target = nimkit.newActionTarget(selectRichTextAction) do(
-    sender: nimkit.DynamicAgent
+  selectRichTextThemes.target = nimkit.newActionTarget(selectRichTextAction, settings) do(
+    settings: KosmoSettingsWindow, sender: DynamicAgent
   ):
-    discard sender
-    themeTargets.selectedIndexes = @[2, 3, 4]
+    settings.xMoeThemesSource.targetsTable.selectedIndexes = @[2, 3, 4]
   selectRichTextThemes.action = selectRichTextAction
   resetThemes.identifier = KosmoResetThemesIdentifier
   resetThemes.accessibilityLabel =
     "Restore selected items to their themes when Settings opened"
   resetThemes.action = nimkit.actionSelector("kosmo.themes.reset")
-  resetThemes.target = nimkit.newActionTarget(resetThemes.action) do(
-    sender: nimkit.DynamicAgent
+  resetThemes.target = nimkit.newActionTarget(resetThemes.action, settings) do(
+    settings: KosmoSettingsWindow, sender: DynamicAgent
   ):
-    discard sender
-    moeThemesSource.resetSelectedThemes()
+    settings.xMoeThemesSource.resetSelectedThemes()
   themeButtons.spacing = 8
   themeButtons.alignment = nimkit.svaCenter
   themeButtons.addArrangedSubview(
@@ -1383,17 +1380,15 @@ proc newKosmoSettingsWindow*(
   settings.xGrammarInstaller.contentMinSize = nimkit.initSize(560, 300)
   grammarInstallerDone.identifier = KosmoGrammarInstallerDoneIdentifier
   grammarInstallerDone.action = nimkit.actionSelector("kosmo.closeGrammarInstaller")
-  grammarInstallerDone.target = nimkit.newActionTarget(grammarInstallerDone.action) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
+  grammarInstallerDone.target = nimkit.newActionTarget(
+    grammarInstallerDone.action, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     settings.xGrammarInstaller.close()
   installMoreGrammars.identifier = KosmoInstallMoreGrammarsIdentifier
   installMoreGrammars.action = nimkit.actionSelector("kosmo.showGrammarInstaller")
-  installMoreGrammars.target = nimkit.newActionTarget(installMoreGrammars.action) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
+  installMoreGrammars.target = nimkit.newActionTarget(
+    installMoreGrammars.action, settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     settings.showGrammarInstaller()
   textMateGrammarsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Installed grammars")
@@ -1415,6 +1410,9 @@ proc newKosmoSettingsWindow*(
   nimdexLocal.text = if nimdexMode.selectedIndex == 0: nimdexCommand else: ""
   nimdexAddress.text =
     if nimdexMode.selectedIndex == 1: nimdexCommand else: "tcp://127.0.0.1:9257"
+  settings.xNimdexMode = nimdexMode
+  settings.xNimdexLocal = nimdexLocal
+  settings.xNimdexAddress = nimdexAddress
   settings.xNimdexStatus = nimdexStatusLabel
   nimdexForm.edgeInsets = nimkit.insets(0.0)
   nimdexForm.spacing[nimkit.dcol] = 12.0
@@ -1426,30 +1424,30 @@ proc newKosmoSettingsWindow*(
   nimdexButtons.alignment = nimkit.svaCenter
   nimdexButtons.addArrangedSubview(nimdexConnect, nimdexDisconnect)
   nimdexConnect.target = nimkit.newActionTarget(
-    nimkit.actionSelector("kosmo.nimdex.connect")
-  ) do(sender: nimkit.DynamicAgent):
-    discard sender
+    nimkit.actionSelector("kosmo.nimdex.connect"), settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
     var command =
-      if nimdexMode.selectedIndex == 1:
-        nimdexAddress.text.strip()
+      if settings.xNimdexMode.selectedIndex == 1:
+        settings.xNimdexAddress.text.strip()
       else:
-        nimdexLocal.text.strip()
-    if nimdexMode.selectedIndex == 0 and command.len > 0 and
+        settings.xNimdexLocal.text.strip()
+    if settings.xNimdexMode.selectedIndex == 0 and command.len > 0 and
         (fileExists(command) or not command.contains(' ')):
       command = quoteShell(command) & " daemon"
-    if not nimdexAction.isNil:
-      let error = nimdexAction(command, true)
+    let delegate = settings.xNimdexDelegate{}
+    if not delegate.isNil:
+      let error = delegate.nimdexSettingsAction(command, true)
       settings.xNimdexStatusError = error.len > 0
-      nimdexStatusLabel.text = if error.len > 0: error else: "Connecting…"
+      settings.xNimdexStatus.text = if error.len > 0: error else: "Connecting…"
   nimdexConnect.action = nimkit.actionSelector("kosmo.nimdex.connect")
   nimdexDisconnect.target = nimkit.newActionTarget(
-    nimkit.actionSelector("kosmo.nimdex.disconnect")
-  ) do(sender: nimkit.DynamicAgent):
-    discard sender
-    if not nimdexAction.isNil:
-      let error = nimdexAction("", false)
+    nimkit.actionSelector("kosmo.nimdex.disconnect"), settings
+  ) do(settings: KosmoSettingsWindow, sender: DynamicAgent):
+    let delegate = settings.xNimdexDelegate{}
+    if not delegate.isNil:
+      let error = delegate.nimdexSettingsAction("", false)
       settings.xNimdexStatusError = error.len > 0
-      nimdexStatusLabel.text = if error.len > 0: error else: "Disconnected"
+      settings.xNimdexStatus.text = if error.len > 0: error else: "Disconnected"
   nimdexDisconnect.action = nimkit.actionSelector("kosmo.nimdex.disconnect")
   nimdexPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Nimdex"),
@@ -1460,8 +1458,8 @@ proc newKosmoSettingsWindow*(
       "Local mode starts Nimdex for this editor; daemon mode connects to an existing listener."
     ),
   )
-  if not nimdexStatus.isNil:
-    nimdexStatusLabel.text = nimdexStatus()
+  if not nimdexDelegate.isNil:
+    nimdexStatusLabel.text = nimdexDelegate.nimdexSettingsStatus()
 
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(
@@ -1503,9 +1501,11 @@ proc newKosmoSettingsWindow*(
 
 proc refreshNimdexStatus*(settings: KosmoSettingsWindow) =
   ## Refresh the connection indicator from the editor worker.
-  if not settings.isNil and not settings.xNimdexStatusError and
-      not settings.xNimdexStatusHandler.isNil:
-    let status = settings.xNimdexStatusHandler()
+  if not settings.isNil and not settings.xNimdexStatusError:
+    let delegate = settings.xNimdexDelegate{}
+    if delegate.isNil:
+      return
+    let status = delegate.nimdexSettingsStatus()
     if settings.xNimdexStatus.text != status:
       settings.xNimdexStatus.text = status
 

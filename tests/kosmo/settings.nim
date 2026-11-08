@@ -5,6 +5,20 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
 
+type NimdexSettingsSpy = ref object of Responder
+  command: string
+  connected: bool
+
+protocol NimdexSettingsSpyMethods of KosmoNimdexSettingsDelegate:
+  method nimdexSettingsStatus(delegate: NimdexSettingsSpy): string =
+    if delegate.connected: "Connected" else: "Disconnected"
+
+  method nimdexSettingsAction(
+      delegate: NimdexSettingsSpy, command: string, connect: bool
+  ): string =
+    delegate.command = command
+    delegate.connected = connect
+
 proc renderedFigText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
     result.add node.textLayout.displayRune(glyphIndex).toUTF8()
@@ -90,13 +104,10 @@ suite "Kosmo settings":
     check ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl) in info.creditLinks
 
   test "Nimdex settings connect and disconnect using the selected mode":
-    var command = ""
-    var connected = false
-    let panel = newKosmoSettingsWindow(
-      nimdexAction = proc(value: string, connect: bool): string =
-        command = value
-        connected = connect
-    )
+    let delegate = NimdexSettingsSpy()
+    initResponder(delegate)
+    discard delegate.withProtocol(NimdexSettingsSpyMethods)
+    let panel = newKosmoSettingsWindow(nimdexDelegate = delegate)
     defer:
       panel.close()
     let root = panel.contentView()
@@ -113,14 +124,36 @@ suite "Kosmo settings":
     local.text = "nimdex"
     mode.selectedIndex = 0
     require start.tryToPerform(performClick(), DynamicAgent(start))
-    check connected
-    check command.contains("nimdex") and command.endsWith(" daemon")
+    check delegate.connected
+    check delegate.command.contains("nimdex") and delegate.command.endsWith(" daemon")
     mode.selectedIndex = 1
     address.text = "tcp://127.0.0.1:9257"
     require start.tryToPerform(performClick(), DynamicAgent(start))
-    check command == "tcp://127.0.0.1:9257"
+    check delegate.command == "tcp://127.0.0.1:9257"
     require stop.tryToPerform(performClick(), DynamicAgent(stop))
-    check not connected
+    check not delegate.connected
+
+  test "Nimdex settings do not retain their delegate":
+    var panel: KosmoSettingsWindow
+    var observed: BackRef[Responder]
+    block:
+      let delegate = NimdexSettingsSpy()
+      initResponder(delegate)
+      discard delegate.withProtocol(NimdexSettingsSpyMethods)
+      observed{} = Responder(delegate)
+      panel = newKosmoSettingsWindow(nimdexDelegate = delegate)
+    defer:
+      panel.close()
+      panel.window().close()
+    check observed.isNil
+    panel.refreshNimdexStatus()
+    let tabs =
+      TabView(panel.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoNimdexSettingsTabIdentifier)
+    let start =
+      Button(panel.contentView().viewWithIdentifier("kosmo.settings.nimdex.connect"))
+    require not start.isNil
+    check start.sendAction()
 
   test "Nimdex status button opens settings when no command is configured":
     let toggle = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")

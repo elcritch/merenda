@@ -1,4 +1,5 @@
 import ../foundation/selectors
+import ../responder/actiontargets
 import ../accessibility/accessibility
 import ../text/fieldeditors
 import ../text/texttypes
@@ -19,8 +20,7 @@ type
     xMirrorsControlViewState: bool
 
   ActionCell* = ref object of Cell
-    xTarget: BackRef[Responder]
-    xOwnedTarget: DynamicAgent
+    xTarget: ActionTarget
     xAction: ActionSelector
 
 proc normalizeState(value: ButtonState, allowsMixedState: bool): ButtonState =
@@ -226,17 +226,15 @@ proc target*(cell: ActionCell): DynamicAgent =
   asDynamicAgent(cell.xTarget{})
 
 proc setTarget*(cell: ActionCell, target: DynamicAgent) =
-  cell.xTarget.target = target
-  cell.xOwnedTarget = nil
+  cell.xTarget{} = target
 
 proc setRetainedTarget*(cell: ActionCell, target: DynamicAgent) =
   ## Retain an explicitly installed callback adapter.
-  cell.setTarget(target)
-  cell.xOwnedTarget = target
+  cell.xTarget.setRetainedTarget(target)
 
 proc retainedTarget*(cell: ActionCell): DynamicAgent =
   ## Return the explicitly retained target, if present.
-  cell.xOwnedTarget
+  cell.xTarget.retainedTarget()
 
 proc action*(cell: ActionCell): ActionSelector =
   cell.xAction

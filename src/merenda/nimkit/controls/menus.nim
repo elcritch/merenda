@@ -35,8 +35,7 @@ type
     image*: ImageResource
     keyEquivalent*: KeyStroke
     hasKeyEquivalent*: bool
-    xTarget: BackRef[Responder]
-    xOwnedActionTarget: ClosureTarget
+    xTarget: ActionTarget
     action*: ActionSelector
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
@@ -49,8 +48,7 @@ type
     xTitle: string
     xSubtitle: string
     xAction: ActionSelector
-    xTarget: BackRef[Responder]
-    xOwnedActionTarget: ClosureTarget
+    xTarget: ActionTarget
     xState: ButtonState
     xEnabled: bool
     xHidden: bool
@@ -143,7 +141,7 @@ proc clone*(model: MenuItemModel): MenuItemModel {.gcsafe.} =
   ## Preserve action target identity when cloning value models on the owning thread.
   result = model
   for name, field in result.fieldPairs:
-    when name != "xTarget" and name != "xOwnedActionTarget":
+    when name != "xTarget":
       field = clone(field)
 
 protocol MenuProtocol {.selectorScope: protocol.} from Menu:
@@ -305,12 +303,13 @@ proc target*(model: MenuItemModel): DynamicAgent =
   asDynamicAgent(model.xTarget{})
 
 proc `target=`*(model: var MenuItemModel, target: DynamicAgent) =
-  model.xTarget.target = target
-  model.xOwnedActionTarget = nil
+  model.xTarget{} = target
 
 proc `target=`*(model: var MenuItemModel, target: ClosureTarget) =
-  model.target = asDynamicAgent(target)
-  model.xOwnedActionTarget = target
+  model.xTarget{} = target
+
+proc `target=`*(model: var MenuItemModel, target: ActionAdapter) =
+  model.xTarget{} = target
 
 proc `target=`*(model: var MenuItemModel, target: typeof(nil)) =
   model.target = DynamicAgent(target)
@@ -416,8 +415,7 @@ proc newMenuItem*(model: MenuItemModel): MenuItem =
   result.xHidden = model.hidden
   result.xSeparator = model.separator
   result.xImage = model.image
-  result.xTarget.target = model.target
-  result.xOwnedActionTarget = model.xOwnedActionTarget
+  result.xTarget = model.xTarget
   result.xRepresentedObject = model.representedObject
   result.xUserInfo = model.userInfo
   result.xTag = model.tag
@@ -474,16 +472,17 @@ proc target*(item: MenuItem): DynamicAgent =
   asDynamicAgent(item.xTarget{})
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
-  item.xTarget.target = target
-  item.xOwnedActionTarget = nil
+  item.xTarget{} = target
 
 proc `target=`*(item: MenuItem, target: Responder) =
   item.target = asDynamicAgent(target)
 
 proc `target=`*(item: MenuItem, target: ClosureTarget) =
   ## Closure targets are retained; ordinary responder targets are non-owning.
-  item.target = asDynamicAgent(target)
-  item.xOwnedActionTarget = target
+  item.xTarget{} = target
+
+proc `target=`*(item: MenuItem, target: ActionAdapter) =
+  item.xTarget{} = target
 
 proc `target=`*(item: MenuItem, target: typeof(nil)) =
   item.target = DynamicAgent(target)
@@ -600,7 +599,6 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
     separator = item.xSeparator,
     image = item.xImage,
     action = item.xAction,
-    target = item.target(),
     keyEquivalent = item.xKeyEquivalent,
     hasKeyEquivalent = item.xHasKeyEquivalent,
     representedObject = item.xRepresentedObject,
@@ -609,7 +607,7 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
     validates = item.xValidates,
     children = children,
   )
-  result.xOwnedActionTarget = item.xOwnedActionTarget
+  result.xTarget = item.xTarget
 
 proc menu*(view: View): Menu =
   if view.xContextMenu.isNil or not (view.xContextMenu of Menu):

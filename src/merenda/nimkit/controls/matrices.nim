@@ -36,8 +36,7 @@ type
     tooltip*: string
     image*: ImageResource
     action*: ActionSelector
-    xTarget: BackRef[Responder]
-    xOwnedActionTarget: ClosureTarget
+    xTarget: ActionTarget
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
 
@@ -60,7 +59,7 @@ proc clone*(model: MatrixItemModel): MatrixItemModel {.gcsafe.} =
   ## Preserve action target identity when cloning value models on the owning thread.
   result = model
   for name, field in result.fieldPairs:
-    when name != "xTarget" and name != "xOwnedActionTarget":
+    when name != "xTarget":
       field = clone(field)
 
 protocol MatrixDataSource {.selectorScope: protocol.}:
@@ -140,12 +139,13 @@ proc target*(model: MatrixItemModel): DynamicAgent =
   asDynamicAgent(model.xTarget{})
 
 proc `target=`*(model: var MatrixItemModel, target: DynamicAgent) =
-  model.xTarget.target = target
-  model.xOwnedActionTarget = nil
+  model.xTarget{} = target
 
 proc `target=`*(model: var MatrixItemModel, target: ClosureTarget) =
-  model.target = asDynamicAgent(target)
-  model.xOwnedActionTarget = target
+  model.xTarget{} = target
+
+proc `target=`*(model: var MatrixItemModel, target: ActionAdapter) =
+  model.xTarget{} = target
 
 proc `target=`*(model: var MatrixItemModel, target: typeof(nil)) =
   model.target = DynamicAgent(target)
@@ -187,11 +187,12 @@ proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
     state = cell.state(),
     enabled = cells.isEnabled(cell),
     action = cell.action(),
-    target = cell.target(),
   )
   let retained = cell.retainedTarget()
-  if retained of ClosureTarget:
-    result.target = ClosureTarget(retained)
+  if retained of ActionAdapter:
+    result.target = ActionAdapter(retained)
+  else:
+    result.target = cell.target()
 
 proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
   if visibleIndex < 0:
@@ -252,8 +253,9 @@ proc applyMatrixItemModelToCell(
   cell.title = model.title
   cell.state = matrix.selectedStateForModel(model, selectedIdentifiers)
   cells.setEnabled(cell, model.enabled)
-  if not model.xOwnedActionTarget.isNil:
-    cell.setTarget(model.xOwnedActionTarget)
+  let retained = model.xTarget.retainedTarget()
+  if not retained.isNil:
+    cell.setRetainedTarget(retained)
   else:
     cell.setTarget(model.target)
   cell.setAction(model.action)
@@ -555,8 +557,8 @@ proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
         result.enabled = cells.isEnabled(cell)
         result.action = cell.action()
         let retained = cell.retainedTarget()
-        if retained of ClosureTarget:
-          result.target = ClosureTarget(retained)
+        if retained of ActionAdapter:
+          result.target = ActionAdapter(retained)
         else:
           result.target = cell.target()
       return

@@ -585,6 +585,31 @@ func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
   if not frontend.isNil:
     result = frontend.xSettingsWindow
 
+protocol KosmoNimdexSettingsTargetMethods of KosmoNimdexSettingsDelegate:
+  method nimdexSettingsStatus(delegate: KosmoNimdexSettingsTarget): string =
+    let controller = delegate.controller{}
+    if controller.isNil:
+      return "Disconnected"
+    controller.editor.nimdexConnectionStatus()
+
+  method nimdexSettingsAction(
+      delegate: KosmoNimdexSettingsTarget, command: string, connect: bool
+  ): string =
+    let controller = delegate.controller{}
+    if controller.isNil:
+      return "The editor window is closed."
+    if not connect:
+      controller.editor.disconnectNimdex()
+      return
+    result = controller.editor.connectNimdex(command)
+    let manager = delegate.manager{}
+    if result.len == 0 and not manager.isNil:
+      manager.config.nimLspCommand = command
+      manager.config.nimdexStopped = false
+      if not manager.config.saveKosmoConfig(manager.configPath) and
+          manager.configPath.len > 0:
+        return "Connecting; could not save the setting."
+
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present Kosmo's application settings without Merenda's global settings pages.
   if frontend.isNil or frontend.application.isNil:
@@ -600,31 +625,21 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     if not frontend.xSettingsWindow.isNil:
       frontend.xSettingsWindow.close()
     let weakFrontend = frontend.unsafeWeakRef()
+    let nimdexTarget = KosmoNimdexSettingsTarget()
+    nimkit.initResponder(nimdexTarget)
+    nimdexTarget.controller.set(
+      frontend.dockController, frontend.dockController.backRefs
+    )
+    nimdexTarget.manager{} = frontend.xWindowManager{}
+    discard nimdexTarget.withProtocol(KosmoNimdexSettingsTargetMethods)
+    frontend.xNimdexSettingsTarget = nimdexTarget
     frontend.xSettingsWindow = newKosmoSettingsWindow(
       nimdexCommand =
         if not frontend.xWindowManager.isNil:
           frontend.xWindowManager{}.config.nimLspCommand
         else:
           frontend.dockController.editor.nimLspConfiguration().command,
-      nimdexStatus = proc(): string =
-        if not weakFrontend.isNil:
-          return weakFrontend[].dockController.editor.nimdexConnectionStatus()
-        "Disconnected",
-      nimdexAction = proc(command: string, connect: bool): string =
-        if weakFrontend.isNil:
-          return "The editor window is closed."
-        let target = weakFrontend[]
-        if connect:
-          result = target.dockController.editor.connectNimdex(command)
-          if result.len == 0 and not target.xWindowManager.isNil:
-            let manager = target.xWindowManager{}
-            manager.config.nimLspCommand = command
-            manager.config.nimdexStopped = false
-            if not manager.config.saveKosmoConfig(manager.configPath) and
-                manager.configPath.len > 0:
-              return "Connecting; could not save the setting."
-        else:
-          target.dockController.editor.disconnectNimdex(),
+      nimdexDelegate = frontend.xNimdexSettingsTarget,
       preferEditorPanes = frontend.xPreferEditorPanes,
       preferEditorPanesHandler = proc(enabled: bool) =
         if not weakFrontend.isNil:

@@ -1,6 +1,7 @@
 import sigils/core
 
 import ./cells
+import ../responder/actiontargets
 import ../accessibility/accessibility
 import ../app/animations
 import ../app/dragging
@@ -13,27 +14,20 @@ import ../foundation/selectors
 import ../foundation/types
 import ../view/views
 
-export cells, objectvalues, views
+export cells, objectvalues, views, actiontargets
 
-type
-  Control* = ref object of View
-    xCell: Cell
-    xTarget: BackRef[Responder]
-    xOwnedActionTarget: ClosureTarget
-    xAction: ActionSelector
-    xCurrentEditor: FieldEditor
-    xDraggingSession: DraggingSession
-    xObjectValue: ObjectValue
-    xObjectValueFormatter: DynamicAgent
-    xObjectFormatContext: ObjectFormatContext
-    xObjectParseContext: ObjectParseContext
-    xValidationError: ObjectValidationError
-    xActivationAnimation: Animation
-
-  ActionProc* = proc(sender: DynamicAgent) {.closure.}
-
-  ClosureTarget* = ref object of Responder
-    xCallback: ActionProc
+type Control* = ref object of View
+  xCell: Cell
+  xTarget: ActionTarget
+  xAction: ActionSelector
+  xCurrentEditor: FieldEditor
+  xDraggingSession: DraggingSession
+  xObjectValue: ObjectValue
+  xObjectValueFormatter: DynamicAgent
+  xObjectFormatContext: ObjectFormatContext
+  xObjectParseContext: ObjectParseContext
+  xValidationError: ObjectValidationError
+  xActivationAnimation: Animation
 
 protocol ControlEvents:
   proc actionDidSend*(control: Control, sender: DynamicAgent) {.signal.}
@@ -331,7 +325,6 @@ proc target*(control: Control): DynamicAgent =
 
 proc `target=`*(control: Control, target: DynamicAgent) =
   control.xTarget{} = target
-  control.xOwnedActionTarget = nil
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(target)
@@ -573,26 +566,26 @@ proc cancelDragging*(control: Control) =
   if not control.xDraggingSession.isNil:
     control.xDraggingSession.cancelDraggingSession()
 
-proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =
-  result = ClosureTarget()
-  initResponder(result)
-  result.xCallback = callback
-  let fn: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
-    let target = ClosureTarget(self)
-    let args = invocation.argsAs(ActionArgs)
-    if not target.xCallback.isNil:
-      target.xCallback(args.sender)
-    invocation.setResult(())
-  discard result.replaceMethod(action, fn)
-
 proc `target=`*(control: Control, target: ClosureTarget) =
   ## Closure targets are retained. Ordinary responder targets are non-owning.
   ## An explicitly upcast ClosureTarget follows the non-owning overload.
-  control.target = asDynamicAgent(target)
-  control.xOwnedActionTarget = target
+  control.xTarget{} = target
+  let selected = control.selectedCell()
+  if not selected.isNil and selected of ActionCell:
+    ActionCell(selected).setTarget(asDynamicAgent(target))
 
 proc setTarget*(cell: ActionCell, target: ClosureTarget) =
   ## Retain closure targets; ordinary responder targets are non-owning.
+  cell.setRetainedTarget(asDynamicAgent(target))
+
+proc `target=`*(control: Control, target: ActionAdapter) =
+  ## Retain the adapter while it tracks its receiver without owning it.
+  control.xTarget{} = target
+  let selected = control.selectedCell()
+  if not selected.isNil and selected of ActionCell:
+    ActionCell(selected).setTarget(asDynamicAgent(target))
+
+proc setTarget*(cell: ActionCell, target: ActionAdapter) =
   cell.setRetainedTarget(asDynamicAgent(target))
 
 proc setTarget*(cell: ActionCell, target: typeof(nil)) =

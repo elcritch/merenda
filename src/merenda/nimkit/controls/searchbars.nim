@@ -42,6 +42,12 @@ type
     onQueryChanged: SearchQueryAction
     onPrevious, onNext, onClose: SearchAction
 
+proc searchBarAction(self: DynamicAgent, invocation: var Invocation)
+
+proc bindSearchTarget(bar: SearchBar, control: Control, action: ActionSelector) =
+  control.target = bar
+  discard bar.replaceMethod(action, DynamicMethod(searchBarAction))
+
 proc focusSearch(bar: SearchBar, replacing: bool): bool
 
 proc activatePrevious(bar: SearchBar) =
@@ -156,7 +162,6 @@ proc newSearchBar*(
   result.backdropTintOpacity = 0.78
   discard result.withProtocol(SearchBarKeyEquivalents)
   discard result.withProtocol(SearchBarMouseEvents)
-  let searchBar = result.unsafeWeakRef()
 
   result.xQueryField = newTextField()
   result.xQueryField.objectParseContext =
@@ -202,26 +207,13 @@ proc newSearchBar*(
   result.hidden = true
 
   result.xQueryField.connect(textDidChange, result, searchQueryDidChange)
-  result.previousButton.target = newActionTarget(
-    actionSelector("nimkit.searchPrevious")
-  ) do(sender: DynamicAgent):
-    discard sender
-    if not searchBar.isNil:
-      searchBar[].activatePrevious()
+  result.bindSearchTarget(
+    result.previousButton, actionSelector("nimkit.searchPrevious")
+  )
   result.previousButton.action = actionSelector("nimkit.searchPrevious")
-  result.nextButton.target = newActionTarget(actionSelector("nimkit.searchNext")) do(
-    sender: DynamicAgent
-  ):
-    discard sender
-    if not searchBar.isNil:
-      searchBar[].activateNext()
+  result.bindSearchTarget(result.nextButton, actionSelector("nimkit.searchNext"))
   result.nextButton.action = actionSelector("nimkit.searchNext")
-  result.closeButton.target = newActionTarget(actionSelector("nimkit.searchClose")) do(
-    sender: DynamicAgent
-  ):
-    discard sender
-    if not searchBar.isNil:
-      searchBar[].activateClose()
+  result.bindSearchTarget(result.closeButton, actionSelector("nimkit.searchClose"))
   result.closeButton.action = actionSelector("nimkit.searchClose")
 
 func queryField*(bar: SearchBar): TextField =
@@ -285,16 +277,8 @@ proc enableExpressions*(bar: SearchBar) =
   bar.queryRow.insertArrangedSubview(
     bar.expressionButton, if bar.disclosureButton.isNil: 1 else: 2
   )
-  let weakBar = bar.unsafeWeakRef()
   bar.expressionButton.action = actionSelector("nimkit.searchExpressions")
-  bar.expressionButton.target = newActionTarget(bar.expressionButton.action) do(
-    sender: DynamicAgent
-  ):
-    if not weakBar.isNil:
-      weakBar[].regularExpression = weakBar[].expressionButton.state == bsOn
-      let owner = weakBar[].window()
-      if owner of Window:
-        discard Window(owner).makeFirstResponder(weakBar[].xQueryField)
+  bar.bindSearchTarget(bar.expressionButton, bar.expressionButton.action)
 
 func replacementVisible*(bar: SearchBar): bool =
   bar.xReplacementVisible
@@ -342,7 +326,6 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
   bar.onReplaceAll = onReplaceAll
   if not bar.xReplacementField.isNil:
     return
-  let weakBar = bar.unsafeWeakRef()
   bar.xReplacementField = newTextField()
   bar.xReplacementField.objectParseContext =
     initObjectParseContext(trimsWhitespace = false)
@@ -361,28 +344,12 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
   bar.inputColumn.insertArrangedSubview(bar.replacementRow, 1)
   bar.queryRow.insertArrangedSubview(bar.disclosureButton, 0)
   bar.disclosureButton.action = actionSelector("nimkit.toggleReplacement")
-  bar.disclosureButton.target = newActionTarget(bar.disclosureButton.action) do(
-    sender: DynamicAgent
-  ):
-    if not weakBar.isNil:
-      let bar = weakBar[]
-      bar.replacementVisible = not bar.replacementVisible
-      let owner = bar.window()
-      if owner of Window:
-        discard Window(owner).makeFirstResponder(bar.xQueryField)
+  bar.bindSearchTarget(bar.disclosureButton, bar.disclosureButton.action)
   bar.xReplacementField.connect(textDidChange, bar, replacementDidChange)
   bar.replaceButton.action = actionSelector("nimkit.replaceMatch")
-  bar.replaceButton.target = newActionTarget(bar.replaceButton.action) do(
-    sender: DynamicAgent
-  ):
-    if not weakBar.isNil and not weakBar[].onReplace.isNil:
-      weakBar[].onReplace()
+  bar.bindSearchTarget(bar.replaceButton, bar.replaceButton.action)
   bar.replaceAllButton.action = actionSelector("nimkit.replaceAllMatches")
-  bar.replaceAllButton.target = newActionTarget(bar.replaceAllButton.action) do(
-    sender: DynamicAgent
-  ):
-    if not weakBar.isNil and not weakBar[].onReplaceAll.isNil:
-      weakBar[].onReplaceAll()
+  bar.bindSearchTarget(bar.replaceAllButton, bar.replaceAllButton.action)
   bar.replacementVisible = false
   bar.hasMatches = bar.xHasMatches
 
@@ -399,3 +366,30 @@ proc close*(bar: SearchBar) =
   bar.onReplaceAll = nil
   bar.hidden = true
   bar.removeFromSuperview()
+
+proc searchBarAction(self: DynamicAgent, invocation: var Invocation) =
+  let bar = SearchBar(self)
+  invocation.setResult(())
+  case $invocation.selector
+  of "nimkit.searchPrevious":
+    bar.activatePrevious()
+  of "nimkit.searchNext":
+    bar.activateNext()
+  of "nimkit.searchClose":
+    bar.activateClose()
+  of "nimkit.searchExpressions", "nimkit.toggleReplacement":
+    if $invocation.selector == "nimkit.searchExpressions":
+      bar.regularExpression = bar.expressionButton.state == bsOn
+    else:
+      bar.replacementVisible = not bar.replacementVisible
+    let owner = bar.window()
+    if owner of Window:
+      discard Window(owner).makeFirstResponder(bar.xQueryField)
+  of "nimkit.replaceMatch":
+    if not bar.onReplace.isNil:
+      bar.onReplace()
+  of "nimkit.replaceAllMatches":
+    if not bar.onReplaceAll.isNil:
+      bar.onReplaceAll()
+  else:
+    discard
