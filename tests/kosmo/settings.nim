@@ -142,23 +142,36 @@ suite "Kosmo settings":
       frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.percentage")
     let spinner =
       frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.spinner")
+    let entry =
+      frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.entrypoint")
     let nimdexButton = frontend.contentView.viewWithIdentifier("kosmo.nimdex.toggle")
     require spinner of ProgressIndicator
     check spinner.hidden
     check ProgressIndicator(spinner).progressIndicatorStyle == pisSpinning
     require progress of ProgressIndicator
     require percentage of Label
+    require entry of Label
     require nimdexButton of Button
     check progress.hidden
     check percentage.hidden
     frontend.contentView.layoutSubtreeIfNeeded()
-    percentage.hidden = false
-    progress.hidden = false
-    Label(percentage).text = "100.00%"
     let section = percentage.superview()
     require section of Box
+    for theme in [initAquaTheme(), initMacOSDarkTheme(), initPunchTheme()]:
+      frontend.window.setAppearance(initAppearance(theme))
+      let style = section.effectiveAppearance().resolveBoxStyle(
+          controlStyle(srBox, id = section.styleId)
+        )
+      check style.box.borderWidth == 0
+    percentage.hidden = false
+    progress.hidden = false
+    spinner.hidden = false
+    entry.hidden = false
+    Label(percentage).text = "100.00%"
+    Label(entry).text = "kosmo.nim"
     check progress.superview() == section
     check spinner.superview() == section
+    check entry.superview() == section
     check nimdexButton.superview() == section
     let statusBar = section.superview()
     require not statusBar.isNil
@@ -166,6 +179,8 @@ suite "Kosmo settings":
     statusBar.layoutSubtreeIfNeeded()
     require not progress.hidden
     require not percentage.hidden
+    check spinner.frame().minX - entry.frame().maxX == 4.0'f32
+    check spinner.frame().maxX <= progress.frame().minX
     check percentage.frame().size.width >= Label(percentage).sizeThatFits().width
     check progress.frame().maxX <= percentage.frame().minX
     check percentage.frame().maxX <= nimdexButton.frame().minX
@@ -173,6 +188,8 @@ suite "Kosmo settings":
     check section.frame().maxX <= choiceView.frame().minX
     percentage.hidden = true
     progress.hidden = true
+    spinner.hidden = true
+    entry.hidden = true
     let choice = PopupMenuButton(choiceView)
     check choice.menu().len == 2
     check choice.menu()[0].title == "moe (vim)"

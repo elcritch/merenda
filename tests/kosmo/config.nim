@@ -174,8 +174,9 @@ suite "Kosmo configuration":
       app = newApplication("Kosmo Nimdex Default Test")
     defer:
       removeDir(root)
-    writeFile(path, "{\"nimLspCommand\":\"nimdex daemon\"}")
-    check loadKosmoConfig(path).nimdexStopped
+    writeFile(path, "{\"nimLspCommand\":\"nimdex daemon\",\"nimdexStopped\":false}")
+    check not loadKosmoConfig(path).nimdexAutoStart
+    check loadKosmoConfig(path).nimLspCommand == "nimdex daemon"
     let manager = newKosmoWindowManager(app, configPath = path)
     defer:
       manager.close()
@@ -191,7 +192,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       app = newApplication("Kosmo Nim LSP Config Test")
       command = "custom-server --stdio"
-      config = KosmoConfig(nimLspCommand: command, nimdexStopped: false)
+      config = KosmoConfig(nimLspCommand: command, nimdexAutoStart: true)
     defer:
       removeDir(root)
     require config.saveKosmoConfig(path)
@@ -207,7 +208,7 @@ suite "Kosmo configuration":
     require Button(toggle).tryToPerform(performClick(), DynamicAgent(toggle))
     check not frontend.editorView.editor.nimdexRequested()
     check Button(toggle).toolTip == "Start Nimdex"
-    check loadKosmoConfig(path).nimdexStopped
+    check loadKosmoConfig(path).nimdexAutoStart
 
   test "passes a persisted TCP endpoint through the standalone LSP launcher":
     let
@@ -215,7 +216,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       app = newApplication("Kosmo TCP LSP Config Test")
       address = "tcp://127.0.0.1:49153"
-      config = KosmoConfig(nimLspCommand: address, nimdexStopped: false)
+      config = KosmoConfig(nimLspCommand: address, nimdexAutoStart: true)
       previousLauncher = kosmoLspLauncherExecutable
     kosmoLspLauncherExecutable = getAppFilename()
     defer:
@@ -229,6 +230,34 @@ suite "Kosmo configuration":
     let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
     check frontend.editorView.editor.nimLspConfiguration() ==
       (enabled: true, command: address)
+
+  test "Nimdex automatic startup preference persists":
+    let
+      root = createTempDir("kosmo-nimdex-autostart-", "")
+      path = root / "config.json"
+      app = newApplication("Nimdex automatic startup setting")
+      manager = newKosmoWindowManager(app, configPath = path)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    require frontend.showSettings()
+    let tabs = TabView(
+      frontend.settingsWindow().contentView().viewWithIdentifier(
+        KosmoSettingsTabsIdentifier
+      )
+    )
+    require tabs.selectPage(KosmoNimdexSettingsTabIdentifier)
+    let view = frontend.settingsWindow().contentView().viewWithIdentifier(
+        "kosmo.settings.nimdex.autostart"
+      )
+    require view of Button
+    let button = Button(view)
+    check button.state == bsOff
+    require button.tryToPerform(performClick(), DynamicAgent(button))
+    check loadKosmoConfig(path).nimdexAutoStart
+    require button.tryToPerform(performClick(), DynamicAgent(button))
+    check not loadKosmoConfig(path).nimdexAutoStart
 
   test "editor pane preference is configurable and persisted":
     let

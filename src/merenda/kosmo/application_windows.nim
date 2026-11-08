@@ -538,6 +538,15 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           frontend.xWindowManager[].config.nimLspCommand
         else:
           frontend.dockController.editor.nimLspConfiguration().command,
+      nimdexAutoStart =
+        not frontend.xWindowManager.isNil and
+        frontend.xWindowManager[].config.nimdexAutoStart,
+      nimdexAutoStartHandler = proc(enabled: bool) =
+        if not weakFrontend.isNil and not weakFrontend[].xWindowManager.isNil:
+          let manager = weakFrontend[].xWindowManager[]
+          manager.config.nimdexAutoStart = enabled
+          discard manager.config.saveKosmoConfig(manager.configPath)
+      ,
       nimdexStatus = proc(): string =
         if not weakFrontend.isNil:
           return weakFrontend[].dockController.editor.nimdexConnectionStatus()
@@ -551,7 +560,6 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           if result.len == 0 and not target.xWindowManager.isNil:
             let manager = target.xWindowManager[]
             manager.config.nimLspCommand = command
-            manager.config.nimdexStopped = false
             if not manager.config.saveKosmoConfig(manager.configPath) and
                 manager.configPath.len > 0:
               return "Connecting; could not save the setting."
@@ -1297,7 +1305,7 @@ proc newKosmoApplication*(
       newKosmoEditor(
         workingDirectory = editorWorkingDirectory,
         nimLspCommand =
-          if manager.config.nimdexStopped: "" else: manager.config.nimLspCommand,
+          if manager.config.nimdexAutoStart: manager.config.nimLspCommand else: "",
       )
     )
     editorPane = newKosmoEditorPane(editorView)

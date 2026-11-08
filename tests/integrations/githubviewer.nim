@@ -65,7 +65,8 @@ suite "GitHub CLI document integration":
         check request["repoOverride"].getStr() == ""
         check request["promptDisabled"].getStr() == "1"
         check request["pager"].getStr() == "cat"
-        check request["args"][3].getStr() == "closed"
+        check request["args"][0].getStr() == "api"
+        check "state=closed" in request["args"][1].getStr()
         check not fileExists(root / "INJECTED")
 
     test "login-shell gh commands remain cancellable and are reaped":
@@ -99,7 +100,12 @@ suite "GitHub CLI document integration":
     putEnv("GH_REPO", "another/project")
     writeFile(root / "github-test-mode", "success")
     let snapshot = readGitHubSnapshot(
-      root, ghsClosed, {ghikPullRequest}, itemLimit = 1, executable = getAppFilename()
+      root,
+      ghsClosed,
+      {ghikPullRequest},
+      itemLimit = 1,
+      executable = getAppFilename(),
+      openPullRequests = @[9],
     )
     check snapshot.errors[ghikPullRequest] == ""
     check snapshot.items.len == 1
@@ -109,11 +115,13 @@ suite "GitHub CLI document integration":
     check request["root"].getStr() == expandFilename(root)
     check request["promptDisabled"].getStr() == "1"
     check request["repoOverride"].getStr() == ""
-    check request["args"][3].getStr() == "closed"
-    check request["args"][5].getStr() == "1"
-    check "statusCheckRollup" in request["args"][7].getStr()
+    check request["args"][0].getStr() == "api"
+    check "state=closed" in request["args"][1].getStr()
+    check "per_page=100" in request["args"][1].getStr()
     require snapshot.items[0].jobs.len == 1
     check snapshot.items[0].jobs[0].state == ghjsRunning
+    check snapshot.items[0].jobs[0].workflow == "CI"
+    check snapshot.items[0].reviewActivity == "1 approved"
 
   test "partial failures, bad JSON, missing gh, and authentication errors are snapshots":
     let root = createTempDir("kosmo-github-errors-", "")
@@ -139,6 +147,41 @@ suite "GitHub CLI document integration":
     check getCurrentDir() == beforeDirectory
     when defined(macosx) or defined(linux):
       check processResourceUsage().fileDescriptors == beforeResources.fileDescriptors
+
+  test "REST pagination skips pull requests in issue pages and collects check runs":
+    let root = createTempDir("kosmo-github-pages-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "github-test-mode", "pages")
+    let snapshot = readGitHubSnapshot(
+      root, itemLimit = 10, executable = getAppFilename(), openPullRequests = @[9]
+    )
+    check snapshot.errors[ghikIssue] == ""
+    check snapshot.errors[ghikPullRequest] == ""
+    require snapshot.items.len == 2
+    check snapshot.items[0].kind == ghikIssue
+    check snapshot.items[0].number == 101
+    require snapshot.items[1].jobs.len == 101
+    check snapshot.items[1].jobs[100].state == ghjsPassed
+    check parseInt(readFile(root / "issue-request-count")) == 2
+    check parseInt(readFile(root / "checks-request-count")) == 3
+
+  test "REST check failures preserve other commit statuses":
+    let root = createTempDir("kosmo-github-check-error-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "github-test-mode", "checks-error")
+    let snapshot = readGitHubSnapshot(
+      root,
+      kinds = {ghikPullRequest},
+      executable = getAppFilename(),
+      openPullRequests = @[9],
+    )
+    require snapshot.items.len == 1
+    check snapshot.items[0].jobsError == "Checks permission denied"
+    require snapshot.items[0].jobs.len == 1
+    check snapshot.items[0].jobs[0].name == "external"
+    check "Some checks could not be loaded" in snapshot.gitHubMarkdown()
 
   test "timed out gh commands are terminated and reaped":
     let root = createTempDir("kosmo-github-timeout-", "")
@@ -320,12 +363,18 @@ suite "GitHub CLI document integration":
       panel.close()
     require panel.waitForGitHub()
     require panel.snapshot.items.len == 2
-    require panel.snapshot.items[1].jobs[0].state == ghjsRunning
+    check panel.snapshot.items[1].jobsPending
+    check not fileExists(root / "checks-request-count")
     let pr = panel.headingDisclosure("#9 pr open")
     require not pr.isNil
     require pr.accessibilityPerformAction(AccessibilityActionExpand)
     require panel.waitForGitHub()
-    require pr.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.snapshot.items[1].jobs.len == 1
+    check panel.snapshot.items[1].jobs[0].state == ghjsRunning
+    let checksBeforeCollapse = parseInt(readFile(root / "checks-request-count"))
+    let expandedPr = panel.headingDisclosure("#9 pr open")
+    require not expandedPr.isNil
+    require expandedPr.accessibilityPerformAction(AccessibilityActionCollapse)
     require panel.waitForGitHub()
     check not panel.autoRefreshSwitch.on
     require panel.autoRefreshSwitch.tryToPerform(
@@ -333,6 +382,12 @@ suite "GitHub CLI document integration":
     )
     check panel.autoRefreshSwitch.on
     writeFile(root / "github-job-state", "SUCCESS")
+    panel.refresh()
+    require panel.waitForGitHub()
+    check parseInt(readFile(root / "checks-request-count")) == checksBeforeCollapse
+    let reopened = panel.headingDisclosure("#9 pr open")
+    require reopened.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
     let deadline = getMonoTime() + initDuration(seconds = 10)
     while getMonoTime() < deadline and
         panel.snapshot.items[1].jobs[0].state != ghjsPassed:
@@ -341,6 +396,16 @@ suite "GitHub CLI document integration":
       discard drainMainThreadWork()
       sleep(1)
     check panel.snapshot.items[1].jobs[0].state == ghjsPassed
+    let pullSection = panel.headingDisclosure("Pull Requests (1)")
+    require pullSection.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.waitForGitHub()
+    let checksWhileHidden = parseInt(readFile(root / "checks-request-count"))
+    panel.refresh()
+    require panel.waitForGitHub()
+    check parseInt(readFile(root / "checks-request-count")) == checksWhileHidden
+    let closedSection = panel.headingDisclosure("Pull Requests (1)")
+    require closedSection.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
     require panel.autoRefreshSwitch.tryToPerform(
       performClick(), DynamicAgent(panel.autoRefreshSwitch)
     )
@@ -348,9 +413,7 @@ suite "GitHub CLI document integration":
     check "1 passed" in panel.markdownView.markdown()
     let refreshedPR = panel.headingDisclosure("#9 pr open")
     require not refreshedPR.isNil
-    check refreshedPR.accessibilityValue() == "collapsed"
-    check "Jobs:" notin panel.markdownView.textStorage().stringValue()
-    require refreshedPR.accessibilityPerformAction(AccessibilityActionExpand)
+    check refreshedPR.accessibilityValue() == "expanded"
     require panel.waitForGitHub()
     check "1 passed" in panel.markdownView.textStorage().stringValue()
     let reads = readFile(root / "pr-request-count")
@@ -376,13 +439,16 @@ suite "GitHub CLI document integration":
       panel.close()
     require panel.waitForGitHub()
     let reads = parseInt(readFile(root / "pr-request-count"))
+    let pr = panel.headingDisclosure("#9 pr open")
+    require pr.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
     writeFile(root / "github-job-state", "FAILURE")
     panel.autoRefreshSwitch.on = true
     for index in 0 ..< 8:
       panel.scheduleRepositoryRefresh()
     check not panel.pollRepositoryRefresh()
     require panel.waitForGitHub()
-    check parseInt(readFile(root / "pr-request-count")) == reads + 1
+    check parseInt(readFile(root / "pr-request-count")) == reads + 2
     require panel.snapshot.items.len == 2
     check panel.snapshot.items[1].jobs[0].state == ghjsFailed
     panel.scheduleRepositoryRefresh()
@@ -391,7 +457,7 @@ suite "GitHub CLI document integration":
     )
     check not panel.pollRepositoryRefresh()
     require panel.waitForGitHub()
-    check parseInt(readFile(root / "pr-request-count")) == reads + 1
+    check parseInt(readFile(root / "pr-request-count")) == reads + 2
 
   when defined(posix):
     test "menu opens one reusable project tab and closing releases its worker":
@@ -444,6 +510,9 @@ suite "GitHub CLI document integration":
         )
       )
       check frontend.gitHubPanel == panel
+      require panel.waitForGitHub()
+      let pr = panel.headingDisclosure("#9 pr open")
+      require pr.accessibilityPerformAction(AccessibilityActionExpand)
       require panel.waitForGitHub()
       require panel.autoRefreshSwitch.tryToPerform(
         performClick(), DynamicAgent(panel.autoRefreshSwitch)

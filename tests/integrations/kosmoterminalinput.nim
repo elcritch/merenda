@@ -17,6 +17,36 @@ proc waitForTerminalText(view: TerminalView, text: string): bool =
 
 suite "Kosmo terminal shortcut PTY input":
   when defined(posix):
+    test "Control wheel reaches terminal applications as one mouse report":
+      let
+        session = spawnTerminalViewSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; dd bs=1 count=10 2>/dev/null | od -An -tx1"
+          ),
+          columns = 80,
+          rows = 4,
+        )
+        terminal = newKosmoTerminalView(session, frame = rect(0, 0, 800, 120))
+        window = newWindow("Control wheel mouse reporting", rect(0, 0, 800, 120))
+      defer:
+        terminal.close()
+        session.waitForCommands()
+        window.close()
+      session.processOutput("\x1b[?1000;1006h")
+      session.waitForCommands()
+      window.setContentView(terminal)
+      require terminal.waitForTerminalText("ready")
+      require session.screenInfo().scrollbackCount == 0
+      let point = terminal.pointToWindow(
+        initPoint(
+          terminal.padding() + terminal.monoTextMetrics().cellWidth * 0.5,
+          terminal.padding() + terminal.monoTextMetrics().lineHeight * 0.5,
+        )
+      )
+      require window.scrollWheelAt(point, deltaY = 1, modifiers = {nimkit.kmControl})
+      require terminal.waitForTerminalText("1b 5b 3c 38 30 3b 31 3b 31 4d")
+
     test "new terminals restore the saved theme":
       let
         root = createTempDir("kosmo-terminal-theme-", "")

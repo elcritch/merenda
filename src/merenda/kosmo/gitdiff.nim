@@ -11,6 +11,7 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
 import ./readerpresentation
 import ./themetargets
+import ./scrolling
 
 import ./[searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
@@ -3446,6 +3447,7 @@ proc newKosmoGitDiffPanel(
   discard document.withProtocol(GitDiffDocumentDrawing)
   result.documentView = document
   result.scrollView = nimkit.newScrollView(documentView = document)
+  result.scrollView.controlScrollMultiplier = KosmoControlScrollMultiplier
   result.scrollView.hasVerticalScroller = true
   result.scrollView.hasHorizontalScroller = true
   result.scrollView.clipView().connect(
