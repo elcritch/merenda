@@ -36,6 +36,11 @@
 
 - Show and switch Git branches from the Kosmo file browser.
 - Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
+- Close Kosmo's dialogs together with the window they were opened from: the
+  Open, Save As, rename/delete, branch-switch, update, and terminal-error
+  dialogs, plus the Merenda Settings panel, now attach as child windows of
+  their opening window, and windows expose the link as `addChildWindow`.
+  Closing the main window can no longer leave a lone dialog running.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
   budget, keeping visible previews and pending work pinned and sharing

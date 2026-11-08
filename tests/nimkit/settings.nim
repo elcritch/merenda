@@ -394,6 +394,19 @@ suite "nimkit settings":
     check app.merendaSettingsThemeIdentifier == "darkbsd"
     check savedCount == 0
 
+  test "the settings panel closes with the window that opened it":
+    let
+      app = newApplication("Settings child window test")
+      owner = newWindow("Owner")
+    app.addWindow(owner)
+    owner.makeKeyAndOrderFront()
+    app.showMerendaSettings()
+    let settingsWindow = app.windows[^1]
+    require settingsWindow != owner
+    check not settingsWindow.isClosed()
+    owner.close()
+    check settingsWindow.isClosed()
+
   test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()
     defer:

@@ -457,6 +457,8 @@ proc saveUntitledTab(
   discard panel.rebuildSavePanelView()
 
   if ownsPanel:
+    if not group.isNil and not group.window.isNil:
+      group.window.addChildWindow(panel.window)
     discard panel.window.makeFirstResponder(panel.nameField)
     if frontend.application.runModal(panel) != nimkit.PanelResponseOk:
       return
@@ -1516,6 +1518,7 @@ proc presentTerminalError(
     )
   alert.window.setInheritedAppearance(group.window.effectiveAppearance())
   discard alert.contentView()
+  group.window.addChildWindow(alert.window)
   discard app.beginModalSession(alert.window)
   var weakWindow: nimkit.BackRef[nimkit.Window]
   weakWindow.target = alert.window

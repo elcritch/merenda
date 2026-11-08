@@ -1033,6 +1033,7 @@ proc performFileTreeAction(
   defer:
     alert.window.close()
   alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+  frontend.window.addChildWindow(alert.window)
   if renaming:
     alert.window.frame = nimkit.rect(
       alert.window.frame().origin,
@@ -1057,6 +1058,7 @@ proc performFileTreeAction(
     let failure = nimkit.newAlert("Could not " & title.toLowerAscii(), error.msg)
     defer:
       failure.window.close()
+    frontend.window.addChildWindow(failure.window)
     discard frontend.application.runModal(failure)
 
 proc showPipedGitDiff*(
@@ -1726,6 +1728,7 @@ proc newKosmoApplication*(
           )
           defer:
             alert.window.close()
+          frontend[].window.addChildWindow(alert.window)
           discard frontend[].application.runModal(alert)
           return
     discard fileTree.switchBranch(root, branch)
@@ -1748,6 +1751,7 @@ proc newKosmoApplication*(
       let alert = nimkit.newAlert("Could not switch branch", output.strip())
       defer:
         alert.window.close()
+      frontend[].window.addChildWindow(alert.window)
       discard frontend[].application.runModal(alert)
   searchPanel.onOpenResult = proc(
       match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
@@ -1889,6 +1893,7 @@ proc chooseFile(frontend: KosmoApplication) =
   panel.canChooseDirectories = true
   panel.directoryUrl = frontend.fileTree.rootPath
   centerWindowOnWindow(panel.window, frontend.window)
+  frontend.window.addChildWindow(panel.window)
   if frontend.application.runModal(panel) == nimkit.PanelResponseOk:
     discard frontend.openPath(nimkit.filePathFromUrl(panel.selectedUrl()))
 
@@ -1905,6 +1910,7 @@ proc chooseFile(manager: KosmoWindowManager) =
   panel.message = "Open a file or folder in Kosmo."
   panel.canChooseDirectories = true
   panel.directoryUrl = getCurrentDir()
+  manager.application.mainWindow().addChildWindow(panel.window)
   if manager.application.runModal(panel) != nimkit.PanelResponseOk:
     return
   discard manager.openPath(nimkit.filePathFromUrl(panel.selectedUrl()))
@@ -1927,6 +1933,10 @@ proc chooseProject(manager: KosmoWindowManager) =
       getCurrentDir()
     else:
       frontend.fileTree.rootPath
+  if not frontend.isNil:
+    frontend.window.addChildWindow(panel.window)
+  else:
+    manager.application.mainWindow().addChildWindow(panel.window)
   if manager.application.runModal(panel) == nimkit.PanelResponseOk:
     discard manager.openProject(nimkit.filePathFromUrl(panel.selectedUrl()))
 
@@ -2232,6 +2242,9 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
           )
           defer:
             alert.window.close()
+          let updateFrontend = manager.activeFrontend()
+          if not updateFrontend.isNil:
+            updateFrontend.window.addChildWindow(alert.window)
           discard app.runModal(alert)
           false
       )
@@ -2255,6 +2268,7 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
             target.activeFrontend()
         if not frontend.isNil:
           alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+          frontend.window.addChildWindow(alert.window)
         if app.runModal(alert) == nimkit.PanelResponseOk:
           approvedUpdate = version
       ,

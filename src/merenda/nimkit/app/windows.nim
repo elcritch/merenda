@@ -2023,6 +2023,17 @@ proc attachAuxiliaryWindow(owner, auxiliary: Window) =
   if auxiliary notin owner.xAuxiliaryWindows:
     owner.xAuxiliaryWindows.add auxiliary
 
+proc addChildWindow*(window: Window, child: Window) =
+  ## Makes `child` close together with `window`. Dialogs and utility panels
+  ## attach themselves this way so they can never outlive the window they were
+  ## opened from; closing the child on its own only detaches it. Adding an
+  ## already owned child re-parents it to `window`.
+  if child.isNil or window.isNil or child == window:
+    return
+  if not child.xOwnerWindow.isNil and child.xOwnerWindow != window:
+    detachAuxiliaryWindow(child.xOwnerWindow, child)
+  attachAuxiliaryWindow(window, child)
+
 proc beginSheet*(window: Window, sheet: Window) =
   if sheet.isNil:
     return
