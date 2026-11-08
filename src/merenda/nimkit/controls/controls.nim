@@ -98,7 +98,7 @@ proc syncActionCell(control: Control, cell: Cell) =
   if cell.isNil or not (cell of ActionCell):
     return
   let actionCell = ActionCell(cell)
-  actionCell.setTarget(asDynamicAgent(control.xTarget.target))
+  actionCell.setTarget(asDynamicAgent(control.xTarget{}))
   actionCell.setAction(control.xAction)
 
 proc defaultControlCell(): Cell =
@@ -327,7 +327,7 @@ proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     return ActionCell(selected).target()
-  asDynamicAgent(control.xTarget.target)
+  asDynamicAgent(control.xTarget{})
 
 proc `target=`*(control: Control, target: DynamicAgent) =
   control.xTarget.target = target

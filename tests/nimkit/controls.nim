@@ -29,13 +29,13 @@ suite "nimkit controls":
     block:
       let responder = newResponder()
       link.target = responder
-      check link.target == responder
+      check link{} == responder
       let dynamic = DynamicAgent(responder)
       link.target = dynamic
-      check link.target == responder
+      check link{} == responder
       expect ValueError:
         link.target = DynamicAgent()
-      check link.target == responder
+      check link{} == responder
     check link.isNil
     link.target = DynamicAgent(nil)
     check link.isNil

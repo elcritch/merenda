@@ -13,7 +13,7 @@ proc registerKnownSession(manager: KosmoWindowManager): bool =
   for index in countdown(knownSessions.high, 0):
     if knownSessions[index].isNil:
       knownSessions.delete(index)
-    elif knownSessions[index].target == manager:
+    elif knownSessions[index]{} == manager:
       return
   var reference: nimkit.BackRef[KosmoWindowManager]
   reference.target = manager
@@ -24,7 +24,7 @@ proc lastKnownSession(
     app: nimkit.Application, requireFrontend = false
 ): KosmoWindowManager =
   for index in countdown(knownSessions.high, 0):
-    let candidate = knownSessions[index].target
+    let candidate = knownSessions[index]{}
     if not candidate.isNil and (
       if app.isNil: not candidate.application.isNil
       else: candidate.application == app
@@ -37,7 +37,7 @@ proc lastKnownSession(
 
 proc forgetKnownSession(manager: KosmoWindowManager) =
   for index in countdown(knownSessions.high, 0):
-    if knownSessions[index].isNil or knownSessions[index].target == manager:
+    if knownSessions[index].isNil or knownSessions[index]{} == manager:
       knownSessions.delete(index)
 
 proc releaseConvenienceSession(manager: KosmoWindowManager) =
@@ -226,7 +226,7 @@ proc `preferEditorPanes=`*(frontend: KosmoApplication, enabled: bool) =
     if not frontend.xSettingsWindow.isNil:
       frontend.xSettingsWindow.preferEditorPanes = enabled
   else:
-    let manager = frontend.xWindowManager.target
+    let manager = frontend.xWindowManager{}
     manager.config.preferEditorPanes = enabled
     for target in manager.frontends:
       if not target.xClosed:
@@ -264,7 +264,7 @@ proc `terminalInputPolicy=`*(
   if frontend.xWindowManager.isNil:
     frontend.applyTerminalInputPolicy(policy)
   else:
-    let manager = frontend.xWindowManager.target
+    let manager = frontend.xWindowManager{}
     manager.config.terminalInput = policy.terminalInputPolicyName()
     for target in manager.frontends:
       if not target.xClosed:
@@ -289,7 +289,7 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
   if frontend.xWindowManager.isNil:
     frontend.applyTerminalOptionAsMeta(enabled)
   else:
-    let manager = frontend.xWindowManager.target
+    let manager = frontend.xWindowManager{}
     manager.config.terminalOptionAsMeta = enabled
     for target in manager.frontends:
       if not target.xClosed:
@@ -349,7 +349,7 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
     if not outcome.applied and not frontend.statusLabel.isNil:
       frontend.statusLabel.text = outcome.message
     if outcome.applied and not frontend.xWindowManager.isNil:
-      let manager = frontend.xWindowManager.target
+      let manager = frontend.xWindowManager{}
       let previousMoeTheme = manager.config.moeTheme
       manager.config.moeTheme = identifier
       for target in manager.frontends:
@@ -382,7 +382,7 @@ proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
     if theme.identifier == identifier and theme.validContentTheme():
       frontend.applyTerminalTheme(theme)
       if not frontend.xWindowManager.isNil:
-        let manager = frontend.xWindowManager.target
+        let manager = frontend.xWindowManager{}
         manager.config.terminalTheme = identifier
         for target in manager.frontends:
           if target != frontend and not target.xClosed:
@@ -419,7 +419,7 @@ proc setRichTextTheme(
       return
   frontend.applyRichTextTheme(selectedTheme, target)
   if not frontend.xWindowManager.isNil:
-    let manager = frontend.xWindowManager.target
+    let manager = frontend.xWindowManager{}
     if target.themeTargetIncludes(KosmoThemeTarget.Markdown):
       manager.config.markdownTheme = identifier
     if target.themeTargetIncludes(KosmoThemeTarget.GitDiff):
@@ -603,7 +603,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow = newKosmoSettingsWindow(
       nimdexCommand =
         if not frontend.xWindowManager.isNil:
-          frontend.xWindowManager.target.config.nimLspCommand
+          frontend.xWindowManager{}.config.nimLspCommand
         else:
           frontend.dockController.editor.nimLspConfiguration().command,
       nimdexStatus = proc(): string =
@@ -617,7 +617,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if connect:
           result = target.dockController.editor.connectNimdex(command)
           if result.len == 0 and not target.xWindowManager.isNil:
-            let manager = target.xWindowManager.target
+            let manager = target.xWindowManager{}
             manager.config.nimLspCommand = command
             manager.config.nimdexStopped = false
             if not manager.config.saveKosmoConfig(manager.configPath) and
@@ -1213,7 +1213,7 @@ proc saveMerendaSettings(
   true
 
 proc currentAdaptivePalette(): nimkit.ContentThemePalette =
-  var manager = adaptiveSession.target
+  var manager = adaptiveSession{}
   if manager.isNil:
     manager = lastKnownSession(nil)
     adaptiveSession.target = manager
@@ -1232,7 +1232,7 @@ proc installKosmoSettingsSaveHandler(
     var managerRef: nimkit.BackRef[KosmoWindowManager]
     managerRef.target = manager
     app.merendaSettingsSaveHandler = proc(settings: nimkit.MerendaSettings): bool =
-      let target = managerRef.target
+      let target = managerRef{}
       if not target.isNil:
         return target.saveMerendaSettings(settings)
 
@@ -1306,7 +1306,10 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
   if not applicationMenu.isNil and applicationMenu.len > 2:
     let settingsItem = applicationMenu[2]
     let manager =
-      if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager.target
+      if frontend.xWindowManager.isNil:
+        nil
+      else:
+        frontend.xWindowManager{}
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = manager
@@ -1343,14 +1346,14 @@ proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
         item.identifier() == KosmoQuitAction:
       item.identifier = KosmoQuitAction
       item.action = nimkit.actionSelector(KosmoQuitAction)
-      item.target = frontend.xWindowManager.target
+      item.target = frontend.xWindowManager{}
       break
 
 proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   let windowMenu = frontend.application.windowsMenu()
   if windowMenu.isNil:
     return
-  let manager = frontend.xWindowManager.target
+  let manager = frontend.xWindowManager{}
   if not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
     proc retarget(menu: nimkit.Menu) =
       for item in menu.items():
@@ -1691,7 +1694,7 @@ proc newKosmoApplication*(
   fileBrowserPanel.onSelectBranch = proc(root, branch: string) =
     if frontend.isNil or branchManager.isNil:
       return
-    for existing in branchManager.target.frontends:
+    for existing in branchManager{}.frontends:
       for tab in existing.dockController.editor.tabs():
         if tab.modified:
           let alert = nimkit.newAlert(
@@ -1706,7 +1709,7 @@ proc newKosmoApplication*(
   fileTree.onBranchSwitched = proc(root, branch: string, code: int, output: string) =
     if frontend.isNil or branchManager.isNil:
       return
-    for existing in branchManager.target.frontends:
+    for existing in branchManager{}.frontends:
       for tab in existing.dockController.editor.tabs():
         if tab.filePath.isSome:
           let path = absolutePath(
@@ -1818,7 +1821,7 @@ proc openProject*(
   ## Create a project window in the same application session as `frontend`.
   if frontend.isNil or frontend.xWindowManager.isNil:
     return
-  result = frontend.xWindowManager.target.openProject(path)
+  result = frontend.xWindowManager{}.openProject(path)
 
 proc openFileWindow(
     manager: KosmoWindowManager, path: string
@@ -1931,7 +1934,7 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
     if not frontend.hasFileBrowser():
       if frontend.xWindowManager.isNil:
         return
-      return not frontend.xWindowManager.target.openProject(path).isNil
+      return not frontend.xWindowManager{}.openProject(path).isNil
     let root = normalizedPath(absolutePath(path))
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
   else:
@@ -2122,7 +2125,7 @@ proc close*(frontend: KosmoApplication) =
   if not frontend.fileTree.isNil:
     frontend.fileTree.stopGitStatusMonitoring()
     frontend.fileTree.workspaceFiles.close()
-  let manager = frontend.xWindowManager.target
+  let manager = frontend.xWindowManager{}
   frontend.xWindowManager.clear()
   if not manager.isNil:
     manager.unregister(frontend)
@@ -2134,7 +2137,7 @@ proc close*(manager: KosmoWindowManager) =
   let
     app = manager.application
     restoresSaveHandler = not app.isNil and lastKnownSession(app) == manager
-    restoresPalette = adaptiveSession.target == manager
+    restoresPalette = adaptiveSession{} == manager
   manager.forgetKnownSession()
   var replacement = lastKnownSession(app, requireFrontend = true)
   if replacement.isNil:
@@ -2172,7 +2175,7 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
   try:
     manager.cliServer = startKosmoCliOpenServer(
       proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
-        let target = cliManager.target
+        let target = cliManager{}
         if not target.isNil:
           return target.openCliRequest(request)
         KosmoCliOpenResponse(errors: @["Kosmo has no active window manager"])
@@ -2221,7 +2224,7 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
         )
         defer:
           alert.window.close()
-        let target = cliManager.target
+        let target = cliManager{}
         let frontend =
           if target.isNil:
             nil

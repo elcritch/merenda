@@ -302,7 +302,7 @@ proc reload*(menuBar: MenuBar) =
   menuBar.reloadMenuBar()
 
 proc target*(model: MenuItemModel): DynamicAgent =
-  asDynamicAgent(model.xTarget.target)
+  asDynamicAgent(model.xTarget{})
 
 proc `target=`*(model: var MenuItemModel, target: DynamicAgent) =
   model.xTarget.target = target
@@ -471,7 +471,7 @@ proc `action=`*(item: MenuItem, action: ActionSelector) =
   syncNativeMainMenu()
 
 proc target*(item: MenuItem): DynamicAgent =
-  asDynamicAgent(item.xTarget.target)
+  asDynamicAgent(item.xTarget{})
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
   item.xTarget.target = target

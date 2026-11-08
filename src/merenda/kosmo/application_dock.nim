@@ -1439,7 +1439,7 @@ proc newTerminalDocument(
       nimkit.terminalFileWasActivated, frontend.xWindowLifecycle, openTerminalFile
     )
     if not frontend.xWindowManager.isNil:
-      let manager = frontend.xWindowManager.target
+      let manager = frontend.xWindowManager{}
       if not manager.cliServer.isNil:
         resolvedOptions.setTerminalEnvironment(
           KosmoCliEndpointEnvironment, manager.cliServer.endpointPath()

@@ -28,6 +28,22 @@ proc observe(view: View): BackRef[View] =
   result.target = view
 
 suite "NimKit ARC back references":
+  test "dereferencing returns the target or nil after it is released":
+    var reference: BackRef[View]
+    var retained: View
+    check reference{}.isNil
+    block:
+      let view = newView()
+      reference.target = view
+      check reference{} == view
+      retained = reference{}
+      check retained == view
+    check reference{} == retained
+    retained = nil
+    check reference{}.isNil
+    reference.clear()
+    check reference{}.isNil
+
   test "empty action targets and typed nil assignments are safe":
     let
       button = newButton("Empty")
@@ -74,8 +90,8 @@ suite "NimKit ARC back references":
       let view = newView()
       base.target = Responder(view)
       derived.target = view
-      check base.target == Responder(view)
-      check derived.target == view
+      check base{} == Responder(view)
+      check derived{} == view
     check base.isNil
     check derived.isNil
 
@@ -90,10 +106,10 @@ suite "NimKit ARC back references":
       reference.set(other, first.first)
     check reference.isNil
     reference.set(first, first.first)
-    check reference.target == first
+    check reference{} == first
     expect AssertionDefect:
       reference.set(other, first.first)
-    check reference.target == first
+    check reference{} == first
 
   test "a reference can switch registries for the same target":
     var reference, copy: BackRef[RegistryOwner]
@@ -102,10 +118,10 @@ suite "NimKit ARC back references":
       reference.set(target, target.first)
       copy = reference
       reference.set(target, target.second)
-      check reference.target == target
-      check copy.target == target
+      check reference{} == target
+      check copy{} == target
       reference.clear()
-      check copy.target == target
+      check copy{} == target
     check copy.isNil
 
   test "returned copied and moved back references clear independently":
@@ -118,15 +134,15 @@ suite "NimKit ARC back references":
       moved = move(original)
 
       check original.isNil
-      check copied.target == target
-      check moved.target == target
+      check copied{} == target
+      check moved{} == target
 
       original = copied
       original = original
       copied.clear()
       check copied.isNil
-      check original.target == target
-      check moved.target == target
+      check original{} == target
+      check moved{} == target
 
     check original.isNil
     check copied.isNil
@@ -143,18 +159,18 @@ suite "NimKit ARC back references":
       block:
         let secondTarget = newView()
         original.target = secondTarget
-        check original.target == secondTarget
-        check copied.target == firstTarget
+        check original{} == secondTarget
+        check copied{} == firstTarget
 
       check original.isNil
-      check original.target.isNil
-      check copied.target == firstTarget
+      check original{}.isNil
+      check copied{} == firstTarget
 
       original.target = firstTarget
       copied.target = nil
       check copied.isNil
-      check copied.target.isNil
-      check original.target == firstTarget
+      check copied{}.isNil
+      check original{} == firstTarget
 
     check original.isNil
     check copied.isNil
@@ -167,7 +183,7 @@ suite "NimKit ARC back references":
       var copied = original
       survivor = observe(target)
       original.clear()
-      check copied.target == target
+      check copied{} == target
       copied.clear()
     # Removing the earlier link must update the moved link's registry index.
     survivor.clear()
@@ -188,9 +204,9 @@ suite "NimKit ARC back references":
       check references.len == 256
       check copied.len == 257
       for reference in references:
-        check reference.target == target
+        check reference{} == target
       for reference in copied:
-        check reference.target == target
+        check reference{} == target
 
     for reference in references:
       check reference.isNil

@@ -66,6 +66,10 @@ proc target*[T](backRef: BackRef[T]): T {.inline.} =
   if backRef != nil and not backRef.link.backRefs.isNil:
     result = cast[T](backRef.link.backRefs.target)
 
+proc `{}`*[T](backRef: BackRef[T]): T {.inline.} =
+  ## Returns the target, or nil if the handle is empty or the target has died.
+  backRef.target
+
 proc isNil*[T](backRef: BackRef[T]): bool {.inline.} =
   ## Tests the target's lifetime, including handles whose registration survives it.
   backRef == nil or backRef.link.backRefs.isNil

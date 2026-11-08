@@ -137,7 +137,7 @@ proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel])
 proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int
 
 proc target*(model: MatrixItemModel): DynamicAgent =
-  asDynamicAgent(model.xTarget.target)
+  asDynamicAgent(model.xTarget{})
 
 proc `target=`*(model: var MatrixItemModel, target: DynamicAgent) =
   model.xTarget.target = target

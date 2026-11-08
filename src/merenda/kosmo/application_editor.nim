@@ -2514,7 +2514,7 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
         controller.frontend[].chooseFile()
     of KosmoOpenProjectAction:
       if not controller.frontend.isNil and not controller.frontend[].xWindowManager.isNil:
-        controller.frontend[].xWindowManager.target.chooseProject()
+        controller.frontend[].xWindowManager{}.chooseProject()
     of KosmoQuickOpenAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showQuickOpen()
@@ -3923,7 +3923,7 @@ proc syncKeyModeChoices(controller: KosmoDockController) =
 proc selectKeyMode(self: nimkit.DynamicAgent, invocation: var nimkit.Invocation) =
   let
     bar = KosmoStatusBar(self)
-    controller = bar.dockController.target
+    controller = bar.dockController{}
     sender = invocation.argsAs(nimkit.ActionArgs).sender
   if not controller.isNil and not controller.frontend.isNil and sender of nimkit.MenuItem:
     let identifier = nimkit.MenuItem(sender).identifier()
@@ -3966,7 +3966,7 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
     else:
       var command = editor.nimLspConfiguration().command
       if not frontend.xWindowManager.isNil:
-        command = frontend.xWindowManager.target.config.nimLspCommand
+        command = frontend.xWindowManager{}.config.nimLspCommand
       if command.len == 0:
         if frontend.showSettings() and not frontend.xSettingsWindow.isNil:
           let tabs = frontend.xSettingsWindow.contentView().viewWithIdentifier(
@@ -3985,7 +3985,7 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
         weakBar[].label.toolTip = error
         return
     if not frontend.xWindowManager.isNil:
-      let manager = frontend.xWindowManager.target
+      let manager = frontend.xWindowManager{}
       manager.config.nimdexStopped = running
       discard manager.config.saveKosmoConfig(manager.configPath)
     weakBar[].syncNimdexButton(editor.nimdexRequested())
@@ -4164,7 +4164,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         controller.frontend[].chooseFile()
     of KosmoOpenProjectAction:
       if not controller.frontend.isNil and not controller.frontend[].xWindowManager.isNil:
-        controller.frontend[].xWindowManager.target.chooseProject()
+        controller.frontend[].xWindowManager{}.chooseProject()
     of KosmoQuickOpenAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showQuickOpen()

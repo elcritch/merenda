@@ -223,7 +223,7 @@ proc setNextState*(cell: Cell) =
   cell.setState(cell.nextState())
 
 proc target*(cell: ActionCell): DynamicAgent =
-  asDynamicAgent(cell.xTarget.target)
+  asDynamicAgent(cell.xTarget{})
 
 proc setTarget*(cell: ActionCell, target: DynamicAgent) =
   cell.xTarget.target = target

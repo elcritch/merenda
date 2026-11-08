@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Share the target pointer across each `BackRefSet`; a registry asserts if
-  registered with a second target during its lifetime.
+  registered with a second target during its lifetime. Read a `BackRef` target
+  with `reference{}` or `reference.target`.
 
 - Give convenience-created Kosmo sessions an explicit lifetime through application
   termination or completion of the event loop with no open windows. Manager links
