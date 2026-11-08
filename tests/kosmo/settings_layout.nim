@@ -68,7 +68,7 @@ suite "Kosmo settings layout":
     let tabs = TabView(tabsView)
 
     let expectedPageText = @[
-      (KosmoNimdexSettingsTabIdentifier, @["Nimdex"]),
+      (KosmoNimdexSettingsTabIdentifier, @["Nimdex server"]),
       (KosmoTerminalSettingsTabIdentifier, @["Terminal"]),
       (KosmoShortcutsSettingsTabIdentifier, @["Active Shortcuts"]),
       (KosmoMoeThemesSettingsTabIdentifier, @["Themes"]),

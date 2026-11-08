@@ -4006,10 +4006,6 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
         weakBar[].label.text = error
         weakBar[].label.toolTip = error
         return
-    if not frontend.xWindowManager.isNil:
-      let manager = frontend.xWindowManager[]
-      manager.config.nimdexStopped = running
-      discard manager.config.saveKosmoConfig(manager.configPath)
     weakBar[].syncNimdexButton(editor.nimdexRequested())
     for host in controller.hosts:
       if not host.statusLabel.isNil and host.statusLabel.superview() of KosmoStatusBar:
