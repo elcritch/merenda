@@ -39,6 +39,7 @@ const
   KosmoStatusBarHeight* = 28.0'f32
   KosmoStatusIconWidth = 30.0'f32
   KosmoStatusLabelStyleId = "kosmo.status-label"
+  KosmoNimdexSectionStyleId = "kosmo.nimdex.section"
   KosmoKeyModeSelectorIdentifier* = "kosmo.status.keymode"
   KosmoCommandBarLineHeightMultiplier = 1.6'f32
   KosmoRenameAlertHeight* = 240.0'f32
