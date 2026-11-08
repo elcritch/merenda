@@ -302,14 +302,14 @@ proc reload*(menuBar: MenuBar) =
   menuBar.reloadMenuBar()
 
 proc target*(model: MenuItemModel): DynamicAgent =
-  DynamicAgent(model.xTarget.target)
+  asDynamicAgent(model.xTarget.target)
 
 proc `target=`*(model: var MenuItemModel, target: DynamicAgent) =
   model.xTarget.target = target
   model.xOwnedActionTarget = nil
 
 proc `target=`*(model: var MenuItemModel, target: ClosureTarget) =
-  model.target = DynamicAgent(target)
+  model.target = asDynamicAgent(target)
   model.xOwnedActionTarget = target
 
 proc `target=`*(model: var MenuItemModel, target: typeof(nil)) =
@@ -471,18 +471,18 @@ proc `action=`*(item: MenuItem, action: ActionSelector) =
   syncNativeMainMenu()
 
 proc target*(item: MenuItem): DynamicAgent =
-  DynamicAgent(item.xTarget.target)
+  asDynamicAgent(item.xTarget.target)
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
   item.xTarget.target = target
   item.xOwnedActionTarget = nil
 
 proc `target=`*(item: MenuItem, target: Responder) =
-  item.target = DynamicAgent(target)
+  item.target = asDynamicAgent(target)
 
 proc `target=`*(item: MenuItem, target: ClosureTarget) =
   ## Closure targets are retained; ordinary responder targets are non-owning.
-  item.target = DynamicAgent(target)
+  item.target = asDynamicAgent(target)
   item.xOwnedActionTarget = target
 
 proc `target=`*(item: MenuItem, target: typeof(nil)) =

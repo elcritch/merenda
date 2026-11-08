@@ -137,14 +137,14 @@ proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel])
 proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int
 
 proc target*(model: MatrixItemModel): DynamicAgent =
-  DynamicAgent(model.xTarget.target)
+  asDynamicAgent(model.xTarget.target)
 
 proc `target=`*(model: var MatrixItemModel, target: DynamicAgent) =
   model.xTarget.target = target
   model.xOwnedActionTarget = nil
 
 proc `target=`*(model: var MatrixItemModel, target: ClosureTarget) =
-  model.target = DynamicAgent(target)
+  model.target = asDynamicAgent(target)
   model.xOwnedActionTarget = target
 
 proc `target=`*(model: var MatrixItemModel, target: typeof(nil)) =

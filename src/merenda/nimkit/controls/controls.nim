@@ -98,7 +98,7 @@ proc syncActionCell(control: Control, cell: Cell) =
   if cell.isNil or not (cell of ActionCell):
     return
   let actionCell = ActionCell(cell)
-  actionCell.setTarget(DynamicAgent(control.xTarget.target))
+  actionCell.setTarget(asDynamicAgent(control.xTarget.target))
   actionCell.setAction(control.xAction)
 
 proc defaultControlCell(): Cell =
@@ -327,7 +327,7 @@ proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     return ActionCell(selected).target()
-  DynamicAgent(control.xTarget.target)
+  asDynamicAgent(control.xTarget.target)
 
 proc `target=`*(control: Control, target: DynamicAgent) =
   control.xTarget.target = target
@@ -337,7 +337,7 @@ proc `target=`*(control: Control, target: DynamicAgent) =
     ActionCell(selected).setTarget(target)
 
 proc `target=`*(control: Control, target: Responder) =
-  control.target = DynamicAgent(target)
+  control.target = asDynamicAgent(target)
 
 proc action*(control: Control): ActionSelector =
   let selected = control.selectedCell()
@@ -588,12 +588,12 @@ proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarg
 proc `target=`*(control: Control, target: ClosureTarget) =
   ## Closure targets are retained. Ordinary responder targets are non-owning.
   ## An explicitly upcast ClosureTarget follows the non-owning overload.
-  control.target = DynamicAgent(target)
+  control.target = asDynamicAgent(target)
   control.xOwnedActionTarget = target
 
 proc setTarget*(cell: ActionCell, target: ClosureTarget) =
   ## Retain closure targets; ordinary responder targets are non-owning.
-  cell.setRetainedTarget(target)
+  cell.setRetainedTarget(asDynamicAgent(target))
 
 proc setTarget*(cell: ActionCell, target: typeof(nil)) =
   cell.setTarget(DynamicAgent(target))

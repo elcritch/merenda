@@ -24,6 +24,13 @@ proc `target=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
   else:
     backRef.set(target, target.xBackRefs)
 
+proc `target=`*(backRef: var BackRef[Responder], target: Responder) =
+  # Keep nil responders out of the DynamicAgent upcast on Nim 2.2.
+  if target.isNil:
+    backRef.clear()
+  else:
+    backRef.set(target, target.xBackRefs)
+
 proc `target=`*(backRef: var BackRef[Responder], target: DynamicAgent) =
   ## Action targets need Responder's zeroing lifetime tracking.
   if not target.isNil and not (target of Responder):
@@ -33,6 +40,11 @@ proc `target=`*(backRef: var BackRef[Responder], target: DynamicAgent) =
   else:
     let responder = Responder(target)
     backRef.set(responder, responder.xBackRefs)
+
+proc asDynamicAgent*[T: Responder](target: T): DynamicAgent {.inline.} =
+  ## Upcast only non-nil responders; Nim 2.2 otherwise emits a nil member access.
+  if not target.isNil:
+    result = DynamicAgent(target)
 
 proc nextResponder*(responder: Responder): Responder
 proc clearNextResponder*(responder: Responder)
