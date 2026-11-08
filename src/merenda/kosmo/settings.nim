@@ -1463,6 +1463,8 @@ proc newKosmoSettingsWindow*(
       settings.xNimdexStatusError = error.len > 0
       nimdexStatusLabel.text = if error.len > 0: error else: "Disconnected"
   nimdexDisconnect.action = nimkit.actionSelector("kosmo.nimdex.disconnect")
+  nimdexPage.stack.spacing = 4.0
+  nimdexPage.stack.edgeInsets = nimkit.insets(10.0, 16.0)
   nimdexPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Nimdex server"),
     nimdexForm,

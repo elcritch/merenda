@@ -249,11 +249,20 @@ suite "Kosmo settings layout":
       settings.contentView().viewWithIdentifier("kosmo.settings.nimdex.connect")
     let disconnect =
       settings.contentView().viewWithIdentifier("kosmo.settings.nimdex.disconnect")
+    let autoStart =
+      settings.contentView().viewWithIdentifier("kosmo.settings.nimdex.autostart")
     require connect of Button
     require disconnect of Button
-    for height in [360.0'f32, 500.0'f32, 700.0'f32]:
-      window.frame = rect(180, 160, 760, height)
+    require autoStart of Button
+    for height in [KosmoSettingsMinimumHeight, 360.0'f32, 500.0'f32, 700.0'f32]:
+      window.frame = rect(180, 160, KosmoSettingsMinimumWidth, height)
       settings.contentView().layoutSubtreeIfNeeded()
+      settings.contentView().checkVisibleText(
+        ["Nimdex server", "Start Nimdex automatically"]
+      )
+      autoStart.checkVisibleIn(settings.contentView())
+      connect.checkVisibleIn(settings.contentView())
+      disconnect.checkVisibleIn(settings.contentView())
       check connect.frame().size.height <= 36.0'f32
       check disconnect.frame().size.height <= 36.0'f32
       check connect.frame().size.height > 0
