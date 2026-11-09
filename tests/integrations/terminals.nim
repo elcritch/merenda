@@ -1898,6 +1898,12 @@ suite "nimkit terminal views":
       )
       check view.scrollPosition() == 1.0'f32
       check view.stringValue().splitLines()[0].strip() == "two"
+      let dragEnd = view.terminalCellPoint(0, 2)
+      check window.mouseDownAt(point)
+      check window.mouseDraggedAt(dragEnd)
+      check window.mouseUpAt(dragEnd)
+      check view.scrollPosition() == 1.0'f32
+      check view.selectionText() == "two"
 
   test "Codex resume history inserted above its composer remains scrollable":
     for usesAlternateScreen in [false, true]:
@@ -2021,11 +2027,21 @@ suite "nimkit terminal views":
       root.addSubview(peer)
       window.setContentView(root)
       check session.pollUntilText("ready")
-      session.processOutput("\x1b[?1004h")
+      session.processOutput("\r\none\r\ntwo\r\nthree\r\nfour\r\nfive\r\n\x1b[?1004h")
       session.waitForCommands()
+      view.selectTerminalRange(
+        TerminalSelection(
+          anchor: initTerminalPosition(0, 0), extent: initTerminalPosition(0, 1)
+        ),
+        centered = true,
+      )
+      let oldScroll = view.scrollPosition()
+      require oldScroll > 0
 
       check window.makeFirstResponder(view)
+      check view.scrollPosition() == oldScroll
       check window.makeFirstResponder(peer)
+      check view.scrollPosition() == oldScroll
       check session.pollUntilExit()
       check "1b 5b 49 1b 5b 4f" in session.normalizedTerminalOutput()
 

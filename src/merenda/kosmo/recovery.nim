@@ -3,6 +3,7 @@
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./moe
+import ./scrolling
 
 type
   KosmoRecoveryList = ref object of nimkit.OutlineView
@@ -118,6 +119,7 @@ proc newKosmoRecoveryView*(editor: KosmoEditor): KosmoRecoveryView =
   discard result.withProtocol(KosmoRecoveryLayout)
   result.list = KosmoRecoveryList()
   result.list.initOutlineViewFields()
+  result.list.scrollView().controlScrollMultiplier = KosmoControlScrollMultiplier
   discard result.list.withProtocol(KosmoRecoveryDataSource)
   result.list.outlineDataSource = result.list
   result.list.outlineColumn().title = "Preserved work"

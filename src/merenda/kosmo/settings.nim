@@ -856,6 +856,8 @@ proc `textMateGrammars=`*(
 
 proc newKosmoSettingsWindow*(
     nimdexCommand = "",
+    nimdexAutoStart = false,
+    nimdexAutoStartHandler: proc(enabled: bool) {.closure.} = nil,
     nimdexAction: proc(command: string, connect: bool): string {.closure.} = nil,
     nimdexStatus: proc(): string {.closure.} = nil,
     preferEditorPanes = true,
@@ -916,6 +918,7 @@ proc newKosmoSettingsWindow*(
     terminalPage = newSettingsPage()
     nimdexPage = newSettingsPage()
     nimdexForm = nimkit.newFormView()
+    nimdexAutoStartButton = nimkit.newCheckBox("Start Nimdex automatically")
     nimdexMode = nimkit.newComboBox(["Launch locally", "Connect to daemon"])
     nimdexLocal = nimkit.newTextField()
     nimdexAddress = nimkit.newTextField()
@@ -1405,6 +1408,14 @@ proc newKosmoSettingsWindow*(
   grammarActions.addArrangedSubview(installMoreGrammars)
   textMateGrammarsPage.stack.addArrangedSubview(grammarActions)
 
+  nimdexAutoStartButton.identifier = "kosmo.settings.nimdex.autostart"
+  nimdexAutoStartButton.state = if nimdexAutoStart: nimkit.bsOn else: nimkit.bsOff
+  nimdexAutoStartButton.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.nimdex.autoStartChanged")
+  ) do(sender: nimkit.DynamicAgent):
+    if not nimdexAutoStartHandler.isNil:
+      nimdexAutoStartHandler(nimkit.Button(sender).state == nimkit.bsOn)
+  nimdexAutoStartButton.action = nimkit.actionSelector("kosmo.nimdex.autoStartChanged")
   nimdexMode.identifier = "kosmo.settings.nimdex.mode"
   nimdexLocal.identifier = "kosmo.settings.nimdex.local"
   nimdexAddress.identifier = "kosmo.settings.nimdex.address"
@@ -1451,9 +1462,12 @@ proc newKosmoSettingsWindow*(
       settings.xNimdexStatusError = error.len > 0
       nimdexStatusLabel.text = if error.len > 0: error else: "Disconnected"
   nimdexDisconnect.action = nimkit.actionSelector("kosmo.nimdex.disconnect")
+  nimdexPage.stack.spacing = 4.0
+  nimdexPage.stack.edgeInsets = nimkit.insets(10.0, 16.0)
   nimdexPage.stack.addArrangedSubview(
-    nimkit.newHeadingLabel("Nimdex"),
+    nimkit.newHeadingLabel("Nimdex server"),
     nimdexForm,
+    nimdexAutoStartButton,
     nimdexButtons,
     nimdexStatusLabel,
     nimkit.newLabel(
@@ -1486,7 +1500,7 @@ proc newKosmoSettingsWindow*(
     )
   )
   discard tabs.addTabViewItem(
-    nimkit.newTabViewItem("Nimdex", nimdexPage.view, KosmoNimdexSettingsTabIdentifier)
+    nimkit.newTabViewItem("LSP", nimdexPage.view, KosmoNimdexSettingsTabIdentifier)
   )
   layout.spacing = 12.0
   layout.alignment = nimkit.svaFill

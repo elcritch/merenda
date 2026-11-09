@@ -322,6 +322,8 @@ suite "Kosmo Moe frontend bridges":
     let documents = frontend.editorGroups()[0].documents()
     require documents.len == 1
     let recovery = KosmoRecoveryView(documents[0].contentView)
+    check OutlineView(recovery.preferredResponder())
+      .scrollView().controlScrollMultiplier == 3
     check frontend.window.firstResponder() == recovery.preferredResponder()
     editor.forceInputMode = true
     require recovery.restoreSelected()
@@ -353,4 +355,5 @@ suite "Kosmo Moe frontend bridges":
       for document in group.documents():
         if document.identifier == KosmoOutputTabIdentifier:
           inc documents
+          check ScrollView(document.contentView).controlScrollMultiplier == 3
     check documents == 1

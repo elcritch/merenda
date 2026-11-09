@@ -13,7 +13,7 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   gitDiffTheme*: string
   gitHubTheme*: string
   nimLspCommand*: string
-  nimdexStopped*: bool = true
+  nimdexAutoStart*: bool
   merendaTheme*: string
   merendaFont*: string
   merendaMonoFont*: string
@@ -41,7 +41,10 @@ proc loadKosmoConfig*(path: string): KosmoConfig =
     return
   try:
     var config = KosmoConfig()
-    config.fromJson(parseJson(readFile(path)), Joptions(allowMissingKeys: true))
+    let node = parseJson(readFile(path))
+    if node.kind == JObject and node.hasKey("nimdexStopped"):
+      node.delete("nimdexStopped")
+    config.fromJson(node, Joptions(allowMissingKeys: true))
     result = config
   except CatchableError:
     discard

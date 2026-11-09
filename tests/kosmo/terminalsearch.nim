@@ -53,6 +53,36 @@ suite "Kosmo terminal search":
     let info = session.screenInfo()
     let start = info.totalLineCount - info.rows - int(terminal.scrollPosition())
     check terminal.selection().anchor.row - start == info.rows div 2
+    let selectedCell = terminal.cellAt(info.rows div 2, 0)
+    check selectedCell.backgroundColor == color(1.0, 0.82, 0.16, 1.0)
+    check selectedCell.foregroundColor == color(0.08, 0.08, 0.08, 1.0)
+    var lightPalette = initTerminalPalette()
+    lightPalette.background = color(1, 1, 1, 1)
+    lightPalette.foreground = color(0, 0, 0, 1)
+    lightPalette.selection = color(1, 0.82, 0.16, 0.15)
+    terminal.palette = lightPalette
+    check terminal.cellAt(info.rows div 2, 0).backgroundColor ==
+      selectedCell.backgroundColor
+    check terminal.cellAt(info.rows div 2, 0).foregroundColor ==
+      selectedCell.foregroundColor
+    session.processOutput("\x1b[?1000h\x1b[?1004h")
+    session.waitForCommands()
+    let beforeClick = terminal.scrollPosition()
+    let point = terminal.pointToWindow(
+      initPoint(
+        padding + metrics.cellWidth * 1.5,
+        padding + metrics.lineHeight * (info.rows div 2).float32,
+      )
+    )
+    check window.mouseDownAt(point)
+    discard window.mouseUpAt(point)
+    check terminal.scrollPosition() == beforeClick
+    check window.scrollWheelAt(point, deltaY = 1)
+    let normalScroll = terminal.scrollPosition() - beforeClick
+    check normalScroll == 1
+    let beforeFastScroll = terminal.scrollPosition()
+    check window.scrollWheelAt(point, deltaY = 1, modifiers = {nimkit.kmControl})
+    check terminal.scrollPosition() - beforeFastScroll == normalScroll * 3
     terminal.findNext()
     check terminal.selection().anchor.row == 19
     check terminal.scrollPosition() == 0
