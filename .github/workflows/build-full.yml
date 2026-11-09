@@ -254,7 +254,7 @@ jobs:
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
-            nimargs: '-- --opt:none'
+            nimargs: ''
     steps:
     - uses: actions/checkout@v5
 
@@ -328,7 +328,7 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      # The unoptimized Linux GUI suite can exceed 20 minutes on hosted runners.
+      # Allow headroom for the expanded GUI suite on hosted runners.
       timeout-minutes: 35
       run: |
         testExecutable=./deps/.nimcache/tests/tkosmo/tkosmo
