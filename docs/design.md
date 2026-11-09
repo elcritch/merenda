@@ -218,9 +218,24 @@ ordinary target alive. Once it is released, the target becomes nil and normal
 nil-target responder-chain routing applies. Assigning a non-nil `DynamicAgent`
 that is not a `Responder` raises `ValueError`.
 
-`newActionTarget` creates a `ClosureTarget`. Assigning a value whose static type
-is `ClosureTarget` through `target=` (or `setTarget` on an action cell) retains
-it until replacement. If it is first converted to `Responder` or `DynamicAgent`,
+`newActionTarget(action, receiver, handler)` creates an `ActionAdapter` that holds
+a zeroing reference to its receiver and a non-capturing `.nimcall.` handler.
+The factory marks inline `do` blocks `.nimcall.` before type checking their body;
+captured variables are rejected. Named handlers must also use `.nimcall.`. The handler takes
+`(receiver, sender)` and safely does nothing after the receiver
+is released. For example:
+
+```nim
+button.target = newActionTarget(change, controller) do(
+  controller: MyController, sender: DynamicAgent
+):
+  controller.applyChange()
+```
+
+The two-argument `newActionTarget(action, callback)` remains available for
+compatibility and creates a `ClosureTarget`. Assigning a value whose static type
+is `ActionAdapter` or `ClosureTarget` through `target=` (or `setTarget` on an
+action cell) retains it until replacement. If converted to `Responder` or `DynamicAgent`,
 assignment is non-owning instead; keep another owner in that case. A retained
 closure must not strongly capture its owning control or menu item, or it can form
 a cycle. Menu and matrix models preserve explicitly retained callback targets
@@ -229,6 +244,17 @@ UI thread; a zeroing reference does not make responder access thread-safe.
 Use `initMenuItemModel` or `initMatrixItemModel` and their `target=` setters to
 configure model targets; the former public object-constructor field is no longer
 available.
+
+The shared `ActionTarget` value stores either a zeroing responder reference or an
+owned receiver. Retained callback targets do not need a second, weak registration.
+The action-cell `setRetainedTarget` API remains an explicit ownership choice for
+other responder adapters. Copies preserve the selected ownership policy and
+receiver identity. Kosmo settings use explicit-receiver adapters; SearchBar
+buttons use named actions on their owning bar. Neither form captures its owner.
+Nimdex settings use a zeroing delegate link for action and status requests. The
+application owns this delegate, which in turn holds zeroing links to its editor
+controller and window manager. Settings callers provide `nimdexDelegate` instead
+of the former `nimdexAction` and `nimdexStatus` closure arguments.
 
 - `Cell` and `ActionCell` store control-view back references, enabled and
   highlighted state, button state cycling, and target/action storage.

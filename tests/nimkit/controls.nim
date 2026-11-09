@@ -5,7 +5,7 @@ import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
-import ./fixtures/rendergeometry
+import ./fixtures/[rendergeometry, celltargetimports]
 
 type TextChangeSpy = ref object of Agent
   changeCount: int
@@ -24,6 +24,20 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "direct cell imports retain action adapters":
+    check cellRetainsInlineAdapter()
+
+  test "copied button cells retain explicitly owned targets":
+    var copied: ButtonCell
+    block:
+      let source = newButtonCell("Run")
+      source.setTarget(
+        newActionTarget(actionSelector("test.copyCell")) do(sender: DynamicAgent):
+          discard
+      )
+      copied = source.copyButtonCell()
+    check not copied.retainedTarget().isNil
+
   test "back references accept responder and dynamic agent and clear safely":
     var link: BackRef[Responder]
     block:

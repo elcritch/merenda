@@ -3,6 +3,36 @@ import std/[options, strutils, unittest]
 import merenda/nimkit
 
 suite "NimKit reusable search":
+  test "search buttons use a zeroing reference to their owning bar":
+    proc actionButtons(view: View): seq[Button] =
+      if view of Button:
+        result.add Button(view)
+      for child in view.subviews():
+        result.add actionButtons(child)
+
+    var observed: BackRef[Responder]
+    var buttons: seq[Button]
+    var calls = 0
+    block:
+      let bar = newSearchBar(
+        onNext = proc() =
+          inc calls
+      )
+      bar.enableExpressions()
+      bar.enableReplacement(nil, nil)
+      observed{} = Responder(bar)
+      buttons = actionButtons(bar)
+      check buttons.len == 7
+      for button in buttons:
+        check button.target() == DynamicAgent(bar)
+        if button.action().name == actionSelector("nimkit.searchNext").name:
+          check button.sendAction()
+      check calls == 1
+    check observed.isNil
+    for button in buttons:
+      check button.target().isNil
+      check not button.sendAction()
+
   test "floating search tolerates collapsed hosts and releases its constraints":
     let
       host = newView(frame = rect(0, 0, 0, 0))

@@ -287,7 +287,11 @@ proc copyButtonCell*(cell: ButtonCell): ButtonCell =
   result.allowsMixedState = cell.allowsMixedState()
   result.state = cell.state()
   cells.setEnabled(result, cells.isEnabled(cell))
-  result.setTarget(cell.target())
+  let retained = cell.retainedTarget()
+  if retained.isNil:
+    result.setTarget(cell.target())
+  else:
+    result.setRetainedTarget(retained)
   result.setAction(cell.action())
   result.xReservedTitles = cell.xReservedTitles
   result.xIcon = cell.xIcon

@@ -241,6 +241,10 @@ type
   KosmoDetachedWindowLifecycle = ref object of nimkit.Responder
     controller: WeakRef[KosmoDockController]
 
+  KosmoNimdexSettingsTarget = ref object of nimkit.Responder
+    controller: nimkit.BackRef[KosmoDockController]
+    manager: nimkit.BackRef[KosmoWindowManager]
+
   KosmoApplication* = ref object
     application*: nimkit.Application
     window*: nimkit.Window
@@ -262,6 +266,7 @@ type
     documentView: KosmoContentView
     dockController: KosmoDockController
     xSettingsWindow: KosmoSettingsWindow
+    xNimdexSettingsTarget: KosmoNimdexSettingsTarget
     xPreferEditorPanes: bool
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool

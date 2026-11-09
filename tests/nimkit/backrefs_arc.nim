@@ -14,6 +14,21 @@ type
   RegistryOwner = ref object
     first, second: BackRefSet[RegistryOwner]
 
+  ActionReceiver = ref object of Responder
+    calls: int
+
+static:
+  doAssert not compiles(
+    block:
+      proc withCapture(receiver: Responder) =
+        var calls = 0
+        let handler = proc(receiver: Responder, sender: DynamicAgent) {.closure.} =
+          inc calls
+        discard newActionTarget(actionSelector("test.rejectCapture"), receiver, handler)
+
+      withCapture(newResponder())
+  )
+
 protocol IntrinsicLifetimeLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: IntrinsicLifetimeView): IntrinsicSize =
     initIntrinsicSize(120, 30)
@@ -28,6 +43,50 @@ proc observe(view: View): BackRef[View] =
   result.target = view
 
 suite "NimKit ARC back references":
+  test "non-capturing action adapters do not retain their receiver":
+    let button = newButton("Run")
+    var observed: BackRef[ActionReceiver]
+    block:
+      let receiver = ActionReceiver()
+      initResponder(receiver)
+      observed{} = receiver
+      let action = actionSelector("test.explicitReceiver")
+      button.target = newActionTarget(action, receiver) do(
+        receiver: ActionReceiver, sender: DynamicAgent
+      ):
+        check sender of Button
+        inc receiver.calls
+      button.action = action
+      check button.sendAction()
+      check receiver.calls == 1
+    check observed.isNil
+    check button.target() of ActionAdapter
+    check not (button.target() of ClosureTarget)
+    check button.sendAction()
+    button.target = nil
+    check button.target().isNil
+
+  test "action target copies retain callbacks and switch ownership independently":
+    var storage, copied: ActionTarget
+    var observed: BackRef[Responder]
+    block:
+      let callback = newActionTarget(actionSelector("test.sharedStorage")) do(
+        sender: DynamicAgent
+      ):
+        discard sender
+      observed{} = Responder(callback)
+      storage{} = callback
+      copied = storage
+    check not observed.isNil
+    expect ValueError:
+      storage{} = DynamicAgent()
+    check storage{} == observed{}
+    storage{} = Responder(nil)
+    check storage{}.isNil
+    check copied{} == observed{}
+    copied{} = nil
+    check observed.isNil
+
   test "dereferencing returns the target or nil after it is released":
     var reference: BackRef[View]
     var retained: View
@@ -54,6 +113,7 @@ suite "NimKit ARC back references":
       matrixModel: MatrixItemModel
       emptyResponder: Responder
       emptyClosure: ClosureTarget
+      emptyAdapter: ActionAdapter
     check button.target().isNil
     check cell.target().isNil
     check item.target().isNil
@@ -64,6 +124,11 @@ suite "NimKit ARC back references":
     button.target = emptyClosure
     item.target = emptyClosure
     cell.setTarget(emptyClosure)
+    button.target = emptyAdapter
+    item.target = emptyAdapter
+    cell.setTarget(emptyAdapter)
+    menuModel.target = emptyAdapter
+    matrixModel.target = emptyAdapter
     menuModel.target = emptyClosure
     matrixModel.target = emptyClosure
     check button.target().isNil
