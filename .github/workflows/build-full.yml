@@ -328,8 +328,8 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      # The expanded GUI suite takes over 15 minutes in the unoptimized Linux build.
-      timeout-minutes: 20
+      # The unoptimized Linux GUI suite can exceed 20 minutes on hosted runners.
+      timeout-minutes: 35
       run: |
         testExecutable=./deps/.nimcache/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
