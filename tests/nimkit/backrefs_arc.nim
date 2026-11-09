@@ -9,7 +9,10 @@ static:
   doAssert compileOption("mm", "arc") or compileOption("mm", "orc") or
     compileOption("mm", "atomicArc")
 
-type IntrinsicLifetimeView = ref object of View
+type
+  IntrinsicLifetimeView = ref object of View
+  RegistryOwner = ref object
+    first, second: BackRefSet[RegistryOwner]
 
 protocol IntrinsicLifetimeLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: IntrinsicLifetimeView): IntrinsicSize =
@@ -25,6 +28,102 @@ proc observe(view: View): BackRef[View] =
   result.target = view
 
 suite "NimKit ARC back references":
+  test "dereferencing returns the target or nil after it is released":
+    var reference: BackRef[View]
+    var retained: View
+    check reference{}.isNil
+    block:
+      let view = newView()
+      reference{} = view
+      check reference{} == view
+      retained = reference{}
+      check retained == view
+    check reference{} == retained
+    retained = nil
+    check reference{}.isNil
+    reference.clear()
+    check reference{}.isNil
+
+  test "empty action targets and typed nil assignments are safe":
+    let
+      button = newButton("Empty")
+      cell = newActionCell()
+      item = newMenuItem("Empty")
+    var
+      menuModel: MenuItemModel
+      matrixModel: MatrixItemModel
+      emptyResponder: Responder
+      emptyClosure: ClosureTarget
+    check button.target().isNil
+    check cell.target().isNil
+    check item.target().isNil
+    check menuModel.target().isNil
+    check matrixModel.target().isNil
+    button.target = emptyResponder
+    item.target = emptyResponder
+    button.target = emptyClosure
+    item.target = emptyClosure
+    cell.setTarget(emptyClosure)
+    menuModel.target = emptyClosure
+    matrixModel.target = emptyClosure
+    check button.target().isNil
+    check cell.target().isNil
+    check item.target().isNil
+    check menuModel.target().isNil
+    check matrixModel.target().isNil
+
+  test "nil responder assignment clears a window owner safely":
+    let view = newView()
+    block:
+      let window = newWindow("Back-reference nil owner")
+      view.setWindowOwner(window)
+      check view.windowBacklink() == Responder(window)
+      var empty: Responder
+      view.setWindowOwner(empty)
+      check view.windowBacklink().isNil
+      window.close()
+
+  test "base and derived references share the responder registry":
+    var base: BackRef[Responder]
+    var derived: BackRef[View]
+    block:
+      let view = newView()
+      base.target = Responder(view)
+      derived.target = view
+      check base{} == Responder(view)
+      check derived{} == view
+    check base.isNil
+    check derived.isNil
+
+  test "a registry stays bound to its first target after its last link is cleared":
+    let
+      first = RegistryOwner()
+      other = RegistryOwner()
+    var reference: BackRef[RegistryOwner]
+    reference.set(first, first.first)
+    reference.clear()
+    expect AssertionDefect:
+      reference.set(other, first.first)
+    check reference.isNil
+    reference.set(first, first.first)
+    check reference{} == first
+    expect AssertionDefect:
+      reference.set(other, first.first)
+    check reference{} == first
+
+  test "a reference can switch registries for the same target":
+    var reference, copy: BackRef[RegistryOwner]
+    block:
+      let target = RegistryOwner()
+      reference.set(target, target.first)
+      copy = reference
+      reference.set(target, target.second)
+      check reference{} == target
+      check copy{} == target
+      reference.clear()
+      check copy{} == target
+    check copy.isNil
+
   test "returned copied and moved back references clear independently":
     var original, copied, moved: BackRef[View]
 
@@ -35,15 +134,15 @@ suite "NimKit ARC back references":
       moved = move(original)
 
       check original.isNil
-      check copied.target == target
-      check moved.target == target
+      check copied{} == target
+      check moved{} == target
 
       original = copied
       original = original
       copied.clear()
       check copied.isNil
-      check original.target == target
-      check moved.target == target
+      check original{} == target
+      check moved{} == target
 
     check original.isNil
     check copied.isNil
@@ -60,23 +159,23 @@ suite "NimKit ARC back references":
       block:
         let secondTarget = newView()
         original.target = secondTarget
-        check original.target == secondTarget
-        check copied.target == firstTarget
+        check original{} == secondTarget
+        check copied{} == firstTarget
 
       check original.isNil
-      check original.target.isNil
-      check copied.target == firstTarget
+      check original{}.isNil
+      check copied{} == firstTarget
 
       original.target = firstTarget
       copied.target = nil
       check copied.isNil
-      check copied.target.isNil
-      check original.target == firstTarget
+      check copied{}.isNil
+      check original{} == firstTarget
 
     check original.isNil
     check copied.isNil
 
-  test "dropping the last copied handle unregisters its shared slot":
+  test "dropping the last copied handle unregisters its shared link":
     let target = newView()
     var survivor: BackRef[View]
     block:
@@ -84,9 +183,9 @@ suite "NimKit ARC back references":
       var copied = original
       survivor = observe(target)
       original.clear()
-      check copied.target == target
+      check copied{} == target
       copied.clear()
-    # Removing the earlier slot must update the moved slot's registry index.
+    # Removing the earlier link must update the moved link's registry index.
     survivor.clear()
     check survivor.isNil
 
@@ -105,9 +204,9 @@ suite "NimKit ARC back references":
       check references.len == 256
       check copied.len == 257
       for reference in references:
-        check reference.target == target
+        check reference{} == target
       for reference in copied:
-        check reference.target == target
+        check reference{} == target
 
     for reference in references:
       check reference.isNil

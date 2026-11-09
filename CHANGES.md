@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Share the target pointer across each `BackRefSet`; a registry asserts if
+  registered with a second target during its lifetime. Read a `BackRef` target
+  with `reference{}` or `reference.target`.
+
+- Give convenience-created Kosmo sessions an explicit lifetime through application
+  termination or completion of the event loop with no open windows. Manager links
+  are zeroing, and standard application menus dispatch named manager actions.
+
+- Make control, action-cell, menu-item and item-model responder targets
+  non-owning zeroing references. `ClosureTarget` assignments retain callbacks;
+  statically upcast targets are non-owning. See `docs/design.md` for ownership
+  and model migration details.
+
 - Accelerate Control-wheel scrolling in Kosmo's terminal and reader tabs.
 - Use GitHub REST endpoints for Kosmo's GitHub view and refresh checks only for
   expanded pull requests.

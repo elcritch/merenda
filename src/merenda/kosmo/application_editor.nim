@@ -327,7 +327,7 @@ proc markdownCacheDidChange(watch: KosmoMarkdownCacheWatch) {.slot.} =
 
 proc newMarkdownCacheWatch(controller: KosmoDockController): KosmoMarkdownCacheWatch =
   result = KosmoMarkdownCacheWatch()
-  result.controller.set(controller, controller.markdownBackRefs)
+  result.controller.set(controller, controller.backRefs)
 
 proc watchMarkdownPreview(controller: KosmoDockController, view: KosmoMarkdownView) =
   if controller.isNil or view.isNil or not view.previewWatch.isNil:
@@ -2514,7 +2514,7 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
         controller.frontend[].chooseFile()
     of KosmoOpenProjectAction:
       if not controller.frontend.isNil and not controller.frontend[].xWindowManager.isNil:
-        controller.frontend[].xWindowManager[].chooseProject()
+        controller.frontend[].xWindowManager{}.chooseProject()
     of KosmoQuickOpenAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showQuickOpen()
@@ -3943,28 +3943,29 @@ proc syncKeyModeChoices(controller: KosmoDockController) =
       if button.title() != selectedMode.title:
         button.title = selectedMode.title
 
-proc newKeyModeTarget(
-    controller: KosmoDockController, mode: KosmoKeyMode
-): nimkit.DynamicAgent =
-  let weakController = controller.unsafeWeakRef()
-  result = nimkit.newActionTarget(nimkit.actionSelector("kosmo.selectKeyMode")) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
-    if weakController.isNil:
-      return
-    let controller = weakController[]
-    if controller.frontend.isNil:
-      return
-    let frontend = controller.frontend[]
-    frontend.setEditorInputPolicy(mode.inputPolicy)
-    frontend.setForceInputMode(mode.forceInput)
+proc selectKeyMode(self: nimkit.DynamicAgent, invocation: var nimkit.Invocation) =
+  let
+    bar = KosmoStatusBar(self)
+    controller = bar.dockController{}
+    sender = invocation.argsAs(nimkit.ActionArgs).sender
+  if not controller.isNil and not controller.frontend.isNil and sender of nimkit.MenuItem:
+    let identifier = nimkit.MenuItem(sender).identifier()
+    for mode in KosmoKeyModes:
+      if mode.identifier == identifier:
+        let frontend = controller.frontend[]
+        frontend.setEditorInputPolicy(mode.inputPolicy)
+        frontend.setForceInputMode(mode.forceInput)
+        break
+  invocation.setResult(())
 
 proc configureKeyModeChoice(bar: KosmoStatusBar, controller: KosmoDockController) =
-  for index, mode in KosmoKeyModes:
+  bar.dockController.set(controller, controller.backRefs)
+  let action = nimkit.actionSelector("kosmo.selectKeyMode")
+  discard bar.replaceMethod(action, nimkit.DynamicMethod(selectKeyMode))
+  for index in 0 ..< KosmoKeyModes.len:
     let item = bar.keyModeChoice.menu()[index]
-    item.action = nimkit.actionSelector("kosmo.selectKeyMode")
-    item.target = controller.newKeyModeTarget(mode)
+    item.action = action
+    item.target = nimkit.Responder(bar)
   controller.syncKeyModeChoices()
 
 proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController) =
@@ -3988,7 +3989,7 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
     else:
       var command = editor.nimLspConfiguration().command
       if not frontend.xWindowManager.isNil:
-        command = frontend.xWindowManager[].config.nimLspCommand
+        command = frontend.xWindowManager{}.config.nimLspCommand
       if command.len == 0:
         if frontend.showSettings() and not frontend.xSettingsWindow.isNil:
           let tabs = frontend.xSettingsWindow.contentView().viewWithIdentifier(
@@ -4182,7 +4183,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         controller.frontend[].chooseFile()
     of KosmoOpenProjectAction:
       if not controller.frontend.isNil and not controller.frontend[].xWindowManager.isNil:
-        controller.frontend[].xWindowManager[].chooseProject()
+        controller.frontend[].xWindowManager{}.chooseProject()
     of KosmoQuickOpenAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showQuickOpen()

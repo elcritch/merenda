@@ -19,7 +19,8 @@ type
     xMirrorsControlViewState: bool
 
   ActionCell* = ref object of Cell
-    xTarget: DynamicAgent
+    xTarget: BackRef[Responder]
+    xOwnedTarget: DynamicAgent
     xAction: ActionSelector
 
 proc normalizeState(value: ButtonState, allowsMixedState: bool): ButtonState =
@@ -222,10 +223,20 @@ proc setNextState*(cell: Cell) =
   cell.setState(cell.nextState())
 
 proc target*(cell: ActionCell): DynamicAgent =
-  cell.xTarget
+  asDynamicAgent(cell.xTarget{})
 
 proc setTarget*(cell: ActionCell, target: DynamicAgent) =
-  cell.xTarget = target
+  cell.xTarget.target = target
+  cell.xOwnedTarget = nil
+
+proc setRetainedTarget*(cell: ActionCell, target: DynamicAgent) =
+  ## Retain an explicitly installed callback adapter.
+  cell.setTarget(target)
+  cell.xOwnedTarget = target
+
+proc retainedTarget*(cell: ActionCell): DynamicAgent =
+  ## Return the explicitly retained target, if present.
+  cell.xOwnedTarget
 
 proc action*(cell: ActionCell): ActionSelector =
   cell.xAction

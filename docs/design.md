@@ -212,6 +212,24 @@ row/column allocation as public constraints.
 
 Controls are kept thin and cell-driven:
 
+Action targets on controls, action cells, menu items, and their item models are
+non-owning and use zeroing responder references. The application must keep an
+ordinary target alive. Once it is released, the target becomes nil and normal
+nil-target responder-chain routing applies. Assigning a non-nil `DynamicAgent`
+that is not a `Responder` raises `ValueError`.
+
+`newActionTarget` creates a `ClosureTarget`. Assigning a value whose static type
+is `ClosureTarget` through `target=` (or `setTarget` on an action cell) retains
+it until replacement. If it is first converted to `Responder` or `DynamicAgent`,
+assignment is non-owning instead; keep another owner in that case. A retained
+closure must not strongly capture its owning control or menu item, or it can form
+a cycle. Menu and matrix models preserve explicitly retained callback targets
+when they are copied or rebuilt. Models with targets must remain on their owning
+UI thread; a zeroing reference does not make responder access thread-safe.
+Use `initMenuItemModel` or `initMatrixItemModel` and their `target=` setters to
+configure model targets; the former public object-constructor field is no longer
+available.
+
 - `Cell` and `ActionCell` store control-view back references, enabled and
   highlighted state, button state cycling, and target/action storage.
 - `Control` owns cell installation, cell selector forwarding, enabled state,

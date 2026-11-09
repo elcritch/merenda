@@ -1,3 +1,4 @@
+import sigils/cloneutils
 import std/options
 
 from figdraw import FigIdx
@@ -34,7 +35,8 @@ type
     image*: ImageResource
     keyEquivalent*: KeyStroke
     hasKeyEquivalent*: bool
-    target*: DynamicAgent
+    xTarget: BackRef[Responder]
+    xOwnedActionTarget: ClosureTarget
     action*: ActionSelector
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
@@ -47,7 +49,8 @@ type
     xTitle: string
     xSubtitle: string
     xAction: ActionSelector
-    xTarget: DynamicAgent
+    xTarget: BackRef[Responder]
+    xOwnedActionTarget: ClosureTarget
     xState: ButtonState
     xEnabled: bool
     xHidden: bool
@@ -135,6 +138,13 @@ proc popUpContextMenu*(
 proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil)
 proc installNativeWindowsMenu*(menu: Menu)
 proc installNativeServicesMenu*(menu: Menu)
+
+proc clone*(model: MenuItemModel): MenuItemModel {.gcsafe.} =
+  ## Preserve action target identity when cloning value models on the owning thread.
+  result = model
+  for name, field in result.fieldPairs:
+    when name != "xTarget" and name != "xOwnedActionTarget":
+      field = clone(field)
 
 protocol MenuProtocol {.selectorScope: protocol.} from Menu:
   method openMenu*(menu: Menu) =
@@ -291,6 +301,20 @@ proc closePopup*(button: PopupMenuButton) =
 proc reload*(menuBar: MenuBar) =
   menuBar.reloadMenuBar()
 
+proc target*(model: MenuItemModel): DynamicAgent =
+  asDynamicAgent(model.xTarget{})
+
+proc `target=`*(model: var MenuItemModel, target: DynamicAgent) =
+  model.xTarget.target = target
+  model.xOwnedActionTarget = nil
+
+proc `target=`*(model: var MenuItemModel, target: ClosureTarget) =
+  model.target = asDynamicAgent(target)
+  model.xOwnedActionTarget = target
+
+proc `target=`*(model: var MenuItemModel, target: typeof(nil)) =
+  model.target = DynamicAgent(target)
+
 proc initMenuItemModel*(
     identifier = "",
     title = "",
@@ -302,7 +326,7 @@ proc initMenuItemModel*(
     separator = false,
     image: ImageResource = nil,
     action: ActionSelector = ActionSelector(),
-    target: DynamicAgent = nil,
+    target: auto = DynamicAgent(nil),
     keyEquivalent = KeyStroke(),
     hasKeyEquivalent = false,
     representedObject: DynamicAgent = nil,
@@ -314,7 +338,7 @@ proc initMenuItemModel*(
   let keyIsSet =
     hasKeyEquivalent or keyEquivalent.text.len > 0 or keyEquivalent.key != keyUnknown or
     keyEquivalent.keyCode != 0
-  MenuItemModel(
+  result = MenuItemModel(
     identifier: identifier,
     title: title,
     subtitle: subtitle,
@@ -326,7 +350,6 @@ proc initMenuItemModel*(
     image: image,
     keyEquivalent: keyEquivalent,
     hasKeyEquivalent: keyIsSet,
-    target: target,
     action: action,
     representedObject: representedObject,
     userInfo: userInfo,
@@ -334,6 +357,7 @@ proc initMenuItemModel*(
     validates: validates,
     children: @children,
   )
+  result.target = target
 
 proc menuItemModelTitle(model: MenuItemModel): string =
   if model.title.len > 0:
@@ -392,7 +416,8 @@ proc newMenuItem*(model: MenuItemModel): MenuItem =
   result.xHidden = model.hidden
   result.xSeparator = model.separator
   result.xImage = model.image
-  result.xTarget = model.target
+  result.xTarget.target = model.target
+  result.xOwnedActionTarget = model.xOwnedActionTarget
   result.xRepresentedObject = model.representedObject
   result.xUserInfo = model.userInfo
   result.xTag = model.tag
@@ -446,12 +471,21 @@ proc `action=`*(item: MenuItem, action: ActionSelector) =
   syncNativeMainMenu()
 
 proc target*(item: MenuItem): DynamicAgent =
-  item.xTarget
+  asDynamicAgent(item.xTarget{})
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
-  item.xTarget = target
+  item.xTarget.target = target
+  item.xOwnedActionTarget = nil
 
 proc `target=`*(item: MenuItem, target: Responder) =
+  item.target = asDynamicAgent(target)
+
+proc `target=`*(item: MenuItem, target: ClosureTarget) =
+  ## Closure targets are retained; ordinary responder targets are non-owning.
+  item.target = asDynamicAgent(target)
+  item.xOwnedActionTarget = target
+
+proc `target=`*(item: MenuItem, target: typeof(nil)) =
   item.target = DynamicAgent(target)
 
 proc state*(item: MenuItem): ButtonState =
@@ -555,7 +589,7 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
   var children: seq[MenuItemModel]
   if not item.xSubmenu.isNil:
     children = item.xSubmenu.itemModels()
-  initMenuItemModel(
+  result = initMenuItemModel(
     identifier = item.xIdentifier,
     title = item.xTitle,
     subtitle = item.xSubtitle,
@@ -566,7 +600,7 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
     separator = item.xSeparator,
     image = item.xImage,
     action = item.xAction,
-    target = item.xTarget,
+    target = item.target(),
     keyEquivalent = item.xKeyEquivalent,
     hasKeyEquivalent = item.xHasKeyEquivalent,
     representedObject = item.xRepresentedObject,
@@ -575,6 +609,7 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
     validates = item.xValidates,
     children = children,
   )
+  result.xOwnedActionTarget = item.xOwnedActionTarget
 
 proc menu*(view: View): Menu =
   if view.xContextMenu.isNil or not (view.xContextMenu of Menu):
@@ -875,9 +910,10 @@ proc findActionTarget*(start: Responder, selector: ActionSelector): DynamicAgent
     current = current.nextResponder()
 
 proc validate*(item: MenuItem, start: Responder): bool =
+  let explicitTarget = item.target()
   let target =
-    if not item.xTarget.isNil:
-      item.xTarget
+    if not explicitTarget.isNil:
+      explicitTarget
     else:
       findActionTarget(start, item.xAction)
   item.validate(target)
@@ -920,10 +956,11 @@ proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent)
 proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): bool =
   if item.xSeparator or item.xHidden or not item.xEnabled:
     return false
-  if not item.xTarget.isNil:
-    if not item.validate(item.xTarget):
+  let explicitTarget = item.target()
+  if not explicitTarget.isNil:
+    if not item.validate(explicitTarget):
       return false
-    return item.xTarget.sendLocalIfHandled(
+    return explicitTarget.sendLocalIfHandled(
       item.xAction,
       ActionArgs(
         sender:

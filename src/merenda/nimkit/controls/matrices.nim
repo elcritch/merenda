@@ -1,3 +1,4 @@
+import sigils/cloneutils
 import sigils/core
 import sigils/selectors
 
@@ -35,7 +36,8 @@ type
     tooltip*: string
     image*: ImageResource
     action*: ActionSelector
-    target*: DynamicAgent
+    xTarget: BackRef[Responder]
+    xOwnedActionTarget: ClosureTarget
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
 
@@ -53,6 +55,13 @@ type
     xHighlightedIndex: int
     xLeadIndex: int
     xSelectedIndex: int
+
+proc clone*(model: MatrixItemModel): MatrixItemModel {.gcsafe.} =
+  ## Preserve action target identity when cloning value models on the owning thread.
+  result = model
+  for name, field in result.fieldPairs:
+    when name != "xTarget" and name != "xOwnedActionTarget":
+      field = clone(field)
 
 protocol MatrixDataSource {.selectorScope: protocol.}:
   method matrixItemCount*(matrix: Matrix): int
@@ -127,6 +136,20 @@ proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel]
 proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel])
 proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int
 
+proc target*(model: MatrixItemModel): DynamicAgent =
+  asDynamicAgent(model.xTarget{})
+
+proc `target=`*(model: var MatrixItemModel, target: DynamicAgent) =
+  model.xTarget.target = target
+  model.xOwnedActionTarget = nil
+
+proc `target=`*(model: var MatrixItemModel, target: ClosureTarget) =
+  model.target = asDynamicAgent(target)
+  model.xOwnedActionTarget = target
+
+proc `target=`*(model: var MatrixItemModel, target: typeof(nil)) =
+  model.target = DynamicAgent(target)
+
 proc initMatrixItemModel*(
     identifier = "",
     title = "",
@@ -138,11 +161,11 @@ proc initMatrixItemModel*(
     tooltip = "",
     image: ImageResource = nil,
     action: ActionSelector = ActionSelector(),
-    target: DynamicAgent = nil,
+    target: auto = DynamicAgent(nil),
     representedObject: DynamicAgent = nil,
     userInfo: DynamicAgent = nil,
 ): MatrixItemModel =
-  MatrixItemModel(
+  result = MatrixItemModel(
     identifier: identifier,
     title: title,
     objectValue: objectValue,
@@ -153,19 +176,22 @@ proc initMatrixItemModel*(
     tooltip: tooltip,
     image: image,
     action: action,
-    target: target,
     representedObject: representedObject,
     userInfo: userInfo,
   )
+  result.target = target
 
 proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
-  initMatrixItemModel(
+  result = initMatrixItemModel(
     title = cell.title(),
     state = cell.state(),
     enabled = cells.isEnabled(cell),
     action = cell.action(),
     target = cell.target(),
   )
+  let retained = cell.retainedTarget()
+  if retained of ClosureTarget:
+    result.target = ClosureTarget(retained)
 
 proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
   if visibleIndex < 0:
@@ -226,7 +252,10 @@ proc applyMatrixItemModelToCell(
   cell.title = model.title
   cell.state = matrix.selectedStateForModel(model, selectedIdentifiers)
   cells.setEnabled(cell, model.enabled)
-  cell.setTarget(model.target)
+  if not model.xOwnedActionTarget.isNil:
+    cell.setTarget(model.xOwnedActionTarget)
+  else:
+    cell.setTarget(model.target)
   cell.setAction(model.action)
 
 proc clearMatrixItemCell(cell: ButtonCell) =
@@ -525,7 +554,11 @@ proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
         result.state = cell.state()
         result.enabled = cells.isEnabled(cell)
         result.action = cell.action()
-        result.target = cell.target()
+        let retained = cell.retainedTarget()
+        if retained of ClosureTarget:
+          result.target = ClosureTarget(retained)
+        else:
+          result.target = cell.target()
       return
   matrix.cellAtIndex(index).matrixItemModel()
 

@@ -6,6 +6,240 @@ import merenda/kosmo/cli
 import fixtures/ui
 
 suite "Kosmo configuration":
+  test "a retained settings callback is harmless after its manager is released":
+    let
+      root = createTempDir("kosmo-closed-settings-owner-", "")
+      app = newApplication("Closed settings owner")
+    defer:
+      removeDir(root)
+    var saved: SettingsSaveHandler
+    block:
+      let manager = newKosmoWindowManager(app, configPath = root / "config.json")
+      saved = app.merendaSettingsSaveHandler()
+      require not saved.isNil
+      manager.close()
+    check not saved(MerendaSettings())
+
+  test "an explicitly closed manager can be reused":
+    let
+      root = createTempDir("kosmo-reused-owner-", "")
+      app = newApplication("Reused settings owner")
+      manager = newKosmoWindowManager(app, configPath = root / "config.json")
+    defer:
+      manager.close()
+      removeDir(root)
+    manager.close()
+    check app.merendaSettingsSaveHandler().isNil
+    let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    check not app.merendaSettingsSaveHandler().isNil
+    let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+    require not item.isNil
+    check item.target() == DynamicAgent(manager)
+    let before = frontend.editorView.editor.tabs().len
+    check item.perform(Responder(frontend.editorView))
+    check frontend.editorView.editor.tabs().len == before + 1
+
+  test "adaptive palette returns to the newest surviving manager":
+    let
+      root = createTempDir("kosmo-palette-owner-", "")
+      firstPath = root / "first.json"
+      secondPath = root / "second.json"
+      app = newApplication("Palette owner fallback")
+    defer:
+      removeDir(root)
+    var firstTheme, secondTheme: string
+    for theme in standaloneMoeThemes():
+      case theme.name
+      of "Catppuccin Latte":
+        firstTheme = theme.identifier
+      of "Catppuccin Mocha":
+        secondTheme = theme.identifier
+      else:
+        discard
+    require firstTheme.len > 0 and secondTheme.len > 0
+    writeFile(firstPath, $(%*{"moeTheme": firstTheme}))
+    writeFile(secondPath, $(%*{"moeTheme": secondTheme}))
+    let first = newKosmoWindowManager(app, configPath = firstPath)
+    defer:
+      first.close()
+    let firstPalette = adaptiveContentPalette()
+    block:
+      let second = newKosmoWindowManager(app, configPath = secondPath)
+      check adaptiveContentPalette() != firstPalette
+      second.close()
+    check adaptiveContentPalette() == firstPalette
+
+  test "settings persistence follows the newest surviving manager without windows":
+    let
+      root = createTempDir("kosmo-settings-owner-", "")
+      app = newApplication("Settings owner fallback")
+      first = newKosmoWindowManager(app, configPath = root / "first.json")
+      firstFrontend = newKosmoApplication(first, monitorsGitStatus = false)
+      second = newKosmoWindowManager(app, configPath = root / "second.json")
+      third = newKosmoWindowManager(app)
+    defer:
+      third.close()
+      second.close()
+      first.close()
+      removeDir(root)
+    check app.merendaSettingsSaveHandler().isNil
+    third.close()
+    require not app.merendaSettingsSaveHandler().isNil
+    firstFrontend.close()
+    first.close()
+    let save = app.merendaSettingsSaveHandler()
+    require not save.isNil
+    check save(app.merendaSettingsDefaults())
+    check fileExists(root / "second.json")
+    check not fileExists(root / "first.json")
+
+  test "closing the newest manager restores surviving session menu targets and settings":
+    let
+      root = createTempDir("kosmo-session-fallback-", "")
+      app = newApplication("Surviving session")
+      first = newKosmoWindowManager(app, configPath = root / "config.json")
+      firstFrontend = newKosmoApplication(first, monitorsGitStatus = false)
+    defer:
+      first.close()
+      removeDir(root)
+    block:
+      let second = newKosmoWindowManager(app)
+      discard newKosmoApplication(second, monitorsGitStatus = false)
+      check app.merendaSettingsSaveHandler().isNil
+      second.close()
+    let
+      newAction = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+      quitAction = app.mainMenu().menuItemForAction(KosmoQuitAction)
+      settingsAction = app.mainMenu().menuItemForAction(KosmoShowSettingsAction)
+      workspaceAction = app.windowsMenu().menuItemWithIdentifier(KosmoNextTabAction)
+    require not newAction.isNil and not quitAction.isNil and not settingsAction.isNil
+    require not workspaceAction.isNil
+    for item in [newAction, quitAction, settingsAction, workspaceAction]:
+      check item.target() == DynamicAgent(first)
+    let save = app.merendaSettingsSaveHandler()
+    require not save.isNil
+    check save(app.merendaSettingsDefaults())
+    let before = firstFrontend.editorView.editor.tabs().len
+    check newAction.perform(Responder(firstFrontend.editorView))
+    check firstFrontend.editorView.editor.tabs().len == before + 1
+
+  test "hidden windows keep their convenience session across a stopped run loop":
+    let app = newApplication("Hidden session lifetime")
+    var managerRef: BackRef[Responder]
+    block:
+      let frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      app.addWindow(frontend.window)
+      frontend.window.orderOut()
+      require not frontend.window.isVisible()
+      let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+      require not item.isNil
+      managerRef.target = Responder(item.target())
+      app.run()
+      check not managerRef.isNil
+      frontend.close()
+      frontend.window.close()
+    app.run()
+    check managerRef.isNil
+
+  test "quit follows the surviving explicit manager":
+    let app = newApplication("Surviving menu target")
+    var
+      firstRef: BackRef[Responder]
+      second: KosmoWindowManager
+    block:
+      let first = newKosmoWindowManager(app)
+      let firstFrontend = newKosmoApplication(first, monitorsGitStatus = false)
+      firstRef.target = first
+      second = newKosmoWindowManager(app)
+      discard newKosmoApplication(second, monitorsGitStatus = false)
+      firstFrontend.close()
+      first.close()
+    defer:
+      second.close()
+    check firstRef.isNil
+    let quit = app.mainMenu().menuItemForAction(KosmoQuitAction)
+    require not quit.isNil
+    check quit.target() == DynamicAgent(second)
+    check quit.perform(nil)
+    check app.isTerminating()
+
+  test "convenience session releases when event loop runs out of windows":
+    let
+      app = newApplication("Stopped session lifetime")
+      otherApp = newApplication("Other session lifetime")
+    var managerRef, otherManagerRef: BackRef[Responder]
+    block:
+      let other = newKosmoApplication(otherApp, monitorsGitStatus = false)
+      let otherItem = otherApp.mainMenu().menuItemForAction(KosmoNewFileAction)
+      require not otherItem.isNil
+      otherManagerRef.target = Responder(otherItem.target())
+      other.close()
+      other.window.close()
+    block:
+      let frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+      require not item.isNil
+      managerRef.target = Responder(item.target())
+      frontend.close()
+      frontend.window.close()
+    check not managerRef.isNil
+    app.run()
+    check managerRef.isNil
+    check not otherManagerRef.isNil
+    check otherApp.terminate() == trNow
+    check otherManagerRef.isNil
+
+  test "workspace menu targets follow the newest session for the application":
+    let app = newApplication("Session menu routing")
+    let first = newKosmoApplication(app, monitorsGitStatus = false)
+    let firstAction = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+    require not firstAction.isNil
+    let firstTarget = firstAction.target()
+    let second = newKosmoApplication(app, monitorsGitStatus = false)
+    let secondAction = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+    let workspaceAction = app.windowsMenu().menuItemWithIdentifier(KosmoNextTabAction)
+    let quitAction = app.mainMenu().menuItemForAction(KosmoQuitAction)
+    require not secondAction.isNil and not workspaceAction.isNil and not quitAction.isNil
+    check secondAction.target() != firstTarget
+    check workspaceAction.target() == secondAction.target()
+    check quitAction.target() == secondAction.target()
+    first.close()
+    second.close()
+    check quitAction.perform(nil)
+    check app.isTerminating()
+
+  test "convenience sessions survive window close and release on application termination":
+    let app = newApplication("Convenience session lifetime")
+    var managerRef: BackRef[Responder]
+    block:
+      let frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+      require not item.isNil
+      require item.target() of Responder
+      check not (item.target() of ClosureTarget)
+      managerRef.target = Responder(item.target())
+      frontend.close()
+    check not managerRef.isNil
+    check app.terminate() == trNow
+    check managerRef.isNil
+
+  test "closed explicit manager does not leave dangling frontend or menu targets":
+    let app = newApplication("Explicit session lifetime")
+    var
+      frontend: KosmoApplication
+      managerRef: BackRef[Responder]
+    block:
+      let manager = newKosmoWindowManager(app)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+      let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+      require not item.isNil
+      managerRef.target = Responder(item.target())
+      manager.close()
+    check managerRef.isNil
+    check frontend.openProject(getTempDir()).isNil
+    let item = app.mainMenu().menuItemForAction(KosmoNewFileAction)
+    check item.target().isNil
+
   test "installs bundled fonts as Kosmo defaults":
     let
       root = createTempDir("merenda-kosmo-fonts-", "")

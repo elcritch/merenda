@@ -192,6 +192,8 @@ suite "Kosmo settings":
     entry.hidden = true
     let choice = PopupMenuButton(choiceView)
     check choice.menu().len == 2
+    check choice.menu()[0].target() of View
+    check choice.menu()[0].target() == choice.menu()[1].target()
     check choice.menu()[0].title == "moe (vim)"
     check choice.menu()[1].title == "normal"
     check choice.title == "moe (vim)"

@@ -1413,9 +1413,8 @@ proc newKosmoSettingsWindow*(
   nimdexAutoStartButton.target = nimkit.newActionTarget(
     nimkit.actionSelector("kosmo.nimdex.autoStartChanged")
   ) do(sender: nimkit.DynamicAgent):
-    discard sender
     if not nimdexAutoStartHandler.isNil:
-      nimdexAutoStartHandler(nimdexAutoStartButton.state == nimkit.bsOn)
+      nimdexAutoStartHandler(nimkit.Button(sender).state == nimkit.bsOn)
   nimdexAutoStartButton.action = nimkit.actionSelector("kosmo.nimdex.autoStartChanged")
   nimdexMode.identifier = "kosmo.settings.nimdex.mode"
   nimdexLocal.identifier = "kosmo.settings.nimdex.local"
