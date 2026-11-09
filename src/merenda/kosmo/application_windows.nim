@@ -586,6 +586,12 @@ func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
     result = frontend.xSettingsWindow
 
 protocol KosmoNimdexSettingsTargetMethods of KosmoNimdexSettingsDelegate:
+  method nimdexSettingsAutoStart(delegate: KosmoNimdexSettingsTarget, enabled: bool) =
+    let manager = delegate.manager{}
+    if not manager.isNil:
+      manager.config.nimdexAutoStart = enabled
+      discard manager.config.saveKosmoConfig(manager.configPath)
+
   method nimdexSettingsStatus(delegate: KosmoNimdexSettingsTarget): string =
     let controller = delegate.controller{}
     if controller.isNil:
@@ -605,7 +611,6 @@ protocol KosmoNimdexSettingsTargetMethods of KosmoNimdexSettingsDelegate:
     let manager = delegate.manager{}
     if result.len == 0 and not manager.isNil:
       manager.config.nimLspCommand = command
-      manager.config.nimdexStopped = false
       if not manager.config.saveKosmoConfig(manager.configPath) and
           manager.configPath.len > 0:
         return "Connecting; could not save the setting."
@@ -639,6 +644,9 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           frontend.xWindowManager{}.config.nimLspCommand
         else:
           frontend.dockController.editor.nimLspConfiguration().command,
+      nimdexAutoStart =
+        not frontend.xWindowManager.isNil and
+        frontend.xWindowManager{}.config.nimdexAutoStart,
       nimdexDelegate = frontend.xNimdexSettingsTarget,
       preferEditorPanes = frontend.xPreferEditorPanes,
       preferEditorPanesHandler = proc(enabled: bool) =
@@ -1469,7 +1477,7 @@ proc newKosmoApplication*(
       newKosmoEditor(
         workingDirectory = editorWorkingDirectory,
         nimLspCommand =
-          if manager.config.nimdexStopped: "" else: manager.config.nimLspCommand,
+          if manager.config.nimdexAutoStart: manager.config.nimLspCommand else: "",
       )
     )
     editorPane = newKosmoEditorPane(editorView)

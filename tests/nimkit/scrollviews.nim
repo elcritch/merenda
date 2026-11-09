@@ -323,6 +323,25 @@ proc windowPointForDocumentChild(fixture: NestedScrollFixture, child: View): Poi
   )
 
 suite "nimkit scroll views":
+  test "Control wheel acceleration is opt-in and applies to both axes":
+    let view = newScrollView()
+    let plain = ScrollEvent(deltaX: 0.5, deltaY: -0.25)
+    var control = plain
+    control.modifiers = {nimkit.kmControl}
+    check view.controlScrollMultiplier == 1.0'f32
+    check view.scrollWheelDelta(control) == view.scrollWheelDelta(plain)
+    view.controlScrollMultiplier = 3.0'f32
+    let normal = view.scrollWheelDelta(plain)
+    let fast = view.scrollWheelDelta(control)
+    check fast.x == normal.x * 3
+    check fast.y == normal.y * 3
+    control.modifiers = {nimkit.kmControl, nimkit.kmShift}
+    var shifted = plain
+    shifted.modifiers = {nimkit.kmShift}
+    check view.scrollWheelDelta(control).x == view.scrollWheelDelta(shifted).x * 3
+    expect ValueError:
+      view.controlScrollMultiplier = 0
+
   test "scroll view owns a clipped content view and document view":
     let
       document = newView(frame = rect(0, 0, 320, 220))

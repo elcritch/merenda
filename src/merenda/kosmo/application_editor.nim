@@ -3705,22 +3705,37 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(bar: KosmoStatusBar) =
     const percentageWidth = 100.0'f32
     const progressBaseWidth = 114.0'f32 + percentageWidth
+    const entrySpinnerSpacing = 4.0'f32
     let bounds = bar.bounds()
     let
       choiceWidth = min(100.0'f32, max(bounds.size.width - 8.0'f32, 0.0'f32))
       choiceHeight = min(20.0'f32, max(bounds.size.height - 8.0'f32, 0.0'f32))
       choiceX = max(bounds.size.width - choiceWidth - 4.0'f32, 0.0'f32)
       choiceY = (bounds.size.height - choiceHeight) * 0.5'f32
+    let reservedEntrySpacing =
+      if not bar.indexEntryLabel.hidden and not bar.indexSpinner.hidden:
+        entrySpinnerSpacing
+      else:
+        0.0'f32
     let entryWidth =
       if bar.indexEntryLabel.hidden:
         0.0'f32
       else:
-        min(140.0'f32, max(choiceX - progressBaseWidth - KosmoStatusIconWidth, 0.0'f32))
+        min(
+          140.0'f32,
+          max(
+            choiceX - progressBaseWidth - KosmoStatusIconWidth - reservedEntrySpacing,
+            0.0'f32,
+          ),
+        )
+    let entrySpacing = if entryWidth > 0: reservedEntrySpacing else: 0.0'f32
     let progressWidth =
       if bar.indexProgress.hidden:
         min(KosmoStatusIconWidth, choiceX)
       else:
-        min(progressBaseWidth + entryWidth + KosmoStatusIconWidth, choiceX)
+        min(
+          progressBaseWidth + entryWidth + entrySpacing + KosmoStatusIconWidth, choiceX
+        )
     let progressX = max(choiceX - progressWidth, 0.0'f32)
     let buttonWidth = min(KosmoStatusIconWidth, progressWidth)
     let buttonX = choiceX - buttonWidth
@@ -3742,13 +3757,16 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
         buttonSize,
       )
     )
-    bar.indexSpinner.setFrameFromLayout(nimkit.rect(entryWidth, choiceY + 2, 16, 16))
+    bar.indexSpinner.setFrameFromLayout(
+      nimkit.rect(entryWidth + entrySpacing, choiceY + 2, 16, 16)
+    )
     bar.indexProgress.setFrameFromLayout(
       nimkit.rect(
-        entryWidth + 20,
+        entryWidth + entrySpacing + 20,
         choiceY + 5,
         max(
-          progressWidth - KosmoStatusIconWidth - entryWidth - percentageWidth - 24,
+          progressWidth - KosmoStatusIconWidth - entryWidth - entrySpacing -
+            percentageWidth - 24,
           0.0'f32,
         ),
         10,
@@ -3809,6 +3827,10 @@ proc applyKosmoStatusBarStyle(bar: KosmoStatusBar, base: nimkit.Appearance) =
   appearance.setStyle(choiceSelector, nimkit.StyleIndicatorSize, 16.0'f32)
   appearance.setStyle(choiceSelector, nimkit.StyleMinimumSize, nimkit.initSize(0, 20))
   bar.keyModeChoice.appearance = appearance
+  let nimdexSelector =
+    nimkit.initStyleSelector(nimkit.srBox, id = KosmoNimdexSectionStyleId)
+  appearance.setStyle(nimdexSelector, nimkit.StyleBorderWidth, 0.0'f32)
+  bar.nimdexSection.appearance = appearance
 
 protocol KosmoStatusBarAppearanceObserver of nimkit.WindowAppearanceEvents:
   proc didChangeEffectiveAppearance(
@@ -3843,7 +3865,8 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     stopIcon = nimkit.newSvgMtsdfResource(KosmoStopIconSvg, "kosmo-nimdex-stop")
     nimdexButton = newKosmoStatusIconButton(playIcon, "Start Nimdex")
     nimdexSection = nimkit.newBox()
-  nimdexSection.identifier = "kosmo.nimdex.section"
+  nimdexSection.identifier = KosmoNimdexSectionStyleId
+  nimdexSection.styleId = KosmoNimdexSectionStyleId
   nimdexButton.identifier = "kosmo.nimdex.toggle"
   indexProgress.identifier = "kosmo.nimdex.progress"
   indexProgress.accessibilityLabel = "Nimdex indexing"
@@ -3984,10 +4007,6 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
         weakBar[].label.text = error
         weakBar[].label.toolTip = error
         return
-    if not frontend.xWindowManager.isNil:
-      let manager = frontend.xWindowManager{}
-      manager.config.nimdexStopped = running
-      discard manager.config.saveKosmoConfig(manager.configPath)
     weakBar[].syncNimdexButton(editor.nimdexRequested())
     for host in controller.hosts:
       if not host.statusLabel.isNil and host.statusLabel.superview() of KosmoStatusBar:
@@ -4372,6 +4391,7 @@ protocol MarkdownReaderPresentation of KosmoReaderPresentationProtocol:
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  result.scrollView().controlScrollMultiplier = KosmoControlScrollMultiplier
   discard result.withProtocol(MarkdownReaderPresentation)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.previewGrammarRevision = editorView.editor.viewerGrammarRevision()
@@ -4497,6 +4517,7 @@ proc showOutputDocument(view: KosmoEditorView, text: string, keepFocus: bool): b
   let output = nimkit.newTextView(text)
   output.editable = false
   let scroll = nimkit.newScrollView(documentView = output)
+  scroll.controlScrollMultiplier = KosmoControlScrollMultiplier
   let document = newKosmoPaneDocument(
     KosmoOutputTabIdentifier,
     "Command Output",

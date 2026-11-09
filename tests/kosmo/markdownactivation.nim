@@ -44,6 +44,18 @@ suite "Kosmo Markdown activation":
     let first = frontend.editorPane.markdownView
     require first.waitForMarkdownParsing()
     discard buildRenders(first)
+    let scroll = first.scrollView()
+    let wheelPoint = scroll.pointToWindow(
+      initPoint(scroll.bounds().size.width / 2, scroll.bounds().size.height / 2)
+    )
+    require frontend.window.scrollWheelAt(wheelPoint, deltaY = -0.25)
+    let normalDistance = scroll.contentOffset().y
+    require normalDistance > 0
+    scroll.contentOffset = initPoint(0, 0)
+    require frontend.window.scrollWheelAt(
+      wheelPoint, deltaY = -0.25, modifiers = {nimkit.kmControl}
+    )
+    check abs(scroll.contentOffset().y - normalDistance * 3) < 0.01
     first.textView().selectedRange = initTextRange(2, 3)
     first.scrollView().scrollTo(initPoint(0, 24))
     let firstScrollOffset = first.scrollView().contentOffset()

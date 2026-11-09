@@ -22,6 +22,11 @@
   statically upcast targets are non-owning. See `docs/design.md` for ownership
   and model migration details.
 
+- Accelerate Control-wheel scrolling in Kosmo's terminal and reader tabs.
+- Use GitHub REST endpoints for Kosmo's GitHub view and refresh checks only for
+  expanded pull requests.
+- Keep terminal search results in scrollback when clicked and give the current
+  match a high-contrast highlight.
 - Add the macOS Adaptive merenda theme: the macOS Dark structure recolored from
   a shared content palette such as Catppuccin Mocha. Kosmo registers its
   selected editor palette, so the window chrome follows the editor theme and
