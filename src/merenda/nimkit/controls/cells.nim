@@ -232,6 +232,16 @@ proc setRetainedTarget*(cell: ActionCell, target: DynamicAgent) =
   ## Retain an explicitly installed callback adapter.
   cell.xTarget.setRetainedTarget(target)
 
+proc setTarget*(cell: ActionCell, target: ClosureTarget) =
+  ## Retain closure targets; ordinary responder targets are non-owning.
+  cell.setRetainedTarget(asDynamicAgent(target))
+
+proc setTarget*(cell: ActionCell, target: ActionAdapter) =
+  cell.setRetainedTarget(asDynamicAgent(target))
+
+proc setTarget*(cell: ActionCell, target: typeof(nil)) =
+  cell.setTarget(DynamicAgent(target))
+
 proc retainedTarget*(cell: ActionCell): DynamicAgent =
   ## Return the explicitly retained target, if present.
   cell.xTarget.retainedTarget()

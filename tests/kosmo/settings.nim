@@ -118,6 +118,12 @@ suite "Kosmo settings":
     let tabs = TabView(root.viewWithIdentifier(KosmoSettingsTabsIdentifier))
     require not tabs.isNil
     require tabs.selectPage(KosmoNimdexSettingsTabIdentifier)
+    let autoStart =
+      Button(panel.contentView().viewWithIdentifier("kosmo.settings.nimdex.autostart"))
+    require not autoStart.isNil
+    autoStart.state = bsOn
+    check autoStart.sendAction()
+    check delegate.autoStart
     let mode = ComboBox(root.viewWithIdentifier("kosmo.settings.nimdex.mode"))
     let local = TextField(root.viewWithIdentifier("kosmo.settings.nimdex.local"))
     let address = TextField(root.viewWithIdentifier("kosmo.settings.nimdex.address"))

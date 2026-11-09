@@ -574,22 +574,12 @@ proc `target=`*(control: Control, target: ClosureTarget) =
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(asDynamicAgent(target))
 
-proc setTarget*(cell: ActionCell, target: ClosureTarget) =
-  ## Retain closure targets; ordinary responder targets are non-owning.
-  cell.setRetainedTarget(asDynamicAgent(target))
-
 proc `target=`*(control: Control, target: ActionAdapter) =
   ## Retain the adapter while it tracks its receiver without owning it.
   control.xTarget{} = target
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(asDynamicAgent(target))
-
-proc setTarget*(cell: ActionCell, target: ActionAdapter) =
-  cell.setRetainedTarget(asDynamicAgent(target))
-
-proc setTarget*(cell: ActionCell, target: typeof(nil)) =
-  cell.setTarget(DynamicAgent(target))
 
 proc `target=`*(control: Control, target: typeof(nil)) =
   control.target = DynamicAgent(target)

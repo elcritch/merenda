@@ -58,6 +58,34 @@ proc clickCell(window: Window, matrix: Matrix, row, column: int): bool =
   window.mouseDownAt(point) and window.mouseUpAt(point)
 
 suite "nimkit matrix":
+  test "prototype copies retain their callback targets":
+    var matrix: Matrix
+    block:
+      let prototype = newButtonCell("Run")
+      prototype.setTarget(
+        newActionTarget(actionSelector("test.prototype")) do(sender: DynamicAgent):
+          discard
+      )
+      matrix = newMatrix(1, 1, prototype)
+    check not matrix.prototypeCell().retainedTarget().isNil
+    check not matrix.cellAt(0, 0).retainedTarget().isNil
+
+  test "model conversion retains explicitly owned responder targets":
+    var model: MatrixItemModel
+    block:
+      let cell = newButtonCell("Run")
+      let target = newResponder()
+      cell.setRetainedTarget(DynamicAgent(target))
+      model = cell.matrixItemModel()
+    check not model.target().isNil
+    let matrix = newMatrix()
+    matrix.matrixItemModels = [model]
+    var roundTrip = matrix.matrixItemAtIndex(0)
+    model.target = nil
+    matrix.matrixItemModels = []
+    check not roundTrip.target().isNil
+    roundTrip.target = nil
+
   test "explicit-receiver adapters survive cell and model round trips":
     var model: MatrixItemModel
     var observed: BackRef[Responder]

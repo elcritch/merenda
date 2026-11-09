@@ -189,10 +189,10 @@ proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
     action = cell.action(),
   )
   let retained = cell.retainedTarget()
-  if retained of ActionAdapter:
-    result.target = ActionAdapter(retained)
-  else:
+  if retained.isNil:
     result.target = cell.target()
+  else:
+    result.xTarget.setRetainedTarget(retained)
 
 proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
   if visibleIndex < 0:
@@ -557,10 +557,10 @@ proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
         result.enabled = cells.isEnabled(cell)
         result.action = cell.action()
         let retained = cell.retainedTarget()
-        if retained of ActionAdapter:
-          result.target = ActionAdapter(retained)
-        else:
+        if retained.isNil:
           result.target = cell.target()
+        else:
+          result.xTarget.setRetainedTarget(retained)
       return
   matrix.cellAtIndex(index).matrixItemModel()
 
