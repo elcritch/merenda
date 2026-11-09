@@ -467,7 +467,9 @@ suite "Kosmo shared workspace inventory":
       "nested/renamed.nim" in frontend.quickOpenPanel.projectFiles() and
         "nested/created.nim" notin frontend.quickOpenPanel.projectFiles()
     )
-    require runGitCommand(root, ["checkout", "-qb", "watch-test"]).exitCode == 0
+    let checkout = runGitCommand(root, ["checkout", "-qb", "watch-test"])
+    checkpoint "Git checkout output: " & checkout.output
+    require checkout.exitCode == 0
     eventually(frontend.editorView.editor.status().gitBranch == "watch-test")
     removeFile(root / "nested" / "renamed.nim")
     eventually("nested/renamed.nim" notin frontend.quickOpenPanel.projectFiles())
