@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Show the Kosmo file browser when a command-line file request opens a fresh
+  window, such as starting `kosmo <file>`: the new window now keeps its sidebar
+  rooted at the opened file's folder instead of showing only an editor pane.
+
 - Share action-target ownership storage across controls, action cells, menus, and
   item models. Add explicit-receiver action adapters with non-capturing handlers
   and zeroing receiver references; Kosmo settings use these adapters, while
@@ -27,6 +31,7 @@
   expanded pull requests.
 - Keep terminal search results in scrollback when clicked and give the current
   match a high-contrast highlight.
+
 - Add the macOS Adaptive merenda theme: the macOS Dark structure recolored from
   a shared content palette such as Catppuccin Mocha. Kosmo registers its
   selected editor palette, so the window chrome follows the editor theme and
@@ -36,6 +41,15 @@
 
 - Show and switch Git branches from the Kosmo file browser.
 - Persist the terminal Option/Alt as Meta preference across Kosmo windows and runs.
+- Close Kosmo's dialogs together with the window they were opened from: the
+  Open, Save As, rename/delete, branch-switch, update, and terminal-error
+  dialogs, plus the Merenda Settings panel, now attach as child windows of
+  their opening window, and windows expose the link as `addChildWindow`.
+  Closing the main window can no longer leave a lone dialog running. Child
+  windows own only a lifetime, not a presentation: dismissing a transient
+  session (a popup or menu) on the opening window leaves them open, and
+  Escape in a child window dismisses the child's own transient session
+  instead of the opening window's.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
   budget, keeping visible previews and pending work pinned and sharing

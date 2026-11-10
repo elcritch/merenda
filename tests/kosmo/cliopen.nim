@@ -178,7 +178,7 @@ suite "Kosmo CLI window routing":
     check first.fileTree.rootPaths == @[firstRoot, addedRoot]
     check second.fileTree.rootPaths == @[secondRoot]
 
-  test "a file request without a window creates an editor-only destination":
+  test "a file request without a window opens the file's folder in a browser":
     let
       root = createTempDir("merenda-kosmo-cli-file-window-", "")
       filePath = root / "new-file.nim"
@@ -194,7 +194,9 @@ suite "Kosmo CLI window routing":
     check response.errors.len == 0
     let windows = manager.managedWindows()
     require windows.len == 1
-    check not windows[0].hasFileBrowser()
+    check windows[0].hasFileBrowser()
+    check windows[0].fileTree.rootPaths == @[root]
+    check not windows[0].sidebarPane.isHidden
     check windows[0].hasOpenPath(filePath)
 
   test "a piped diff targets its originating window and opens the Git Diff tab":

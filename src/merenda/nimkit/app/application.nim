@@ -1049,6 +1049,10 @@ proc showMerendaSettings*(app: Application) =
       app.xMerendaSettingsDefaults = app.xMerendaSettingsWindow.currentSettings()
       app.xHasMerendaSettingsDefaults = true
   app.xMerendaSettingsWindow.resetSelections()
+  # The panel is a child of the window it was opened from, so closing that
+  # window also closes the panel instead of leaving the application running
+  # with a lone dialog.
+  app.xKeyWindow.addChildWindow(app.xMerendaSettingsWindow.window)
   discard app.showWindow(
     app.xMerendaSettingsWindow.window,
     app.xMerendaSettingsWindow.contentView(),
