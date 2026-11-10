@@ -180,6 +180,8 @@ type
     xInsertionPointBlinkTarget: TextView
     xOwnerWindow: Window
     xAuxiliaryWindows: seq[Window]
+    xParentWindow: Window
+    xChildWindows: seq[Window]
     xSheet: Window
     xSheetParent: Window
     xIsPopup: bool
@@ -2023,6 +2025,43 @@ proc attachAuxiliaryWindow(owner, auxiliary: Window) =
   if auxiliary notin owner.xAuxiliaryWindows:
     owner.xAuxiliaryWindows.add auxiliary
 
+proc detachChildWindow(parent, child: Window) =
+  if parent.isNil:
+    return
+  let idx = parent.xChildWindows.find(child)
+  if idx >= 0:
+    parent.xChildWindows.delete(idx)
+
+proc attachChildWindow(parent, child: Window) =
+  if parent.isNil:
+    return
+  child.xParentWindow = parent
+  if child notin parent.xChildWindows:
+    parent.xChildWindows.add child
+
+proc addChildWindow*(window: Window, child: Window) =
+  ## Makes `child` close together with `window`. Dialogs and utility panels
+  ## attach themselves this way so they can never outlive the window they were
+  ## opened from; closing the child on its own only detaches it. Adding an
+  ## already owned child re-parents it to `window`.
+  ##
+  ## Child windows own only a lifetime, not a presentation: they stay open when
+  ## a transient session on `window` is dismissed, and they receive keyboard
+  ## routing like ordinary windows instead of routing Escape to `window`.
+  if child.isNil or window.isNil or child == window:
+    return
+  if not child.xParentWindow.isNil and child.xParentWindow != window:
+    detachChildWindow(child.xParentWindow, child)
+  attachChildWindow(window, child)
+
+proc closeChildWindows(window: Window) =
+  let children = window.xChildWindows
+  window.xChildWindows.setLen(0)
+  for child in children:
+    if not child.isNil:
+      child.xParentWindow = nil
+      child.close()
+
 proc beginSheet*(window: Window, sheet: Window) =
   if sheet.isNil:
     return
@@ -2052,6 +2091,10 @@ proc sheetParent*(window: Window): Window =
   window.xSheetParent
 
 proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
+  ## Closes the transient presentation windows of `window`: native popups,
+  ## sheets, and windows attached by a transient session. Lifetime-owned child
+  ## windows from `addChildWindow` are not part of the transient presentation
+  ## and stay open; they only close together with `window` itself.
   let auxiliaries = window.xAuxiliaryWindows
   window.xAuxiliaryWindows.setLen(0)
   for auxiliary in auxiliaries:
@@ -2094,6 +2137,8 @@ proc finishTransientSession(
   let session = window.xTransientSession
   window.xTransientSession = TransientSession()
   window.xLastTransientDismissReason = reason
+  # Only the transient presentation closes here; child windows added with
+  # addChildWindow outlive popup dismissal and close with the window itself.
   window.closeAuxiliaryWindows(notifyDone = false)
 
   if notifyDismiss and not session.onDismiss.isNil:
@@ -2185,11 +2230,15 @@ proc close*(window: Window) =
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
     window.closeAuxiliaryWindows(notifyDone = false)
+  window.closeChildWindows()
   if not window.xOwnerWindow.isNil:
     if window.xOwnerWindow.xSheet == window:
       window.xOwnerWindow.xSheet = nil
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
+  if not window.xParentWindow.isNil:
+    detachChildWindow(window.xParentWindow, window)
+    window.xParentWindow = nil
   if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
     window.xSheetParent.xSheet = nil
     window.xSheetParent = nil
@@ -3384,9 +3433,13 @@ proc markHostClosed(window: Window) =
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
     window.closeAuxiliaryWindows(notifyDone = false)
+  window.closeChildWindows()
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
+  if not window.xParentWindow.isNil:
+    detachChildWindow(window.xParentWindow, window)
+    window.xParentWindow = nil
   if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
     window.xSheetParent.xSheet = nil
     window.xSheetParent = nil

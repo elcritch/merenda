@@ -171,3 +171,114 @@ suite "NimKit modal lifetimes":
     check active.state == mssStopped
     check active.response == 42
     check app.modalSession().isNil
+
+  test "closing a window closes its attached child windows":
+    var weakParent, weakDialog: BackRef[Responder]
+    block:
+      let
+        app = newApplication("Child window lifetime")
+        parent = newWindow("Parent")
+        unrelated = newWindow("Unrelated")
+        dialog = newWindow("Dialog")
+      weakParent.target = Responder(parent)
+      weakDialog.target = Responder(dialog)
+      app.addWindow(parent)
+      app.addWindow(unrelated)
+      parent.makeKeyAndOrderFront()
+      parent.addChildWindow(dialog)
+      parent.close()
+      check dialog.isClosed()
+      check not unrelated.isClosed()
+      unrelated.close()
+      discard app.runForFrames(1)
+    check weakParent.isNil
+    check weakDialog.isNil
+
+  test "closing a child window on its own leaves the parent open":
+    let
+      app = newApplication("Child detach lifetime")
+      parent = newWindow("Parent")
+      dialog = newWindow("Dialog")
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    dialog.close()
+    check dialog.isClosed()
+    check not parent.isClosed()
+    parent.close()
+
+  test "adding an owned child window again moves it to the new parent":
+    let
+      app = newApplication("Child re-parenting")
+      first = newWindow("First")
+      second = newWindow("Second")
+      dialog = newWindow("Dialog")
+    app.addWindow(first)
+    app.addWindow(second)
+    first.addChildWindow(dialog)
+    second.addChildWindow(dialog)
+    first.close()
+    check not dialog.isClosed()
+    second.close()
+    check dialog.isClosed()
+
+  test "closing the owner window ends a modal session running on its child dialog":
+    let
+      app = newApplication("Child modal lifetime")
+      parent = newWindow("Parent")
+      dialog = newWindow("Dialog")
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    let session = app.beginModalSession(dialog)
+    require not session.isNil
+    parent.close()
+    check dialog.isClosed()
+    check session.state == mssAborted
+    check app.modalSession().isNil
+    check app.runModalSession(session) == 0
+
+  test "dismissing a transient session leaves attached child windows open":
+    let
+      app = newApplication("Child survives transient dismissal")
+      parent = newWindow("Parent", frame = rect(0, 0, 240, 140))
+      dialog = newWindow("Dialog")
+      root = newView(frame = rect(0, 0, 240, 140))
+      anchor = newView(frame = rect(8, 8, 120, 24))
+    root.addSubview(anchor)
+    parent.setContentView(root)
+    anchor.acceptsFirstResponder = true
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    parent.beginTransientSession(
+      owner = Responder(anchor), restoreResponder = Responder(anchor)
+    )
+    check parent.hasActiveTransientSession()
+    check parent.dismissTransientSession(tdrEscape)
+    check not parent.hasActiveTransientSession()
+    check not dialog.isClosed()
+    parent.close()
+    check dialog.isClosed()
+
+  test "escape dismisses a transient session started on a child window":
+    let
+      app = newApplication("Child transient escape")
+      parent = newWindow("Parent", frame = rect(0, 0, 240, 140))
+      dialog = newWindow("Dialog", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      anchor = newView(frame = rect(8, 8, 120, 24))
+    root.addSubview(anchor)
+    dialog.setContentView(root)
+    anchor.acceptsFirstResponder = true
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    dialog.beginTransientSession(
+      owner = Responder(anchor), restoreResponder = Responder(anchor)
+    )
+    check dialog.hasActiveTransientSession()
+    check dialog.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check not dialog.hasActiveTransientSession()
+    parent.close()
+    check dialog.isClosed()
