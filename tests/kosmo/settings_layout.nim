@@ -291,6 +291,28 @@ suite "Kosmo settings layout":
       check connect.frame().size.height > 0
       check disconnect.frame().size.height > 0
 
+  test "minimum window size keeps fixed page content at natural height":
+    let settings = newKosmoSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    let minimumSize = window.contentMinSize()
+    check minimumSize.width == KosmoSettingsMinimumWidth
+    check minimumSize.height >= KosmoSettingsMinimumHeight
+    window.frame = rect(initPoint(180, 160), minimumSize)
+    for item in tabs.items():
+      require tabs.selectPage(item.identifier())
+      settings.contentView().layoutSubtreeIfNeeded()
+      require item.view() of StackView
+      let stack = StackView(item.view())
+      for child in stack.arrangedSubviews():
+        if stack.arrangedSubviewSizingPolicy(child) == svspFillAvailableSpace:
+          continue
+        check child.frame().size.height >= child.fittingSize().height - 0.1'f32
+
   test "Install more opens a reusable sheet and returns to installed grammars":
     let app = newApplication("Grammar installer test")
     let settings = newKosmoSettingsWindow()

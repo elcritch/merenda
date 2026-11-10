@@ -719,6 +719,36 @@ proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack.edgeInsets = nimkit.insets(14.0, 16.0)
   result.view = result.stack
 
+proc pageHeightRequirement(page: nimkit.View): float32 =
+  ## Return the height a settings page needs so a vertical stack cannot
+  ## squeeze its arranged text below the natural line height of the resolved
+  ## UI font. A page that can shed a vertical shortfall into a flexible or
+  ## low-compression arranged child never squeezes its remaining children, so
+  ## it imposes no requirement and only fills the window through the shared
+  ## minimum; every other page needs its full fitting height.
+  if page of nimkit.StackView:
+    let stack = nimkit.StackView(page)
+    for child in stack.arrangedSubviews():
+      if stack.arrangedSubviewSizingPolicy(child) == nimkit.svspFillAvailableSpace or
+          child.compressionPriority(nimkit.laVertical) < nimkit.LayoutPriorityHigh:
+        return
+  page.fittingSize().height
+
+proc settingsContentMinimumHeight(content: nimkit.View, tabs: nimkit.TabView): float32 =
+  ## Derive the settings window's minimum content height from the built
+  ## pages, so no page squeezes its text at the minimum size whatever font
+  ## the UI resolves. The measured content height carries the window chrome
+  ## (title, tab bar, insets) around the tallest page; swapping that page's
+  ## natural height for the tallest page's requirement keeps the chrome while
+  ## counting only the heights pages actually need.
+  var tallestPage = 0.0'f32
+  var tallestRequirement = 0.0'f32
+  for item in tabs.items():
+    let page = item.view()
+    tallestPage = max(tallestPage, page.fittingSize().height)
+    tallestRequirement = max(tallestRequirement, pageHeightRequirement(page))
+  content.fittingSize().height - tallestPage + tallestRequirement
+
 proc preferEditorPanes*(settings: KosmoSettingsWindow): bool =
   ## Return the editor pane preference shown in settings.
   not settings.isNil and settings.xPreferEditorPanesButton.state == nimkit.bsOn
@@ -1512,8 +1542,13 @@ proc newKosmoSettingsWindow*(
     edges = {nimkit.leLeft, nimkit.leTop, nimkit.leRight, nimkit.leBottom},
   )
   result.xWindow.styleMask = result.xWindow.styleMask + {nimkit.wsmResizable}
-  result.xWindow.contentMinSize =
-    nimkit.initSize(KosmoSettingsMinimumWidth, KosmoSettingsMinimumHeight)
+  result.xWindow.contentMinSize = nimkit.initSize(
+    KosmoSettingsMinimumWidth,
+    max(
+      KosmoSettingsMinimumHeight,
+      settingsContentMinimumHeight(result.xContentView, tabs),
+    ),
+  )
 
 proc refreshNimdexStatus*(settings: KosmoSettingsWindow) =
   ## Refresh the connection indicator from the editor worker.
