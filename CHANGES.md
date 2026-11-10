@@ -5,7 +5,10 @@
 - Derive the Kosmo settings window's minimum height from its pages' measured
   content, so settings text is never squeezed below the resolved UI font's line
   height at the minimum window size. `KosmoSettingsMinimumHeight` remains the
-  floor, so machines with shorter font fallbacks keep the compact minimum.
+  floor, so machines with shorter font fallbacks keep the compact minimum. The
+  minimum recomputes when the settings content attaches to the window and when
+  the window's effective appearance changes, covering font picks that resolve
+  only after attachment.
 
 - Share action-target ownership storage across controls, action cells, menus, and
   item models. Add explicit-receiver action adapters with non-capturing handlers

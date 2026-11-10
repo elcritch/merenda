@@ -313,6 +313,33 @@ suite "Kosmo settings layout":
           continue
         check child.frame().size.height >= child.fittingSize().height - 0.1'f32
 
+  test "settings minimum refreshes on attach and appearance changes":
+    let settings = newKosmoSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    var nimdexPage: View
+    for item in tabs.items():
+      if item.identifier() == KosmoNimdexSettingsTabIdentifier:
+        nimdexPage = item.view()
+    require not nimdexPage.isNil
+    require nimdexPage of StackView
+    let page = StackView(nimdexPage)
+    let attachedRow = newLabel("First additional measurement row")
+    page.addArrangedSubview(attachedRow)
+    let constructedMinimum = window.contentMinSize().height
+    window.setContentView(settings.contentView())
+    let attachedMinimum = window.contentMinSize().height
+    check attachedMinimum >= constructedMinimum + attachedRow.fittingSize().height
+    check window.contentMinSize().width == KosmoSettingsMinimumWidth
+    let appearanceRow = newLabel("Second additional measurement row")
+    page.addArrangedSubview(appearanceRow)
+    window.setAppearance(window.effectiveAppearance())
+    check window.contentMinSize().height >=
+      attachedMinimum + appearanceRow.fittingSize().height
+
   test "Install more opens a reusable sheet and returns to installed grammars":
     let app = newApplication("Grammar installer test")
     let settings = newKosmoSettingsWindow()

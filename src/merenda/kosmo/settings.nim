@@ -749,6 +749,33 @@ proc settingsContentMinimumHeight(content: nimkit.View, tabs: nimkit.TabView): f
     tallestRequirement = max(tallestRequirement, pageHeightRequirement(page))
   content.fittingSize().height - tallestPage + tallestRequirement
 
+proc refreshContentMinimumSize(settings: KosmoSettingsWindow) =
+  ## Recompute the content-derived window minimum. Runs at construction and
+  ## whenever the settings content attaches to the window or the window's
+  ## effective appearance changes, since both can resolve a different UI font
+  ## than the detached default appearance measured during construction.
+  if settings.isNil or settings.xWindow.isNil:
+    return
+  settings.xWindow.contentMinSize = nimkit.initSize(
+    KosmoSettingsMinimumWidth,
+    max(
+      KosmoSettingsMinimumHeight,
+      settingsContentMinimumHeight(settings.xContentView, settings.xTabs),
+    ),
+  )
+
+proc settingsWindowDidChangeContentView(
+    settings: KosmoSettingsWindow, oldView: nimkit.View
+) {.slot.} =
+  discard oldView
+  settings.refreshContentMinimumSize()
+
+proc settingsWindowDidChangeAppearance(
+    settings: KosmoSettingsWindow, appearance: nimkit.Appearance
+) {.slot.} =
+  discard appearance
+  settings.refreshContentMinimumSize()
+
 proc preferEditorPanes*(settings: KosmoSettingsWindow): bool =
   ## Return the editor pane preference shown in settings.
   not settings.isNil and settings.xPreferEditorPanesButton.state == nimkit.bsOn
@@ -1542,13 +1569,13 @@ proc newKosmoSettingsWindow*(
     edges = {nimkit.leLeft, nimkit.leTop, nimkit.leRight, nimkit.leBottom},
   )
   result.xWindow.styleMask = result.xWindow.styleMask + {nimkit.wsmResizable}
-  result.xWindow.contentMinSize = nimkit.initSize(
-    KosmoSettingsMinimumWidth,
-    max(
-      KosmoSettingsMinimumHeight,
-      settingsContentMinimumHeight(result.xContentView, tabs),
-    ),
+  result.xWindow.connect(
+    nimkit.didSetContentView, result, settingsWindowDidChangeContentView
   )
+  result.xWindow.connect(
+    nimkit.didChangeEffectiveAppearance, result, settingsWindowDidChangeAppearance
+  )
+  result.refreshContentMinimumSize()
 
 proc refreshNimdexStatus*(settings: KosmoSettingsWindow) =
   ## Refresh the connection indicator from the editor worker.
