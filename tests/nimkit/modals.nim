@@ -237,3 +237,48 @@ suite "NimKit modal lifetimes":
     check session.state == mssAborted
     check app.modalSession().isNil
     check app.runModalSession(session) == 0
+
+  test "dismissing a transient session leaves attached child windows open":
+    let
+      app = newApplication("Child survives transient dismissal")
+      parent = newWindow("Parent", frame = rect(0, 0, 240, 140))
+      dialog = newWindow("Dialog")
+      root = newView(frame = rect(0, 0, 240, 140))
+      anchor = newView(frame = rect(8, 8, 120, 24))
+    root.addSubview(anchor)
+    parent.setContentView(root)
+    anchor.acceptsFirstResponder = true
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    parent.beginTransientSession(
+      owner = Responder(anchor), restoreResponder = Responder(anchor)
+    )
+    check parent.hasActiveTransientSession()
+    check parent.dismissTransientSession(tdrEscape)
+    check not parent.hasActiveTransientSession()
+    check not dialog.isClosed()
+    parent.close()
+    check dialog.isClosed()
+
+  test "escape dismisses a transient session started on a child window":
+    let
+      app = newApplication("Child transient escape")
+      parent = newWindow("Parent", frame = rect(0, 0, 240, 140))
+      dialog = newWindow("Dialog", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      anchor = newView(frame = rect(8, 8, 120, 24))
+    root.addSubview(anchor)
+    dialog.setContentView(root)
+    anchor.acceptsFirstResponder = true
+    app.addWindow(parent)
+    parent.makeKeyAndOrderFront()
+    parent.addChildWindow(dialog)
+    dialog.beginTransientSession(
+      owner = Responder(anchor), restoreResponder = Responder(anchor)
+    )
+    check dialog.hasActiveTransientSession()
+    check dialog.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check not dialog.hasActiveTransientSession()
+    parent.close()
+    check dialog.isClosed()

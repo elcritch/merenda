@@ -45,7 +45,11 @@
   Open, Save As, rename/delete, branch-switch, update, and terminal-error
   dialogs, plus the Merenda Settings panel, now attach as child windows of
   their opening window, and windows expose the link as `addChildWindow`.
-  Closing the main window can no longer leave a lone dialog running.
+  Closing the main window can no longer leave a lone dialog running. Child
+  windows own only a lifetime, not a presentation: dismissing a transient
+  session (a popup or menu) on the opening window leaves them open, and
+  Escape in a child window dismisses the child's own transient session
+  instead of the opening window's.
 
 - Bound Kosmo's inactive Markdown preview cache with a 128 MiB logical soft
   budget, keeping visible previews and pending work pinned and sharing
