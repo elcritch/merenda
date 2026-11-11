@@ -1,0 +1,56 @@
+Hint mode playground — open this file in a Kosmo editor tab and keep it visible.
+Everything below is intentional test content; do not "fix" its spelling.
+
+1. Links for F6 (Open Link with Hints):
+   https://example.com/alpha
+   https://example.com/beta
+   https://example.com/gamma
+   https://example.com/delta
+   https://example.com/epsilon
+   (see https://example.com/wrapped-in-parens)
+   https://example.com/trailing-comma,
+   https://en.wikipedia.org/wiki/Foo_(balanced_parens)
+   ftp://files.example.com/legacy
+   gemini://gemini.example.net/capsule
+   no scheme here, just example.com without protocol
+   xhttps://example.com/glued-to-a-word (must NOT be hinted)
+
+2. File locations for Shift-F6 (Open File with Hints) — paths must exist:
+   /etc/passwd
+   /etc/hostname
+   /etc/hosts
+   /etc/resolv.conf
+   /etc/os-release
+   /etc/fstab
+   /etc/group
+   /etc/shadow (existing file, opening may fail due to permissions — expected)
+   ./hints-playground.txt (relative to this file's folder)
+   /does/not/exist/nope.nim (must NOT be hinted)
+   and/or (no slash-extension shape, must NOT be hinted)
+
+3. Line references for Shift-F6 — selects the file AND the line:
+   /etc/passwd:10
+   /etc/hosts:3
+   Nim style: /etc/hosts(5, 2)
+
+4. Words for Alt-F6 (Copy Word with Hints) — enough words for two-character
+   labels (40+ short words, so typing the first character only filters):
+   alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima
+   mike november oscar papa quebec romeo sierra tango uniform victor whiskey
+   xray yankee zulu one two three four five six seven eight nine ten eleven
+   twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
+   e.g. and foo_bar/baz and λος (word selection includes these too)
+
+5. Hashes for Ctrl-F6 (Copy Hash with Hints):
+   deadbeef1234567
+   cafebabe000000
+   0123456789abcdef
+   ABCDEF123456 (uppercase must NOT be hinted)
+   123456 (too short, must NOT be hinted)
+   commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 looks like a Git SHA
+
+6. Terminal test: open a terminal tab and run:
+   grep -n root /etc/passwd
+   echo "visit https://example.com/from-terminal today"
+   ls /etc
+   then press F6 / Shift-F6 / Alt-F6 in the terminal and pick a marker.

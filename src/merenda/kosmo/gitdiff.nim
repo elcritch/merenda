@@ -3381,8 +3381,11 @@ proc searchMatchCount*(panel: KosmoGitDiffPanel): int =
 protocol KosmoGitDiffHintSurface of KosmoHintSurfaceProtocol:
   method showKosmoHintMode(panel: KosmoGitDiffPanel, args: KosmoHintModeArgs): bool =
     ## Present hint markers over the Git diff summary and every materialized
-    ## file section, anchored to the panel's scrollable document.
-    if panel.isNil or panel.closed or panel.documentView.isNil:
+    ## file section, anchored to the panel's scrollable document. Terminal
+    ## insertion is declined; only the focused terminal attaches the insert
+    ## hook.
+    if panel.isNil or panel.closed or panel.documentView.isNil or
+        not args.kosmoHintActionSupported():
       return false
     let workingDirectory =
       if panel.repositoryRootPath.len > 0:

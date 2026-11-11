@@ -434,8 +434,9 @@ proc githubHintWorkingDirectory(panel: KosmoGitHubPanel): string =
 protocol KosmoGitHubHintSurface of KosmoHintSurfaceProtocol:
   method showKosmoHintMode(panel: KosmoGitHubPanel, args: KosmoHintModeArgs): bool =
     ## Present hint markers over the reader's rendered Markdown and run the
-    ## request's action on the selected snippet.
-    if panel.isNil or panel.closed:
+    ## request's action on the selected snippet. Terminal insertion is
+    ## declined; only the focused terminal attaches the insert hook.
+    if panel.isNil or panel.closed or not args.kosmoHintActionSupported():
       return false
     let textView = panel.markdownView.textView()
     presentKosmoHints(

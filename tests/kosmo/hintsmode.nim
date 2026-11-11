@@ -3,6 +3,7 @@ import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import sigils/threads
 import ../support/terminalhelpers
+import fixtures/ui
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/hintsmode
@@ -191,6 +192,58 @@ suite "Kosmo hint mode":
     check pasteboard.plainText() == "beta"
     check frontend.window.firstResponder() == Responder(terminal)
 
+  test "terminal insert hints type the picked location into the terminal":
+    let
+      root = createTempDir("kh-insert-", "")
+      source = root / "insert.nim"
+      app = newApplication("Kosmo Terminal Insert")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      session = newTerminalViewSession(columns = 40, rows = 5)
+      terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 160))
+    defer:
+      terminal.close()
+      frontend.close()
+      removeDir(root)
+    writeFile(source, "let inserted = true\n")
+    app.presentSyntheticWindow(frontend)
+    require frontend.openDocument(
+      newKosmoPaneDocument("kosmo.test.hints-insert", "Terminal", terminal)
+    )
+    require frontend.window.firstResponder() == Responder(terminal)
+    session.processOutput(source & "\r\n")
+    discard terminal.pollSettled()
+    check terminal.lastInputError() == ""
+    require frontend.window.dispatchKeyDown(f6Event({nimkit.kmControl, nimkit.kmShift}))
+    check kosmoHintsVisible(terminal)
+    require frontend.window.dispatchKeyDown(labelEvent('1', text = ""))
+    check not kosmoHintsVisible(terminal)
+    # The picked location was typed into the terminal's program input; the
+    # idle test session has no program, so the write attempt is recorded.
+    check terminal.lastInputError() != ""
+
+  test "plain F6 falls through to the terminal without visible links":
+    let
+      app = newApplication("Kosmo F6 Fallthrough")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      session = newTerminalViewSession(columns = 40, rows = 5)
+      terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 160))
+    defer:
+      terminal.close()
+      frontend.close()
+    app.presentSyntheticWindow(frontend)
+    require frontend.openDocument(
+      newKosmoPaneDocument("kosmo.test.hints-fallthrough", "Terminal", terminal)
+    )
+    require frontend.window.firstResponder() == Responder(terminal)
+    # An htop-like screen: text, but no URLs, so the link hint command
+    # declines and the key reaches the program instead of opening hint mode.
+    session.processOutput("load average: 0.4 0.3 0.2\r\n")
+    discard terminal.pollSettled()
+    check terminal.lastInputError() == ""
+    discard frontend.window.dispatchKeyDown(f6Event())
+    check not kosmoHintsVisible(terminal)
+    check terminal.lastInputError() != ""
+
   test "git diff hints collect from materialized file sections":
     let
       snapshot = parseGitDiff(
@@ -237,6 +290,53 @@ suite "Kosmo hint mode":
     check pasteboard.plainText() == "https://example.com/diff-link"
     check not kosmoHintsVisible(panel.documentView)
 
+  test "github hints resolve paths against the repository root":
+    let
+      root = createTempDir("kosmo-github-hints-", "")
+      source = root / "src" / "reported.nim"
+      pasteboard = generalPasteboard()
+      previousClipboard = pasteboard.plainText()
+    defer:
+      discard pasteboard.setPlainText(previousClipboard)
+      removeDir(root)
+    createDir(source.parentDir())
+    writeFile(source, "let reported = true\n")
+    var snapshot = GitHubSnapshot(rootPath: root)
+    snapshot.items.add parseGitHubItems(
+      "[{\"number\":9,\"title\":\"Crash\",\"body\":\"Fails at src/reported.nim:12 " &
+        "after https://example.com/issue-link\"," &
+        "\"url\":\"https://github.com/o/r/issues/9\",\"state\":\"OPEN\",\"author\":null," &
+        "\"labels\":[],\"updatedAt\":\"2026-11-01T12:00:00Z\"}]",
+      ghikIssue,
+    )
+    let
+      panel = newKosmoGitHubPanel(snapshot)
+      window = newWindow("GitHub hints", frame = rect(0, 0, 700, 600))
+    defer:
+      panel.close()
+      window.close()
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForGitHub()
+    panel.markdownView.expandMarkdownHeadings()
+    require panel.waitForGitHub()
+    let textView = panel.markdownView.textView()
+    require window.makeFirstResponder(textView)
+    require performKosmoHintModeInChain(
+      Responder(textView), KosmoHintModeArgs(kind: khkPath, action: khaCopy)
+    )
+    check kosmoHintsVisible(textView)
+    let hints = textView.hintOverlayForView().presentedHints()
+    require hints.len == 1
+    # The location resolves against the panel's repository root, not the
+    # process working directory.
+    require hints[0].fileLocation.isSome
+    check hints[0].fileLocation.get().path == source
+    check hints[0].fileLocation.get().line == 12
+    require window.dispatchKeyDown(labelEvent(hints[0].label[0], text = ""))
+    check pasteboard.plainText() == "src/reported.nim:12"
+    check not kosmoHintsVisible(textView)
+
   test "hint requests decline on responder chains without a hint surface":
     let window = newWindow("No hint surface", frame = rect(0, 0, 320, 200))
     defer:
@@ -244,6 +344,27 @@ suite "Kosmo hint mode":
     check not performKosmoHintModeInChain(
       window.firstResponder(), KosmoHintModeArgs(kind: khkLink, action: khaCopy)
     )
+
+  test "insert requests decline on surfaces without terminal insertion":
+    let
+      root = createTempDir("kosmo-hints-decline-", "")
+      path = root / "decline.nim"
+      app = newApplication("Kosmo Hints Decline")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    # Words are visible, but only the focused terminal attaches an insert hook,
+    # so the editor must decline instead of showing markers that do nothing.
+    writeFile(path, "alpha beta gamma\n")
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    let editorView = frontend.editorView
+    require frontend.window.makeFirstResponder(editorView)
+    check not performKosmoHintModeInChain(
+      editorView, KosmoHintModeArgs(kind: khkWord, action: khaInsert)
+    )
+    check not kosmoHintsVisible(editorView)
 
   test "hint keys select labels without event text like real backends":
     let
@@ -321,6 +442,38 @@ suite "Kosmo hint mode":
     check pasteboard.plainText() == twoCharacter.text
     check not kosmoHintsVisible(editorView)
     check frontend.window.firstResponder() == Responder(editorView)
+
+  test "declined hint requests report in the status bar":
+    let
+      root = createTempDir("kosmo-hint-decline-", "")
+      path = root / "decline.txt"
+      app = newApplication("Kosmo Hint Decline")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    # The buffer holds a hash, but only far below the visible rows, so the
+    # focused editor collects nothing and the request must not fail silently.
+    writeFile(
+      path, "no hashes up here\n" & repeat("filler\n", 300) & "deadbeef1234567\n"
+    )
+    app.presentSyntheticWindow(frontend)
+    require frontend.openPath(path)
+    let editorView = frontend.editorView
+    require frontend.window.makeFirstResponder(editorView)
+    require frontend.window.dispatchKeyDown(f6Event({nimkit.kmControl}))
+    check not kosmoHintsVisible(editorView)
+    # The fall-through key refreshes the editor, which composes the host
+    # message into the status bar ahead of mode and file.
+    checkpoint "hash decline status: " & frontend.statusLabel.text
+    check frontend.statusLabel.text.startsWith("No visible hashes to copy")
+    # Insertion needs a focused terminal, which the editor also declines.
+    require frontend.window.dispatchKeyDown(f6Event({nimkit.kmControl, nimkit.kmShift}))
+    check not kosmoHintsVisible(editorView)
+    checkpoint "insert decline status: " & frontend.statusLabel.text
+    check frontend.statusLabel.text.startsWith(
+      "No visible paths to insert into the focused terminal"
+    )
 
   test "workspace advertises URL opening on every platform":
     let app = newApplication("Kosmo Hint Workspace")

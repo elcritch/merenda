@@ -1364,14 +1364,16 @@ proc showHintMode(
   ## Present hint markers on the focused pane's surface for `kind`, running
   ## `action` on the selected snippet. The request travels along the responder
   ## chain, so surfaces without a hint collector, such as sidebar panels and
-  ## search fields outside panes, decline it.
+  ## search fields outside panes, decline it. A request nothing presents is
+  ## reported in the status bar of the focused window's pane instead of
+  ## failing silently.
   if controller.isNil or controller.frontend.isNil:
     return false
   let window = controller.frontend[].application.keyWindow()
   if window.isNil or window.isClosed():
     return false
   let frontend = controller.frontend[]
-  performKosmoHintModeInChain(
+  result = performKosmoHintModeInChain(
     window.firstResponder(),
     KosmoHintModeArgs(
       kind: kind,
@@ -1384,6 +1386,19 @@ proc showHintMode(
       ),
     ),
   )
+  if not result:
+    # Report the decline where the user pressed the shortcut. Every group of a
+    # window shares its status bar, so the first match is the right label. The
+    # label shows the message immediately; the host message keeps it visible
+    # when the fall-through key reaches the editor, whose refresh rewrites the
+    # label from the editor status.
+    let message = kosmoHintDeclineMessage(kind, action)
+    for group in controller.groups:
+      if group.window == window:
+        group.editorView.editor.setHostMessage(message)
+        if not group.editorView.statusLabel.isNil:
+          group.editorView.statusLabel.text = message
+        break
 
 iterator gitDiffPanels(frontend: KosmoApplication): KosmoGitDiffPanel =
   if not frontend.isNil and not frontend.xClosed and not frontend.dockController.isNil:

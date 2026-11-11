@@ -3019,8 +3019,9 @@ protocol KosmoEditorHintSurface of KosmoHintSurfaceProtocol:
     ## Present hint markers over the editor's visible text area. The scan skips
     ## Moe's tab line, status area, and line-number gutters, and only reads the
     ## rendered grid, so register, search, hover, and completion state stays
-    ## untouched.
-    if view.isNil:
+    ## untouched. Terminal insertion is declined; only the focused terminal
+    ## attaches the insert hook.
+    if view.isNil or not args.kosmoHintActionSupported():
       return false
     let area = view.editor.gridTextArea()
     presentKosmoHints(
@@ -4433,8 +4434,9 @@ proc markdownHintWorkingDirectory(view: KosmoMarkdownView): string =
 protocol KosmoMarkdownHintSurface of KosmoHintSurfaceProtocol:
   method showKosmoHintMode(view: KosmoMarkdownView, args: KosmoHintModeArgs): bool =
     ## Present hint markers over rendered Markdown text. Embedded code blocks
-    ## are separate text views and stay unhinted for now.
-    if view.isNil:
+    ## are separate text views and stay unhinted for now. Terminal insertion is
+    ## declined; only the focused terminal attaches the insert hook.
+    if view.isNil or not args.kosmoHintActionSupported():
       return false
     let
       textView = view.textView()

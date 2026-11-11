@@ -10,7 +10,9 @@
 ## Hint requests travel as `KosmoHintModeArgs` along the responder chain:
 ## surfaces that collect hints implement `KosmoHintSurfaceProtocol`, and
 ## `performKosmoHintModeInChain` presents markers on the first surface that
-## accepts the request, so dispatch sites never check concrete surface types.
+## implements the request, so dispatch sites never check concrete surface
+## types. Surfaces decline requests whose action their activation cannot run,
+## so terminal insertion never shows inert markers elsewhere.
 
 import std/[options, strutils, unicode]
 
@@ -61,7 +63,10 @@ type
     xTyped: string
     xDismissed: bool
     xOnActivate: proc(hint: KosmoHint) {.closure.}
-    xRestoreFirstResponder: nimkit.Responder
+    xRestoreFirstResponder: nimkit.BackRef[nimkit.Responder]
+      ## The surface focused before the session, non-owning so a host that was
+      ## itself the first responder cannot form a strong cycle with the
+      ## overlay it hosts.
     xHostBoundsSize: nimkit.Size
 
 const
@@ -418,6 +423,30 @@ proc runKosmoHintAction*(
     else:
       not activation.openLink.isNil and activation.openLink(hint.text)
 
+func kosmoHintActionSupported*(args: KosmoHintModeArgs): bool =
+  ## Whether `args.activation` can run `args.action`. Insertion types the
+  ## snippet into the focused surface, so only requests carrying an
+  ## `insertText` hook — the terminal surface attaches its own — can present
+  ## markers; other surfaces decline instead of showing inert markers.
+  args.action != khaInsert or not args.activation.insertText.isNil
+
+func kosmoHintDeclineMessage*(kind: KosmoHintKind, action: KosmoHintAction): string =
+  ## The status-bar text for a hint request that no surface presented, so a
+  ## decline such as matches below the visible area is reported instead of
+  ## failing silently.
+  case kind
+  of khkLink:
+    "No visible links to open"
+  of khkPath:
+    if action == khaInsert:
+      "No visible paths to insert into the focused terminal"
+    else:
+      "No visible file paths to open"
+  of khkWord:
+    "No visible words to copy"
+  of khkHash:
+    "No visible hashes to copy"
+
 protocol KosmoHintSurfaceProtocol:
   method showKosmoHintMode*(args: KosmoHintModeArgs): bool {.optional.}
     ## Present hint markers on this surface for the request and return whether
@@ -426,10 +455,12 @@ protocol KosmoHintSurfaceProtocol:
 proc performKosmoHintModeInChain*(
     responder: nimkit.Responder, args: KosmoHintModeArgs
 ): bool =
-  ## Perform a hint request on `responder` and its responder chain, presenting
-  ## markers on the first surface that collects hints for it. Returns false
-  ## when no surface implements the request or the collecting surface finds no
-  ## matches to present.
+  ## Perform a hint request on `responder` and its responder chain. The walk
+  ## ends at the first surface implementing the request — even when that
+  ## surface declines by returning false, as a focused Markdown preview does
+  ## when it shows no matches — so inner surfaces shadow outer ones. Returns
+  ## false when no surface implements the request or the presenting surface
+  ## finds no matches to present.
   var current = responder
   while not current.isNil:
     let handled = current.trySendLocal(showKosmoHintMode(), args)
@@ -467,7 +498,7 @@ proc dismissKosmoHints*(overlay: KosmoHintOverlay) =
   overlay.xDismissed = true
   let
     owner = overlay.window()
-    restore = overlay.xRestoreFirstResponder
+    restore = overlay.xRestoreFirstResponder.target
     host = overlay.superview()
   if not host.isNil:
     host.disconnect(nimkit.geometryDidChange, overlay)
@@ -678,7 +709,7 @@ proc presentKosmoHints*(
   nimkit.Window(owner).connect(
     nimkit.didResignKeyWindow, overlay, hintOverlayDidResignKey
   )
-  overlay.xRestoreFirstResponder = nimkit.Window(owner).firstResponder()
+  overlay.xRestoreFirstResponder.target = nimkit.Window(owner).firstResponder()
   result = nimkit.Window(owner).makeFirstResponder(nimkit.Responder(overlay))
   if not result:
     overlay.dismissKosmoHints()

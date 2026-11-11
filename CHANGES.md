@@ -105,9 +105,12 @@
   locations (including `path:line` and Nim's `path(line, col)`) in the editor,
   `Alt-F6` and `Ctrl-F6` copy visible words and hexadecimal hashes, and
   `Ctrl-Shift-F6` types a visible file location into the focused terminal.
-  Markers are prefix-free with the shortest labels nearest the cursor, Escape
-  or any foreign key cancels, and every action is configurable in Settings. The
-  feature works across Moe editors, terminal tabs, Markdown previews, the Help
+  Markers are prefix-free with the shortest labels at the bottom of the
+  screen, Escape or any foreign key cancels, and every action is configurable
+  in Settings. A command that finds nothing visible — hashes below the fold,
+  insertion without a focused terminal — reports the decline in the window's
+  status bar instead of silently doing nothing. The feature works across Moe
+  editors, terminal tabs, Markdown previews, the Help
   and GitHub readers, and the Git diff's summary and expanded file sections
   without touching editor state such as LSP hover, completion, or Moe registers.
 

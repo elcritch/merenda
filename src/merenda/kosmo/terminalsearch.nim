@@ -263,18 +263,25 @@ protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:
 protocol KosmoTerminalHintSurface of KosmoHintSurfaceProtocol:
   method showKosmoHintMode(view: KosmoTerminalView, args: KosmoHintModeArgs): bool =
     ## Present hint markers over the terminal's visible screen and run the
-    ## request's action on the selected snippet. Insertion types the text into
-    ## the terminal.
+    ## request's action on the selected snippet. Insertion types the text
+    ## into this terminal, so the surface attaches its own insert hook; the
+    ## hook holds the view weakly because the overlay is the view's subview
+    ## for the session's lifetime.
     if view.isNil or view.session().isNil:
       return false
-    let info = view.session().screenInfo()
-    presentKosmoHints(view, view.collectMonoTextHints(args.kind, info.currentDirectory)) do(
-      hint: KosmoHint
-    ):
-      if args.action == khaInsert:
-        discard view.pasteText(hint.text)
+    let
+      weakView = view.unsafeWeakRef()
+      info = view.session().screenInfo()
+    var request = args
+    request.activation.insertText = proc(text: string): bool =
+      if not weakView.isNil:
+        weakView[].pasteText(text)
       else:
-        discard runKosmoHintAction(hint, args.action, args.activation)
+        false
+    presentKosmoHints(
+      view, view.collectMonoTextHints(request.kind, info.currentDirectory)
+    ) do(hint: KosmoHint):
+      discard runKosmoHintAction(hint, request.action, request.activation)
 
 proc newKosmoTerminalView*(
     session: nimkit.TerminalViewSession = nil,
