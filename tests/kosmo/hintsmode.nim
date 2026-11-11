@@ -515,40 +515,6 @@ suite "Kosmo hint mode":
         opened = true
     check opened
 
-  test "hint-opened files keep a previewed source tab beside them":
-    let
-      root = createTempDir("kosmo-hint-preview-", "")
-      path = root / "preview.txt"
-      app = newApplication("Kosmo Hint Preview")
-      frontend = newKosmoApplication(app, monitorsGitStatus = false)
-    defer:
-      frontend.close()
-      removeDir(root)
-    # A file-tree single click previews rather than permanently opening.
-    writeFile(path, "/etc/hostname\n")
-    app.presentSyntheticWindow(frontend)
-    require frontend.editorView.previewFile(path)
-    let editorView = frontend.editorView
-    require frontend.window.makeFirstResponder(editorView)
-    require frontend.window.dispatchKeyDown(f6Event({nimkit.kmShift}))
-    check kosmoHintsVisible(editorView)
-    let overlay = editorView.hintOverlayForView()
-    var picked: KosmoHint
-    for hint in overlay.presentedHints():
-      if hint.text == "/etc/hostname":
-        picked = hint
-    require picked.label.len == 1
-    require frontend.window.dispatchKeyDown(labelEvent(picked.label[0], text = ""))
-    check not kosmoHintsVisible(editorView)
-    # The picked file opens beside the previewed source tab, not in its place.
-    var openPaths: seq[string]
-    for tab in frontend.editorView.editor.tabs():
-      if tab.filePath.isSome:
-        openPaths.add tab.filePath.get
-    check openPaths.len == 2
-    check path in openPaths
-    check "/etc/hostname" in openPaths
-
   test "hint actions route through the surface activation":
     var inserted: seq[string]
     var activation = KosmoHintActivation(

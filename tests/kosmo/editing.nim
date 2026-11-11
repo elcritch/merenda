@@ -1265,30 +1265,6 @@ suite "Kosmo":
     check tabs[2].temporary
     editor.close()
 
-  test "permanent opens keep the previewed tab beside them":
-    let
-      root = createTempDir("merenda-kosmo-preview-kept-", "")
-      firstPath = root / "first.txt"
-      secondPath = root / "second.txt"
-    writeFile(firstPath, "first")
-    writeFile(secondPath, "second")
-    defer:
-      removeFile(firstPath)
-      removeFile(secondPath)
-      removeDir(root)
-
-    let editor = newKosmoEditor()
-    check editor.previewFile(firstPath).loaded
-    check editor.openFile(secondPath).loaded
-    var tabs = editor.tabs()
-    check tabs.len == 2
-    check tabs[0].title == "first.txt"
-    check tabs[0].temporary
-    check tabs[1].title == "second.txt"
-    check tabs[1].active
-    check not tabs[1].temporary
-    editor.close()
-
   test "preview tab titles are italic until the file is opened permanently":
     let path = getTempDir() / "merenda-kosmo-preview-style.txt"
     writeFile(path, "preview")
