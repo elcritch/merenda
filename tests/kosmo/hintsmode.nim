@@ -482,17 +482,33 @@ suite "Kosmo hint mode":
   test "editor path hints survive Moe indentation guides":
     let
       root = createTempDir("kosmo-editor-hints-indent-", "")
-      path = root / "indent.txt"
       app = newApplication("Kosmo Editor Indent Hints")
-      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      # Opening the temp root as the window's project makes the editor resolve
+      # the buffer's relative paths against it, like compiler output in a
+      # project.
+      frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
     defer:
       frontend.close()
       removeDir(root)
     # Moe renders the last leading space of an indented line as a vertical
-    # indentation guide; glued paths must still resolve.
-    writeFile(path, "/etc/passwd\n   /etc/hostname\ntest: /etc/hosts\n")
+    # indentation guide; glued paths must still resolve. The targets are
+    # temporary files with traceable content instead of platform files such
+    # as /etc/passwd, so hints resolve on macOS, Linux, and Windows alike.
+    let
+      targets = root / "targets"
+      plain = targets / "plain.txt"
+      indented = targets / "indented.txt"
+      prefixed = targets / "prefixed.txt"
+    createDir(targets)
+    writeFile(plain, "plain hint target\n")
+    writeFile(indented, "indented hint target\n")
+    writeFile(prefixed, "prefixed hint target\n")
+    writeFile(
+      root / "indent.txt",
+      "targets/plain.txt\n   targets/indented.txt\ntest: targets/prefixed.txt\n",
+    )
     app.presentSyntheticWindow(frontend)
-    require frontend.openPath(path)
+    require frontend.openPath(root / "indent.txt")
     let editorView = frontend.editorView
     require frontend.window.makeFirstResponder(editorView)
     require frontend.window.dispatchKeyDown(f6Event({nimkit.kmShift}))
@@ -501,18 +517,29 @@ suite "Kosmo hint mode":
     var texts: seq[string]
     for hint in overlay.presentedHints():
       texts.add hint.text
-    check texts == @["/etc/passwd", "/etc/hostname", "/etc/hosts"]
-    var indented: KosmoHint
+    check texts == @[
+      "targets/plain.txt", "targets/indented.txt", "targets/prefixed.txt"
+    ]
+    var indentedHint: KosmoHint
     for hint in overlay.presentedHints():
-      if hint.text == "/etc/hostname":
-        indented = hint
-    require indented.label.len == 1
-    require frontend.window.dispatchKeyDown(labelEvent(indented.label[0], text = ""))
+      if hint.text == "targets/indented.txt":
+        indentedHint = hint
+    require indentedHint.label.len == 1
+    require indentedHint.fileLocation.isSome
+    check indentedHint.fileLocation.get().path == normalizedPath(absolutePath(indented))
+    require frontend.window.dispatchKeyDown(
+      labelEvent(indentedHint.label[0], text = "")
+    )
     check not kosmoHintsVisible(editorView)
+    # The picked location opened in a new editor tab holding the target's
+    # traceable content.
     var opened = false
     for tab in frontend.editorView.editor.tabs():
-      if tab.filePath == some("/etc/hostname"):
+      if tab.filePath == some(indentedHint.fileLocation.get().path):
         opened = true
+        let buffer = frontend.editorView.editor.bufferText(tab.id)
+        require buffer.isSome
+        check "indented hint target" in buffer.get()
     check opened
 
   test "hint actions route through the surface activation":
