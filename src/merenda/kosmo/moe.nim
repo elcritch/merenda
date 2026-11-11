@@ -1195,20 +1195,12 @@ proc isTemporaryBuffer(editor: KosmoEditor, id: BufferId): bool =
     if temporaryId == id:
       return true
 
-proc discardTemporaryBuffer(
-    editor: KosmoEditor, exceptId: Option[BufferId], scope: string
-) =
-  editor.normalizeTemporaryBuffers()
-  let previous = editor.temporaryBufferId(scope)
-  if previous.isNone or previous == exceptId:
-    return
-  editor.temporaryBufferIds.del(scope)
-  discard editor.editor.closeBuffer(previous.get)
-
 proc openFile*(
     editor: KosmoEditor, path: string, scope = "", reusePristineBuffer = true
 ): FileOpenResult =
   ## Permanently open `path`, promoting it when it is the temporary buffer.
+  ## The scope's unmodified preview stays open beside the promoted file: only
+  ## the next preview, or closing the tab, replaces a preview.
   result = editor.validateFileOpen(path)
   if not result.loaded:
     if not editor.isNil and not editor.editor.isNil:
@@ -1225,8 +1217,6 @@ proc openFile*(
     if not editor.isNil and not editor.editor.isNil:
       editor.editor.state.statusMessage = result.message
     return
-  let opened = editor.activeBufferId()
-  editor.discardTemporaryBuffer(opened, scope)
   editor.resetBufferSelection()
 
 proc previewFile*(

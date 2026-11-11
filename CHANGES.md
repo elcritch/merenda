@@ -114,6 +114,12 @@
   and GitHub readers, and the Git diff's summary and expanded file sections
   without touching editor state such as LSP hover, completion, or Moe registers.
 
+- Keep the previous preview tab when a file is opened permanently, such as by
+  double-clicking it in the file tree, picking it with hint mode, or opening it
+  from the command line: only the next preview or closing the tab replaces a
+  preview, so the file you were reading stays beside the one you open, like
+  VS Code's preview tabs.
+
 - Open links on Linux and Windows: the workspace's URL operation only
   supported macOS and silently did nothing elsewhere. It now launches the
   platform's default handler — `xdg-open` or `gio open` on Linux and the BSDs,
