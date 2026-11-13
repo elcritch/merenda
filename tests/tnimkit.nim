@@ -34,6 +34,7 @@ else:
   import nimkit/csslayout
   import nimkit/datepickers
   import nimkit/daterangepickers
+  import nimkit/declarativedragging
   import nimkit/devcontrol
   import nimkit/diagnostics
   import nimkit/dockviews

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add NimKit's discrete declarative dragging port: model-derived destinations,
+  isolated layout/render previews, stable IDs, floating, animated rearrangement,
+  cancellation and application-owned undoable commits. Try
+  `examples/declarative_drag_demo.nim`; see `docs/declarative-dragging.md` for the
+  builder contract and current scope.
+
 - Derive the Kosmo settings window's minimum height from its pages' measured
   content, so settings text is never squeezed below the resolved UI font's line
   height at the minimum window size. `KosmoSettingsMinimumHeight` remains the

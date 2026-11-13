@@ -1,7 +1,12 @@
 # TODO: Declarative dragging for NimKit
 
-Source review: 2026-11-06. This is an implementation plan; no Dragology support
-has been implemented or benchmarked as part of this review.
+Source review: 2026-11-06. Implementation update: 2026-11-13.
+
+The discrete native port now lives in `nimkit/interaction/`, with a two-column
+example and shared NimKit tests. See [the usage guide](docs/declarative-dragging.md)
+for implemented behavior and explicit limitations. The checklist below remains
+the broader acceptance roadmap: performance/memory measurements, continuous
+composition, and large-collection work are still outstanding.
 
 Implement an optional NimKit interaction layer inspired by declarative dragging
 (D2). Applications describe reachable model states, and the engine derives drag

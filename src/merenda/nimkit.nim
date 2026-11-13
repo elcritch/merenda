@@ -30,6 +30,7 @@ import ./nimkit/debug/selectionrings
 import ./nimkit/debug/viewselection
 import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
+import ./nimkit/interaction/dragcontrollers
 import ./nimkit/foundation/assetcache
 import ./nimkit/foundation/backgroundworkers
 import ./nimkit/foundation/events
@@ -132,6 +133,7 @@ export selectionrings
 export viewselection
 export viewinspectors
 export dragging
+export dragcontrollers
 export assetcache
 export events
 export filesearch

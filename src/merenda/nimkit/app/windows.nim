@@ -1269,12 +1269,15 @@ proc clearInheritedAppearance*(window: Window) =
     window.postWindowAppearanceNotification()
 
 proc clearMouseState(window: Window) =
+  if not window.xMouseCaptureView.isNil:
+    discard window.xMouseCaptureView.sendLocalIfHandled(mouseCancelled())
   window.clearToolTip()
   if not window.xMouseActiveView.isNil:
     window.xMouseActiveView.active = false
   if not window.xMouseHoverView.isNil:
     window.xMouseHoverView.hovered = false
   window.xMouseCaptureView = nil
+  window.xMousePolicyStopResponder = nil
   window.xMouseActiveView = nil
   window.xMouseHoverView = nil
   window.xMouseTrackingEvent = MouseEvent()
@@ -1283,6 +1286,17 @@ proc clearMouseState(window: Window) =
   window.xLastClickView = nil
   window.xHasLastClick = false
   window.xLastClickCount = 0
+
+proc releaseMouseCapture*(window: Window, view: View) =
+  ## Releases tracking only when `view` still owns it. No cancellation is sent
+  ## back to the owner; callers use this after completing their own cleanup.
+  if window.xMouseCaptureView == view:
+    window.xMouseCaptureView = nil
+    window.xMousePolicyStopResponder = nil
+    window.xHasMouseTrackingEvent = false
+    if not window.xMouseActiveView.isNil:
+      window.xMouseActiveView.active = false
+    window.xMouseActiveView = nil
 
 proc setMouseActiveView(window: Window, view: View) =
   if window.xMouseActiveView == view:
@@ -2220,6 +2234,7 @@ proc close*(window: Window) =
   window.stopInsertionPointBlink()
   window.clearToolTip()
   discard window.saveFrameUsingName()
+  window.clearMouseState()
   window.xClosed = true
   window.xVisibleRequested = false
   window.xMiniaturized = false
@@ -3031,6 +3046,8 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     if target.isNil:
       return false
     dispatchEvent.clickCount = window.nextClickCount(target, event)
+    if not window.xMouseCaptureView.isNil:
+      discard window.xMouseCaptureView.sendLocalIfHandled(mouseCancelled())
     let hitPolicy = window.mouseHitPolicyInChain(target, contentPoint, dispatchEvent)
     case hitPolicy.policy
     of chpDefault:
@@ -3393,6 +3410,8 @@ proc dispatchHostTextInput(window: Window, text: string) =
 proc dispatchHostFocusChanged*(window: Window, focused: bool) =
   ## Route a native or synthetic host-focus change into window and application state.
   window.xHostFocused = focused
+  if not focused:
+    window.clearMouseState()
   if focused:
     if not window.xIsPopup:
       window.setKeyWindow(true)
@@ -3423,6 +3442,7 @@ proc markHostClosed(window: Window) =
   window.stopInsertionPointBlink()
   window.stopAnimationClock()
   discard window.saveFrameUsingName()
+  window.clearMouseState()
   window.xClosed = true
   window.xVisibleRequested = false
   window.xMiniaturized = false
