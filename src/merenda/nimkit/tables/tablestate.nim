@@ -353,7 +353,8 @@ protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
         Window(tableView.window())
       else:
         nil
-    if not currentWindow.isNil and DynamicAgent(currentWindow) != DynamicAgent(window):
+    if not currentWindow.isNil and
+        (window.isNil or DynamicAgent(currentWindow) != DynamicAgent(window)):
       tableView.saveAutosavedState()
       tableView.unobserveTableStateWindow()
       tableView.xHasRestoredState = false
