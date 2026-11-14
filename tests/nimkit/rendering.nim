@@ -1569,6 +1569,7 @@ suite "nimkit rendering":
 
     let firstRenders = buildRenders(root)
     check customDrawCount == 1
+    root.properties = {vpDraggable}
     let cachedRenders = buildRenders(root)
     check cachedRenders == firstRenders
     check customDrawCount == 1

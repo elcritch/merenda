@@ -276,7 +276,8 @@ protocol ViewContextMenuEvents of ResponderEventProtocol:
     let next = view.trySendNext(rightMouseDown(), event)
     if next.isSome and next.get():
       return true
-    not view.menu().popUpContextMenu(view, event).isNil
+    let menu = view.menu()
+    not menu.isNil and not menu.popUpContextMenu(view, event).isNil
 
 proc open*(menu: Menu) =
   menu.openMenu()
@@ -624,9 +625,9 @@ proc `menu=`*(view: View, menu: Menu) =
   view.xContextMenu = Responder(menu)
   if not menu.isNil:
     menu.setNextResponder(view)
-    if not view.xContextMenuHandlerInstalled:
+    if vipContextMenuHandlerInstalled notin view.xPrivProps:
       discard view.pushMethods(ViewContextMenuEvents.init())
-      view.xContextMenuHandlerInstalled = true
+      view.xPrivProps.incl vipContextMenuHandlerInstalled
 
 proc title*(menu: Menu): string =
   menu.xTitle

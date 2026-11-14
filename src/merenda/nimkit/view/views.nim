@@ -197,7 +197,7 @@ protocol DefaultViewResponder of ResponderProtocol:
     view.needsDisplay = true
 
 proc needsUpdateConstraints*(view: View): bool =
-  view.xNeedsUpdateConstraints
+  vipNeedsUpdateConstraints in view.xPrivProps
 
 proc invalidateLayoutSolveFailures(view: View) =
   var current = view
@@ -210,29 +210,29 @@ proc setNeedsUpdateConstraints*(view: View, value: bool) =
     return
   view.invalidateLayoutSolveFailures()
   view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
-  view.xNeedsUpdateConstraints = true
+  view.xPrivProps.incl vipNeedsUpdateConstraints
 
 proc setNeedsUpdateConstraints*(view: View) =
   view.setNeedsUpdateConstraints(true)
 
 proc runUpdateConstraints(view: View) =
-  view.xNeedsUpdateConstraints = false
+  view.xPrivProps.excl vipNeedsUpdateConstraints
   discard view.sendLocalIfHandled(updateConstraints())
 
 proc updateConstraintsForSubtreeIfNeeded*(view: View) =
   for child in view.xSubviews:
     child.updateConstraintsForSubtreeIfNeeded()
-  if view.xNeedsUpdateConstraints:
+  if vipNeedsUpdateConstraints in view.xPrivProps:
     view.runUpdateConstraints()
 
 proc needsLayout*(view: View): bool =
-  view.xNeedsLayout
+  vipNeedsLayout in view.xPrivProps
 
 proc `needsLayout=`*(view: View, value: bool) =
   if value:
     view.invalidateLayoutSolveFailures()
     view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
-  view.xNeedsLayout = value
+  view.setViewInternalProperty(vipNeedsLayout, value)
 
 proc setNeedsLayout*(view: View) =
   view.needsLayout = true
@@ -240,14 +240,14 @@ proc setNeedsLayout*(view: View) =
 proc hasPendingLayoutInSubtree(view: View): bool =
   if view.layoutFeedbackBlocked() or view.solveBlocked(lsmLayout):
     return false
-  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
+  if vipNeedsUpdateConstraints in view.xPrivProps or vipNeedsLayout in view.xPrivProps:
     return true
   for child in view.xSubviews:
     if child.hasPendingLayoutInSubtree():
       return true
 
 proc firstPendingLayoutView(view: View): View =
-  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
+  if vipNeedsUpdateConstraints in view.xPrivProps or vipNeedsLayout in view.xPrivProps:
     return view
   for child in view.xSubviews:
     result = child.firstPendingLayoutView()
@@ -263,7 +263,7 @@ proc updateConstraintsForTransaction(
     child.updateConstraintsForTransaction(transaction)
   view.xConstraintVisitGeneration = transaction.generation
   transaction.currentView = view
-  if view.xNeedsUpdateConstraints:
+  if vipNeedsUpdateConstraints in view.xPrivProps:
     view.runUpdateConstraints()
 
 proc hasInternalLayoutConstraints(view: View): bool =
@@ -296,8 +296,8 @@ proc hasAncestorOwnedDescendantConstraints(view: View): bool =
 proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
   if view.layoutFeedbackBlocked():
     return
-  if view.xNeedsLocalConstraintLayout:
-    view.xNeedsLocalConstraintLayout = false
+  if vipNeedsLocalConstraintLayout in view.xPrivProps:
+    view.xPrivProps.excl vipNeedsLocalConstraintLayout
     # A manual container can resize this host after the outer solve. Resolve its
     # internal anchors with that assigned frame fixed before laying out children.
     # Preserve descendant geometry governed by the outer constraint graph.
@@ -309,8 +309,8 @@ proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
         return
   view.xLayoutVisitGeneration = transaction.generation
   transaction.currentView = view
-  if view.xNeedsLayout:
-    view.xNeedsLayout = false
+  if vipNeedsLayout in view.xPrivProps:
+    view.xPrivProps.excl vipNeedsLayout
     discard view.sendLocalIfHandled(layoutSubviews())
     discard view.sendLocalIfHandled(layout())
   for child in view.xSubviews:
@@ -319,7 +319,7 @@ proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
 proc hasActiveLayoutAncestor(view: View): bool =
   var current = view
   while not current.isNil:
-    if current.xLayoutSubtreeInProgress:
+    if vipLayoutSubtreeInProgress in current.xPrivProps:
       return true
     current = current.superviewBacklink()
 
@@ -327,7 +327,7 @@ proc layoutSubtreeIfNeeded*(view: View) =
   if view.hasActiveLayoutAncestor() or view.hasBlockedLayoutAncestor() or
       not view.hasPendingLayoutInSubtree():
     return
-  view.xLayoutSubtreeInProgress = true
+  view.xPrivProps.incl vipLayoutSubtreeInProgress
   var transaction = LayoutTransactionState(
     root: view, generation: nextLayoutGeneration(), phase: ltpUpdatingConstraints
   )
@@ -337,7 +337,7 @@ proc layoutSubtreeIfNeeded*(view: View) =
   defer:
     view.xLayoutPhase = ltpIdle
     activeLayoutTransaction = previousTransaction
-    view.xLayoutSubtreeInProgress = false
+    view.xPrivProps.excl vipLayoutSubtreeInProgress
 
   view.xLayoutPhase = transaction.phase
   view.updateConstraintsForTransaction(transaction)
@@ -435,7 +435,7 @@ proc acknowledgeDisplayRevision*(view: View, revision: uint64) =
   ## Marks one captured local drawing revision complete without losing a newer one.
   if view.isNil or view.xDisplayRevision != revision:
     return
-  view.xNeedsLocalDisplay = false
+  view.xPrivProps.excl vipNeedsLocalDisplay
 
 proc refreshDisplayStateSubtree*(view: View): bool {.discardable.} =
   ## Rebuilds aggregate descendant-dirty state after revision acknowledgement.
@@ -445,10 +445,12 @@ proc refreshDisplayStateSubtree*(view: View): bool {.discardable.} =
   for child in view.xSubviews:
     if child.refreshDisplayStateSubtree():
       hasDirtyDescendant = true
-  view.xNeedsDisplay = view.xNeedsLocalDisplay or hasDirtyDescendant
-  if not view.xNeedsDisplay:
+  view.setViewInternalProperty(
+    vipNeedsDisplay, vipNeedsLocalDisplay in view.xPrivProps or hasDirtyDescendant
+  )
+  if vipNeedsDisplay notin view.xPrivProps:
     view.xInvalidRects.setLen(0)
-  view.xNeedsDisplay
+  vipNeedsDisplay in view.xPrivProps
 
 proc moveToWindowOwner*(view: View, window: Responder) =
   if view.windowBacklink() == window:
@@ -477,21 +479,20 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(rect(0.0, 0.0, 0.0, 0.0))
   view.xBounds = rect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
-  view.xFlipped = true
+  view.xPrivProps.incl vipFlipped
   view.xAlphaValue = 1.0'f32
-  view.xNeedsDisplay = true
-  view.xNeedsLocalDisplay = true
+  view.xPrivProps.incl {vipNeedsDisplay, vipNeedsLocalDisplay}
   view.xDisplayRevision = 1
   view.xRenderSlotRevisions = initTable[RenderSlotId, uint64]()
-  view.xNeedsLayout = true
+  view.xPrivProps.incl vipNeedsLayout
   view.xLayoutSolveLimits = defaultLayoutSolveLimits()
-  view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
+  view.setViewInternalProperty(vipAutoresizingMaskConstraints, not frame.hasAutoMetric)
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow
   view.xHuggingPriority[laVertical] = LayoutPriorityLow
   view.xCompressionPriority[laHorizontal] = LayoutPriorityHigh
   view.xCompressionPriority[laVertical] = LayoutPriorityHigh
   view.xBackgroundColor = color(0.0, 0.0, 0.0, 0.0)
-  view.xUsesThemedRootBackground = true
+  view.xPrivProps.incl vipUsesThemedRootBackground
   discard view.withProto()
   discard view.withProtocol(DefaultViewResponder)
   discard view.withProtocol(DefaultAccessibilityProtocol)

@@ -1262,7 +1262,7 @@ proc constraintExpressionFor(
       let
         ancestorView = state.solverView(ancestor)
         frameTop = ancestorView.top - ancestor.xAlignmentInsets.top.solverValue
-      if ancestor.xFlipped:
+      if vipFlipped in ancestor.xPrivProps:
         result = result + frameTop - ancestor.xBounds.origin.y.solverValue
       else:
         result = frameTop + ancestor.xBounds.maxY.solverValue - result
@@ -1435,7 +1435,8 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
     return
   state.checkSolveBudget()
 
-  if not item.xAutoresizingMaskConstraints or state.hasConstraintItem(item):
+  if vipAutoresizingMaskConstraints notin item.xPrivProps or
+      state.hasConstraintItem(item):
     let intrinsicSize = item.resolvedIntrinsicContentSize()
     if intrinsicSize.hasWidth:
       state.addGeneratedEquation(
@@ -1529,7 +1530,8 @@ proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
 
   for child in owner.xSubviews:
     state.checkSolveBudget()
-    if child.xAutoresizingMaskConstraints and not state.hasConstraintItem(child):
+    if vipAutoresizingMaskConstraints in child.xPrivProps and
+        not state.hasConstraintItem(child):
       child.refreshAutoresizingReferenceIfNeeded()
       if child.xAutoresizingState.hasReference and state.hasSolverView(child) and
           state.hasSolverView(owner):
@@ -1815,7 +1817,8 @@ proc applySolvedFrames(frames: openArray[SolvedFrame]) =
 
 proc refreshAutoresizingStates(state: LayoutSolveState) =
   for solverView in state.items:
-    if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
+    if not solverView.item.isNil and
+        vipAutoresizingMaskConstraints in solverView.item.xPrivProps:
       solverView.item.refreshAutoresizingReference()
 
 proc generatedSourcesToRebuild(root: View): LayoutInputSources =

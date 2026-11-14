@@ -140,6 +140,7 @@ protocol LayoutInvalidatingHooks of ViewLayoutProtocol:
 
 protocol ReentrantLayoutHooks of ViewLayoutProtocol:
   method layoutSubviews(spy: ReentrantLayoutView) =
+    spy.properties = {vpDraggable}
     spy.target.layoutSubtreeIfNeeded()
     spy.targetEventsDuringLayout = spy.target.events.len
 
@@ -235,6 +236,67 @@ proc newConstraintRemovingView(frame: Rect, target: View): ConstraintRemovingVie
   discard result.withProtocol(ConstraintRemovingHooks)
 
 suite "nimkit views":
+  test "replacing view properties preserves display and appearance state":
+    let view = newView(frame = rect(0, 0, 100, 80))
+    check view.properties == {}
+    check view.flipped
+    check view.needsDisplay
+    check view.usesThemedRootBackground
+
+    view.properties = {vpDraggable}
+    check view.properties == {vpDraggable}
+    check view.flipped
+    check view.needsDisplay
+    check view.usesThemedRootBackground
+    view.acknowledgeDisplayRevision(view.xDisplayRevision)
+    view.refreshDisplayStateSubtree()
+    check not view.needsDisplay
+
+    view.flipped = false
+    view.usesThemedRootBackground = false
+    view.needsDisplay = false
+    view.properties = {}
+    check not view.flipped
+    check not view.usesThemedRootBackground
+    check not view.needsDisplay
+    check view.properties == {}
+
+    view.needsDisplay = true
+    view.properties = {vpAccessibilityElement}
+    view.refreshDisplayStateSubtree()
+    check view.needsDisplay
+    check view.properties == {vpAccessibilityElement}
+
+  test "replacing view properties preserves pending layout flags":
+    let view = newView(frame = rect(0, 0, 100, 80))
+    view.setNeedsUpdateConstraints()
+    view.applyLayoutFrame(rect(0, 0, 120, 100))
+    check view.needsUpdateConstraints
+    check view.needsLayout
+    check vipNeedsLocalConstraintLayout in view.xPrivProps
+
+    view.properties = {vpDraggable}
+    check view.properties == {vpDraggable}
+    check view.needsUpdateConstraints
+    check view.needsLayout
+    check vipNeedsLocalConstraintLayout in view.xPrivProps
+
+    view.layoutSubtreeIfNeeded()
+    check not view.needsUpdateConstraints
+    check not view.needsLayout
+    check vipNeedsLocalConstraintLayout notin view.xPrivProps
+    check vipLayoutSubtreeInProgress notin view.xPrivProps
+
+  test "replacing view properties preserves autoresizing behavior":
+    let view = newView(frame = rect(0, 0, 100, 80))
+    check view.autoresizingMaskConstraints
+    view.properties = {vpDraggable}
+    check view.autoresizingMaskConstraints
+    view.autoresizingMaskConstraints = false
+    view.properties = {}
+    check not view.autoresizingMaskConstraints
+    check not newView().autoresizingMaskConstraints
+
   test "layer surface window API is limited to Wayland platforms":
     when defined(linux) or defined(bsd):
       check declared(LayerSurfaceConfig)
@@ -700,6 +762,7 @@ suite "nimkit views":
     root.layoutSubtreeIfNeeded()
 
     check root.targetEventsDuringLayout == 0
+    check root.properties == {vpDraggable}
     check target.events == @["layoutSubviews", "layout"]
     check not root.needsLayout
     check not target.needsLayout
