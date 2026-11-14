@@ -106,6 +106,7 @@ else:
   import nimkit/tokenfields
   import nimkit/tooltips
   import nimkit/treeviewdemo
+  import nimkit/twodocumenteditors
   import nimkit/types
   import nimkit/undomanagers
   import nimkit/urls
