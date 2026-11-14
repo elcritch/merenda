@@ -15,7 +15,7 @@ type
     ticket: uint64
     seen: Table[string, bool]
 
-  Binding = ref object of Agent
+  Binding = ref object of Responder
     scope: BackRef[BindingScope]
     active, pending, needsConnect, updating: bool
     applyValue: proc(binding: Binding) {.nimcall.}
@@ -26,8 +26,8 @@ type
     signalKey: string
     disconnectSource: proc(binding: Binding) {.closure.}
 
-  EditBinding = ref object of Agent
-    owner {.cursor.}: Binding
+  EditBinding = ref object of Responder
+    owner: BackRef[Binding]
     invoke: proc(editor: EditBinding) {.nimcall.}
 
   TextEditBinding[R, C] = ref object of EditBinding
@@ -50,7 +50,10 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
   let receiver = binding.receiver{}
   let target = binding.target{}
   if not receiver.isNil and not target.isNil:
+    let generation = binding.generation
     let value = binding.getter(receiver, binding.context)
+    if not binding.active or binding.generation != generation:
+      return
     when compiles(value == binding.lastValue):
       if binding.skipUnchanged and binding.hasLast and value == binding.lastValue:
         return
@@ -63,7 +66,8 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
       binding.updating = false
 
 proc textEdited(editor: EditBinding, sender: DynamicAgent) {.slot.} =
-  if not editor.owner.isNil and editor.owner.active and not editor.owner.updating:
+  let owner = editor.owner{}
+  if not owner.isNil and owner.active and not owner.updating:
     editor.invoke(editor)
 
 proc invokeEdit[R: Responder, C](base: EditBinding) =
@@ -177,7 +181,7 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
     setter: proc(target: V, value: T) {.nimcall.},
     sourceKey: pointer,
     signalKey: string,
-    initialApply: bool,
+    textBinding: bool,
 ): ValueBinding[R, C, V, T] =
   if scope.isNil or scope.disposed:
     raise newException(ValueError, "Binding scope is disposed")
@@ -186,6 +190,7 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
   if scope.bindings.hasKey(id) and scope.bindings[id] of ValueBinding[R, C, V, T]:
     result = ValueBinding[R, C, V, T](scope.bindings[id])
     if result.sourceKey != sourceKey or result.signalKey != signalKey:
+      result.hasLast = false
       if not result.disconnectSource.isNil:
         result.disconnectSource(result)
       result.disconnectSource = nil
@@ -197,6 +202,15 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
     result.applyValue = applyValue[R, C, V, T]
     scope.bindings[id] = result
   inc result.generation
+  if result.skipUnchanged != textBinding:
+    if not result.disconnectEditor.isNil:
+      result.disconnectEditor(result)
+      result.disconnectEditor = nil
+    result.editor = nil
+    result.skipUnchanged = textBinding
+    result.hasLast = false
+  if result.getter != getter or result.setter != setter:
+    result.hasLast = false
   if result.receiver{} != receiver or result.target{} != target:
     result.hasLast = false
   when compiles(result.context == context):
@@ -212,18 +226,16 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
   result.receiver.target = receiver
   result.target.target = target
   result.pending = false
-  if initialApply:
-    result.applyValue(result)
 
-template bindValue*(
+template bindValueImpl(
     scope: BindingScope,
     id: string,
     source: Responder,
     signal: untyped,
     receiver, context, getter, target, setter: untyped,
-    initialApply: bool = true,
+    initialApply: bool,
+    textBinding: bool,
 ) =
-  ## Replacing an ID disconnects its previous subscription before initial read.
   block:
     let binding = createValueBinding(
       scope,
@@ -235,7 +247,7 @@ template bindValue*(
       setter,
       cast[pointer](source),
       astToStr(signal),
-      initialApply,
+      textBinding,
     )
     if binding.needsConnect and not scope.preview and not source.isNil:
       proc makeDisconnect(input: typeof(source)): proc(owned: Binding) {.closure.} =
@@ -249,6 +261,22 @@ template bindValue*(
       binding.needsConnect = false
       source.connect(signal, Binding(binding), invalidate, true)
       binding.disconnectSource = makeDisconnect(source)
+    if initialApply:
+      binding.applyValue(binding)
+
+template bindValue*(
+    scope: BindingScope,
+    id: string,
+    source: Responder,
+    signal: untyped,
+    receiver, context, getter, target, setter: untyped,
+    initialApply: bool = true,
+) =
+  ## Replacing an ID disconnects its previous subscription before initial read.
+  bindValueImpl(
+    scope, id, source, signal, receiver, context, getter, target, setter, initialApply,
+    false,
+  )
 
 template bindSigilValue*(
     scope: BindingScope,
@@ -269,7 +297,7 @@ template bindSigilValue*(
       setter,
       cast[pointer](source),
       "sigil.change",
-      initialApply,
+      false,
     )
     if binding.needsConnect and not scope.preview and not source.isNil:
       proc makeDisconnect(input: typeof(source)): proc(owned: Binding) {.closure.} =
@@ -279,6 +307,8 @@ template bindSigilValue*(
       binding.needsConnect = false
       source.connect(change, Binding(binding), invalidate, true)
       binding.disconnectSource = makeDisconnect(source)
+    if initialApply:
+      binding.applyValue(binding)
 
 proc hasPendingBindings*(scope: BindingScope): bool =
   if not scope.isNil and not scope.disposed:
@@ -303,7 +333,8 @@ proc installTextEdit[R: Responder, C](
       binding.editor = nil
       editor = nil
   if editor.isNil:
-    editor = TextEditBinding[R, C](owner: binding, invoke: invokeEdit[R, C])
+    editor = TextEditBinding[R, C](invoke: invokeEdit[R, C])
+    editor.owner.target = binding
     editor.field.target = field
     binding.editor = editor
     var fieldRef: BackRef[TextField]
@@ -326,17 +357,9 @@ template bindTextField*(
 ) =
   ## The edit callback performs controller validation, undo, and model mutation.
   block:
-    bindValue(
-      scope,
-      id,
-      source,
-      signal,
-      receiver,
-      context,
-      getter,
-      field,
-      setBoundText,
-      initialApply = false,
+    bindValueImpl(
+      scope, id, source, signal, receiver, context, getter, field, setBoundText, false,
+      true,
     )
     let binding = ValueBinding[typeof(receiver), typeof(context), TextField, string](
       scope.bindings[id]

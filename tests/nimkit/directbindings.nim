@@ -10,6 +10,7 @@ type Model = ref object of Responder
   text: string
   edits: int
   observable: Sigil[int]
+  triggerOnRead: bool
 
 type Target = ref object of Responder
   value: int
@@ -32,6 +33,19 @@ proc readText(model: Model, context: int): string =
 proc editText(model: Model, context: int, text: string) =
   inc model.edits
   discard text
+
+proc readThenNotify(model: Model, context: int): int =
+  result = model.value
+  if model.triggerOnRead:
+    model.triggerOnRead = false
+    inc model.value
+    emit model.changed(0)
+
+proc readAlternateText(model: Model, context: int): string =
+  model.text
+
+proc writeText(field: TextField, text: string) =
+  field.stringValue = text
 
 suite "direct owned bindings":
   test "coalesces, rebinds sources and tears down queued work":
@@ -138,3 +152,51 @@ suite "direct owned bindings":
     check weakScope.isNil
     emit source.changed(0)
     discard drainMainThreadWork()
+
+  test "initial reads observe synchronous source invalidations":
+    let model = Model(value: 1, triggerOnRead: true)
+    let target = Target()
+    let scope = newBindingScope()
+    scope.bindValue(
+      "value", model, changed, model, 0, readThenNotify, target, writeValue
+    )
+    check target.value == 1
+    check scope.hasPendingBindings
+    scope.flushBindings()
+    check target.value == 2
+    scope.dispose()
+
+  test "switching a text ID to a generic binding removes its editor policy":
+    let model = Model(text: "first")
+    let field = newTextField()
+    let scope = newBindingScope()
+    scope.bindTextField("text", model, changed, model, 0, readText, field, editText)
+    scope.bindValue("text", model, changed, model, 0, readText, field, writeText)
+    let edits = model.edits
+    field.stringValue = "local"
+    check model.edits == edits
+    emit model.changed(0)
+    scope.flushBindings()
+    check field.stringValue == "first"
+    scope.dispose()
+
+  test "changing text getters refreshes equal cached model values":
+    let model = Model(text: "first")
+    let field = newTextField()
+    let scope = newBindingScope()
+    scope.bindTextField("text", model, changed, model, 0, readText, field, editText)
+    field.stringValue = "local"
+    scope.bindTextField(
+      "text", model, changed, model, 0, readAlternateText, field, editText
+    )
+    check field.stringValue == "first"
+    scope.dispose()
+
+  test "dropping a text scope leaves the retained field inert":
+    let model = Model(text: "first")
+    let field = newTextField()
+    var scope = newBindingScope()
+    scope.bindTextField("text", model, changed, model, 0, readText, field, editText)
+    scope = nil
+    field.stringValue = "local"
+    check model.edits == 0
