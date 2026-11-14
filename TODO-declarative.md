@@ -274,6 +274,222 @@ this target; this excludes strings, child buffers, adapters, widgets, and shared
 resources and must not be used as a total-memory estimate. There are no measured
 results yet for the alternative architectures below.
 
+## Declarative composition and MVC
+
+Source review on 2026-11-14, against the prototype and existing NimKit MVC
+implementation. The recommendations below are proposed experiments, not features
+already provided by `viewBody`.
+
+### They describe different architectural choices
+
+MVC assigns responsibilities: the model holds application data, the controller
+coordinates operations and presentation, and views handle display and interaction.
+A declarative body specifies how to describe and update those views. The current
+demo already combines the two: `TaskModel` is a plain value, `TaskController` is a
+`ViewController`, and `viewBody` produces the controller's view description.
+
+The useful comparison is therefore between different ways of implementing the
+view/synchronization part of MVC, rather than between MVC and its replacement.
+
+| Concern | Direct retained-view MVC | Current declarative prototype | Proposed combination |
+| --- | --- | --- | --- |
+| Composition | Controller constructs and arranges widgets. | Body constructs values; mount creates widgets. | Keep the body syntax and ordinary Nim helpers. |
+| Synchronization | Controller updates known widgets and reconciles structural changes explicitly. | Caller refreshes a whole body; mount reconciles it. | Controller/model events invalidate explicit body scopes; mount reconciles within each scope. |
+| Identity | Controller or collection owns widget/item correspondence. | Sibling keys and structural slots retain widgets. | Use entity IDs consistently, while keeping model identity, view keys, and reuse IDs distinct. |
+| Commands | Target/action, responder chain, validation, and undo can share a controller operation. | Inline handlers use ActionTarget but directly mutate the demo model and refresh. | Keep inline wiring; delegate reusable operations to controller/domain commands. |
+| Editing | Existing controls own editors, provisional text, formatting, and validation. | Text patches preserve an editor; the DSL exposes text-change callbacks. | Add explicit binding/commit policies over existing editing protocols. |
+| Lifetime | Controller loading, containment, appearance, and teardown. | Host lifetime and `clear()` are managed by the caller. | Attach mounts and subscriptions to controller lifetime. |
+| Speculation | Application must provide a separate construction/projection path. | Same descriptions can build detached Dragology previews. | Keep a pure model-to-description path alongside live MVC infrastructure. |
+
+The declarative layer should own composition, matching, property patching, and
+binding installation. Domain rules, document persistence, command validation, and
+undo belong to the existing application/controller layers. Dependency discovery
+is a separate choice: MVC does not require automatic observation, and declarative
+composition does not require every field to become a Sigil.
+
+### Reuse controller lifecycle and commands
+
+[ViewController](src/merenda/nimkit/app/viewcontrollers.nim) already provides lazy
+`makeView`, represented-object changes, child containment, responder-chain
+installation, UI validation, undo-manager lookup, and explicit teardown events.
+An integration can own a declarative host and its subscriptions there. In
+particular, use `willTeardown` to disconnect bindings and clear the host; hiding a
+view should not implicitly destroy its editing state. The demo currently calls
+`live.clear()` in a `defer`; controller integration is not automatic today.
+
+Use a controller for a screen or independently managed panel, not one controller
+per label or scalar field. A smaller body-update scope need not be a new controller.
+
+Keep event wiring beside the control, as requested for this DSL. For example, an
+inline Reverse handler could call a proposed `receiver.reverseTasks()` operation.
+That operation can also serve a menu or keyboard action without duplicating model
+mutation, undo registration, and invalidation in each handler. This preserves the
+layout integration without returning to detached callback variables and manual
+weak-receiver lookups.
+
+There is an actual routing gap to address. Ordinary
+[Control.sendAction](src/merenda/nimkit/controls/controls.nim) uses the window's
+responder chain when no explicit target is supplied. In contrast,
+[dispatchViewAction](src/merenda/nimkit/declarative/actions.nim) only sends locally
+to an explicit target. The mount also installs a private `declarativeViewAction`
+selector on buttons, obscuring the underlying application's command selector.
+Named-command routing and validation therefore need deliberate integration.
+
+Support both inline receiver/context handlers and named commands. Preserve the
+real command selector for validation and distinguish intentional responder-chain
+dispatch from an expired weak receiver: the latter must remain inert. Existing
+[resource commands](src/merenda/nimkit/resources/resrccore.nim) already distinguish
+responder-chain, application, and explicit targets; use that vocabulary where
+appropriate instead of inventing unrelated semantics.
+
+### Use model events as explicit invalidation boundaries
+
+[Model controllers](src/merenda/nimkit/app/modelcontrollers.nim) already offer
+ObjectController, ArrayController, TreeController, and identifier-based
+SelectionController. They expose change signals and post `nkModelMutationDidChange`
+notifications carrying identifiers, field keys, an index, and a count. These are
+useful inputs to scoped updates:
+
+- A counter change invalidates the counter region.
+- A title change invalidates that task's row and affected preview content.
+- A task insertion or reorder invalidates list membership/order.
+- Sorting or filtering can change the presentation order even when one field
+  changed, so it may invalidate the list rather than just a row.
+
+This requires an explicit dependency mapping or subscriptions. A helper such as
+`taskRows()` currently returns ordinary values and does **not** establish a cached
+component or an independently invalidatable mount. Model events alone cannot
+infer which arbitrary Nim expressions depend on a changed field.
+
+The notifications are also not a complete collection edit script. ArrayController
+insert, remove, and move currently all report `mmkItemsChanged`; the payload does
+not supply a full before/after index mapping. Source indexes can differ from
+sorted/filtered indexes. Recompute keyed presentation membership or introduce a
+well-defined change-set contract before driving incremental widget operations.
+Existing `bindTableView`/`bindCollectionView` helpers wire data sources and perform
+an initial reload; they do not themselves install automatic model-mutation-driven
+incremental refreshes.
+
+A controller-owned invalidation queue could coalesce notifications and flush on
+the GUI thread, with a deterministic flush for tests and synchronous consumers.
+Specify reentrant changes, notification order, and teardown before relying on it.
+Explicit scope dependencies can become stale when a body starts reading another
+field; this is the main correctness cost versus automatic dependency tracking.
+
+Keep the typed `TaskModel` as the source of truth. ArrayController's `ModelItem` and
+`ObjectValue` representation is useful for generic data-source widgets, but forcing
+every application through it would lose type precision and can create a second,
+unsynchronized model. A typed controller can publish equivalent changes directly,
+or expose an adapter over the model. SelectionController is independently reusable.
+
+### Build repeated-content support on existing collections, with fixes
+
+[CollectionView](src/merenda/nimkit/containers/collectionviews.nim) already queries a
+data source for item identity/content, creates visible item views, recycles views
+by reuse identifier, and delegates layout and configuration. This is already a
+form of declarative projection: the application supplies what an item is, while
+the collection owns its widget lifetime. A declarative row body could fit into
+`viewForCollectionItem`/`configureCollectionItemView` instead of requiring a second
+collection framework.
+
+However, the current implementation needs work before it meets our evaluation
+contract:
+
+- `applyCollectionUpdates` clears all mounted item and supplementary slots for
+  every update kind, then retiles. Reuse does not guarantee the same task retains
+  the same text field or field editor after a move.
+- Visible slots are matched by index during viewport synchronization, and rows
+  leaving the viewport are recycled. An actively edited row needs a defined
+  pinning, commit, or cancellation policy before reuse for another entity.
+- The default visible-index calculation scans every item. Bounding live widget
+  count does not by itself make all list work proportional to visible rows.
+- `CollectionView` is not one of the current `ViewSpec` node kinds. Integration
+  needs a widget adapter or an explicit composition boundary.
+
+Improve stable identifier matching and editor lifetime in the shared collection
+implementation so imperative MVC and declarative clients both benefit. A reuse
+identifier describes a compatible widget shape; it is not an entity ID. Similarly,
+`keyed(taskId)` is local to a declarative sibling group, while `View.identifier`
+also serves lookup/Dragology. These concepts should remain distinct even when
+their values derive from the same task ID.
+
+### Reuse editing, validation, document, and undo mechanisms
+
+[Control](src/merenda/nimkit/controls/controls.nim) already supports formatting,
+parsing, `validateValue`, `shouldCommitValue`, and commit/failure notifications.
+[TextField](src/merenda/nimkit/text/textfields.nim) uses these when deciding whether
+editing may end and when committing the editor's contents. A future binding needs
+an explicit choice between provisional text updates and validated model commits.
+Keep cursor, selection, and IME composition in the existing editor; do not make
+re-evaluated view descriptions the sole owner of that transient state.
+
+The current DSL's `onChange` subscription does not install the receiver as the
+text field's validation target. Adding a model callback therefore does not yet
+connect controller validation protocols. An adapter must preserve or forward that
+target relationship and avoid confusing programmatic value changes with user
+commits. Failed validation, cancellation, and external changes during editing need
+defined behavior, not just text equality checks.
+
+[Document](src/merenda/nimkit/app/documents.nim) and
+[UndoManager](src/merenda/nimkit/foundation/undomanagers.nim) already provide
+persistence lifecycle, clean-state tracking, grouped edits, value changes, and
+collection undo operations. Register undo at the accepted controller/domain
+operation, not during body evaluation or speculative preview construction. The
+toolbar and drag commit should share those operations; a completed text edit may
+need one undo group rather than one application-level undo entry per keystroke.
+Multiple controllers can project the same document without each owning a copy of
+its persistent state.
+
+### Keep Dragology's snapshot boundary explicit
+
+The reusable part is a model transition and its view projection. Preview a proposed
+transition using plain model values and detached descriptions; validate and commit
+it through the live controller exactly once. Do not create live controllers,
+subscriptions, or undo entries for each candidate. Observation and other effects
+belong to the live mount/commit path, not to the body builder.
+
+Scoped invalidation exposes an important edge in
+[the demo](examples/declarative_views_demo.nim): its drag commit replaces the whole
+`TaskModel`, including the unrelated counter. Currently every ordinary refresh
+also assigns `preview.model`, and
+[that setter](src/merenda/nimkit/interaction/dragcontrollers.nim) cancels the active
+drag and rebuilds its snapshot. Simply skipping that assignment for counter
+changes would leave stale candidate models that could overwrite a newer counter.
+
+Before caching preview geometry independently, choose a consistency policy:
+cancel/rebuild on relevant model revisions, reject stale commits, or commit an
+operation such as moving a task by stable IDs against the current model. Reusing
+unchanged geometry must not mean reusing stale application state. A narrow task
+snapshot/transition is another option, provided commit preserves unrelated state
+and checks that its task assumptions still hold.
+
+### Next comparison to run
+
+The most useful next experiment is **controller-owned scoped declarative updates**
+using the existing retained widgets. It can retain `viewBody`, inline action wiring,
+and the detached preview path while testing MVC reuse independently of a syntax
+rewrite or a new state system:
+
+1. Put reusable model operations behind controller methods, and connect mount
+   teardown to controller teardown. Exercise menu/keyboard/button parity and
+   command validation as named-action support is added.
+2. Give the counter and task list separate update scopes, driven by explicit
+   controller changes. A counter update must not evaluate task row bodies or
+   allocate their handlers. Keep preview state coherent using the policy above.
+3. Add validated edit/undo and external model-change cases to the existing keyed
+   editor-preservation contract. Measure the same eager-list workload first.
+4. Separately test a CollectionView row adapter after fixing identity-preserving
+   updates. Compare equal viewport sizes and scroll/edit behavior; report this as
+   a different workload from the existing all-rows-visible benchmark.
+
+The current 100-row counter result is 1.043 ms for body/update and 133.862 ms with
+layout; the 0.0017 ms direct setter excludes layout and reconciliation. These
+suggest testing narrower invalidation, not claiming that MVC is thousands of times
+faster. Both designs can incur the same eager StackView layout cost, including the
+300-row solver-budget failure. Measure body evaluations, adapter allocations,
+widget/editor identity, update time, layout time, and preview rebuilds separately.
+There are no performance measurements of this proposed hybrid yet.
+
 ## Alternatives to compare
 
 These are design experiments, not performance claims about SwiftUI, Compose, GTK,
@@ -282,6 +498,7 @@ or any unimplemented NimKit alternative. Several choices can be combined.
 | Alternative | Potential benefit | What it must prove against this baseline |
 | --- | --- | --- |
 | Direct imperative retained widgets | Updates touch only known changed controls; no intermediate description tree. | Equivalent identity/editing/lifecycle behavior, plus the maintenance cost of manual reconciliation and separate preview construction. The direct-label benchmark measures only one tiny part. |
+| MVC with scoped declarative bodies | Reuses controller lifecycle, commands, and model events while preserving the DSL and keyed mounts. | Correct scope dependencies, command/validation routing, coherent preview snapshots, and reduced work on the same evaluation contract; see the MVC analysis above. |
 | Macro-generated patch code | Avoid a generic interpreter and some transient descriptions; retain the layout syntax. | Control-flow/key semantics, compile times, code size, useful diagnostics, and a detached preview path without duplicating UI logic. |
 | Scoped reactive subscriptions or invalidation | Reevaluate only dependent components; coalesce repeated changes. | Subscription ownership, stale-read prevention, dynamic branches, reentrancy, deterministic flushes, and predictable editor/IME behavior. |
 | Typed/open widget adapters with explicit create/update/dispose | Third-party controls and per-widget patch policies without growing a central enum. | Safe type erasure or specialization, update compatibility, adapter lifetime, and an explicit preview-safe contract. |
@@ -308,7 +525,15 @@ alone will not fix StackView ordering or layout costs.
   reversal, head insertion, and keyboard traversal correctness.
 - [ ] **Try one subtree invalidation boundary:** the unrelated counter should not
   require row body evaluation or handler recreation. Compare explicit invalidation
-  with a scoped Sigil subscription before adding a general state system.
+  driven by controller changes with a scoped Sigil subscription before adding a
+  general state system. Preserve current preview state even if its geometry is
+  unchanged; whole-model drag commits must not overwrite unrelated newer edits.
+- [ ] **Integrate existing MVC contracts:** controller-owned mount teardown,
+  named-command/responder-chain routing alongside inline handlers, validation
+  targets, and shared undoable operations. Keep expired weak targets inert.
+- [ ] **Evaluate CollectionView as the repeated-content host:** first preserve
+  item identity through updates and define editor lifetime during reuse. Measure
+  declarative row mounts without assuming current incremental APIs preserve them.
 - [ ] **Try one custom widget adapter:** define create/patch/dispose and detached
   preview behavior without expanding a centralized case statement for every widget.
 - [ ] **Separate binding description from adapter installation:** test whether
