@@ -62,6 +62,9 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.xProps
 
   method `properties=`(self: View, properties: set[ViewProperty]) =
+    if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
+      self.xIntrinsicCacheValid = false
+      inc self.xIntrinsicRevision
     self.xProps = properties
 
   method frame(self: View): Rect =

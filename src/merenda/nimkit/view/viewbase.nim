@@ -123,6 +123,7 @@ type
     vpDraggable ## Marks a subtree for declarative dragging.
     vpAccessibilityElement ## Explicitly exposes the view as an accessibility element.
     vpAccessibilityIgnored ## Excludes the view from accessibility traversal.
+    vpCacheIntrinsicSize ## Opt in when intrinsic inputs invalidate layout on change.
 
   ViewInternalProperty* = enum
     vipFlipped
@@ -258,6 +259,10 @@ type
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
     xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
     xLayoutInputRevision*: uint64
+    xIntrinsicRevision*: uint64
+    xIntrinsicCacheRevision*: uint64
+    xIntrinsicCacheValid*: bool
+    xIntrinsicCache*: IntrinsicSize
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
@@ -350,9 +355,17 @@ proc setViewInternalProperty*(
   else:
     view.xPrivProps.excl property
 
-proc markLocalNeedsDisplay*(view: View, wholeView = true, propagateAncestors = false) =
+proc markLocalNeedsDisplay*(
+    view: View,
+    wholeView = true,
+    propagateAncestors = false,
+    invalidateIntrinsic = false,
+) =
   if view.isNil:
     return
+  if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
+    inc view.xIntrinsicRevision
+    view.xIntrinsicCacheValid = false
   view.xDisplayRevision.advanceRevision()
   for revision in view.xRenderSlotRevisions.mvalues:
     revision.advanceRevision()
@@ -362,6 +375,9 @@ proc markLocalNeedsDisplay*(view: View, wholeView = true, propagateAncestors = f
   if propagateAncestors:
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
+      if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
+        inc ancestor.xIntrinsicRevision
+        ancestor.xIntrinsicCacheValid = false
       ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 

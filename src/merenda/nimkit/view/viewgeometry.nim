@@ -129,6 +129,11 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
 func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
   reason in {lirSuperview, lirSubviews, lirHierarchy, lirHidden}
 
+proc invalidateIntrinsicMeasurement(view: View) =
+  if vpCacheIntrinsicSize in view.xProps:
+    inc view.xIntrinsicRevision
+    view.xIntrinsicCacheValid = false
+
 proc markConstraintStorageChangedRaw(view: View) =
   view.xPrivProps.incl {vipNeedsUpdateConstraints, vipNeedsLayout}
 
@@ -143,6 +148,7 @@ proc markAggregateLayoutInputDirty(
       current.xLayoutFeedbackCycles = 0
       current.xLastLayoutInvalidation = LayoutInvalidationDiagnostic()
     inc current.xLayoutInputRevision
+    current.invalidateIntrinsicMeasurement()
     current.xLayoutInputCache.aggregateDirtySources.incl source
     if structureDirty:
       current.xLayoutInputCache.aggregateStructureDirty = true
@@ -295,7 +301,11 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   view.xFrame = frame
   view.xBounds = rect(view.xBounds.origin, frame.size)
   view.xPrivProps.incl vipNeedsLayout
-  view.markLocalNeedsDisplay(propagateAncestors = true)
+  # A layout-owned frame may change a custom intrinsic method or an
+  # ancestor's child bounds fallback. Reuse the display propagation walk.
+  view.markLocalNeedsDisplay(
+    propagateAncestors = true, invalidateIntrinsic = origin in {lfoContainer, lfoSolver}
+  )
   case origin
   of lfoAuthored:
     view.invalidateLayoutItemGeometry(lirFrame)
@@ -372,11 +382,26 @@ proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
+  ## Opt-in caching applies only to the intrinsic result. Fitting proposals and
+  ## bounds fallbacks are always resolved by sizeThatFits on each call.
   withLayoutResolutionGuard(view, lroIntrinsicContentSize):
+    let cacheEnabled = vpCacheIntrinsicSize in view.xProps
+    if cacheEnabled and view.xIntrinsicCacheValid and
+        view.xIntrinsicCacheRevision == view.xIntrinsicRevision:
+      return view.xIntrinsicCache
+    let revision = view.xIntrinsicRevision
     let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
-    if measured.isSome:
-      return measured.get()
-    view.intrinsicContentSize()
+    result =
+      if measured.isSome:
+        measured.get()
+      else:
+        view.intrinsicContentSize()
+    # An observer or custom measurement may invalidate during resolution.
+    if cacheEnabled and vpCacheIntrinsicSize in view.xProps and
+        view.xIntrinsicRevision == revision:
+      view.xIntrinsicCache = result
+      view.xIntrinsicCacheRevision = revision
+      view.xIntrinsicCacheValid = true
 
 proc resolvedLayoutStyleContext*(view: View): StyleContext =
   ## Concrete widgets own their semantic role/effective-state layout hook.
@@ -438,6 +463,7 @@ proc invalidateContainerMetrics*(view: View) =
   )
 
 proc markIntrinsicContentSizeDirtySubtree(view: View) =
+  view.invalidateIntrinsicMeasurement()
   view.xLayoutInputCache.dirtySources.incl lisIntrinsic
   view.markConstraintStorageChangedRaw()
   for child in view.xSubviews:
