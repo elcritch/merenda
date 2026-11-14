@@ -1,5 +1,5 @@
 import std/unittest
-import sigils/core
+import sigils/[core, selectors]
 import merenda/nimkit/responder/[guardedcommands, responders]
 import merenda/nimkit/declarative/actions
 
