@@ -200,6 +200,8 @@ proc reconcile(node: var MountedNode, spec: ViewSpec, stats: var ViewUpdateStats
     if not node.target.isNil:
       node.target.updating = true
     try:
+      if spec.kind == vskTextField and not spec.binding.ownsText:
+        discard node.bindings.relinquishText(TextField(node.view))
       node.view.applyProperties(node.spec, spec, false)
       spec.binding.configureBindings(node.bindings, node.view)
     finally:

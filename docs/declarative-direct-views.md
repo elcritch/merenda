@@ -94,6 +94,11 @@ Property ownership is explicit:
   TextField edits when an unchanged model value is repeated.
 - A binding owns updates to the properties its setter writes. Omitting a binding
   disconnects it but leaves its last value; assign a replacement value explicitly.
+- For TextField, an authored `stringValue` assignment retires the previous text
+  binding in that scope before writing, so the handoff cannot invoke its edit
+  command. Returning from bound text resets the authored-value cache, including
+  after a pass that omitted both the binding and assignment. A new `bindTextField`
+  registration for the same field replaces its previous text owner in that scope.
 - The positional Button title, named properties, and body setters rerun with the
   body; other positional constructor arguments run only on creation. A binding
   updates independently of the body.
@@ -104,6 +109,9 @@ GUI thread; `flushBindings` supports deterministic pumping. `bindTextField` adds
 last-model-text tracking, programmatic-echo suppression, and an edit command routed
 through a weak controller. Invalid drafts remain in the editor. External accepted
 model changes replace the draft; a richer conflict/commit policy is future work.
+These text handoff rules cover `bindTextField` and the DSL's text assignment;
+arbitrary binding setters and independently managed scopes still require callers
+to avoid competing writers.
 
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's

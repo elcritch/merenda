@@ -18,12 +18,23 @@ type
   DirectBindingModel = ref object of Responder
     value: int
 
+  TextOwner = ref object of Responder
+    text: Sigil[string]
+    edits: int
+
   CustomDirectView = ref object of View
 
   PropertyDirectView = ref object of View
     seed: int
     xCaption: string
     writes: int
+
+proc readOwnedText(owner: TextOwner, context: int): string =
+  owner.text{}
+
+proc editOwnedText(owner: TextOwner, context: int, value: string) =
+  inc owner.edits
+  owner.text <- value
 
 proc directChanged(model: DirectBindingModel, value: int) {.signal.}
 proc readDirect(model: DirectBindingModel, context: int): int =
@@ -230,6 +241,72 @@ suite "direct view composition":
     render()
     check host.arrangedSubviews[0] == field
     check field.stringValue == "New model"
+
+  test "text ownership transfers across binding and omitted passes":
+    let host = newDirectView()
+    let owner = TextOwner(text: newSigil("bound"))
+    var mode = 0
+    var authored = "plain"
+    proc render() =
+      host.viewBody:
+        TextField:
+          if mode == 0:
+            this.stringValue = authored
+          elif mode == 1:
+            bindingScope.bindTextField(
+              "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
+            )
+
+    render()
+    let field = TextField(host.arrangedSubviews[0])
+    mode = 1
+    render()
+    check field.stringValue == "bound"
+    mode = 0
+    render()
+    check host.arrangedSubviews[0] == field
+    check field.stringValue == "plain"
+    check owner.edits == 0
+    check owner.text{} == "bound"
+    mode = 1
+    render()
+    mode = 2
+    render()
+    check field.stringValue == "bound"
+    mode = 0
+    render()
+    check field.stringValue == "plain"
+    mode = 1
+    render()
+    authored = "different"
+    mode = 0
+    render()
+    check field.stringValue == "different"
+    check owner.edits == 0
+
+  test "initially bound text transfers to an authored value before queued work":
+    let host = newDirectView()
+    let owner = TextOwner(text: newSigil("bound"))
+    var bound = true
+    proc render() =
+      host.viewBody:
+        TextField:
+          if bound:
+            bindingScope.bindTextField(
+              "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
+            )
+          else:
+            this.stringValue = "plain"
+
+    render()
+    let field = TextField(host.arrangedSubviews[0])
+    owner.text <- "queued"
+    bound = false
+    render()
+    discard drainMainThreadWork()
+    check field.stringValue == "plain"
+    check owner.text{} == "queued"
+    check owner.edits == 0
 
   test "omitting a component body binding retires its old subscription":
     let host = newDirectView()

@@ -140,12 +140,33 @@ suite "NimKit declarative views":
     let host = newDeclarativeView(spec)
     let field = TextField(host.viewWithIdentifier("bound-field"))
     field.stringValue = ""
+    let editsBeforeHandoff = owner.edits
     host.update(textFieldSpec("first", identifier = "bound-field"))
+    check owner.edits == editsBeforeHandoff
+    check owner.title{} == "first"
     check field.stringValue == "first"
     check owner.title.subcriptions.len == 0
     let edits = owner.edits
     field.stringValue = "unbound"
     check owner.edits == edits
+  test "retained field transfers text ownership without editing its old model":
+    let owner = BoundController(title: newSigil("bound"))
+    let host = newDeclarativeView(textFieldSpec("plain", identifier = "bound-field"))
+    let field = TextField(host.viewWithIdentifier("bound-field"))
+    host.update(owner.boundBody(0))
+    check field.stringValue == "bound"
+    owner.title <- "queued"
+    host.update(textFieldSpec("plain", identifier = "bound-field"))
+    discard drainMainThreadWork()
+    check host.viewWithIdentifier("bound-field") == field
+    check field.stringValue == "plain"
+    check owner.edits == 0
+    check owner.title{} == "queued"
+    host.update(owner.boundBody(0))
+    host.update(textFieldSpec("different", identifier = "bound-field"))
+    check field.stringValue == "different"
+    check owner.edits == 0
+
   test "viewBody accepts SwiftUI-style capitalized control names":
     let controller = newTestController()
     let body = viewBody:

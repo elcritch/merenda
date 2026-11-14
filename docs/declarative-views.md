@@ -90,6 +90,10 @@ repeating an identity reconfigures its bindings, and omitted bindings disconnect
 `ownsText = true` assigns live text updates to the binding: the spec's text is the
 initial/detached value, and structural rebuilds cannot erase a rejected draft.
 Removing that recipe restores ordinary description-driven text on the next update.
+The previous text binding is disconnected before the replacement text is applied,
+so restoring description ownership does not invoke the old edit command or apply
+its queued work. A new `bindTextField` registration for the same field replaces
+the previous text owner within its binding scope.
 Other binding properties retain their last value unless explicitly reset.
 
 Dropping the host releases subscriptions and disables retained action gateways.

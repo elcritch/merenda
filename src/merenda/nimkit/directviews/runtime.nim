@@ -168,6 +168,8 @@ proc arrangeChildren(node: DirectNode) =
         stack.setArrangedSubviewSizingPolicy(child.view, child.sizing)
 
 proc endChildren*(node: DirectNode) =
+  if node.view of TextField and node.bindings.ownsText(TextField(node.view)):
+    node.hasAuthoredText = false
   node.bindings.endBindings()
   if not node.target.isNil:
     node.target.active = true
@@ -254,6 +256,8 @@ proc bindingScope*(node: DirectNode): BindingScope =
 
 proc patchText*(node: DirectNode, field: TextField, value: string) =
   ## Preserve provisional editing when an unrelated composition repeats a value.
+  if node.bindings.relinquishText(field):
+    node.hasAuthoredText = false
   if (not node.hasAuthoredText or node.authoredText != value) and
       field.stringValue != value:
     field.stringValue = value

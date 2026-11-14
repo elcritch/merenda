@@ -123,6 +123,52 @@ suite "direct owned bindings":
     discard drainMainThreadWork()
     check target.value == 8
 
+  test "queued updates cannot cross source or receiver handoffs":
+    let a = Model(value: 1)
+    let b = Model(value: 5)
+    let target = Target()
+    let scope = newBindingScope()
+    scope.bindValue("value", a, changed, a, 0, readValue, target, writeValue)
+    a.value = 2
+    emit a.changed(0)
+    scope.bindValue("value", b, changed, b, 0, readValue, target, writeValue)
+    let writes = target.writes
+    discard drainMainThreadWork()
+    check target.value == 5
+    check target.writes == writes
+    b.value = 6
+    emit b.changed(0)
+    scope.bindValue("value", b, changed, a, 0, readValue, target, writeValue)
+    let receiverWrites = target.writes
+    discard drainMainThreadWork()
+    check target.value == 2
+    check target.writes == receiverWrites
+    scope.dispose()
+
+  test "a different text binding identity retires the old editor before applying":
+    let first = Model(text: "first")
+    let second = Model(text: "second")
+    let field = newTextField()
+    let scope = newBindingScope()
+    scope.bindTextField("first", first, changed, first, 0, readText, field, editText)
+    emit first.changed(0)
+    scope.bindTextField("second", second, changed, second, 0, readText, field, editText)
+    discard drainMainThreadWork()
+    check field.stringValue == "second"
+    check first.edits == 0
+    check second.edits == 0
+    scope.dispose()
+
+  test "empty binding identity relinquishes text normally":
+    let model = Model(text: "bound")
+    let field = newTextField()
+    let scope = newBindingScope()
+    scope.bindTextField("", model, changed, model, 0, readText, field, editText)
+    check scope.relinquishText(field)
+    field.stringValue = "plain"
+    check model.edits == 0
+    scope.dispose()
+
   test "preview and omitted bindings do not subscribe":
     let model = Model(value: 2)
     let target = Target()

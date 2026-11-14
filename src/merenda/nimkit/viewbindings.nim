@@ -18,6 +18,7 @@ type
 
   Binding = ref object of Responder
     scope: BackRef[BindingScope]
+    textTarget: BackRef[TextField]
     active, pending, needsConnect, updating: bool
     applyValue: proc(binding: Binding) {.nimcall.}
     editor: EditBinding
@@ -145,6 +146,32 @@ proc removeBinding*(scope: BindingScope, id: string) =
     binding.scope.clear()
     scope.bindings.del(id)
 
+proc ownsText*(scope: BindingScope, field: TextField): bool =
+  ## Whether this scope has a bindTextField owner for the field.
+  if not scope.isNil and not scope.disposed:
+    for binding in scope.bindings.values:
+      if binding.textTarget{} == field:
+        return true
+
+proc relinquishTextExcept(
+    scope: BindingScope, field: TextField, exceptId: string, keepId: bool
+): bool =
+  ## Transfer ownership before another writer changes the field. Omission alone
+  ## uses endBindings and leaves the current field value intact.
+  if not scope.isNil and not scope.disposed:
+    var removed: seq[string]
+    for id, binding in scope.bindings:
+      if (not keepId or id != exceptId) and binding.textTarget{} == field:
+        removed.add id
+    for id in removed:
+      scope.removeBinding(id)
+    result = removed.len > 0
+
+proc relinquishText*(scope: BindingScope, field: TextField): bool =
+  ## Retire this scope's text binding before another writer updates the field.
+  ## Returns whether an owner was removed; the current text is left unchanged.
+  scope.relinquishTextExcept(field, "", false)
+
 proc dispose*(scope: BindingScope) =
   if not scope.isNil and not scope.disposed:
     scope.disposed = true
@@ -210,6 +237,8 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
     result.editor = nil
     result.skipUnchanged = textBinding
     result.hasLast = false
+  if not textBinding:
+    result.textTarget.clear()
   if result.getter != getter or result.setter != setter:
     result.hasLast = false
   if result.receiver{} != receiver or result.target{} != target:
@@ -416,6 +445,7 @@ template bindTextField*(
 ) =
   ## The edit callback performs controller validation, undo, and model mutation.
   block:
+    discard scope.relinquishTextExcept(field, id, true)
     bindValueImpl(
       scope, id, source, signal, receiver, context, getter, field, setBoundText, false,
       true,
@@ -423,6 +453,7 @@ template bindTextField*(
     let binding = ValueBinding[typeof(receiver), typeof(context), TextField, string](
       scope.bindings[id]
     )
+    binding.textTarget.target = field
     if not scope.preview:
       installTextEdit(binding, receiver, context, field, edit)
     else:
@@ -447,12 +478,14 @@ template bindTextField*[T](
 ) =
   ## Observe a Sigil snapshot while routing edits through a weak controller.
   block:
+    discard scope.relinquishTextExcept(field, id, true)
     bindSigilValueImpl(
       scope, id, input, receiver, context, getter, field, setBoundText, false, true
     )
     let binding = ValueBinding[typeof(receiver), typeof(context), TextField, string](
       scope.bindings[id]
     )
+    binding.textTarget.target = field
     if not scope.preview:
       installTextEdit(binding, receiver, context, field, edit)
     binding.applyValue(binding)
