@@ -304,7 +304,8 @@ proc setChange*(node: DirectNode, field: TextField, action: ViewAction) =
     field.connect(textDidChange, node.target, fieldChanged)
   node.target.changed = action
 
-proc flushBindings*(node: DirectNode) =
+proc flushBindings*(node: sink DirectNode) =
+  ## Keep the node alive when a binding clears or replaces its owning root.
   if not node.isNil and not node.closed and not node.suspended:
     node.bodyBindings.flushBindings()
     if not node.closed and not node.suspended:

@@ -9,6 +9,8 @@ type LifetimeOwner = ref object of Responder
   calls, draws: int
   nested: Sigil[int]
   host: DirectView
+  root: BackRef[DirectNode]
+  rootAliveAfterClear: bool
 
 proc lifetimeBody(context: DirectNode, owner: LifetimeOwner, value: int) =
   inc owner.draws
@@ -37,6 +39,7 @@ proc conditionalLifetime(
 proc clearOnChange(context: DirectNode, owner: LifetimeOwner, shouldClear: bool) =
   if shouldClear:
     owner.host.clear()
+    owner.rootAliveAfterClear = not owner.root.isNil
   else:
     context.viewBody:
       Button("first")
@@ -185,6 +188,10 @@ suite "direct view activation and lifetime":
       host = newDirectView()
       owner = LifetimeOwner(host: host, nested: newSigil(1))
       clearSignal = newSigil(false)
+    block:
+      let root = host.beginUpdate()
+      owner.root.target = root
+      host.endUpdate()
     host.viewBody:
       component(clearingComponent, owner, clearSignal)
       component(observedLifetime, owner, owner.nested)
@@ -193,6 +200,8 @@ suite "direct view activation and lifetime":
     clearSignal <- true
     owner.nested <- 2
     host.resumeUpdates()
+    check owner.rootAliveAfterClear
+    check owner.root.isNil
     check host.arrangedSubviews.len == 0
     check second.title == "1"
     check owner.nested.subcriptions.len == 0
