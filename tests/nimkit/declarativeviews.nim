@@ -1,5 +1,7 @@
 import std/unittest
+import sigils/reactive
 import merenda/nimkit
+import merenda/nimkit/foundation/mainthreadwork
 
 type
   Todo = object
@@ -9,6 +11,31 @@ type
     called, value: string
     actions, changes: int
     host: DeclarativeView
+
+  BoundController = ref object of Responder
+    title: Sigil[string]
+    order: Sigil[int]
+    edits: int
+
+proc boundTitle(owner: BoundController, context: int): string =
+  owner.title{}
+
+proc acceptTitle(owner: BoundController, context: int, title: string) =
+  inc owner.edits
+  if title.len > 0:
+    owner.title <- title
+
+proc boundBody(owner: BoundController, order: int): ViewSpec =
+  result = textFieldSpec(owner.title{}, identifier = "bound-field")
+  result.binding = viewBinding(
+    owner,
+    0,
+    proc(scope: BindingScope, owner: BoundController, context: int, field: TextField) =
+      scope.bindTextField(
+        "title", owner.title, owner, context, boundTitle, field, acceptTitle
+      ),
+    ownsText = true,
+  )
 
 proc newTestController(): TestController =
   result = TestController()
@@ -79,6 +106,46 @@ static:
   )
 
 suite "NimKit declarative views":
+  test "owned bindings preserve drafts through structural refresh and disappear with host":
+    let owner = BoundController(title: newSigil("first"), order: newSigil(0))
+    var host = newDeclarativeView(vstackSpec())
+    host.bindBody(owner.order, owner, boundBody)
+    let field = TextField(host.viewWithIdentifier("bound-field"))
+    owner.title <- "accepted"
+    discard drainMainThreadWork()
+    check field.stringValue == "accepted"
+    field.stringValue = ""
+    check owner.edits == 1
+    owner.order <- 1
+    discard drainMainThreadWork()
+    check host.viewWithIdentifier("bound-field") == field
+    check field.stringValue == ""
+    owner.title <- "queued"
+    var weakHost: BackRef[DeclarativeView]
+    weakHost.target = host
+    host = nil
+    check weakHost.isNil
+    check owner.title.subcriptions.len == 0
+    check owner.order.subcriptions.len == 0
+    discard drainMainThreadWork()
+    field.stringValue = "retained"
+    check owner.edits == 1
+
+  test "detached descriptions ignore binding recipes and removing a binding restores text":
+    let owner = BoundController(title: newSigil("first"), order: newSigil(0))
+    let spec = owner.boundBody(0)
+    let preview = TextField(buildDetachedView(spec))
+    check preview.stringValue == "first"
+    check owner.title.subcriptions.len == 0
+    let host = newDeclarativeView(spec)
+    let field = TextField(host.viewWithIdentifier("bound-field"))
+    field.stringValue = ""
+    host.update(textFieldSpec("first", identifier = "bound-field"))
+    check field.stringValue == "first"
+    check owner.title.subcriptions.len == 0
+    let edits = owner.edits
+    field.stringValue = "unbound"
+    check owner.edits == edits
   test "viewBody accepts SwiftUI-style capitalized control names":
     let controller = newTestController()
     let body = viewBody:

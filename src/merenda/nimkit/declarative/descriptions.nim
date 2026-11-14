@@ -5,7 +5,9 @@ import ../themes
 import ../containers/stackviews
 import ../text/textfields
 import ./actions
+import ./viewbindings
 export actions except dispatchViewAction
+export viewbindings except configureBindings
 
 type
   ViewSpecKind* = enum
@@ -24,6 +26,7 @@ type
     sizing*: StackViewSizingPolicy
     background*: Color
     text*: string
+    binding*: ViewBinding
     case kind*: ViewSpecKind
     of vskStack:
       orientation*: LayoutAxis
@@ -143,3 +146,8 @@ proc keyedSpec*(key: string, child: ViewSpec): ViewSpec =
     raise newException(ValueError, "declarative keys must not be empty")
   result = child
   result.key = key
+
+proc withBinding*(spec: ViewSpec, binding: ViewBinding): ViewSpec =
+  ## Attach typed setup while keeping description constructors small.
+  result = spec
+  result.binding = binding

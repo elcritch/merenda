@@ -2,6 +2,8 @@
 ## All operations belong to the owning GUI thread. Model ownership stays with callers.
 import std/[sets, tables]
 import sigils/[core, selectors]
+import sigils/reactive
+import ../app/collectionsigils
 import ../view/views
 import ../containers/stackviews
 import ../controls/[buttons, controls]
@@ -10,6 +12,7 @@ import ../responder/actiontargets
 import ../foundation/[types, selectors]
 import ./descriptions
 import ./actions
+import ./viewbindings
 export descriptions
 
 type
@@ -18,31 +21,34 @@ type
 
   EventTarget = ref object of ActionAdapter
     active, updating: bool
+    lifetime: BackRef[BindingScope]
     action, changed: ViewAction
 
   MountedNode = object
     view: View
     spec: ViewSpec
     target: EventTarget
+    bindings: BindingScope
     children: seq[MountedNode]
 
   DeclarativeView* = ref object of StackView
     mounted: MountedNode
     applying: bool
     lastUpdate: ViewUpdateStats
+    bodyBindings: BindingScope
 
 let DeclarativeAction = actionSelector("declarativeViewAction")
 
 proc invokeAction(self: DynamicAgent, invocation: var Invocation) =
   let target = EventTarget(self)
   let callback = target.action
-  if target.active and not target.updating:
+  if target.active and not target.updating and not target.lifetime.isNil:
     callback.dispatchViewAction(invocation.argsAs(ActionArgs).sender)
   invocation.setResult(())
 
 proc fieldChanged(target: EventTarget, sender: DynamicAgent) {.slot.} =
   let callback = target.changed
-  if target.active and not target.updating:
+  if target.active and not target.updating and not target.lifetime.isNil:
     callback.dispatchViewAction(sender)
 
 func identity(spec: ViewSpec, index: int): string =
@@ -112,7 +118,12 @@ proc applyProperties(view: View, previous, next: ViewSpec, initial: bool) =
     let field = TextField(view)
     # Unrelated updates leave live editing alone. An echoed edit already equals
     # the editor's text; rewriting it would discard selection or marked text.
-    if (initial or previous.text != next.text) and field.stringValue != next.text:
+    if (
+      initial or (
+        not next.binding.ownsText and
+        (previous.binding.ownsText or previous.text != next.text)
+      )
+    ) and field.stringValue != next.text:
       field.stringValue = next.text
     if initial or previous.placeholder != next.placeholder:
       field.placeholder = next.placeholder
@@ -134,10 +145,12 @@ proc refreshTarget(node: var MountedNode, spec: ViewSpec) =
 
 proc mount(spec: ViewSpec, stats: var ViewUpdateStats): MountedNode =
   result.view = newWidget(spec)
+  result.bindings = newBindingScope()
   inc stats.created
   result.view.applyProperties(spec, spec, true)
   if spec.kind in {vskButton, vskTextField}:
     result.target = EventTarget(active: true)
+    result.target.lifetime.target = result.bindings
     initResponder(result.target)
     result.refreshTarget(spec)
     if spec.kind == vskButton:
@@ -152,10 +165,12 @@ proc mount(spec: ViewSpec, stats: var ViewUpdateStats): MountedNode =
       let mounted = mount(child, stats)
       StackView(result.view).addArrangedSubview(mounted.view, child.sizing)
       result.children.add mounted
+  spec.binding.configureBindings(result.bindings, result.view)
   result.remember(spec)
 
 proc deactivate(node: var MountedNode, stats: var ViewUpdateStats) =
   inc stats.removed
+  node.bindings.dispose()
   if not node.target.isNil:
     node.target.active = false
     node.target.action = ViewAction()
@@ -186,6 +201,7 @@ proc reconcile(node: var MountedNode, spec: ViewSpec, stats: var ViewUpdateStats
       node.target.updating = true
     try:
       node.view.applyProperties(node.spec, spec, false)
+      spec.binding.configureBindings(node.bindings, node.view)
     finally:
       if not node.target.isNil:
         node.target.updating = false
@@ -250,8 +266,32 @@ proc clear*(host: DeclarativeView) =
   defer:
     host.applying = false
   var stats: ViewUpdateStats
+  host.bodyBindings.dispose()
+  host.bodyBindings = nil
   host.mounted.retire(stats)
   host.lastUpdate = stats
+
+proc bindBody*[S; R: Responder, T](
+    host: DeclarativeView,
+    input: S,
+    owner: R,
+    draw: proc(owner: R, value: T): ViewSpec {.nimcall.},
+) =
+  ## The host owns its structural observation; leaf bindings can update without
+  ## rebuilding descriptions. Rebinding switches input and weak controller.
+  if host.bodyBindings.isNil:
+    host.bodyBindings = newBindingScope()
+  type Input = tuple[source: S, draw: typeof(draw)]
+  proc read(owner: R, input: Input): ViewSpec =
+    unBindSigilEvents:
+      result = input.draw(owner, input.source{})
+
+  proc apply(host: DeclarativeView, spec: ViewSpec) =
+    host.update(spec)
+
+  bindSigilValue(
+    host.bodyBindings, "body", input, owner, (input, draw), read, host, apply
+  )
 
 proc materialize(spec: ViewSpec): View =
   result = newWidget(spec)
