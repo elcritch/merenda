@@ -43,6 +43,27 @@ proc observe(view: View): BackRef[View] =
   result.target = view
 
 suite "NimKit ARC back references":
+  test "action adapters copy explicit context and release their receiver":
+    let button = newButton("Run")
+    let action = actionSelector("test.contextReceiver")
+    var observed: BackRef[ActionReceiver]
+    block:
+      let receiver = ActionReceiver()
+      initResponder(receiver)
+      observed.target = receiver
+      var amount = 3
+      button.target = newActionTarget(action, receiver, amount) do(
+        receiver: ActionReceiver, context: int, sender: DynamicAgent
+      ):
+        check sender of Button
+        receiver.calls += context
+      amount = 8
+      button.action = action
+      check button.sendAction()
+      check receiver.calls == 3
+    check observed.isNil
+    check button.sendAction()
+
   test "non-capturing action adapters do not retain their receiver":
     let button = newButton("Run")
     var observed: BackRef[ActionReceiver]

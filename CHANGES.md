@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add an experimental NimKit declarative view DSL with typed descriptions,
+  keyed retained updates, and detached Dragology preview construction. The
+  editable task-list demo exercises focus, selection, and callback identity
+  across insertion and reorder. See `docs/declarative-views.md`.
+  Inline event blocks use weak-receiver ActionTarget adapters; an explicit context
+  overload binds row IDs without capturing loop variables.
+
 - Add NimKit's discrete declarative dragging port: model-derived destinations,
   isolated layout/render previews, stable IDs, floating, animated rearrangement,
   cancellation and application-owned undoable commits. Try
