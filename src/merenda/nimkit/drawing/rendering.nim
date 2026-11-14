@@ -354,7 +354,7 @@ proc collectRenderFrames(
 proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
   root.layoutSubtreeIfNeeded()
   if not root.xCachedRenderScene.isNil and root.xCachedRenderScene.frameGeneration() > 0 and
-      not root.xNeedsDisplay and
+      vipNeedsDisplay notin root.xPrivProps and
       root.xCachedAppearanceGeneration == appearance.theme.generation():
     return root.xCachedRenderScene
   if root.xCachedRenderScene.isNil:
@@ -373,7 +373,7 @@ proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
 
   if changed:
     root.xCachedRenders = nil
-    root.xHasCachedRenders = false
+    root.xPrivProps.excl vipHasCachedRenders
   root.xCachedRenderResources = root.xCachedRenderScene.renderResources()
   root.xCachedAppearanceGeneration = appearance.theme.generation()
   root.xCachedRenderScene
@@ -384,13 +384,13 @@ proc invalidateRenderCache*(root: View) =
   root.xCachedRenders = nil
   root.xCachedRenderResources = nil
   root.xCachedRenderScene = nil
-  root.xHasCachedRenders = false
+  root.xPrivProps.excl vipHasCachedRenders
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   let scene = root.updateRenderScene(appearance)
-  if not root.xHasCachedRenders:
+  if vipHasCachedRenders notin root.xPrivProps:
     root.xCachedRenders = scene.materialize()
-    root.xHasCachedRenders = true
+    root.xPrivProps.incl vipHasCachedRenders
   scene.acknowledgeRenderGeneration(scene.frameGeneration())
   result = root.xCachedRenders
 

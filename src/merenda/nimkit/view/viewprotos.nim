@@ -103,12 +103,12 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       self.needsDisplay = true
 
   method needsDisplay(self: View): bool =
-    self.xNeedsDisplay
+    vipNeedsDisplay in self.xPrivProps
 
   method `needsDisplay=`(self: View, value: bool) =
     if not value:
-      self.xNeedsDisplay = false
-      self.xNeedsLocalDisplay = false
+      self.xPrivProps.excl vipNeedsDisplay
+      self.xPrivProps.excl vipNeedsLocalDisplay
       self.xInvalidRects.setLen(0)
       return
 
@@ -121,7 +121,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     let clipped = rect.intersection(self.visibleRect())
     if clipped.isEmpty:
       return
-    let wasDirty = self.xNeedsDisplay
+    let wasDirty = vipNeedsDisplay in self.xPrivProps
     self.markLocalNeedsDisplay(wholeView = false)
     if not wasDirty:
       self.xInvalidRects = @[clipped]
@@ -133,7 +133,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       parent.propagateNeedsDisplayInRect(self.rectToView(clipped, parent))
 
   method invalidRect*(self: View): Rect =
-    if not self.xNeedsDisplay:
+    if vipNeedsDisplay notin self.xPrivProps:
       return rect(0.0, 0.0, 0.0, 0.0)
     if self.xInvalidRects.len == 0:
       return self.visibleRect()
@@ -142,7 +142,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       result = result.union(self.xInvalidRects[idx])
 
   method invalidRects*(self: View): seq[Rect] =
-    if not self.xNeedsDisplay:
+    if vipNeedsDisplay notin self.xPrivProps:
       return @[]
     if self.xInvalidRects.len == 0:
       return @[self.visibleRect()]
@@ -161,12 +161,12 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.isHidden()
 
   method flipped(self: View): bool =
-    self.xFlipped
+    vipFlipped in self.xPrivProps
 
   method `flipped=`(self: View, flipped: bool) =
-    if self.xFlipped == flipped:
+    if (vipFlipped in self.xPrivProps) == flipped:
       return
-    self.xFlipped = flipped
+    self.setViewInternalProperty(vipFlipped, flipped)
     self.invalidateLayoutItemGeometry(lirBounds)
     self.setNeedsDisplaySubtree()
 
@@ -233,12 +233,12 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.needsDisplay = true
 
   method usesThemedRootBackground(self: View): bool =
-    self.xUsesThemedRootBackground
+    vipUsesThemedRootBackground in self.xPrivProps
 
   method `usesThemedRootBackground=`(self: View, enabled: bool) =
-    if self.xUsesThemedRootBackground == enabled:
+    if (vipUsesThemedRootBackground in self.xPrivProps) == enabled:
       return
-    self.xUsesThemedRootBackground = enabled
+    self.setViewInternalProperty(vipUsesThemedRootBackground, enabled)
     self.needsDisplay = true
 
   method clipsToBounds(self: View): bool =
@@ -456,8 +456,8 @@ proc propagateNeedsDisplayInRect(view: View, rect: Rect) =
   if clipped.isEmpty:
     return
 
-  if not view.xNeedsDisplay:
-    view.xNeedsDisplay = true
+  if vipNeedsDisplay notin view.xPrivProps:
+    view.xPrivProps.incl vipNeedsDisplay
     view.xInvalidRects = @[clipped]
   elif view.xInvalidRects.len > 0:
     view.xInvalidRects[0] = view.xInvalidRects[0].union(clipped)

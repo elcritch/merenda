@@ -1231,6 +1231,25 @@ suite "nimkit menus":
     check root.subviews()[1] of PopupListView
     button.closePopup()
 
+  test "context menu handler is installed once across menu changes":
+    let
+      view = newView()
+      first = newMenu("First")
+      second = newMenu("Second")
+      initialDepth = DynamicAgent(view).methodStack(rightMouseDown()).len
+
+    view.menu = first
+    check DynamicAgent(view).methodStack(rightMouseDown()).len == initialDepth + 1
+    view.menu = second
+    view.menu = nil
+    var handled = true
+    discard DynamicAgent(view).performLocal(rightMouseDown(), MouseEvent(), handled)
+    check not handled
+    view.properties = {vpDraggable}
+    view.menu = first
+    check DynamicAgent(view).methodStack(rightMouseDown()).len == initialDepth + 1
+    check view.menu == first
+
   test "view context menu opens on secondary click and dispatches item action":
     let
       window = newWindow("Context menu", frame = rect(0, 0, 240, 160))

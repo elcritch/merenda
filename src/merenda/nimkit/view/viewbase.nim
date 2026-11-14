@@ -124,6 +124,19 @@ type
     vpAccessibilityElement ## Explicitly exposes the view as an accessibility element.
     vpAccessibilityIgnored ## Excludes the view from accessibility traversal.
 
+  ViewInternalProperty* = enum
+    vipFlipped
+    vipNeedsDisplay
+    vipNeedsLocalDisplay
+    vipUsesThemedRootBackground
+    vipNeedsUpdateConstraints
+    vipNeedsLayout
+    vipNeedsLocalConstraintLayout
+    vipLayoutSubtreeInProgress
+    vipAutoresizingMaskConstraints
+    vipHasCachedRenders
+    vipContextMenuHandlerInstalled
+
   ViewCursorRect* = object
     rect*: Rect
     cursor*: string
@@ -208,16 +221,13 @@ type
     xTag*: int
     xIdentifier*: string
     xProps*: set[ViewProperty]
+    xPrivProps*: set[ViewInternalProperty]
     xFrame*: Rect
     xBounds*: Rect
-    xFlipped*: bool
-    xNeedsDisplay*: bool
-    xNeedsLocalDisplay*: bool
     xDisplayRevision*: uint64
     xRenderSlotRevisions*: Table[RenderSlotId, uint64]
     xInvalidRects*: seq[Rect]
     xBackgroundColor*: Color
-    xUsesThemedRootBackground*: bool
     xClipsToBounds*: bool
     xFocusRingType*: FocusRingType
     xAlphaValue*: float32
@@ -237,10 +247,6 @@ type
     xAccessibilityIdentifier*: string
     xAccessibilityTraits*: AccessibilityTraits
     xValidationMessage*: string
-    xNeedsUpdateConstraints*: bool
-    xNeedsLayout*: bool
-    xNeedsLocalConstraintLayout*: bool
-    xLayoutSubtreeInProgress*: bool
     xLayoutGeneration*: Natural
     xConstraintVisitGeneration*: Natural
     xLayoutVisitGeneration*: Natural
@@ -253,7 +259,6 @@ type
     xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
     xLayoutInputRevision*: uint64
     xAutoresizingMask*: AutoresizingMask
-    xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
     xLastBaselineOffset*: float32
@@ -273,13 +278,11 @@ type
     xTrackingAreas*: seq[ViewTrackingArea]
     xRegisteredDraggedTypes*: seq[string]
     xContextMenu*: Responder
-    xContextMenuHandlerInstalled*: bool
     xRenderViewId*: RenderViewId
     xCachedRenderScene*: RenderScene
     xCachedRenders*: Renders
     xCachedRenderResources*: RenderResourceManifest
     xCachedAppearanceGeneration*: ThemeGeneration
-    xHasCachedRenders*: bool
 
 proc item*(term: LayoutTerm): View =
   ## Returns nil after the referenced view has been destroyed.
@@ -339,20 +342,27 @@ proc renderSlotRevision*(view: View, slot: RenderSlotId): uint64 =
     view.xRenderSlotRevisions[slot] = 1
   view.xRenderSlotRevisions[slot]
 
+proc setViewInternalProperty*(
+    view: View, property: ViewInternalProperty, enabled: bool
+) {.inline.} =
+  if enabled:
+    view.xPrivProps.incl property
+  else:
+    view.xPrivProps.excl property
+
 proc markLocalNeedsDisplay*(view: View, wholeView = true, propagateAncestors = false) =
   if view.isNil:
     return
   view.xDisplayRevision.advanceRevision()
   for revision in view.xRenderSlotRevisions.mvalues:
     revision.advanceRevision()
-  view.xNeedsDisplay = true
-  view.xNeedsLocalDisplay = true
+  view.xPrivProps.incl {vipNeedsDisplay, vipNeedsLocalDisplay}
   if wholeView:
     view.xInvalidRects.setLen(0)
   if propagateAncestors:
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
-      ancestor.xNeedsDisplay = true
+      ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 
 proc markRenderSlotNeedsDisplay*(
@@ -364,23 +374,22 @@ proc markRenderSlotNeedsDisplay*(
   view.xDisplayRevision.advanceRevision()
   discard view.renderSlotRevision(slot)
   view.xRenderSlotRevisions[slot].advanceRevision()
-  view.xNeedsDisplay = true
-  view.xNeedsLocalDisplay = true
+  view.xPrivProps.incl {vipNeedsDisplay, vipNeedsLocalDisplay}
   view.xInvalidRects.setLen(0)
   if propagateAncestors:
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
-      ancestor.xNeedsDisplay = true
+      ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 
 proc markRenderStructureChanged*(view: View) =
   ## Schedules retained-transform reconciliation without dirtying view drawing.
   if view.isNil:
     return
-  view.xNeedsDisplay = true
+  view.xPrivProps.incl vipNeedsDisplay
   var ancestor = view.superviewBacklink()
   while not ancestor.isNil:
-    ancestor.xNeedsDisplay = true
+    ancestor.xPrivProps.incl vipNeedsDisplay
     ancestor = ancestor.superviewBacklink()
 
 proc nextLayoutGeneration*(): Natural =

@@ -128,8 +128,7 @@ func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
   reason in {lirSuperview, lirSubviews, lirHierarchy, lirHidden}
 
 proc markConstraintStorageChangedRaw(view: View) =
-  view.xNeedsUpdateConstraints = true
-  view.xNeedsLayout = true
+  view.xPrivProps.incl {vipNeedsUpdateConstraints, vipNeedsLayout}
 
 proc markAggregateLayoutInputDirty(
     view: View, source: LayoutInputSource, structureDirty: bool
@@ -166,7 +165,7 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
 
 protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
   proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
-    if view.xAutoresizingMaskConstraints:
+    if vipAutoresizingMaskConstraints in view.xPrivProps:
       emit view.layoutInputChanged(lirSuperviewGeometry)
 
 proc initLayoutSignalBus*(view: View) =
@@ -203,18 +202,18 @@ proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
     return
   view.xAutoresizingMask = mask
   view.invalidateLayoutItemGeometry(lirAutoresizingMask)
-  if view.xAutoresizingMaskConstraints:
+  if vipAutoresizingMaskConstraints in view.xPrivProps:
     view.refreshAutoresizingReference()
   else:
     view.resetAutoresizingState()
 
 proc autoresizingMaskConstraints*(view: View): bool =
-  view.xAutoresizingMaskConstraints
+  vipAutoresizingMaskConstraints in view.xPrivProps
 
 proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
-  if view.xAutoresizingMaskConstraints == value:
+  if (vipAutoresizingMaskConstraints in view.xPrivProps) == value:
     return
-  view.xAutoresizingMaskConstraints = value
+  view.setViewInternalProperty(vipAutoresizingMaskConstraints, value)
   if value:
     view.invalidateLayoutItemGeometry(lirAutoresizingMask)
     view.refreshAutoresizingReference()
@@ -257,7 +256,7 @@ proc resetAutoresizingState*(view: View) =
 
 proc refreshAutoresizingReference*(view: View) =
   let superview = view.superviewBacklink()
-  if superview.isNil or not view.xAutoresizingMaskConstraints:
+  if superview.isNil or vipAutoresizingMaskConstraints notin view.xPrivProps:
     view.resetAutoresizingState()
     return
   view.xAutoresizingState = AutoresizingState(
@@ -274,16 +273,16 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
 
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   if origin == lfoSolver:
-    view.xNeedsLocalConstraintLayout = false
+    view.xPrivProps.excl vipNeedsLocalConstraintLayout
   if view.xFrame == frame:
     return
   if origin == lfoContainer and view.xFrame.size != frame.size:
-    view.xNeedsLocalConstraintLayout = true
+    view.xPrivProps.incl vipNeedsLocalConstraintLayout
     inc view.xLayoutInputRevision
     view.xLayoutInputCache.dirtySources.incl lisAutoresizingMask
   view.xFrame = frame
   view.xBounds = rect(view.xBounds.origin, frame.size)
-  view.xNeedsLayout = true
+  view.xPrivProps.incl vipNeedsLayout
   view.markLocalNeedsDisplay(propagateAncestors = true)
   case origin
   of lfoAuthored:
@@ -296,7 +295,7 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   of lfoSolver:
     let superview = view.superviewBacklink()
     if not superview.isNil:
-      superview.xNeedsLayout = true
+      superview.xPrivProps.incl vipNeedsLayout
 
 proc setFrameFromLayout*(view: View, frame: Rect) =
   view.applyLayoutFrame(frame, lfoContainer)
@@ -523,7 +522,7 @@ proc pointToSuperview(view: View, point: Point): Point =
     frame = view.xFrame
     bounds = view.xBounds
     y =
-      if view.xFlipped:
+      if vipFlipped in view.xPrivProps:
         frame.origin.y + point.y - bounds.origin.y
       else:
         frame.origin.y + bounds.maxY - point.y
@@ -534,7 +533,7 @@ proc pointFromSuperview(view: View, point: Point): Point =
     frame = view.xFrame
     bounds = view.xBounds
     y =
-      if view.xFlipped:
+      if vipFlipped in view.xPrivProps:
         bounds.origin.y + point.y - frame.origin.y
       else:
         bounds.maxY - (point.y - frame.origin.y)
