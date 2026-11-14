@@ -442,3 +442,29 @@ The main hypothesis is that real-view composition plus MVC-owned bindings provid
 the needed expressiveness with less intermediate representation and narrower update
 work. Whether it is faster, simpler, and more robust than P0/P2 remains the result
 this experiment must establish.
+
+## Experimental virtualized rows
+
+`newCollectionRows(collection, controller, builder)` uses an ArrayController as
+its data source and composes each mounted row into a DirectView. The builder is
+called with the stable model identifier and can use the ordinary DirectView DSL
+and scope-owned bindings. The adapter observes model and selection changes;
+`flushBindings` may be used to apply queued changes explicitly on the GUI thread.
+Call `close` when replacing the adapter or disposing its presentation.
+
+Rows outside the viewport are cleared before their host is reused, including
+bindings and action targets. A row containing the window's active field editor
+stays mounted offscreen, retaining its provisional text, marked text and
+selection. The next viewport reconciliation retires it after editing ends.
+Removing the item cancels its field editor and retires the row. A model or
+controller must own any draft that must survive the end of editing or a row's
+retirement; row identity is not a durable draft or asynchronous validity token.
+The adapter uses the collection's delegate and expects unique, stable item IDs.
+
+Compile with `-d:merendaProfile` and import
+`merenda/nimkit/foundation/viewprofiling` to reset and read thread-local phase
+counters. Times are inclusive: solving includes construction and insertion, and
+intrinsic measurement may occur inside generation. Do not add the phase times.
+The drawing phase covers view draw callbacks, not GPU presentation. Solver size
+is the maximum recorded per pass; these counters are diagnostics, not a memory
+or input-latency measurement.

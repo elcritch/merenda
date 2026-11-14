@@ -668,3 +668,145 @@ suite "direct view composition":
       before.elements[before.find("b")].frame.origin.y
     check after.elements[after.find("b")].frame.origin.y <
       after.elements[after.find("a")].frame.origin.y
+
+suite "direct collection rows":
+  test "editing rows survive viewport eviction and model reorder, then retire on deletion":
+    var items: seq[ModelItem]
+    for i in 0 ..< 100:
+      items.add modelItem($i, title = "row " & $i, objectValue = toObj("row " & $i))
+    let controller = newArrayController(items)
+    let collection = newCollectionView(frame = rect(0, 0, 240, 100))
+    collection.collectionLayout = newCollectionViewLayout(
+      clkList,
+      itemSize = initSize(200, 30),
+      minimumLineSpacing = 0,
+      edgeInsets = insets(0),
+    )
+    let rows = newCollectionRows(
+      collection,
+      controller,
+      proc(row: DirectView, controller: ArrayController, id: string) =
+        row.viewBody:
+          TextField:
+            this.stringValue = controller.itemWithIdentifier(id).title,
+    )
+    let window = newWindow("Virtual rows", frame = rect(0, 0, 240, 100))
+    window.setContentView(collection)
+    defer:
+      rows.close()
+      window.close()
+    discard window.buildRenders()
+    let row = DirectView(collection.itemViewAtIndex(0))
+    require not row.isNil
+    let field = TextField(row.arrangedSubviews[0])
+    require window.makeFirstResponder(field)
+    let editor = TextView(field.currentEditor)
+    editor.selectedRange = initTextRange(1, 2)
+    editor.setMarkedTextValue("xy", initTextRange(1, 0), initTextRange(-1, 0))
+    let selection = editor.selectedRange
+    let text = editor.stringValue
+    let marked = editor.markedRange
+    collection.scrollView.contentOffset = initPoint(0, 900)
+    discard window.buildRenders()
+    check collection.itemViewAtIndex(0) == row
+    check not collection.itemViewAtIndex(30).isNil
+    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len + 1
+    check field.currentEditor == editor
+    check editor.selectedRange == selection
+    check editor.markedRange == marked
+    check editor.stringValue == text
+
+    controller.insertItem(modelItem("new", objectValue = toObj("new")), 0)
+    rows.flushBindings()
+    check collection.itemViewAtIndex(1) == row
+    check field.currentEditor == editor
+    check editor.stringValue == text
+    check controller.moveItem("0", 2)
+    rows.flushBindings()
+    check collection.itemViewAtIndex(2) == row
+    check field.currentEditor == editor
+    check editor.selectedRange == selection
+    check editor.markedRange == marked
+    collection.scrollView.contentOffset = initPoint(0, 0)
+    discard window.buildRenders()
+    check collection.itemViewAtIndex(2) == row
+    check field.currentEditor == editor
+    check editor.stringValue == text
+    collection.scrollView.contentOffset = initPoint(0, 900)
+    discard window.buildRenders()
+    check controller.removeItem("0")
+    check field.currentEditor.isNil
+    controller.insertItem(
+      modelItem("0", title = "replacement", objectValue = toObj("replacement")), 0
+    )
+    rows.flushBindings()
+    check field.currentEditor.isNil
+    check not row.containsView(field)
+    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len
+
+  test "reused hosts retire old actions and synchronize selection":
+    var items: seq[ModelItem]
+    for i in 0 ..< 40:
+      items.add modelItem($i, title = "row " & $i, objectValue = toObj($i))
+    let controller = newArrayController(items)
+    let owner = DirectController()
+    let model = DirectBindingModel(value: 1)
+    initResponder(owner)
+    initResponder(model)
+    let collection = newCollectionView(frame = rect(0, 0, 240, 90))
+    collection.collectionLayout = newCollectionViewLayout(
+      clkList,
+      itemSize = initSize(200, 30),
+      minimumLineSpacing = 0,
+      edgeInsets = insets(0),
+    )
+    let rows = newCollectionRows(
+      collection,
+      controller,
+      proc(row: DirectView, controller: ArrayController, id: string) =
+        row.viewBody:
+          VStack:
+            TextField:
+              bindingScope.bindValue(
+                "value", model, directChanged, model, 0, readDirect, this, writeDirect
+              )
+            Button:
+              this.title = controller.itemWithIdentifier(id).title
+              onAction(owner, id) do(
+                receiver: DirectController, key: string, sender: DynamicAgent
+              ):
+                inc receiver.calls
+      ,
+    )
+    defer:
+      rows.close()
+    discard buildRenders(collection)
+    let firstRow = DirectView(collection.itemViewAtIndex(0))
+    let contents = StackView(firstRow.arrangedSubviews[0])
+    let oldField = TextField(contents.arrangedSubviews[0])
+    let oldButton = Button(contents.arrangedSubviews[1])
+    collection.selectedIndex = 0
+    check controller.selectionController.selectedIdentifier == "0"
+    model.value = 2
+    emit model.directChanged(0)
+    collection.scrollView.contentOffset = initPoint(0, 600)
+    discard buildRenders(collection)
+    check not collection.itemViewAtIndex(20).isNil
+    check firstRow in collection.visibleItemViews
+    check firstRow.accessibilityLabel() ==
+      controller.itemWithIdentifier(firstRow.accessibilityIdentifier).title
+    discard drainMainThreadWork()
+    check oldField.stringValue == "1"
+    model.value = 3
+    emit model.directChanged(0)
+    discard drainMainThreadWork()
+    check oldField.stringValue == "1"
+    discard oldButton.send(performClick(), ActionArgs(sender: oldButton))
+    check owner.calls == 0
+    check collection.itemViewAtIndex(0).isNil
+    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len
+    controller.selectionController.setSelectedIdentifiers(["25"])
+    rows.flushBindings()
+    check collection.selectedIdentifier == "25"
+    rows.close()
+    check firstRow.arrangedSubviews.len == 0

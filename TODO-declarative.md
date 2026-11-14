@@ -103,8 +103,9 @@ document save may finish independently.
   remains separate from adopting [Sigils PR #70](https://github.com/elcritch/sigils/pull/70).
 - **Property ownership and retained editing:** binding-to-property transitions,
   row reorder/removal, and field-editor focus/selection/marked-text coverage.
-  CollectionView identity retention and opt-in TableView retained-cell refresh are
-  available; a virtualized DirectView editor experiment is still outstanding.
+  CollectionView identity retention, experimental virtualized DirectView rows, and
+  opt-in TableView retained-cell refresh are available. The [row comparison](docs/benchmarks/collection-rows/README.md)
+  records a fixed-viewport diagnostic; native IME and input latency still need measurement.
 - **Two documents:** independent drafts/history, switching, actual closure and
   same-ID reopening, stale queued results, and teardown checks for both renderers.
   See the [experiment and its acceptance checks](docs/declarative-two-documents.md).
@@ -141,7 +142,8 @@ document save may finish independently.
   respect. Neither is an application transaction system.
 - Components currently have one actual root, and general child reconciliation is
   centered on StackView. Custom containers require explicit integration.
-- Both list demos eagerly create rows. Collection observation is more selective,
+- The existing list demos eagerly create rows; the CollectionView adapter is a
+  separate experiment. Collection observation is more selective,
   but snapshot copying/publication and structural action-adapter creation remain.
   We have not measured heap allocation counts or native input latency.
 - Draft preservation and stale-result rejection require explicit domain policy.
@@ -214,10 +216,10 @@ The later experiments below need not all be completed before an experimental mer
 
 ### 1. Virtualized editable collections through MVC
 
-- [ ] Host DirectView rows in existing CollectionView/TableView presentation with
-  thousands of model items and a bounded viewport.
-- [ ] Define offscreen active-editor behavior, focus restoration, removal, and reuse.
-  Keep durable drafts in the model/controller, independent of row lifetime.
+- [x] Host DirectView rows in CollectionView with 1,000 model items and a
+  bounded viewport.
+- [x] Define offscreen active field-editor behavior, removal, and reuse. Keep
+  durable drafts in the model/controller, independent of row lifetime.
 - [ ] Test reorder/removal while editing, scrolling away/back, and same-ID reuse.
   Measure live view count, getter calls, allocation, and edit/scroll latency.
 

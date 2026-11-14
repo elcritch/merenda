@@ -3,6 +3,7 @@ import std/options
 import sigils/core
 
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../themes
 import ../foundation/types
 import ./viewbase
@@ -382,6 +383,7 @@ proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
+  profileViewPhase(vppIntrinsicMeasurement)
   ## Opt-in caching applies only to the intrinsic result. Fitting proposals and
   ## bounds fallbacks are always resolved by sizeThatFits on each call.
   withLayoutResolutionGuard(view, lroIntrinsicContentSize):

@@ -3,6 +3,7 @@ import std/tables
 import sigils/[core, reactive, selectors]
 import ./responder/responders
 import ./foundation/mainthreadwork
+import ./foundation/viewprofiling
 import ./text/textfields
 import ./app/collectionsigils
 
@@ -48,6 +49,7 @@ type
     lastValue: T
 
 proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
+  profileViewPhase(vppBindingUpdate)
   let binding = ValueBinding[R, C, V, T](base)
   let receiver = binding.receiver{}
   let target = binding.target{}

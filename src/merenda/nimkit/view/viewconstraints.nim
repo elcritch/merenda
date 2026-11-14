@@ -7,6 +7,7 @@ from ../themes/themecore import
   layoutStyleSelection, constraintCount, validStyleConstraint
 import ../themes/private/cssproperties
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../foundation/types
 import ./viewgeometry
 import ./viewbase
@@ -1352,6 +1353,7 @@ proc addSolverConstraint(
     constraint: Constraint,
     priority = LayoutPriorityRequired,
 ) =
+  profileViewPhase(vppConstraintInsertion)
   state.accountSolverConstraint(constraint)
   try:
     state.solver.addConstraint(constraint.strengthened(priority))
@@ -1709,6 +1711,7 @@ proc prepareCssInputs(
     mode: LayoutSolveMode,
     excluded: HashSet[pointer],
 ) =
+  profileViewPhase(vppConstraintGeneration)
   for solverView in state.items:
     state.checkSolveBudget()
     let subject = solverView.item
@@ -1754,18 +1757,20 @@ proc admitCssInputs(state: var LayoutSolveState): HashSet[pointer] =
         le(expression, right)
       of lrGreaterThanOrEqual:
         ge(expression, right)
-    state.accountSolverConstraint(constraint)
-    try:
-      state.solver.addConstraint(constraint.strengthened(equation.priority))
-      state.checkSolveBudget()
-      result.incl cast[pointer](equation.terms[0].item)
-      admitted.add input
-    except UnsatisfiableConstraintError:
-      state.cssDiagnostic(
-        equation.terms[0].item,
-        equation.cssProperty,
-        "Required constraint conflicts with native geometry or an earlier CSS constraint",
-      )
+    block:
+      profileViewPhase(vppConstraintInsertion)
+      state.accountSolverConstraint(constraint)
+      try:
+        state.solver.addConstraint(constraint.strengthened(equation.priority))
+        state.checkSolveBudget()
+        result.incl cast[pointer](equation.terms[0].item)
+        admitted.add input
+      except UnsatisfiableConstraintError:
+        state.cssDiagnostic(
+          equation.terms[0].item,
+          equation.cssProperty,
+          "Required constraint conflicts with native geometry or an earlier CSS constraint",
+        )
   state.cssInputs = move admitted
 
 proc solvedFloat(variable: Variable): float32 =
@@ -1812,6 +1817,7 @@ proc solvedFrames(state: var LayoutSolveState): seq[SolvedFrame] =
       result.add SolvedFrame(item: solverView.item, frame: frame)
 
 proc applySolvedFrames(frames: openArray[SolvedFrame]) =
+  profileViewPhase(vppFrameApplication)
   for solved in frames:
     solved.item.applyLayoutFrame(solved.frame, lfoSolver)
 
@@ -1835,6 +1841,7 @@ proc generatedSourcesToRebuild(root: View): LayoutInputSources =
 proc generateLayoutInputsForSource(
     state: var LayoutSolveState, root: View, source: LayoutInputSource
 ): seq[LayoutInput] =
+  profileViewPhase(vppConstraintGeneration)
   let start = state.generatedInputs.len
   case source
   of lisAutoresizingMask:
@@ -1913,6 +1920,9 @@ proc needsConstraintSolve(view: View): bool =
 proc buildAndSolveConstraints(
     state: var LayoutSolveState, view: View, mode: LayoutSolveMode
 ) =
+  profileViewPhase(vppSolve)
+  defer:
+    recordSolverSize(state.items.len, state.constraintCount)
   let
     startedAt = state.startedAt
     previousCache = view.xLayoutInputCache

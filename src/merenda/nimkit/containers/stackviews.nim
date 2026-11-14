@@ -3,6 +3,7 @@ import std/[tables, sets]
 import sigils/core
 
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../themes
 import ../foundation/types
 import ../view/viewgeometry
@@ -440,6 +441,7 @@ proc alignedCrossFrame(
     result.origin = contentCrossOrigin + availableCross - result.length
 
 proc layoutStackSubviews(stackView: StackView) =
+  profileViewPhase(vppArrangement)
   let
     style = stackView.resolvedStackLayoutStyle()
     children = stackView.layoutArrangedSubviews()
@@ -533,6 +535,7 @@ proc arrangedSubviews*(stackView: StackView): seq[View] =
   stackView.xArrangedSubviews
 
 proc arrangeSubviewPrefix*(stackView: StackView, children: openArray[ArrangedSubview]) =
+  profileViewPhase(vppArrangement)
   ## Places unique children first, retaining other arranged subviews and their policies.
   if children.len <= stackView.xArrangedSubviews.len:
     var unchanged = true

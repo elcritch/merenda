@@ -55,6 +55,14 @@ type
     cukMove
     cukReload
 
+  CollectionEndDisplayReason* = enum
+    ## Viewport eviction is the only transition a delegate may defer.
+    cedViewport
+    ## The identifier disappeared, became ambiguous, or changed reuse class.
+    cedRemoved
+    ## The data source or delegate was replaced.
+    cedReset
+
   CollectionUpdate* = object
     kind*: CollectionUpdateKind
     indexes*: seq[int]
@@ -128,6 +136,7 @@ type
     xHighlightedIdentifier: string
     xPressedIdentifier: string
     xTrackingItem: bool
+    xSuppressSelectionReveal: bool
     xCollectionRole: StyleRole
     xItemRole: StyleRole
     xCollectionDraggingSession: DraggingSession
@@ -271,6 +280,18 @@ protocol CollectionViewEvents:
   ) {.signal.}
 
 protocol CollectionViewDelegate {.selectorScope: protocol.}:
+  method retainCollectionItemView*(
+    collectionView: CollectionView, index: int, identifier: string, view: View
+  ): bool {.optional.} ## Called only for viewport eviction; retained views stay mounted.
+
+  method didEndDisplayingCollectionItemView*(
+    collectionView: CollectionView,
+    index: int,
+    identifier: string,
+    view: View,
+    reason: CollectionEndDisplayReason,
+  ) {.optional.} ## Called before a row is detached or made available for reuse.
+
   method reuseIdentifierForCollectionItem*(
     collectionView: CollectionView, index: int
   ): string {.optional.}
@@ -356,7 +377,17 @@ func rowCount(itemCount, columns: int): int =
   if itemCount <= 0:
     0
   else:
-    (itemCount + max(columns, 1) - 1) div max(columns, 1)
+    1 + (itemCount - 1) div max(columns, 1)
+
+func boundedVisibleRow(position: float32, rows: int, roundUp: bool): int =
+  if position.isNaN or position <= 0:
+    return 0
+  if position >= rows.float32:
+    return rows
+  if roundUp:
+    int(ceil(position))
+  else:
+    int(floor(position))
 
 func defaultCollectionUpdate(
     kind: CollectionUpdateKind,
@@ -676,10 +707,36 @@ protocol DefaultCollectionLayout of CollectionLayoutProtocol:
   method visibleCollectionItemIndexes(
       layout: CollectionViewLayout, collectionView: CollectionView, visibleRect: Rect
   ): seq[int] =
-    for index in 0 ..< collectionView.len():
-      let rect = layout.layoutItemRect(
-        collectionView.len(), index, collectionView.collectionViewportSize().width
+    let
+      count = collectionView.len()
+      width = collectionView.collectionViewportSize().width
+      columns = layout.layoutColumnCount(count, layout.layoutAvailableWidth(width))
+      stride = layout.itemSize().height + layout.minimumLineSpacing()
+    if count == 0 or visibleRect.isEmpty:
+      return
+    # Degenerate zero-height rows cannot intersect a nonempty viewport.
+    if stride <= 0 or layout.itemSize().height <= 0:
+      return
+    let
+      rows = count.rowCount(columns)
+      firstRow = boundedVisibleRow(
+        (visibleRect.minY - layout.edgeInsets().top) / stride, rows, false
       )
+      lastRow = boundedVisibleRow(
+        (visibleRect.maxY - layout.edgeInsets().top) / stride, rows, true
+      )
+      firstIndex =
+        if firstRow == rows:
+          count
+        else:
+          firstRow * columns
+      lastIndex =
+        if lastRow == rows:
+          count
+        else:
+          lastRow * columns
+    for index in firstIndex ..< lastIndex:
+      let rect = layout.layoutItemRect(count, index, width)
       if not rect.intersection(visibleRect).isEmpty:
         result.add index
 
@@ -1073,9 +1130,25 @@ proc enqueueReusableItemView(
     view.removeFromSuperview()
   collectionView.xReusableItemViews.mgetOrPut(identifier, @[]).add view
 
-proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
+proc recycleItemSlot(
+    collectionView: CollectionView,
+    slot: CollectionItemSlot,
+    reason: CollectionEndDisplayReason,
+) =
   if slot.view.isNil:
     return
+  let delegate = collectionView.delegate()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didEndDisplayingCollectionItemView(),
+      (
+        collectionView: collectionView,
+        index: slot.index,
+        identifier: slot.identifier,
+        view: slot.view,
+        reason: reason,
+      ),
+    )
   if slot.reuseIdentifier.len > 0:
     collectionView.enqueueReusableItemView(slot.reuseIdentifier, slot.view)
   else:
@@ -1085,8 +1158,22 @@ proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
 
 proc clearCollectionItemSlots(collectionView: CollectionView) =
   for slot in collectionView.xItemSlots:
-    collectionView.recycleItemSlot(slot)
+    collectionView.recycleItemSlot(slot, cedReset)
   collectionView.xItemSlots.setLen(0)
+
+proc retireMissingCollectionItems*(collectionView: CollectionView) =
+  ## Retire disappeared identities immediately, before coalesced reloads can
+  ## mistake a removed and reinserted identifier for the same item.
+  var position = 0
+  while position < collectionView.xItemSlots.len:
+    let slot = collectionView.xItemSlots[position]
+    let index = collectionView.collectionItemIndexForIdentifier(slot.identifier)
+    if index < 0:
+      collectionView.recycleItemSlot(slot, cedRemoved)
+      collectionView.xItemSlots.delete(position)
+    else:
+      collectionView.xItemSlots[position].index = index
+      inc position
 
 func supplementaryReuseKey(
     kind: CollectionSupplementaryKind, reuseIdentifier: string
@@ -1288,8 +1375,26 @@ proc syncVisibleItemViews(contentView: CollectionContentView) =
   while slotIndex < collectionView.xItemSlots.len:
     let slot = collectionView.xItemSlots[slotIndex]
     if slot.index notin visibleLookup:
-      collectionView.recycleItemSlot(slot)
-      collectionView.xItemSlots.delete(slotIndex)
+      let delegate = collectionView.delegate()
+      let retained =
+        not delegate.isNil and
+        delegate
+        .trySendLocal(
+          retainCollectionItemView(),
+          (
+            collectionView: collectionView,
+            index: slot.index,
+            identifier: slot.identifier,
+            view: slot.view,
+          ),
+        )
+        .get(false)
+      if retained:
+        collectionView.configureCollectionItemSlot(slot)
+        inc slotIndex
+      else:
+        collectionView.recycleItemSlot(slot, cedViewport)
+        collectionView.xItemSlots.delete(slotIndex)
     else:
       inc slotIndex
 
@@ -1300,6 +1405,10 @@ proc syncVisibleItemViews(contentView: CollectionContentView) =
       collectionView.xItemSlots.add slot
       slotPos = collectionView.xItemSlots.high
     collectionView.configureCollectionItemSlot(collectionView.xItemSlots[slotPos])
+
+proc collectionViewportGeometryChanged(collectionView: CollectionView) {.slot.} =
+  if not collectionView.xContentView.isNil:
+    collectionView.xContentView.syncVisibleItemViews()
 
 proc tileCollectionContent(collectionView: CollectionView) =
   let
@@ -1341,7 +1450,7 @@ proc reconcileCollectionItemSlots(collectionView: CollectionView) =
     let index = indexes.getOrDefault(slot.identifier, -1)
     if index < 0 or
         collectionView.defaultReuseIdentifierForItem(index) != slot.reuseIdentifier:
-      collectionView.recycleItemSlot(slot)
+      collectionView.recycleItemSlot(slot, cedRemoved)
       collectionView.xItemSlots.delete(position)
     else:
       collectionView.xItemSlots[position].index = index
@@ -1352,7 +1461,11 @@ proc reloadData*(collectionView: CollectionView) =
   collectionView.reconcileCollectionItemSlots()
   collectionView.clearCollectionSupplementaryViews()
   collectionView.tileCollectionContent()
-  collectionView.selectedIdentifiers = selected
+  collectionView.xSuppressSelectionReveal = true
+  try:
+    collectionView.selectedIdentifiers = selected
+  finally:
+    collectionView.xSuppressSelectionReveal = false
   collectionView.invalidateIntrinsicContentSize()
   collectionView.invalidateCollectionItems()
 
@@ -1363,7 +1476,11 @@ proc applyCollectionUpdates*(
   collectionView.reconcileCollectionItemSlots()
   collectionView.clearCollectionSupplementaryViews()
   collectionView.tileCollectionContent()
-  collectionView.selectedIdentifiers = selected
+  collectionView.xSuppressSelectionReveal = true
+  try:
+    collectionView.selectedIdentifiers = selected
+  finally:
+    collectionView.xSuppressSelectionReveal = false
   emit collectionView.collectionItemsDidUpdate(DynamicAgent(collectionView), @updates)
 
 proc insertItemsAtIndexes*(
@@ -1506,7 +1623,7 @@ proc applySelectedIdentifiers(
     collectionView.xSelectionAnchorIdentifier = nextAnchor
     collectionView.xSelectionLeadIdentifier = nextLead
     let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
-    if leadIndex >= 0:
+    if leadIndex >= 0 and not collectionView.xSuppressSelectionReveal:
       collectionView.scrollItemToVisible(leadIndex)
     return
 
@@ -1523,7 +1640,8 @@ proc applySelectedIdentifiers(
   collectionView.xSelectionLeadIdentifier = nextLead
   let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
   if leadIndex >= 0:
-    collectionView.scrollItemToVisible(leadIndex)
+    if not collectionView.xSuppressSelectionReveal:
+      collectionView.scrollItemToVisible(leadIndex)
   collectionView.invalidateCollectionItems()
   emit collectionView.collectionSelectionDidChange(DynamicAgent(collectionView))
   collectionView.postAccessibilityNotification(anSelectionChanged)
@@ -2329,6 +2447,9 @@ proc initCollectionViewFields*(collectionView: CollectionView, frame: Rect = Aut
   collectionView.xScrollView = initCollectionScrollView(collectionView)
   collectionView.xContentView = initCollectionContentView(collectionView)
   collectionView.xScrollView.documentView = collectionView.xContentView
+  collectionView.xScrollView.clipView().connect(
+    geometryDidChange, collectionView, collectionViewportGeometryChanged
+  )
   collectionView.acceptsFirstResponder = true
   collectionView.clipsToBounds = true
   collectionView.addSubview(collectionView.xScrollView)

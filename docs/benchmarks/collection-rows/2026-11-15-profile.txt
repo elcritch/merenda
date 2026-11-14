@@ -1,0 +1,145 @@
+INF 2026-11-15 01:06:18.844+02:00 resolved typeface from exact system font filename tid=148648451 requested=SFNS.ttf path=/System/Library/Fonts/SFNS.ttf
+variant=materialized operation=mount items=100 viewport_height=90 mounted=100 subscriptions=100 elapsed_us=276850 solver_views_max=505 solver_constraints_max=5034 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=38433
+  vppConstraintInsertion calls=5034 inclusive_us=84353
+  vppSolve calls=1 inclusive_us=125284
+  vppIntrinsicMeasurement calls=2804 inclusive_us=242412
+  vppFrameApplication calls=1 inclusive_us=58
+  vppArrangement calls=401 inclusive_us=39024
+  vppBindingUpdate calls=100 inclusive_us=142
+  vppDrawing calls=18 inclusive_us=692
+variant=materialized operation=scroll items=100 viewport_height=90 mounted=100 subscriptions=100 elapsed_us=1116 solver_views_max=0 solver_constraints_max=0 solver_passes=0 layout_blocked=false
+  vppConstraintGeneration calls=0 inclusive_us=0
+  vppConstraintInsertion calls=0 inclusive_us=0
+  vppSolve calls=0 inclusive_us=0
+  vppIntrinsicMeasurement calls=0 inclusive_us=0
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=0 inclusive_us=0
+  vppBindingUpdate calls=0 inclusive_us=0
+  vppDrawing calls=15 inclusive_us=611
+variant=virtualized operation=mount items=100 viewport_height=90 mounted=3 subscriptions=6 elapsed_us=5154 solver_views_max=21 solver_constraints_max=186 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=1155
+  vppConstraintInsertion calls=186 inclusive_us=213
+  vppSolve calls=1 inclusive_us=1454
+  vppIntrinsicMeasurement calls=77 inclusive_us=3790
+  vppFrameApplication calls=1 inclusive_us=1
+  vppArrangement calls=36 inclusive_us=823
+  vppBindingUpdate calls=15 inclusive_us=10
+  vppDrawing calls=21 inclusive_us=710
+variant=virtualized operation=scroll items=100 viewport_height=90 mounted=3 subscriptions=6 elapsed_us=4588 solver_views_max=21 solver_constraints_max=186 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=1135
+  vppConstraintInsertion calls=186 inclusive_us=205
+  vppSolve calls=1 inclusive_us=1426
+  vppIntrinsicMeasurement calls=74 inclusive_us=3702
+  vppFrameApplication calls=1 inclusive_us=1
+  vppArrangement calls=18 inclusive_us=818
+  vppBindingUpdate calls=6 inclusive_us=6
+  vppDrawing calls=17 inclusive_us=637
+variant=materialized operation=mount items=1000 viewport_height=90 mounted=1000 subscriptions=1000 elapsed_us=970289 solver_views_max=5005 solver_constraints_max=5213 solver_passes=1 layout_blocked=true
+  vppConstraintGeneration calls=4 inclusive_us=399011
+  vppConstraintInsertion calls=5213 inclusive_us=92720
+  vppSolve calls=1 inclusive_us=500071
+  vppIntrinsicMeasurement calls=16004 inclusive_us=1036182
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=2000 inclusive_us=11545
+  vppBindingUpdate calls=1000 inclusive_us=1453
+  vppDrawing calls=1003 inclusive_us=128
+variant=materialized operation=scroll items=1000 viewport_height=90 mounted=1000 subscriptions=1000 elapsed_us=11872 solver_views_max=0 solver_constraints_max=0 solver_passes=0 layout_blocked=true
+  vppConstraintGeneration calls=0 inclusive_us=0
+  vppConstraintInsertion calls=0 inclusive_us=0
+  vppSolve calls=0 inclusive_us=0
+  vppIntrinsicMeasurement calls=0 inclusive_us=0
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=0 inclusive_us=0
+  vppBindingUpdate calls=0 inclusive_us=0
+  vppDrawing calls=0 inclusive_us=0
+variant=virtualized operation=mount items=1000 viewport_height=90 mounted=3 subscriptions=6 elapsed_us=5925 solver_views_max=21 solver_constraints_max=186 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=1177
+  vppConstraintInsertion calls=186 inclusive_us=213
+  vppSolve calls=1 inclusive_us=1475
+  vppIntrinsicMeasurement calls=77 inclusive_us=3829
+  vppFrameApplication calls=1 inclusive_us=1
+  vppArrangement calls=36 inclusive_us=812
+  vppBindingUpdate calls=15 inclusive_us=11
+  vppDrawing calls=21 inclusive_us=716
+variant=virtualized operation=scroll items=1000 viewport_height=90 mounted=3 subscriptions=6 elapsed_us=4798 solver_views_max=21 solver_constraints_max=186 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=1213
+  vppConstraintInsertion calls=186 inclusive_us=206
+  vppSolve calls=1 inclusive_us=1508
+  vppIntrinsicMeasurement calls=74 inclusive_us=3880
+  vppFrameApplication calls=1 inclusive_us=1
+  vppArrangement calls=18 inclusive_us=829
+  vppBindingUpdate calls=6 inclusive_us=6
+  vppDrawing calls=17 inclusive_us=672
+variant=materialized operation=mount items=100 viewport_height=180 mounted=100 subscriptions=100 elapsed_us=213038 solver_views_max=505 solver_constraints_max=5034 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=39437
+  vppConstraintInsertion calls=5034 inclusive_us=85411
+  vppSolve calls=1 inclusive_us=127593
+  vppIntrinsicMeasurement calls=2804 inclusive_us=179304
+  vppFrameApplication calls=1 inclusive_us=145
+  vppArrangement calls=401 inclusive_us=40037
+  vppBindingUpdate calls=100 inclusive_us=135
+  vppDrawing calls=28 inclusive_us=1106
+variant=materialized operation=scroll items=100 viewport_height=180 mounted=100 subscriptions=100 elapsed_us=1813 solver_views_max=0 solver_constraints_max=0 solver_passes=0 layout_blocked=false
+  vppConstraintGeneration calls=0 inclusive_us=0
+  vppConstraintInsertion calls=0 inclusive_us=0
+  vppSolve calls=0 inclusive_us=0
+  vppIntrinsicMeasurement calls=0 inclusive_us=0
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=0 inclusive_us=0
+  vppBindingUpdate calls=0 inclusive_us=0
+  vppDrawing calls=25 inclusive_us=1077
+variant=virtualized operation=mount items=100 viewport_height=180 mounted=6 subscriptions=9 elapsed_us=9847 solver_views_max=36 solver_constraints_max=336 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=2320
+  vppConstraintInsertion calls=336 inclusive_us=546
+  vppSolve calls=1 inclusive_us=3020
+  vppIntrinsicMeasurement calls=149 inclusive_us=7554
+  vppFrameApplication calls=1 inclusive_us=3
+  vppArrangement calls=72 inclusive_us=1623
+  vppBindingUpdate calls=30 inclusive_us=19
+  vppDrawing calls=36 inclusive_us=1339
+variant=virtualized operation=scroll items=100 viewport_height=180 mounted=6 subscriptions=9 elapsed_us=9514 solver_views_max=36 solver_constraints_max=336 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=2288
+  vppConstraintInsertion calls=336 inclusive_us=515
+  vppSolve calls=1 inclusive_us=2961
+  vppIntrinsicMeasurement calls=143 inclusive_us=7431
+  vppFrameApplication calls=1 inclusive_us=2
+  vppArrangement calls=36 inclusive_us=1619
+  vppBindingUpdate calls=12 inclusive_us=10
+  vppDrawing calls=32 inclusive_us=1288
+variant=materialized operation=mount items=1000 viewport_height=180 mounted=1000 subscriptions=1000 elapsed_us=953723 solver_views_max=5005 solver_constraints_max=5244 solver_passes=1 layout_blocked=true
+  vppConstraintGeneration calls=4 inclusive_us=398108
+  vppConstraintInsertion calls=5244 inclusive_us=94058
+  vppSolve calls=1 inclusive_us=500020
+  vppIntrinsicMeasurement calls=16004 inclusive_us=1027974
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=2000 inclusive_us=11281
+  vppBindingUpdate calls=1000 inclusive_us=1338
+  vppDrawing calls=1003 inclusive_us=115
+variant=materialized operation=scroll items=1000 viewport_height=180 mounted=1000 subscriptions=1000 elapsed_us=9524 solver_views_max=0 solver_constraints_max=0 solver_passes=0 layout_blocked=true
+  vppConstraintGeneration calls=0 inclusive_us=0
+  vppConstraintInsertion calls=0 inclusive_us=0
+  vppSolve calls=0 inclusive_us=0
+  vppIntrinsicMeasurement calls=0 inclusive_us=0
+  vppFrameApplication calls=0 inclusive_us=0
+  vppArrangement calls=0 inclusive_us=0
+  vppBindingUpdate calls=0 inclusive_us=0
+  vppDrawing calls=0 inclusive_us=0
+variant=virtualized operation=mount items=1000 viewport_height=180 mounted=6 subscriptions=9 elapsed_us=10250 solver_views_max=36 solver_constraints_max=336 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=2232
+  vppConstraintInsertion calls=336 inclusive_us=527
+  vppSolve calls=1 inclusive_us=2907
+  vppIntrinsicMeasurement calls=149 inclusive_us=7333
+  vppFrameApplication calls=1 inclusive_us=2
+  vppArrangement calls=72 inclusive_us=1598
+  vppBindingUpdate calls=30 inclusive_us=18
+  vppDrawing calls=36 inclusive_us=1337
+variant=virtualized operation=scroll items=1000 viewport_height=180 mounted=6 subscriptions=9 elapsed_us=9348 solver_views_max=36 solver_constraints_max=336 solver_passes=1 layout_blocked=false
+  vppConstraintGeneration calls=4 inclusive_us=2258
+  vppConstraintInsertion calls=336 inclusive_us=520
+  vppSolve calls=1 inclusive_us=2934
+  vppIntrinsicMeasurement calls=143 inclusive_us=7363
+  vppFrameApplication calls=1 inclusive_us=2
+  vppArrangement calls=36 inclusive_us=1625
+  vppBindingUpdate calls=12 inclusive_us=10
+  vppDrawing calls=32 inclusive_us=1274

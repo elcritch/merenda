@@ -7,6 +7,7 @@ from figdraw import
 import ./drawing
 import ./renderscenes
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../themes
 import ../foundation/types
 import ../view/views
@@ -247,9 +248,11 @@ proc captureViewFrame(
         view, cacheKey.level, context.renderParent, localFrame, appearance[]
       )
 
-  discard view.sendLocalIfHandled(drawUnderlay(), context)
-  discard view.sendLocalIfHandled(draw(), context)
-  discard view.sendLocalIfHandled(drawOverlay(), context)
+  block:
+    profileViewPhase(vppDrawing)
+    discard view.sendLocalIfHandled(drawUnderlay(), context)
+    discard view.sendLocalIfHandled(draw(), context)
+    discard view.sendLocalIfHandled(drawOverlay(), context)
 
   result = RenderViewFrame(
     viewId: viewId,
