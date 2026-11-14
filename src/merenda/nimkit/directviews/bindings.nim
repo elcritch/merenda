@@ -278,12 +278,12 @@ template bindValue*(
     false,
   )
 
-template bindSigilValue*(
+template bindSigilValueImpl(
     scope: BindingScope,
     id: string,
     source: untyped,
     receiver, context, getter, target, setter: untyped,
-    initialApply: bool = true,
+    initialApply, textBinding: bool,
 ) =
   ## Explicit fixed Sigil input; rebind to replace its subscription.
   block:
@@ -297,7 +297,7 @@ template bindSigilValue*(
       setter,
       cast[pointer](source),
       "sigil.change",
-      false,
+      textBinding,
     )
     if binding.needsConnect and not scope.preview and not source.isNil:
       proc makeDisconnect(input: typeof(source)): proc(owned: Binding) {.closure.} =
@@ -310,11 +310,38 @@ template bindSigilValue*(
     if initialApply:
       binding.applyValue(binding)
 
+template bindSigilValue*(
+    scope: BindingScope,
+    id: string,
+    source: untyped,
+    receiver, context, getter, target, setter: untyped,
+    initialApply: bool = true,
+) =
+  ## Observe an explicit Sigil input with a weak receiver and value context.
+  bindSigilValueImpl(
+    scope, id, source, receiver, context, getter, target, setter, initialApply, false
+  )
+
 proc hasPendingBindings*(scope: BindingScope): bool =
   if not scope.isNil and not scope.disposed:
     for binding in scope.bindings.values:
       if binding.pending:
         return true
+
+proc bindValue*[T; V: Responder](
+    scope: BindingScope,
+    id: string,
+    input: Sigil[T],
+    target: V,
+    apply: proc(target: V, value: T) {.nimcall.},
+) =
+  ## Bind a Sigil directly to a weak widget target. The scope retains the input;
+  ## callers need no extra receiver, context, or forwarding getter.
+  proc readInput(target: V, input: Sigil[T]): T {.nimcall.} =
+    unBindSigilEvents:
+      result = input{}
+
+  bindSigilValue(scope, id, input, target, input, readInput, target, apply)
 
 proc installTextEdit[R: Responder, C](
     binding: ValueBinding[R, C, TextField, string],
@@ -368,4 +395,32 @@ template bindTextField*(
       installTextEdit(binding, receiver, context, field, edit)
     else:
       binding.skipUnchanged = true
+    binding.applyValue(binding)
+
+template bindTextField*(
+    scope: BindingScope,
+    id: string,
+    controller: Responder,
+    signal: untyped,
+    context, getter, field, edit: untyped,
+) =
+  ## Common MVC case: the controller both emits changes and owns edit commands.
+  bindTextField(scope, id, controller, signal, controller, context, getter, field, edit)
+
+template bindTextField*[T](
+    scope: BindingScope,
+    id: string,
+    input: Sigil[T],
+    receiver, context, getter, field, edit: untyped,
+) =
+  ## Observe a Sigil snapshot while routing edits through a weak controller.
+  block:
+    bindSigilValueImpl(
+      scope, id, input, receiver, context, getter, field, setBoundText, false, true
+    )
+    let binding = ValueBinding[typeof(receiver), typeof(context), TextField, string](
+      scope.bindings[id]
+    )
+    if not scope.preview:
+      installTextEdit(binding, receiver, context, field, edit)
     binding.applyValue(binding)

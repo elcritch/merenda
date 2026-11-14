@@ -48,6 +48,32 @@ proc writeText(field: TextField, text: string) =
   field.stringValue = text
 
 suite "direct owned bindings":
+  test "direct Sigil binding switches inputs and keeps its widget weak":
+    let first = newSigil(1)
+    let second = newSigil(4)
+    let scope = newBindingScope()
+    var target = Target()
+    proc show(target: Target, value: int) =
+      target.value = value
+
+    scope.bindValue("value", first, target, show)
+    check target.value == 1
+    first <- 3
+    discard drainMainThreadWork()
+    check target.value == 3
+    scope.bindValue("value", second, target, show)
+    check first.subcriptions.len == 0
+    check second.subcriptions.len == 1
+    check target.value == 4
+    var weakTarget: BackRef[Target]
+    weakTarget.target = target
+    target = nil
+    check weakTarget.isNil
+    second <- 7
+    discard drainMainThreadWork()
+    scope.dispose()
+    check second.subcriptions.len == 0
+
   test "coalesces, rebinds sources and tears down queued work":
     let a = Model(value: 1)
     let b = Model(value: 5)

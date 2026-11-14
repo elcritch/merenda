@@ -37,6 +37,7 @@ else:
   import nimkit/declarativedragging
   import nimkit/declarativeviews
   import nimkit/directbindings
+  import nimkit/directdemo
   import nimkit/directmodels
   import nimkit/directviews
   import nimkit/devcontrol
