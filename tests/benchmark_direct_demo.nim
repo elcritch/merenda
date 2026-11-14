@@ -3,9 +3,13 @@
 ## same natural StackView distribution as the current example.
 import std/[macros, monotimes, times, os, strformat]
 
-when defined(directDemoBaseline):
+when defined(directDemoBaseline) or defined(directDemoSigilBaseline):
   macro previousDemo(): untyped =
-    let source = staticExec("git show 1cfc3247:examples/direct_views_demo.nim")
+    let source =
+      when defined(directDemoSigilBaseline):
+        staticExec("git show 61bfa142:examples/direct_views_demo.nim")
+      else:
+        staticExec("git show 1cfc3247:examples/direct_views_demo.nim")
     result = parseStmt(source)
     proc naturalStacks(node: NimNode) =
       if node.kind in {nnkCall, nnkCommand} and node.len > 1 and node[0].kind == nnkIdent and
@@ -16,7 +20,8 @@ when defined(directDemoBaseline):
         naturalStacks(child)
 
     for node in result:
-      if node.kind == nnkProcDef and node.name.eqIdent("runDirectViewsDemo"):
+      if not defined(directDemoSigilBaseline) and node.kind == nnkProcDef and
+          node.name.eqIdent("runDirectViewsDemo"):
         node[0] = ident("newTaskController")
         node.params[0] = ident("TaskController")
         var body = newStmtList()
@@ -70,8 +75,11 @@ proc run(csv: File, count: int) =
   defer:
     when compiles(controller.bindings):
       controller.bindings.dispose()
-    controller.rows.close()
-    controller.chrome.close()
+    when compiles(controller.rows):
+      controller.rows.close()
+      controller.chrome.close()
+    else:
+      controller.setView(nil)
     flushWork()
   var tasks: TaskRows
   for id in 1 .. count:

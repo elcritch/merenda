@@ -1,5 +1,8 @@
 # P7 direct views versus P0, 2026-11-14
 
+These are the pre-cleanup results. The demos now share a keyed collection
+controller and owned bindings; see the later [collection comparison](../collection-sigils/README.md).
+
 Diagnostic comparison on Apple M3 Pro, 36 GB, macOS 15.7.9, Nim 2.4.2,
 release/ARC/useMalloc/threads, Clang 17. No native window or GPU. Two sequential
 runs of each variant, five calibrated batches per case per run; results below
