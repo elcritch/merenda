@@ -200,6 +200,9 @@ and all 176 tests in the shared integration runner; the example bundle compiled.
 These were separate commands and compiler configurations, recorded in the report.
 Earlier Git subprocess, native activation, and shutdown-teardown failures remain
 documented there, including the limits of attributing intermittent failures.
+The CI run on `fa78d0e2` reproduced a Linux Kosmo repository-scope assertion that
+also failed in two earlier `main` workflows. The report links those independent
+reproductions; this establishes prior occurrence, not the underlying cause.
 The later experiments below need not all be completed before an experimental merge.
 
 ## Next experiments, in order
