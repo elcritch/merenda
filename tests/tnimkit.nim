@@ -58,7 +58,6 @@ else:
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews
-  import nimkit/guardedcommands
   import nimkit/htmlresources
   when defined(features.merenda.nifDemo):
     import nimkit/nifresources

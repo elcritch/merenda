@@ -68,7 +68,6 @@ import ./nimkit/app/pasteboards
 import ./nimkit/controls/progressindicators
 import ./nimkit/controls/popuplists
 import ./nimkit/responder/responders
-import ./nimkit/responder/guardedcommands
 import ./nimkit/containers/scrollergeometry
 import ./nimkit/controls/sliders
 import ./nimkit/controls/steppers
@@ -175,7 +174,6 @@ export progressindicators
 export popuplists
 export rendering
 export responders
-export guardedcommands
 export resources
 export scrollergeometry
 export sliders

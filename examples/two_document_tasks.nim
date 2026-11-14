@@ -2,7 +2,6 @@
 import std/[algorithm, strutils, tables]
 import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/responder/guardedcommands
 
 type
   EditorTask* = object
@@ -30,8 +29,6 @@ type
     generation*: int
     closed*: bool
     queue*: ValidationQueue
-
-  EditorTaskCommand* = GuardedCommand[EditorController, EditorContext]
 
   ValidationRequest = object
     owner: BackRef[EditorController]
@@ -205,11 +202,9 @@ proc editTask*(owner: EditorController, context: EditorContext, text: string) =
   if owner.validTaskCommand(context):
     owner.editTask(context.id, text)
 
-proc taskCommand*(owner: EditorController, id: int): EditorTaskCommand =
-  initGuardedCommand(owner, (owner.generation, id), validTaskCommand)
-
-proc removeTaskCommand*(owner: EditorController, context: EditorContext) =
-  owner.removeTask(context.id)
+proc removeTask*(owner: EditorController, context: EditorContext) =
+  if owner.validTaskCommand(context):
+    owner.removeTask(context.id)
 
 proc undo*(owner: EditorController) =
   if not owner.closed and not owner.document.isClosed:
@@ -233,8 +228,11 @@ proc queueValidation*(queue: ValidationQueue, owner: EditorController, id: int) 
     )
     owner.status <- "Validation queued"
 
-proc validateTaskCommand*(owner: EditorController, context: EditorContext) =
-  owner.queue.queueValidation(owner, context.id)
+proc queueValidation*(
+    queue: ValidationQueue, owner: EditorController, context: EditorContext
+) =
+  if owner.validTaskCommand(context):
+    queue.queueValidation(owner, context.id)
 
 proc flushValidation*(queue: ValidationQueue) =
   ## Deliver simulated delayed results on the owning GUI thread.

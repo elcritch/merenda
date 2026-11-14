@@ -111,10 +111,13 @@ template editorChecks(name: string, factory: untyped) =
       let switched = newEditorDocument(3, @[EditorTask(id: 1, title: "Switched")])
       let oldField = TextField(left.viewWithIdentifier("title-1"))
       let oldButton = Button(left.viewWithIdentifier("remove-1"))
+      let oldValidate = Button(left.viewWithIdentifier("validate-1"))
       first.bindDocument(switched)
       oldField.stringValue = "Stale edit"
       emit oldField.textDidChange(DynamicAgent(oldField))
       discard oldButton.send(performClick(), ActionArgs(sender: oldButton))
+      discard oldValidate.send(performClick(), ActionArgs(sender: oldValidate))
+      check queue.pendingCount == 3
       check first.taskTitle(1) == "Switched"
       check first.tasks[1].title == "Switched"
       queue.flushValidation()
@@ -167,6 +170,22 @@ template editorChecks(name: string, factory: untyped) =
       queue.flushValidation()
       check queue.applied == 2
 
+    test "removed row actions are ignored before redraw":
+      let queue = newValidationQueue()
+      let owner = newEditorController(1, @[EditorTask(id: 1, title: "One")])
+      let host = factory(owner, queue)
+      defer:
+        host.clear()
+      let remove = Button(host.viewWithIdentifier("remove-1"))
+      let validate = Button(host.viewWithIdentifier("validate-1"))
+      owner.removeTask(1)
+      let revision = owner.document.revision
+      discard remove.send(performClick(), ActionArgs(sender: remove))
+      discard validate.send(performClick(), ActionArgs(sender: validate))
+      check owner.document.revision == revision
+      check queue.pendingCount == 0
+      check 1 notin owner.tasks
+
     test "switching to a closed document leaves the current editor active":
       let queue = newValidationQueue()
       let owner = newEditorController(1, @[EditorTask(id: 1, title: "First")])
@@ -208,10 +227,13 @@ template editorChecks(name: string, factory: untyped) =
       var weak: BackRef[EditorController]
       weak.target = owner
       let host = factory(owner, queue)
+      let retained = Button(host.viewWithIdentifier("validate-1"))
       queue.queueValidation(owner, 1)
       host.clear()
       owner = nil
       check weak.isNil
+      discard retained.send(performClick(), ActionArgs(sender: retained))
+      check queue.pendingCount == 1
       queue.flushValidation()
       check queue.completed == 1
       check queue.applied == 0
