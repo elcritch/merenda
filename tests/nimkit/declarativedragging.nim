@@ -17,7 +17,7 @@ proc buildList(model: seq[string], env: DragEnvironment): View =
   for id in model:
     let height = if id == "B": 50.0'f32 else: 30.0'f32
     let row = newView(rect(0, y, 160, height))
-    row.identifier = id
+    row.dragId = id
     row.backgroundColor = color(0.2, 0.5, 0.8, 1)
     nested.addSubview(row)
     y += height + 10
@@ -55,7 +55,61 @@ suite "NimKit declarative dragging":
     check root.window.isNil
     check root.subviews[0].subviews.len == 3
     check root.subviews[0].subviews[1].frame == rect(0, 40, 160, 50)
-    root.subviews[0].subviews[1].identifier = "A"
+    root.subviews[0].subviews[1].dragId = "A"
+    expect ValueError:
+      discard captureDragPreview(root, env)
+
+  test "drag IDs are independent of ordinary view identifiers":
+    let env =
+      DragEnvironment(bounds: rect(0, 0, 240, 250), appearance: initAppearance())
+    let root = buildList(@["A", "B"], env)
+    let container = root.subviews[0]
+    let row = container.subviews[0]
+    root.identifier = "board"
+    container.identifier = "list"
+    for child in container.subviews:
+      child.identifier = "row"
+    let label = newView(rect(0, 0, 100, 20))
+    label.identifier = "title"
+    row.addSubview(label)
+
+    let preview = captureDragPreview(root, env)
+    check preview.elements.len == 2
+    check preview.find("A") >= 0
+    check preview.find("B") >= 0
+    check preview.find("row") == -1
+    check root.viewWithIdentifier("title") == label
+
+    row.dragId = ""
+    let unmarked = captureDragPreview(root, env)
+    check unmarked.elements.len == 1
+    check unmarked.find("A") == -1
+    check unmarked.find("B") >= 0
+
+  test "ordinary identifiers alone do not arm a drag":
+    proc identifiedList(model: seq[string], env: DragEnvironment): View =
+      result = buildList(model, env)
+      for row in result.subviews[0].subviews:
+        row.identifier = row.dragId
+        row.dragId = ""
+
+    let host = newDeclarativeDragView(
+      @["A", "B"], identifiedList, successors, frame = rect(0, 0, 240, 250)
+    )
+    check not host.beginDrag(initPoint(17, 15))
+    check not host.beginDrag(initPoint(17, 55))
+    check host.dragState == ddsIdle
+    check host.model == @["A", "B"]
+
+  test "root and nested drag IDs are rejected":
+    let env =
+      DragEnvironment(bounds: rect(0, 0, 240, 250), appearance: initAppearance())
+    let root = buildList(@["A", "B"], env)
+    root.dragId = "board"
+    expect ValueError:
+      discard captureDragPreview(root, env)
+    root.dragId = ""
+    root.subviews[0].dragId = "list"
     expect ValueError:
       discard captureDragPreview(root, env)
 

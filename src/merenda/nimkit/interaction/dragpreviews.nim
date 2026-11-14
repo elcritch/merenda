@@ -41,7 +41,8 @@ proc find*(preview: DragPreview, id: string): int =
   -1
 
 proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview =
-  ## Every nonempty `identifier` denotes an independently animated subtree.
+  ## Every nonempty `dragId` marks an independently draggable subtree.
+  ## Ordinary view identifiers do not opt views into dragging.
   ## IDs must be unique and non-nested. Builders must return fresh detached trees
   ## without timers, actions, subscriptions to live models, or native resources.
   if root.isNil or not root.superview.isNil or not root.window.isNil:
@@ -53,16 +54,16 @@ proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview 
   var nodes: seq[View]
   var ids = initHashSet[string]()
   proc visit(view: View, insideElement: bool) =
-    if view.identifier.len > 0:
-      if insideElement or view == root or view.identifier in ids:
+    if view.dragId.len > 0:
+      if insideElement or view == root or view.dragId in ids:
         raise newException(
-          ValueError, "drag identifiers must be unique, non-nested descendants"
+          ValueError, "dragId must identify unique, non-nested descendants"
         )
-      ids.incl view.identifier
+      ids.incl view.dragId
       if not view.isHiddenOrHasHiddenAncestor():
         nodes.add view
     for child in view.subviews:
-      visit(child, insideElement or view.identifier.len > 0)
+      visit(child, insideElement or view.dragId.len > 0)
 
   visit(root, false)
   for node in nodes:
@@ -79,7 +80,7 @@ proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview 
         clip = clip.intersection(root.rectFromView(ancestor.bounds, ancestor))
       ancestor = ancestor.superview
     result.elements.add DragElementPreview(
-      id: node.identifier,
+      id: node.dragId,
       frame: frame,
       clip: clip,
       drawingOrigin: node.frame.origin,

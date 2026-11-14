@@ -202,6 +202,11 @@ type
   View* = ref object of Responder
     xTag*: int
     xIdentifier*: string
+    dragId*: string
+      ## Marks this subtree as draggable inside a declarative drag host.
+      ## Empty means unmarked. Nonempty IDs must be unique, non-nested and
+      ## stable across candidate layouts; the builder's root must be unmarked.
+      ## Independent of `identifier`, and read when a drag preview is captured.
     xFrame*: Rect
     xBounds*: Rect
     xFlipped*: bool

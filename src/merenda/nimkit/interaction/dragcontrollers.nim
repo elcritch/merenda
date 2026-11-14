@@ -311,7 +311,8 @@ proc newDeclarativeDragView*[T](
     clicked: proc(id: string) {.closure.} = nil,
 ): DeclarativeDragView[T] =
   ## Models must have value semantics (or immutable referenced data). `build`
-  ## returns fresh, effect-free trees. `successors` enumerates local outcomes;
+  ## returns fresh, effect-free trees with draggable subtrees marked by `dragId`.
+  ## Ordinary view identifiers are ignored. `successors` enumerates local outcomes;
   ## the unchanged outcome is automatically included. `commit` can reject a
   ## stale proposal and owns undo registration; it is called once per change.
   if build.isNil or successors.isNil:

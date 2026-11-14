@@ -29,16 +29,29 @@ let host = newDeclarativeDragView(
 )
 ```
 
+Mark each draggable subtree explicitly in the builder:
+
+```nim
+let card = newStackView(laVertical)
+card.dragId = itemId
+```
+
+The whole card, including its child views, moves together. An empty `dragId`
+leaves a view unmarked. The ordinary `identifier` remains available for view
+lookup and does not make a view draggable. Builders written against the initial
+port should replace their drag-marker `identifier` assignments with `dragId`.
+
 - Use plain value models, or immutable referenced data. A model containing mutable
   references needs an application-owned snapshot before it enters the host.
 - The builder uses normal NimKit layout: views, labels, stacks, constraints and
   drawing protocols. It receives the host's bounds and immutable appearance.
   Return a **fresh detached tree** each time. Do not start timers, workers, native
   windows, actions, or subscriptions to live data inside the builder.
-- Set a nonempty `identifier` on each independently moving subtree. IDs must be
-  unique and stable across candidates. Identified subtrees cannot contain other
-  identified subtrees; unmarked containers and child labels are fine. The root
-  must be unmarked. Duplicate and nested IDs raise `ValueError`.
+- Set a nonempty `dragId` on each independently moving subtree. Drag IDs must be
+  unique and stable across candidates. Marked subtrees cannot contain other
+  drag-marked subtrees; unmarked containers and child labels are fine, including
+  those with ordinary identifiers. The root must be unmarked. Duplicate, nested
+  and root drag IDs raise `ValueError`.
 - Enumerate local successors, not all permutations. The current model is included
   automatically as the first candidate. Missing dragged IDs make an outcome
   ineligible. Empty successors safely leave the original model unchanged.

@@ -108,8 +108,8 @@ commit(expectedRevision, model)  -> accepted/rejected
   specifications, and evaluation results. Use a controller/host GUI object for
   session identity; keep ordinary session state in plain fields.
 - [ ] Require semantic IDs unique within a drag host and stable across reorder
-  and reparent operations. A scoped `DragElementId` may map to existing view
-  identifiers, with duplicate detection.
+  and reparent operations. A scoped `DragElementId` may wrap the explicit
+  `View.dragId` marker, with duplicate detection.
 - [ ] Define model snapshot ownership explicitly. An `object` containing mutable
   references is not automatically isolated. Applications must supply independent
   state or an immutable representation; speculation must not mutate shared data.

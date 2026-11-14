@@ -18,7 +18,7 @@ proc buildBoard(model: Board, env: DragEnvironment): View =
     column.addArrangedSubview(newTitleLabel(if lane == 0: "To do" else: "Done"))
     for item in items:
       let card = newStackView(laVertical)
-      card.identifier = item
+      card.dragId = item
       card.spacing = 8
       card.edgeInsets = insets(14, 14, 14, 14)
       card.backgroundColor =
