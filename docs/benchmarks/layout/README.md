@@ -47,3 +47,27 @@ a distinct output path. Five sample medians in microseconds per arrangement were
 0.54 / 0.23 (10), 30.69 / 0.75 (100), and 309.10 / 2.01 (300), old / batch.
 Raw samples and iteration counts are in `noop.csv`. This isolates arrangement;
 it is not a full direct-view update.
+
+## Opt-in intrinsic cache experiment
+
+`cache.nim` uses fixed-size custom views in a StackView and times one intrinsic
+measurement followed by one direct arrangement, repeated ten times per sample.
+It warms the fixture first so child frames are stable. It compares the same build
+with caching disabled and explicitly enabled on each child; this is a warm-cache
+microbenchmark, not a constraint solver, render, or complete layout transaction.
+Use the build command above with `cache.nim` and a distinct output path.
+
+| Rows | Disabled µs/pair | Enabled µs/pair | Intrinsic reads per 10 pairs, disabled / enabled |
+| ---: | ---: | ---: | ---: |
+| 10 | 7.53 | 6.15 | 200 / 0 |
+| 100 | 58.18 | 44.67 | 2,000 / 0 |
+| 300 | 180.42 | 151.28 | 6,000 / 0 |
+
+Values are medians of five samples on the same machine and compiler described
+above; raw samples are in `cache.csv`. The cache stores intrinsic results only,
+is disabled by default, and is appropriate only when the view's intrinsic inputs
+are invalidated when changed. The StackView arrangement itself already measures
+one fitting size per visible child and reuses it for both axes; this experiment
+measures opt-in reuse across otherwise separate calls. Geometry or intrinsic
+invalidation causes a fresh measurement. These numbers do not establish an
+end-to-end preview or native latency improvement.
