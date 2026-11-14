@@ -490,6 +490,211 @@ faster. Both designs can incur the same eager StackView layout cost, including t
 widget/editor identity, update time, layout time, and preview rebuilds separately.
 There are no performance measurements of this proposed hybrid yet.
 
+## Comparison with SwiftUI and Kotlin Compose
+
+Official documentation reviewed on 2026-11-14. Here, Compose refers to the
+compiler/runtime model shared by Jetpack Compose and Compose Multiplatform;
+Android-specific interoperability APIs below are examples, not portable APIs we
+would import into NimKit. JetBrains documents the shared foundation and the
+platform-specific differences in its
+[Compose relationship guide](https://kotlinlang.org/docs/multiplatform/compose-multiplatform-and-jetpack-compose.html).
+This is an architectural comparison, not a measured performance comparison.
+
+### Similar syntax, different execution models
+
+**SwiftUI** exposes custom types conforming to `View`, with a `body` composed from
+other views. Its modifiers return modified view values. Builder syntax supports
+nested and conditional content, but the precise builder lowering depends on the
+toolchain; we should compare the public composition contract rather than assume
+a particular internal tree representation.
+[View](https://developer.apple.com/documentation/swiftui/view),
+[ViewBuilder](https://developer.apple.com/documentation/swiftui/viewbuilder).
+
+**Compose** defines components as `@Composable` functions participating in a
+compiler-supported runtime. UI-emitting functions conventionally return `Unit`
+and use capitalized names; `Button(...)` is a function call, not construction of
+a `Button` description object. Value-returning composable helpers follow ordinary
+Kotlin function naming. Running composables establishes a Composition that the
+runtime subsequently updates through recomposition.
+[Compose API guidelines](https://android.googlesource.com/platform/frameworks/support/+/androidx-main/compose/docs/compose-api-guidelines.md),
+[Composition lifecycle](https://developer.android.com/develop/ui/compose/lifecycle).
+
+**NimKit today** expands capitalized nodes into ordinary constructors returning
+one closed `ViewSpec` variant. Helpers return those values without needing an
+active composition runtime, and callers explicitly pass them to a live or detached
+interpreter. Built-in capitalization is a readability rule, not evidence that we
+have SwiftUI's type system or Compose's compiler/runtime semantics. In particular,
+our lowercase `taskRow()` helper produces a value; it is not a Compose component
+with its own remembered state and restart boundary.
+
+Our design inference is that the current value-producing API is closer to
+SwiftUI's description model, while its source slots and inline event syntax have
+useful parallels with Compose. Neither similarity supplies automatic observation,
+state storage, or scheduling. An open typed component/adapter system would also
+be a separate step beyond our four built-in node kinds.
+
+### State ownership, identity, and updates
+
+| Concern | SwiftUI | Compose | NimKit prototype |
+| --- | --- | --- | --- |
+| Local state lifetime | `State` storage follows view identity, independently of temporary view values. | `remember` retains values at a composition location; leaving that location forgets them. | Controllers/models and retained widgets own state; there is no DSL-managed local state store. |
+| Identity | Structural identity and explicit data identity distinguish view lifetimes. | Call sites, execution order for repeated calls, and explicit keys distinguish instances. | Sibling keys, macro slots, and positional fallback match mounted widgets. |
+| Update trigger | State and observed dependencies schedule view updates. | Observed state reads and changed inputs participate in recomposition. | Application code explicitly calls `update` with a description. |
+| Read/write connection | `Binding` refers to a source of truth stored elsewhere. | State hoisting can expose a value plus events requesting changes. | Description values flow down; ActionTarget handlers currently read the sender and mutate the model. |
+
+SwiftUI ties persistent state to identity; changing identity can reset it even if
+the new view looks the same. With Observation, a body's reads of an observable
+model's properties establish dependencies, allowing unrelated property changes
+to avoid updating that view. This Observation path requires iOS 17/macOS 14 or
+later; it should not be conflated with the older ObservableObject mechanism.
+Bindings provide access to existing storage rather than introducing a second
+source of truth.
+[SwiftUI identity and lifetime](https://developer.apple.com/videos/play/wwdc2021/10022/),
+[Model Observation](https://developer.apple.com/documentation/swiftui/managing-model-data-in-your-app),
+[Binding](https://developer.apple.com/documentation/swiftui/binding).
+
+Compose similarly requires stable identity when repeated components move.
+`remember` alone is neither observation nor durable persistence: an ordinary
+mutable object can be remembered without its field writes scheduling updates.
+Observable state supplies that notification, and `rememberSaveable` addresses
+restoration separately. State hoisting separates ownership from presentation by
+passing current values and change requests to a component.
+[State and Compose](https://developer.android.com/develop/ui/compose/state),
+[Composition identity](https://developer.android.com/develop/ui/compose/lifecycle).
+
+For NimKit, preserving a TextField instance is already valuable, but it is a
+narrower promise than retaining arbitrary component-local state. Before adding
+`remember`-like syntax, specify what happens when a helper changes its root type,
+a branch disappears, a key is reused, or a row moves to another parent. Stable
+keys alone do not define those lifetimes. Keep plain domain values; observation
+should be an explicit boundary around actual dependencies, not a wrapper around
+every scalar widget field.
+
+### Selective work is a runtime contract
+
+Compose distinguishes observing state from deciding whether a composable can be
+skipped. Its current strong-skipping mode makes restartable composables skippable
+even with unstable parameters, using identity or equality comparisons according
+to parameter stability. It also memoizes lambdas using their captures. This is
+more precise than the outdated generalization that unstable parameters always
+prevent skipping.
+[Strong skipping](https://developer.android.com/develop/ui/compose/performance/stability/strongskipping).
+
+Compose also tracks state reads across composition, layout, and drawing, allowing
+some changes to restart a later phase without repeating composition. Skipping a
+body and avoiding layout are different optimizations.
+[Compose phases](https://developer.android.com/develop/ui/compose/phases).
+
+NimKit currently performs neither dependency-based body scheduling nor subtree
+skipping. Even a cached identical `ViewSpec` is traversed, and freshly evaluated
+inline actions allocate adapters. The corresponding experiment is to separate
+stable mount/event-adapter identity from updated handler context and to compare
+explicit controller invalidation with observed scopes. Any equality shortcut must
+account for all relevant inputs, including theme/layout environment and current
+event context; comparing only visible text is insufficient.
+
+Automatic observation reduces manual dependency bookkeeping but introduces a
+runtime contract developers must understand. Explicit MVC scopes are easier to
+introduce into NimKit, but authors can forget to invalidate a scope when adding a
+new dependency. Generated patch code may remove description work, yet still needs
+correct invalidation. These are independent design choices, not consequences of
+capitalized syntax.
+
+### MVC, bindings, and effects can coexist with declarative views
+
+SwiftUI's observable models and bindings leave a distinct model owner outside a
+reusable view. Compose explicitly supports moving state into a plain state holder
+or a ViewModel when ownership or business logic requires it. The architectural
+lesson is to locate state and operations at an appropriate owner; it does not
+require moving every operation into a view body.
+[SwiftUI model ownership](https://developer.apple.com/documentation/swiftui/managing-model-data-in-your-app),
+[Compose state hoisting](https://developer.android.com/develop/ui/compose/state-hoisting).
+
+NimKit's controller can serve that ownership role while retaining its additional
+responder, document, and undo responsibilities. It is not API-equivalent to an
+Android ViewModel. Keep inline ActionTarget wiring, allow shared named commands,
+and design typed value/commit bindings over existing editing protocols. A binding
+must define validation and undo policy as well as how to read and write a value.
+
+Both frameworks provide lifecycle-aware places for effects. SwiftUI's `.task`
+starts asynchronous work associated with a displayed view and cancels it when the
+view leaves the hierarchy. Compose's `LaunchedEffect` cancels/restarts work with
+its keys and lifetime; `DisposableEffect` handles cleanup; `rememberUpdatedState`
+lets a long-lived effect use a current value without restarting just for that
+change.
+[SwiftUI asynchronous work](https://developer.apple.com/tutorials/instruments/executing-work-asynchronously),
+[Compose effects](https://developer.android.com/develop/ui/compose/side-effects).
+
+Those are useful contracts to borrow, but NimKit can initially implement ownership
+through existing controller/mount teardown. Do not launch tasks or subscribe to
+models merely by evaluating a `ViewSpec` builder: Dragology may evaluate it many
+times for uncommitted alternatives. A later effects API must distinguish live
+installation, dependency changes, removal, cancellation, and preview evaluation.
+Retaining the latest handler context without repeatedly reinstalling an observer
+is especially relevant to our existing adapter-churn benchmark.
+
+### Existing-widget integration is a useful precedent
+
+SwiftUI's `NSViewRepresentable` separates creation, update, and teardown of an
+AppKit view, with a coordinator available to bridge delegate/target-action
+interactions. On Android, Compose's `AndroidView` separates `factory` and `update`,
+and its reuse-capable overload adds `onReset` and `onRelease`.
+[NSViewRepresentable](https://developer.apple.com/documentation/swiftui/nsviewrepresentable),
+[AndroidView integration](https://developer.android.com/develop/ui/compose/migrate/interoperability-apis/views-in-compose).
+
+This is a concrete precedent for an open NimKit adapter contract. All our current
+nodes already materialize existing NimKit widgets, so creation, property patching,
+event connection, reuse, and disposal should be explicit extension points. Reuse
+for another entity must be distinguishable from updating the same entity; resetting
+a text editor on every update would violate our evaluation contract. Preserve the
+existing widget setter boundaries and specify which layer owns each property.
+
+These bridges also show why declarative composition does not eliminate lifecycle
+or MVC coordination. NimKit can make that integration central to the DSL instead
+of treating its established controllers and widgets as a separate legacy system.
+
+### Dragology and the next design decisions
+
+Our ordinary model-to-`ViewSpec` function is directly usable for speculative
+candidate descriptions. A Compose UI function normally contributes to an active
+Composition rather than returning a detached `ViewSpec`-like value; a comparable
+candidate evaluator would need a managed composition/rendering host. That is a
+design inference from the composition contracts above, not a claim that Compose
+cannot implement Dragology.
+
+SwiftUI already offers `ImageRenderer` to render supplied view content on demand.
+Its documented coverage excludes content composited through Core Animation,
+including most UIKit/AppKit views, so a preview adapter must check which controls
+it can capture. Rendering an image is also only part of Dragology's contract:
+candidate geometry/identity, effect isolation, capture validity, and commit behavior
+still need integration.
+[ImageRenderer](https://developer.apple.com/documentation/swiftui/imagerenderer).
+
+For the next NimKit iteration:
+
+- **Borrow explicit state ownership and identity lifetimes.** Keep controller/domain
+  state, editor state, and any future component-local state distinct. Add lifetime
+  semantics before a convenience state keyword.
+- **Compare observation and explicit scopes independently of syntax.** Use the
+  same editable-list test, with an unrelated counter, conditional content, and
+  reordered rows. Count body evaluations and adapter allocations as well as time.
+- **Borrow creation/update/reuse/disposal contracts.** Test one existing custom
+  widget and one CollectionView row adapter; keep preview behavior explicit.
+- **Preserve a pure description path.** Live subscription/effect installation
+  should remain separate so preview candidates cannot start application work.
+- **Evaluate convenience against implementation cost.** SwiftUI-style bindings
+  could reduce sender casts and writeback boilerplate; Compose-style explicit
+  value/events fit controller commands. Prototype both over the same validation
+  and undo behavior before choosing public syntax.
+
+The present tradeoff is a small, inspectable value API with explicit MVC ownership,
+at the cost of manual refreshes, whole-body work, and limited extension/lifetime
+support. The two reference frameworks demonstrate richer contracts to evaluate;
+matching their surface syntax does not establish those contracts. The existing
+NimKit timings remain an internal baseline. Any future cross-toolkit benchmark
+must match visible content, editing behavior, rendering scope, build mode, and
+hardware, and report layout/render work separately from body evaluation.
+
 ## Alternatives to compare
 
 These are design experiments, not performance claims about SwiftUI, Compose, GTK,
