@@ -77,7 +77,7 @@ proc textEdited(editor: EditBinding, sender: DynamicAgent) {.slot.} =
   let owner = editor.owner{}
   if not owner.isNil and owner.active and not owner.updating:
     let scope = owner.scope{}
-    if not scope.isNil and not scope.disposed and not scope.suspended:
+    if not scope.isNil and not scope.disposed:
       editor.invoke(editor)
 
 proc invokeEdit[R: Responder, C](base: EditBinding) =

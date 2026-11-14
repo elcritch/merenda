@@ -39,6 +39,11 @@ proc editText(model: Model, context: int, text: string) =
   inc model.edits
   discard text
 
+proc commitText(model: Model, context: int, text: string) =
+  inc model.edits
+  model.text = text
+  emit model.changed(0)
+
 proc readThenNotify(model: Model, context: int): int =
   result = model.value
   if model.triggerOnRead:
@@ -355,4 +360,23 @@ suite "direct owned bindings":
     emit model.changed(0)
     scope.resumeBindings()
     check field.stringValue == "new model value"
+    scope.dispose()
+
+  test "text edit commands remain active while source refresh is suspended":
+    let
+      model = Model(text: "original")
+      field = newTextField()
+      scope = newBindingScope()
+    scope.bindTextField("text", model, changed, model, 0, readText, field, commitText)
+    scope.suspendBindings()
+    model.text = "external"
+    emit model.changed(0)
+    discard drainMainThreadWork()
+    check field.stringValue == "original"
+    field.stringValue = "draft"
+    check model.text == "draft"
+    check model.edits == 1
+    scope.resumeBindings()
+    check field.stringValue == "draft"
+    check model.text == "draft"
     scope.dispose()

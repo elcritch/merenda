@@ -7,6 +7,7 @@ import merenda/nimkit/foundation/mainthreadwork
 type LifetimeOwner = ref object of Responder
   calls, draws: int
   nested: Sigil[int]
+  host: DirectView
 
 proc lifetimeBody(context: DirectNode, owner: LifetimeOwner, value: int) =
   inc owner.draws
@@ -31,6 +32,16 @@ proc conditionalLifetime(
     context: DirectNode, owner: LifetimeOwner, input: Sigil[bool]
 ) =
   context.bindBody(input, owner, conditionalBody)
+
+proc clearOnChange(context: DirectNode, owner: LifetimeOwner, shouldClear: bool) =
+  if shouldClear:
+    owner.host.clear()
+  else:
+    context.viewBody:
+      Button("first")
+
+proc clearingComponent(context: DirectNode, owner: LifetimeOwner, input: Sigil[bool]) =
+  context.bindBody(input, owner, clearOnChange)
 
 proc settleTitle(button: Button, expected: string) =
   let deadline = getMonoTime() + initDuration(seconds = 60)
@@ -167,3 +178,23 @@ suite "direct view activation and lifetime":
     input <- 2
     Button(host.arrangedSubviews[0]).settleTitle("2")
     host.clear()
+
+  test "resume tolerates a pending child clearing its siblings":
+    let
+      host = newDirectView()
+      owner = LifetimeOwner(host: host, nested: newSigil(1))
+      clearSignal = newSigil(false)
+    host.viewBody:
+      component(clearingComponent, owner, clearSignal)
+      component(observedLifetime, owner, owner.nested)
+    let second = Button(host.arrangedSubviews[1])
+    host.suspendUpdates()
+    clearSignal <- true
+    owner.nested <- 2
+    host.resumeUpdates()
+    check host.arrangedSubviews.len == 0
+    check second.title == "1"
+    check owner.nested.subcriptions.len == 0
+    check clearSignal.subcriptions.len == 0
+    discard drainMainThreadWork()
+    check second.title == "1"

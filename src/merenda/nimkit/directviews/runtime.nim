@@ -309,10 +309,14 @@ proc flushBindings*(node: DirectNode) =
     node.bodyBindings.flushBindings()
     if not node.closed and not node.suspended:
       node.bindings.flushBindings()
+      var children: seq[DirectNode]
       for child in node.children:
+        children.add child
+      for child in children:
         if node.closed or node.suspended:
           break
-        child.flushBindings()
+        if not child.closed and child.parent{} == node:
+          child.flushBindings()
 
 proc hasApplyingNode(node: DirectNode): bool =
   if not node.isNil and not node.closed:
