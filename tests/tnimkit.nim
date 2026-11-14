@@ -40,6 +40,7 @@ else:
   import nimkit/declarativeviews
   import nimkit/directbindings
   import nimkit/directlifetimes
+  import nimkit/directvisibility
   import nimkit/directdemo
   import nimkit/directmodels
   import nimkit/directviews
@@ -57,12 +58,14 @@ else:
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews
+  import nimkit/guardedcommands
   import nimkit/htmlresources
   when defined(features.merenda.nifDemo):
     import nimkit/nifresources
   import nimkit/iconlabels
   import nimkit/images
   import nimkit/itemcollections
+  import nimkit/intrinsiccache
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix

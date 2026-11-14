@@ -22,6 +22,7 @@ import css_theme_demo
 import declarative_drag_demo
 import declarative_views_demo
 import direct_views_demo
+import direct_lifetimes_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
