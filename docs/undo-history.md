@@ -3,7 +3,8 @@
 `UndoManager` stores groups of inverse operations. Grouping combines commands into
 one history entry; it does not roll back mutations if a command or the surrounding
 operation fails. Keep groups synchronous and end or discard them before starting
-asynchronous work.
+asynchronous work. End all open groups before marking a clean checkpoint: a
+checkpoint cannot represent a state inside an indivisible group.
 
 For a continuous value-editing gesture, use `registerMergeableValueChange` with a
 nonempty key that uniquely identifies the document, target, and property. Pass the previous
@@ -21,6 +22,10 @@ unlimited. Reducing the limit prunes distant groups immediately. A clean checkpo
 still describes the same document state, even when it is no longer reachable via
 history. The limit counts groups, not memory: closures may retain arbitrary data,
 so it does not impose a retained-byte budget.
+
+If a replay callback marks the state clean, the checkpoint takes effect after
+the entire undo or redo group completes. Clearing the clean state during replay
+cancels any pending checkpoint.
 
 Undo and redo callbacks should complete without raising. Replay is not transactional:
 if a callback raises, already applied changes are not rolled back and the popped

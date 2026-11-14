@@ -103,6 +103,69 @@ suite "nimkit undo managers":
     change(5)
     check not manager.isAtCleanState()
 
+  test "action names separate coalesced gestures":
+    let manager = newUndoManager()
+    var value = 0
+    proc apply(next: int) =
+      value = next
+
+    value = 1
+    manager.registerMergeableValueChange(apply, 0, 1, "number", "First")
+    manager.setActionName("Second")
+    value = 2
+    manager.registerMergeableValueChange(apply, 1, 2, "number")
+    check manager.undoCount == 2
+    check manager.undoActionName == "Second"
+
+  test "replay observers can reduce the limit and mark the resulting state clean":
+    let manager = newUndoManager()
+    manager.registerUndo(
+      proc() =
+        discard,
+      "Earlier",
+    )
+    manager.registerUndo(
+      proc() =
+        manager.registerUndo(
+          proc() =
+            discard,
+          "Redo",
+        )
+        manager.historyLimit = 1
+        manager.markCleanState()
+    )
+    check manager.performUndo()
+    check manager.undoCount == 0
+    check manager.redoCount == 1
+    check manager.isAtCleanState()
+    check manager.performRedo()
+    check not manager.isAtCleanState()
+
+  test "redo applies a new history limit and deferred checkpoint":
+    let manager = newUndoManager()
+    manager.registerUndo(
+      proc() =
+        discard,
+      "Earlier",
+    )
+    manager.registerUndo(
+      proc() =
+        manager.registerUndo(
+          proc() =
+            manager.registerUndo(
+              proc() =
+                discard
+            )
+            manager.historyLimit = 1
+            manager.markCleanState()
+        )
+    )
+    check manager.performUndo()
+    check manager.performRedo()
+    check manager.undoCount == 1
+    check manager.redoCount == 0
+    check manager.isAtCleanState()
+
   test "groups nested commands, names actions, and invalidates redo branches":
     let manager = newUndoManager()
     var value = ""

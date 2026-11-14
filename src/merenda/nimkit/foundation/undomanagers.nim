@@ -62,6 +62,7 @@ type
     xHasCleanState: bool
     xCanMerge: bool
     xHistoryLimit: Natural
+    xPendingCleanState: bool
 
 protocol UndoManagerEvents:
   proc stateDidChange*(manager: UndoManager, sender: UndoManager) {.signal.}
@@ -213,6 +214,7 @@ proc discardUndoGrouping*(manager: UndoManager): bool {.discardable.} =
   true
 
 proc setActionName*(manager: UndoManager, actionName: string) =
+  manager.xCanMerge = false
   if manager.xGroupStack.len > 0:
     manager.xGroupStack[^1].actionName = actionName
   elif manager.xIsUndoing:
@@ -386,6 +388,7 @@ proc performUndo*(manager: UndoManager): bool {.discardable.} =
   let group = manager.xUndoStack.pop()
   manager.xRedoReplayGroup = UndoGroup(actionName: group.actionName)
   manager.xIsUndoing = true
+  var completed = false
   try:
     var index = group.commands.len - 1
     while index >= 0:
@@ -395,12 +398,21 @@ proc performUndo*(manager: UndoManager): bool {.discardable.} =
       else:
         command.valueOperation(manager)
       dec index
+    completed = true
   finally:
     manager.xIsUndoing = false
+    if not completed:
+      manager.xPendingCleanState = false
   if manager.xRedoReplayGroup.commands.len > 0:
     manager.xRedoStack.add manager.xRedoReplayGroup
+  manager.pruneHistory()
   manager.xRedoReplayGroup = UndoGroup()
   dec manager.xChangeIndex
+  if manager.xPendingCleanState:
+    manager.xCleanIndex = manager.xChangeIndex
+    manager.xCleanBranchSerial = manager.xBranchSerial
+    manager.xHasCleanState = true
+    manager.xPendingCleanState = false
   manager.notifyStateChanged()
   true
 
@@ -411,6 +423,7 @@ proc performRedo*(manager: UndoManager): bool {.discardable.} =
   let group = manager.xRedoStack.pop()
   manager.xUndoReplayGroup = UndoGroup(actionName: group.actionName)
   manager.xIsRedoing = true
+  var completed = false
   try:
     var index = group.commands.len - 1
     while index >= 0:
@@ -420,12 +433,21 @@ proc performRedo*(manager: UndoManager): bool {.discardable.} =
       else:
         command.valueOperation(manager)
       dec index
+    completed = true
   finally:
     manager.xIsRedoing = false
+    if not completed:
+      manager.xPendingCleanState = false
   if manager.xUndoReplayGroup.commands.len > 0:
     manager.xUndoStack.add manager.xUndoReplayGroup
+  manager.pruneHistory()
   manager.xUndoReplayGroup = UndoGroup()
   inc manager.xChangeIndex
+  if manager.xPendingCleanState:
+    manager.xCleanIndex = manager.xChangeIndex
+    manager.xCleanBranchSerial = manager.xBranchSerial
+    manager.xHasCleanState = true
+    manager.xPendingCleanState = false
   manager.notifyStateChanged()
   true
 
@@ -451,7 +473,11 @@ proc clearAll*(manager: UndoManager) =
     manager.notifyStateChanged()
 
 proc markCleanState*(manager: UndoManager) =
+  ## During replay, mark the final state after the entire group has completed.
   manager.xCanMerge = false
+  if manager.xIsUndoing or manager.xIsRedoing:
+    manager.xPendingCleanState = true
+    return
   manager.xCleanIndex = manager.xChangeIndex
   manager.xCleanBranchSerial = manager.xBranchSerial
   manager.xHasCleanState = true
@@ -459,6 +485,7 @@ proc markCleanState*(manager: UndoManager) =
 
 proc clearCleanState*(manager: UndoManager) =
   manager.xCanMerge = false
+  manager.xPendingCleanState = false
   manager.xHasCleanState = false
   manager.notifyStateChanged()
 
