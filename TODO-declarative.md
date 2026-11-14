@@ -14,10 +14,14 @@ and targeted layout improvements. See [the form report](docs/declarative-forms.m
 [undo contracts](docs/undo-history.md), and
 [layout measurements](docs/benchmarks/layout/README.md). The form comparison uses
 ViewSpec actions around a DirectView-owned custom form; it does not add a general
-ViewSpec custom-widget adapter. Follow-up work adds guarded commands, explicit
-DirectView suspension, a real document-owned asynchronous save, and opt-in
-intrinsic measurement caching. Ancestor feedback and dirty marking now share a
-walk outside layout transactions; the notification cascade remains quadratic.
+ViewSpec custom-widget adapter. Actions use existing weak ActionTarget receivers
+and captured context, with a shared controller predicate checking that the editor,
+document, generation and task are still valid. A separate command wrapper added
+duplicate ownership checks without simplifying these call sites, so it was removed.
+Follow-up work adds explicit DirectView suspension, a real document-owned
+asynchronous save, and opt-in intrinsic measurement caching. Ancestor feedback
+and dirty marking now share a walk outside layout transactions; the notification
+cascade remains quadratic.
 StackView already reused measurements within arrangement; opting in allows reuse
 across repeated intrinsic queries while invalidation remains conservative.
 See [measurement contracts](docs/layout-measurement.md) for invalidation rules and

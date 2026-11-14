@@ -48,13 +48,14 @@ per-field concurrent merging, draft persistence, native operating-system IME
 coverage or a universal Save/Close policy. It establishes the smaller contracts
 before exposing a toolkit-wide form abstraction.
 
-`GuardedCommand` now packages a weak receiver, a context snapshot and a
-noncapturing validity predicate. `perform` resolves the receiver and checks the
-predicate immediately before calling its handler. The two-document examples pass
-these values through the existing `onAction` API; they have one task-context
-predicate instead of repeated generation checks in each action. Context follows
-Nim value semantics, so embedded references retain their usual ownership. This
-helper neither owns requests nor cancels document work.
+The two-document examples use `onAction(owner, context)` and ActionTarget's
+existing weak receiver ownership. Their controller methods share one predicate
+that checks the editor and document are open, the captured generation still
+matches, and the task still exists before editing, removing or queuing validation.
+This rejects stale actions even before queued view reconciliation runs. Context
+follows Nim value semantics, so embedded references retain their usual ownership.
+The controller checks neither own requests nor cancel document work; delayed
+results still check their own captured revision before applying.
 
 The separate [visibility example](../examples/direct_lifetimes_demo.nim) wires
 controller appearance signals to explicit DirectView suspension/resumption.
@@ -97,8 +98,9 @@ Behavioral coverage is in [formdrafts.nim](../tests/nimkit/formdrafts.nim) and
 NimKit runner. The former separates domain policy from widget editing checks;
 the latter checks hidden observation, queued work retirement and rebuilding.
 
-The final shared NimKit suite passes all 1,622 tests, Tekton passes 49 tests, and
-the complete example bundle compiles. Widget editing coverage dispatches keys
+After simplifying the controller actions, the shared NimKit suite passes all
+1,621 tests and the complete example bundle compiles. The preceding broader work
+also passed 49 Tekton tests. Widget editing coverage dispatches keys
 through a headless NimKit window; it does not establish native OS IME behavior or
 input-to-display latency.
 

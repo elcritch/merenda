@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Add weak context-guarded commands and explicit DirectView suspension/resumption.
+- Use existing weak ActionTarget receivers with checked controller methods, and
+  add explicit DirectView suspension/resumption.
   The lifetime and form examples demonstrate appearance policy and real
   document-owned asynchronous saving without retaining the initiating view.
 - Add opt-in intrinsic measurement caching with `vpCacheIntrinsicSize` and combine
