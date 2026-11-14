@@ -71,3 +71,33 @@ one fitting size per visible child and reuses it for both axes; this experiment
 measures opt-in reuse across otherwise separate calls. Geometry or intrinsic
 invalidation causes a fresh measurement. These numbers do not establish an
 end-to-end preview or native latency improvement.
+
+## Opt-in cache: default-off comparison
+
+The intrinsic cache is disabled by default. To estimate its cost in that mode,
+we built this same fixture from cache parent `af3659a8` and cache commit `be12b48d`
+in separate detached worktrees. Both used the existing Atlas `deps/` and `nim.cfg`,
+Nim 2.4.2, release flags, and the same machine. The exact build command in each
+worktree was:
+
+```sh
+nim ic -d:release --nimcache:/tmp/merenda-layout-cache-<version>-ic \
+  --out:/tmp/merenda-layout-cache-<version>-bin --path:src \
+  docs/benchmarks/layout/bench.nim
+```
+
+Each binary ran three times in alternating order, giving 15 samples per row
+count and version. The raw samples are [before](default-off-before.csv) and
+[after](default-off-after.csv). Median time changes follow; positive numbers mean
+the cache build took longer.
+
+| Rows | Create | Measure | Layout | Reverse |
+| ---: | ---: | ---: | ---: | ---: |
+| 10 | +1.5% | +3.1% | +0.6% | +1.1% |
+| 100 | +0.5% | -0.7% | +0.6% | -2.9% |
+| 300 | +0.4% | +3.1% | -0.3% | +1.8% |
+
+These small differences are noisy measurements of this synthetic fixture on one
+machine, not a guarantee of zero overhead or a native interaction benchmark. The
+cache also adds bounded per-view storage even when disabled. The change in layout
+measurement is distinct from the separate opt-in cache-hit benchmark.
