@@ -1,7 +1,7 @@
 ## Weak, context-bound commands for presentation-owned actions.
 import ./responders
 
-type GuardedCommand*[R: Responder, C] = object
+type GuardedCommand*[R, C] = object
   receiver: BackRef[R]
   context: C
   valid: proc(receiver: R, context: C): bool {.nimcall.}
