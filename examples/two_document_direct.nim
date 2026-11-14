@@ -2,6 +2,7 @@
 import std/options
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/responder/guardedcommands
 import ./two_document_tasks
 
 proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
@@ -31,15 +32,15 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
       Button(
         "Validate", identifier = "validate-" & $task.id, acceptsFirstResponder = false
       ):
-        onAction(owner, (owner.generation, task.id)) do(
-          receiver: EditorController, context: EditorContext, sender: DynamicAgent
+        onAction(owner, owner.taskCommand(task.id)) do(
+          receiver: EditorController, command: EditorTaskCommand, sender: DynamicAgent
         ):
-          receiver.queue.queueValidation(receiver, context)
+          command.perform(validateTaskCommand)
       Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
-        onAction(owner, (owner.generation, task.id)) do(
-          receiver: EditorController, context: EditorContext, sender: DynamicAgent
+        onAction(owner, owner.taskCommand(task.id)) do(
+          receiver: EditorController, command: EditorTaskCommand, sender: DynamicAgent
         ):
-          receiver.removeTask(context)
+          command.perform(removeTaskCommand)
 
 proc rows(context: DirectNode, owner: EditorController, state: EditorStructure) =
   context.viewBody:

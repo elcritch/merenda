@@ -2,6 +2,7 @@
 import std/[algorithm, strutils, tables]
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/responder/guardedcommands
 
 type
   EditorTask* = object
@@ -29,6 +30,8 @@ type
     generation*: int
     closed*: bool
     queue*: ValidationQueue
+
+  EditorTaskCommand* = GuardedCommand[EditorController, EditorContext]
 
   ValidationRequest = object
     owner: BackRef[EditorController]
@@ -190,20 +193,23 @@ proc detachEditor*(owner: EditorController) =
   owner.structure <- (owner.generation, @[])
   owner.status <- "Detached"
 
+proc validTaskCommand(owner: EditorController, context: EditorContext): bool =
+  not owner.closed and not owner.document.isClosed and
+    owner.generation == context.generation and context.id in owner.tasks
+
 proc taskTitle*(owner: EditorController, context: EditorContext): string =
-  if not owner.closed and not owner.document.isClosed and
-      owner.generation == context.generation:
+  if owner.validTaskCommand(context):
     result = owner.taskTitle(context.id)
 
 proc editTask*(owner: EditorController, context: EditorContext, text: string) =
-  if not owner.closed and not owner.document.isClosed and
-      owner.generation == context.generation:
+  if owner.validTaskCommand(context):
     owner.editTask(context.id, text)
 
-proc removeTask*(owner: EditorController, context: EditorContext) =
-  if not owner.closed and not owner.document.isClosed and
-      owner.generation == context.generation:
-    owner.removeTask(context.id)
+proc taskCommand*(owner: EditorController, id: int): EditorTaskCommand =
+  initGuardedCommand(owner, (owner.generation, id), validTaskCommand)
+
+proc removeTaskCommand*(owner: EditorController, context: EditorContext) =
+  owner.removeTask(context.id)
 
 proc undo*(owner: EditorController) =
   if not owner.closed and not owner.document.isClosed:
@@ -227,12 +233,8 @@ proc queueValidation*(queue: ValidationQueue, owner: EditorController, id: int) 
     )
     owner.status <- "Validation queued"
 
-proc queueValidation*(
-    queue: ValidationQueue, owner: EditorController, context: EditorContext
-) =
-  if not owner.closed and not owner.document.isClosed and
-      owner.generation == context.generation:
-    queue.queueValidation(owner, context.id)
+proc validateTaskCommand*(owner: EditorController, context: EditorContext) =
+  owner.queue.queueValidation(owner, context.id)
 
 proc flushValidation*(queue: ValidationQueue) =
   ## Deliver simulated delayed results on the owning GUI thread.
