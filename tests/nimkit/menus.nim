@@ -1241,7 +1241,11 @@ suite "nimkit menus":
     view.menu = first
     check DynamicAgent(view).methodStack(rightMouseDown()).len == initialDepth + 1
     view.menu = second
+    check view.menu == second
     view.menu = nil
+    check view.menu.isNil
+    view.menu = nil
+    check view.menu.isNil
     var handled = true
     discard DynamicAgent(view).performLocal(rightMouseDown(), MouseEvent(), handled)
     check not handled

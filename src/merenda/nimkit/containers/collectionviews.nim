@@ -158,6 +158,7 @@ proc collectionItemRect*(collectionView: CollectionView, index: int): Rect
 proc collectionItemIndexAtPoint*(collectionView: CollectionView, point: Point): int
 proc visibleItemIndexes*(collectionView: CollectionView): seq[int]
 proc reloadData*(collectionView: CollectionView)
+proc clearCollectionItemSlots(collectionView: CollectionView)
 proc dequeueReusableItemView*(collectionView: CollectionView, identifier: string): View
 proc selectedIdentifiers*(collectionView: CollectionView): seq[string]
 proc `selectedIdentifiers=`*(
@@ -709,6 +710,7 @@ proc `dataSource=`*(collectionView: CollectionView, dataSource: DynamicAgent) =
     return
   if not dataSource.isNil:
     discard dataSource.adopt(CollectionViewDataSource)
+  collectionView.clearCollectionItemSlots()
   collectionView.xDataSource = dataSource
   collectionView.reloadData()
 
@@ -723,6 +725,7 @@ proc `delegate=`*(collectionView: CollectionView, delegate: DynamicAgent) =
     return
   if not delegate.isNil:
     discard delegate.adopt(CollectionViewDelegate)
+  collectionView.clearCollectionItemSlots()
   collectionView.xDelegate = delegate
   collectionView.reloadData()
 
@@ -1322,9 +1325,31 @@ proc invalidateCollectionItems(collectionView: CollectionView) =
   collectionView.xScrollView.horizontalScroller().needsDisplay = true
   collectionView.needsDisplay = true
 
+proc reconcileCollectionItemSlots(collectionView: CollectionView) =
+  # Match against the current presentation order; update payload indexes may
+  # refer to the source order rather than the sorted or filtered presentation.
+  var indexes = initTable[string, int]()
+  for index in 0 ..< collectionView.len():
+    let identifier = collectionView.collectionItemIdentifier(index)
+    if identifier in indexes:
+      indexes[identifier] = -1
+    else:
+      indexes[identifier] = index
+  var position = 0
+  while position < collectionView.xItemSlots.len:
+    let slot = collectionView.xItemSlots[position]
+    let index = indexes.getOrDefault(slot.identifier, -1)
+    if index < 0 or
+        collectionView.defaultReuseIdentifierForItem(index) != slot.reuseIdentifier:
+      collectionView.recycleItemSlot(slot)
+      collectionView.xItemSlots.delete(position)
+    else:
+      collectionView.xItemSlots[position].index = index
+      inc position
+
 proc reloadData*(collectionView: CollectionView) =
   let selected = collectionView.xSelectedIdentifiers
-  collectionView.clearCollectionItemSlots()
+  collectionView.reconcileCollectionItemSlots()
   collectionView.clearCollectionSupplementaryViews()
   collectionView.tileCollectionContent()
   collectionView.selectedIdentifiers = selected
@@ -1335,11 +1360,8 @@ proc applyCollectionUpdates*(
     collectionView: CollectionView, updates: openArray[CollectionUpdate]
 ) =
   let selected = collectionView.xSelectedIdentifiers
-  for update in updates:
-    case update.kind
-    of cukReload, cukRemove, cukMove, cukInsert:
-      collectionView.clearCollectionItemSlots()
-      collectionView.clearCollectionSupplementaryViews()
+  collectionView.reconcileCollectionItemSlots()
+  collectionView.clearCollectionSupplementaryViews()
   collectionView.tileCollectionContent()
   collectionView.selectedIdentifiers = selected
   emit collectionView.collectionItemsDidUpdate(DynamicAgent(collectionView), @updates)

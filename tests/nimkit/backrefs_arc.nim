@@ -16,6 +16,17 @@ type
 
   ActionReceiver = ref object of Responder
     calls: int
+    callback: proc(enabled: bool) {.closure.}
+
+proc enabled(receiver: ActionReceiver): bool =
+  receiver.calls > 0
+
+proc actionWithShadowedGetter(receiver: ActionReceiver, enabled: bool): ActionAdapter =
+  newActionTarget(actionSelector("test.shadowedGetter"), receiver) do(
+    receiver: ActionReceiver, sender: DynamicAgent
+  ):
+    if not receiver.callback.isNil:
+      receiver.callback(receiver.enabled())
 
 static:
   doAssert not compiles(
@@ -27,6 +38,20 @@ static:
         discard newActionTarget(actionSelector("test.rejectCapture"), receiver, handler)
 
       withCapture(newResponder())
+  )
+  doAssert not compiles(
+    block:
+      proc withContextCapture(receiver: Responder) =
+        var calls = 0
+        let handler = proc(
+            receiver: Responder, context: int, sender: DynamicAgent
+        ) {.closure.} =
+          calls += context
+        discard newActionTarget(
+          actionSelector("test.rejectContextCapture"), receiver, 1, handler
+        )
+
+      withContextCapture(newResponder())
   )
 
 protocol IntrinsicLifetimeLayout of ViewLayoutProtocol:
@@ -43,6 +68,54 @@ proc observe(view: View): BackRef[View] =
   result.target = view
 
 suite "NimKit ARC back references":
+  test "receiver actions can call getters shadowed in the creating scope":
+    let receiver = ActionReceiver(calls: 1)
+    initResponder(receiver)
+    var observed = false
+    receiver.callback = proc(enabled: bool) =
+      observed = enabled
+    let button = newButton("Run")
+    button.target = actionWithShadowedGetter(receiver, false)
+    button.action = actionSelector("test.shadowedGetter")
+    check button.sendAction()
+    check observed
+
+  test "action adapters copy explicit context and release their receiver":
+    let button = newButton("Run")
+    let action = actionSelector("test.contextReceiver")
+    var observed: BackRef[ActionReceiver]
+    block:
+      let receiver = ActionReceiver()
+      initResponder(receiver)
+      observed.target = receiver
+      var amount = 3
+      button.target = newActionTarget(
+        action,
+        receiver,
+        context = amount,
+        handler = proc(receiver: ActionReceiver, context: int, sender: DynamicAgent) =
+          check sender of Button
+          receiver.calls += context,
+      )
+      amount = 8
+      button.action = action
+      check button.sendAction()
+      check receiver.calls == 3
+    check observed.isNil
+    check button.sendAction()
+
+  test "action adapters accept a nil pointer context":
+    let receiver = ActionReceiver()
+    initResponder(receiver)
+    let adapter = newActionTarget(
+      actionSelector("test.nilContext"),
+      receiver,
+      pointer(nil),
+      proc(receiver: ActionReceiver, context: pointer, sender: DynamicAgent) =
+        discard,
+    )
+    check not adapter.isNil
+
   test "non-capturing action adapters do not retain their receiver":
     let button = newButton("Run")
     var observed: BackRef[ActionReceiver]

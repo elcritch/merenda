@@ -1,5 +1,6 @@
 ## Table reload transactions and batched row updates.
 
+import std/tables
 import sigils/core
 import ../controls/controls
 import ../foundation/selectors
@@ -9,6 +10,57 @@ import ./tablecore
 import ./tableselection
 import ./tablecells
 import ./tablecoordination
+
+proc presentedRowIdentifier(tableView: TableView, row: int): string =
+  if row in 0 ..< tableView.xPresentedRowIdentifiers.len:
+    tableView.xPresentedRowIdentifiers[row]
+  else:
+    tableView.tableRowIdentifier(row)
+
+proc presentedRowIdentifiers(tableView: TableView, rows: openArray[int]): seq[string] =
+  for row in rows:
+    let identifier = tableView.presentedRowIdentifier(row)
+    if identifier.len > 0:
+      result.add identifier
+
+proc capturePresentedRowIdentifiers(tableView: TableView) =
+  tableView.xPresentedRowIdentifiers.setLen(0)
+  for row in 0 ..< tableView.len():
+    tableView.xPresentedRowIdentifiers.add tableView.tableRowIdentifier(row)
+
+proc reconcileTableCellSlots(tableView: TableView) =
+  var rows = initTable[string, int]()
+  for row in 0 ..< tableView.len():
+    let identifier = tableView.tableRowIdentifier(row)
+    if identifier.len > 0:
+      if identifier in rows:
+        rows[identifier] = -1
+      else:
+        rows[identifier] = row
+  var position = 0
+  while position < tableView.xCellSlots.len:
+    let slot = tableView.xCellSlots[position]
+    let row = rows.getOrDefault(slot.identifier, -1)
+    var keep = false
+    if row >= 0:
+      let delegate = tableView.delegate()
+      if not delegate.isNil:
+        keep = delegate.sendLocalIfHandled(
+          configureCellView(),
+          (
+            tableView: tableView,
+            row: row,
+            column: slot.column,
+            objectValue: tableView.queryTableCellObjectValue(row, slot.column),
+            view: slot.view,
+          ),
+        )
+    if not keep:
+      tableView.recycleCellSlot(slot)
+      tableView.xCellSlots.delete(position)
+    else:
+      tableView.xCellSlots[position].row = row
+      inc position
 
 proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
   ## Reloads rows while preserving selection identities and the viewport anchor.
@@ -20,19 +72,20 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
     oldOffset = tableView.listContentOffset()
     oldFirst = tableView.firstVisibleIndex()
     offsetWithinRow = oldOffset.y - tableView.rowOffset(oldFirst)
-    oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
+    oldFirstIdentifier = tableView.presentedRowIdentifier(oldFirst)
     selectedIdentifiers =
-      tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
-    anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
-    leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
+      tableView.presentedRowIdentifiers(tableView.xRowSelection.indexes)
+    anchorIdentifier = tableView.presentedRowIdentifier(tableView.xRowSelection.anchor)
+    leadIdentifier = tableView.presentedRowIdentifier(tableView.xRowSelection.lead)
     editingIdentifier =
       if tableView.xCellEditing.state.active:
-        tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
+        tableView.presentedRowIdentifier(tableView.xCellEditing.state.row)
       else:
         ""
   if not updateRows.isNil:
     updateRows()
-  tableView.clearTableCellSlots()
+  tableView.reconcileTableCellSlots()
+  tableView.capturePresentedRowIdentifiers()
   tableView.invalidateRowHeightCache()
   tableView.setNeedsLayout()
   if selectedIdentifiers.len > 0:
@@ -88,15 +141,16 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
   tableView.invalidateColumnWidthMeasurements()
   let
     selectedIdentifiers =
-      tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
-    anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
-    leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
+      tableView.presentedRowIdentifiers(tableView.xRowSelection.indexes)
+    anchorIdentifier = tableView.presentedRowIdentifier(tableView.xRowSelection.anchor)
+    leadIdentifier = tableView.presentedRowIdentifier(tableView.xRowSelection.lead)
     editingIdentifier =
       if tableView.xCellEditing.state.active:
-        tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
+        tableView.presentedRowIdentifier(tableView.xCellEditing.state.row)
       else:
         ""
-  tableView.clearTableCellSlots()
+  tableView.reconcileTableCellSlots()
+  tableView.capturePresentedRowIdentifiers()
   tableView.invalidateRowHeightCache()
   tableView.setNeedsLayout()
   tableView.layoutTableContentIfNeeded()

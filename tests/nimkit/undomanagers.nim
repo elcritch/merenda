@@ -13,6 +13,159 @@ proc rememberUndoState(spy: UndoStateSpy, manager: UndoManager) {.slot.} =
   spy.cleanStates.add manager.isAtCleanState()
 
 suite "nimkit undo managers":
+  test "typed changes coalesce only across continuous matching gestures":
+    let manager = newUndoManager()
+    var value = ""
+    proc apply(next: string) =
+      value = next
+
+    proc change(next: string, key = "title") =
+      let before = value
+      value = next
+      manager.registerMergeableValueChange(apply, before, next, key, "Edit")
+
+    change("a")
+    change("ab")
+    check manager.undoCount == 1
+    check manager.performUndo()
+    check value == ""
+    check manager.performRedo()
+    check value == "ab"
+    change("abc") # redo ends the gesture
+    manager.breakUndoCoalescing()
+    change("abcd")
+    change("abcde", "other")
+    check manager.undoCount == 4
+    value = "x"
+    manager.registerMergeableValueChange(apply, "different", "x", "other")
+    check manager.undoCount == 5
+    check manager.performUndo()
+    check value == "different"
+
+  test "checkpoints and unrelated commands separate typed changes":
+    let manager = newUndoManager()
+    var value = 0
+    proc apply(next: int) =
+      value = next
+
+    value = 1
+    manager.registerMergeableValueChange(apply, 0, 1, "number")
+    manager.markCleanState()
+    value = 2
+    manager.registerMergeableValueChange(apply, 1, 2, "number")
+    check manager.undoCount == 2
+    check manager.performUndo()
+    check value == 1
+    check manager.isAtCleanState()
+    check manager.performRedo()
+    manager.registerUndo(
+      proc() =
+        discard
+    )
+    value = 3
+    manager.registerMergeableValueChange(apply, 2, 3, "number")
+    check manager.undoCount == 4
+
+  test "history limits retain clean state identity through pruning and branching":
+    let manager = newUndoManager()
+    var value = 0
+    proc apply(next: int) =
+      value = next
+
+    proc change(next: int) =
+      let before = value
+      value = next
+      manager.registerMergeableValueChange(apply, before, next, "", "Edit")
+
+    manager.historyLimit = 2
+    change(1)
+    manager.markCleanState()
+    change(2)
+    change(3)
+    check manager.undoCount == 2
+    check manager.performUndo()
+    check manager.performUndo()
+    check manager.isAtCleanState()
+    check value == 1
+    manager.historyLimit = 1
+    check manager.redoCount == 1
+    change(4)
+    check not manager.isAtCleanState()
+    check manager.performUndo()
+    check manager.isAtCleanState()
+    check value == 1
+
+    check manager.performRedo()
+    manager.markCleanState()
+    check manager.performUndo()
+    manager.historyLimit = 0
+    manager.clearRedo()
+    change(5)
+    check not manager.isAtCleanState()
+
+  test "action names separate coalesced gestures":
+    let manager = newUndoManager()
+    var value = 0
+    proc apply(next: int) =
+      value = next
+
+    value = 1
+    manager.registerMergeableValueChange(apply, 0, 1, "number", "First")
+    manager.setActionName("Second")
+    value = 2
+    manager.registerMergeableValueChange(apply, 1, 2, "number")
+    check manager.undoCount == 2
+    check manager.undoActionName == "Second"
+
+  test "replay observers can reduce the limit and mark the resulting state clean":
+    let manager = newUndoManager()
+    manager.registerUndo(
+      proc() =
+        discard,
+      "Earlier",
+    )
+    manager.registerUndo(
+      proc() =
+        manager.registerUndo(
+          proc() =
+            discard,
+          "Redo",
+        )
+        manager.historyLimit = 1
+        manager.markCleanState()
+    )
+    check manager.performUndo()
+    check manager.undoCount == 0
+    check manager.redoCount == 1
+    check manager.isAtCleanState()
+    check manager.performRedo()
+    check not manager.isAtCleanState()
+
+  test "redo applies a new history limit and deferred checkpoint":
+    let manager = newUndoManager()
+    manager.registerUndo(
+      proc() =
+        discard,
+      "Earlier",
+    )
+    manager.registerUndo(
+      proc() =
+        manager.registerUndo(
+          proc() =
+            manager.registerUndo(
+              proc() =
+                discard
+            )
+            manager.historyLimit = 1
+            manager.markCleanState()
+        )
+    )
+    check manager.performUndo()
+    check manager.performRedo()
+    check manager.undoCount == 1
+    check manager.redoCount == 0
+    check manager.isAtCleanState()
+
   test "groups nested commands, names actions, and invalidates redo branches":
     let manager = newUndoManager()
     var value = ""

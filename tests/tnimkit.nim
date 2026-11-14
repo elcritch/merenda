@@ -24,6 +24,7 @@ else:
   import nimkit/canvasviews
   import nimkit/cascadingviews
   import nimkit/collectionviews
+  import nimkit/collectionsigils
   import nimkit/colorpicker
   import nimkit/comboboxes
   import nimkit/constraints
@@ -35,16 +36,27 @@ else:
   import nimkit/datepickers
   import nimkit/daterangepickers
   import nimkit/declarativedragging
+  import nimkit/declarativedemo
+  import nimkit/declarativeviews
+  import nimkit/directbindings
+  import nimkit/directlifetimes
+  import nimkit/directvisibility
+  import nimkit/directdemo
+  import nimkit/directmodels
+  import nimkit/directviews
   import nimkit/devcontrol
   import nimkit/diagnostics
   import nimkit/dockviews
   import nimkit/documents
   import nimkit/documenttabs
+  import nimkit/experimentalboundary
+  import nimkit/taskdemochecks
   import nimkit/filebrowsers
   import nimkit/filesearch
   import nimkit/font_layout
   import nimkit/fontpickers
   import nimkit/formviews
+  import nimkit/formdrafts
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews
@@ -54,6 +66,7 @@ else:
   import nimkit/iconlabels
   import nimkit/images
   import nimkit/itemcollections
+  import nimkit/intrinsiccache
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix
@@ -99,6 +112,7 @@ else:
   import nimkit/tokenfields
   import nimkit/tooltips
   import nimkit/treeviewdemo
+  import nimkit/twodocumenteditors
   import nimkit/types
   import nimkit/undomanagers
   import nimkit/urls

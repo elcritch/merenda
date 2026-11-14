@@ -1,5 +1,6 @@
 ## Shared runner for tests requiring cross-component or process-level integration.
 import std/exitprocs
+import integrations/fixtures/backgroundcommand
 import integrations/fixtures/devcontrol
 import integrations/fixtures/atomicsavefailure
 import integrations/fixtures/githubcli
@@ -34,4 +35,5 @@ import integrations/backgroundworkershutdown
 when isMainModule:
   # Nim ic can otherwise exit successfully after unittest records a failure.
   if getProgramResult() != 0:
+    releaseWorkerForFailedExit()
     quit(getProgramResult())

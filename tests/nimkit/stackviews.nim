@@ -5,12 +5,14 @@ import merenda/nimkit
 type
   FixedIntrinsicView = ref object of View
     naturalSize: Size
+    measurements: int
 
   CheckBoxRowView = ref object of View
     checkBox: Button
 
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
+    inc view.measurements
     initIntrinsicSize(view.naturalSize)
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
@@ -145,6 +147,50 @@ suite "nimkit stack views":
 
     check first.frame() == rect(2.0, 1.0, 40.0, 20.0)
     check second.frame() == rect(2.0, 26.0, 40.0, 32.0)
+
+  test "stack arrangement measures each visible child once":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 100, 60))
+      first = newFixedIntrinsicView(20, 10)
+      second = newFixedIntrinsicView(30, 15)
+      hidden = newFixedIntrinsicView(40, 25)
+    stack.distribution = svdNatural
+    stack.spacing = 0
+    stack.alignment = svaLeading
+    stack.addArrangedSubview(first)
+    stack.addArrangedSubview(second)
+    stack.addArrangedSubview(hidden)
+    hidden.hidden = true
+    first.measurements = 0
+    second.measurements = 0
+    hidden.measurements = 0
+    discard stack.sendLocalIfHandled(layoutSubviews())
+    check first.measurements == 1
+    check second.measurements == 1
+    check hidden.measurements == 0
+    check first.frame() == rect(0, 0, 20, 10)
+    check second.frame() == rect(0, 10, 30, 15)
+
+  test "opted-in intrinsic measurement is reused until geometry invalidates it":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 100, 60))
+      child = newFixedIntrinsicView(20, 10)
+    stack.distribution = svdNatural
+    stack.spacing = 0
+    stack.alignment = svaLeading
+    stack.addArrangedSubview(child)
+    child[vpCacheIntrinsicSize] = true
+    child.measurements = 0
+    check stack.intrinsicContentSize() == initIntrinsicSize(20, 10)
+    check child.measurements == 1
+    discard stack.sendLocalIfHandled(layoutSubviews())
+    check child.measurements == 1
+    check child.frame() == rect(0, 0, 20, 10)
+    child.naturalSize = initSize(30, 15)
+    child.invalidateIntrinsicContentSize()
+    discard stack.sendLocalIfHandled(layoutSubviews())
+    check child.measurements == 2
+    check child.frame() == rect(0, 0, 30, 15)
 
   test "cross-axis alignment can fill center and trail":
     let
@@ -289,6 +335,59 @@ suite "nimkit stack views":
     check stack.arrangedSubviews[^2] == plain
     check stack.arrangedSubviews[^1] == explicit
     check stack.arrangedSubviewSizingPolicy(explicit) == svspFillAvailableWidth
+
+  test "batch order preserves unarranged slots and remaining sizing policies":
+    let
+      stack = newStackView(laVertical)
+      a = newView()
+      decoration = newView()
+      b = newView()
+      c = newView()
+    stack.addArrangedSubview(a, svspFillAvailableWidth)
+    stack.addSubview(decoration)
+    stack.addArrangedSubview(b, svspFillAvailableSpace)
+    stack.addArrangedSubview(c)
+    c.hidden = true
+
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspFillAvailableWidth),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+
+    check stack.arrangedSubviews == @[c, a, b]
+    check stack.subviews() == @[c, decoration, a, b]
+    check stack.arrangedSubviewSizingPolicy(c) == svspFillAvailableWidth
+    check stack.arrangedSubviewSizingPolicy(a) == svspAutomatic
+    check stack.arrangedSubviewSizingPolicy(b) == svspFillAvailableSpace
+    check a.superview == stack
+    check b.superview == stack
+    check c.superview == stack
+    stack.needsLayout = false
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspFillAvailableWidth),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+    check not stack.needsLayout
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspAutomatic),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+    check stack.needsLayout
+
+    expect ValueError:
+      stack.arrangeSubviewPrefix([ArrangedSubview(view: a), ArrangedSubview(view: a)])
+    check stack.arrangedSubviews == @[c, a, b]
+    let newcomer = newView()
+    stack.arrangeSubviewPrefix([ArrangedSubview(view: newcomer)])
+    check stack.arrangedSubviews == @[newcomer, c, a, b]
+    check newcomer.superview == stack
+    check stack.subviews() == @[newcomer, decoration, c, a, b]
 
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let

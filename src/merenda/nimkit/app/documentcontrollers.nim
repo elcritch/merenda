@@ -110,7 +110,11 @@ proc postNotification(
     initNotification(
       kind,
       sender = DynamicAgent(controller),
-      representedObject = DynamicAgent(document),
+      representedObject =
+        if document.isNil:
+          nil
+        else:
+          DynamicAgent(document),
       payload =
         if document.isNil:
           initNotificationPayload()

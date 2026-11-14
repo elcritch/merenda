@@ -20,10 +20,14 @@ import constraint_playground_demo
 import controls_showcase
 import css_theme_demo
 import declarative_drag_demo
+import declarative_views_demo
+import direct_views_demo
+import direct_lifetimes_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
 import font_fallback_demo
+import form_editors
 import grid_preferences
 import hello
 import html_ui_demo
@@ -59,6 +63,8 @@ import threadpool_long_work_demo
 import todo_basic
 import todo_stack_drag
 import todo_table
+import two_document_direct
+import two_document_spec
 import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo

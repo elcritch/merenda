@@ -1,3 +1,5 @@
+import std/[tables, sets]
+
 import sigils/core
 
 import ../foundation/selectors
@@ -529,6 +531,64 @@ proc intrinsicContentSize*(stackView: StackView): IntrinsicSize =
 
 proc arrangedSubviews*(stackView: StackView): seq[View] =
   stackView.xArrangedSubviews
+
+proc arrangeSubviewPrefix*(stackView: StackView, children: openArray[ArrangedSubview]) =
+  ## Places unique children first, retaining other arranged subviews and their policies.
+  if children.len <= stackView.xArrangedSubviews.len:
+    var unchanged = true
+    for i, child in children:
+      if child.view != stackView.xArrangedSubviews[i] or
+          child.sizingPolicy != stackView.xArrangedSubviewSizing[i]:
+        unchanged = false
+        break
+    if unchanged:
+      return
+  var
+    seen: HashSet[pointer]
+    arranged: seq[View]
+    sizing: seq[StackViewSizingPolicy]
+  for child in children:
+    if child.view.isNil or cast[pointer](child.view) in seen:
+      raise newException(ValueError, "arranged children must be non-nil and unique")
+    seen.incl cast[pointer](child.view)
+    arranged.add child.view
+    sizing.add child.sizingPolicy
+  for i, child in stackView.xArrangedSubviews:
+    if cast[pointer](child) notin seen:
+      arranged.add child
+      sizing.add stackView.xArrangedSubviewSizing[i]
+  let orderChanged = arranged != stackView.xArrangedSubviews
+  let sizingChanged = sizing != stackView.xArrangedSubviewSizing
+  if not orderChanged and not sizingChanged:
+    return
+  for child in children:
+    if child.view.superview != stackView:
+      stackView.addSubview(child.view)
+  stackView.xArrangedSubviews = arranged
+  stackView.xArrangedSubviewSizing = sizing
+  if orderChanged:
+    var
+      ranks: Table[pointer, int]
+      orderedSubviews: seq[View]
+      nextArranged = 0
+    for child in arranged:
+      ranks[cast[pointer](child)] = 0
+    for view in stackView.subviews():
+      if cast[pointer](view) in ranks:
+        orderedSubviews.add arranged[nextArranged]
+        inc nextArranged
+      else:
+        orderedSubviews.add view
+    if orderedSubviews != stackView.subviews():
+      for i, view in orderedSubviews:
+        ranks[cast[pointer](view)] = i
+      stackView.sortSubviews(
+        proc(first, second: View): int =
+          cmp(ranks[cast[pointer](first)], ranks[cast[pointer](second)])
+      )
+    stackView.invalidateStackLayout()
+  elif sizingChanged:
+    stackView.setNeedsLayout()
 
 proc insertArrangedSubview*(
     stackView: StackView, child: View, index: int, sizingPolicy = svspAutomatic

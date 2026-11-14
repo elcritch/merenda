@@ -25,22 +25,7 @@ import ./tablecoordination
 proc tableCellObjectValue*(
     tableView: TableView, row: int, column: TableColumn
 ): ObjectValue =
-  if not tableView.validCell(row, column):
-    return nilObjectValue()
-  let source = tableView.dataSource()
-  if source.isNil:
-    return emptyObjectValue()
-  let value = source.trySendLocal(
-    objectValueForCell(), (tableView: tableView, row: row, column: column)
-  )
-  if value.isSome:
-    return value.get()
-  let text =
-    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
-  if text.isSome:
-    toObj(text.get())
-  else:
-    emptyObjectValue()
+  tableView.queryTableCellObjectValue(row, column)
 
 proc writeTableCellObjectValue*(
     tableView: TableView, row: int, column: TableColumn, value: ObjectValue

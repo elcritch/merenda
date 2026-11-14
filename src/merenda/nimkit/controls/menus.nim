@@ -616,13 +616,18 @@ proc menu*(view: View): Menu =
   Menu(view.xContextMenu)
 
 proc `menu=`*(view: View, menu: Menu) =
-  if view.xContextMenu == Responder(menu):
+  let responder =
+    if menu.isNil:
+      nil
+    else:
+      Responder(menu)
+  if view.xContextMenu == responder:
     return
   if not view.xContextMenu.isNil and view.xContextMenu.nextResponder() == Responder(
     view
   ):
     view.xContextMenu.clearNextResponder()
-  view.xContextMenu = Responder(menu)
+  view.xContextMenu = responder
   if not menu.isNil:
     menu.setNextResponder(view)
     if vipContextMenuHandlerInstalled notin view.xPrivProps:

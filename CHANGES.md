@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+- Retain DirectView nodes while flushing bindings so reentrant clearing cannot
+  free the active traversal. Guard nil responder conversions during table,
+  document-notification, and menu updates.
+- Drain separate stdout/stderr pipes for POSIX background commands to avoid
+  aliased process-handle cleanup closing a reused descriptor. Combined output
+  remains bounded; relative ordering between stdout and stderr is unspecified.
+- Pin Moe's POSIX Git launcher fixes, preserving Git markers while avoiding
+  aliased handles and temporary changes to the parent process's working directory.
+
+- Preserve non-capturing receiver action handlers on Nim 2.2 when the contextual
+  ActionTarget form is also available.
+
+- Require explicit `merenda/nimkit/declarative` or `merenda/nimkit/directviews`
+  imports for the experimental view DSLs. Their APIs may change incompatibly.
+
+- Use existing weak ActionTarget receivers with checked controller methods, and
+  add explicit DirectView suspension/resumption.
+  The lifetime and form examples demonstrate appearance policy and real
+  document-owned asynchronous saving without retaining the initiating view.
+- Add opt-in intrinsic measurement caching with `vpCacheIntrinsicSize` and combine
+  layout feedback reset with ancestor dirty propagation outside transactions.
+  Fitting proposals remain uncached; custom intrinsic inputs must invalidate on change.
+- Add opt-in typed undo coalescing, explicit gesture boundaries and a total
+  undo/redo group limit. See `docs/undo-history.md` for checkpoint and replay
+  contracts. The formatted-form experiment demonstrates local/shared drafts,
+  explicit acceptance and owned bindings in `examples/form_editors.nim`.
+- Batch DirectView stack ordering and reuse FormView child measurements within
+  each layout pass. Synthetic arrangement measurements and their limits are in
+  `docs/benchmarks/layout/README.md`.
+- Support named property shorthand such as `Button(title = "Remove")` in the
+  direct-view DSL, with an optional body. Properties use existing widget setters
+  on every body evaluation. The first positional Button argument also updates its
+  title; other positional constructor inputs remain creation-only.
+- Add keyed collection observations with read-only item/order projections and
+  indexed lookup. Both declarative demos now share collection-backed MVC commands,
+  validation, undo and stale-drag checks. ViewSpec mounts support owned bindings;
+  direct views own reusable component lifetimes without application-managed sessions.
+  See `docs/collection-sigils.md` and the declarative guides.
+- Add a separate experimental direct-view DSL (`view.viewBody`) with retained
+  typed widgets, owned controller/Sigil bindings, and controller-driven text
+  editing. The MVC evaluation demo includes validation, undo/redo and detached
+  Dragology previews. Keep the ViewSpec prototype for comparison; see
+  `docs/declarative-direct-views.md`.
+- Preserve keyed CollectionView items through model updates. Table delegates can
+  opt into retained hosted cells with `configureCellView`; existing delegates
+  continue receiving fresh cells on reload. Owned ArrayController bridges queue
+  model refreshes for both containers.
+
+- Add an experimental NimKit declarative view DSL with typed descriptions,
+  keyed retained updates, and detached Dragology preview construction. The
+  editable task-list demo exercises focus, selection, and callback identity
+  across insertion and reorder. See `docs/declarative-views.md`.
+  Inline event blocks use weak-receiver ActionTarget adapters; an explicit context
+  overload binds row IDs without capturing loop variables.
+
 - Add NimKit's discrete declarative dragging port: model-derived destinations,
   isolated layout/render previews, stable IDs, floating, animated rearrangement,
   cancellation and application-owned undoable commits. Try

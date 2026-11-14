@@ -31,6 +31,7 @@ import ./nimkit/debug/viewselection
 import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/interaction/dragcontrollers
+import ./nimkit/viewbindings
 import ./nimkit/foundation/assetcache
 import ./nimkit/foundation/backgroundworkers
 import ./nimkit/foundation/events
@@ -52,6 +53,7 @@ import ./nimkit/controls/matrices
 import ./nimkit/controls/segmentedcontrols
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
+import ./nimkit/app/collectionsigils
 import ./nimkit/text/markdownviews
 import ./nimkit/text/matterhighlighting
 import ./nimkit/text/monotextviews
@@ -134,6 +136,7 @@ export viewselection
 export viewinspectors
 export dragging
 export dragcontrollers
+export viewbindings
 export assetcache
 export events
 export filesearch
@@ -154,6 +157,7 @@ export matrices
 export segmentedcontrols
 export menus
 export modelcontrollers
+export collectionsigils
 export markdownviews
 export matterhighlighting
 export monotextviews

@@ -23,6 +23,14 @@ when defined(macosx):
         if native == window.cocoaWindow():
           result.add index
 
+  proc windowIndex(
+      windows: openArray[nimkitWindows.Window], window: nimkitWindows.Window
+  ): int =
+    for index, candidate in windows:
+      if candidate == window:
+        return index
+    -1
+
   proc waitForNativeFront(
       app: Application, windows: openArray[nimkitWindows.Window], frontIndex: int
   ): bool =
@@ -71,6 +79,7 @@ when defined(macosx):
           let alert = newAlert("Unsaved Changes", buttons = ["Discard", "Cancel"])
           defer:
             alert.window.close()
+          let keyBefore = app.keyWindow()
           let session = app.beginModalSheet(owner, alert)
           require not session.isNil
           let confirmationBelongsToOwner = session.parentWindow == owner
@@ -98,6 +107,10 @@ when defined(macosx):
           alert.window.close()
           check app.modalSession().isNil
           let ownerIsKey = app.keyWindow() == owner
+          checkpoint "owner=" & $ownerIndex & " pre-session key=" &
+            $windowIndex(windows, keyBefore) & " previous key=" &
+            $windowIndex(windows, session.previousKeyWindow) & " restored key=" &
+            $windowIndex(windows, app.keyWindow()) & " response=" & response
           check ownerIsKey
           check nativeDocumentOrder(windows) == before
           check not owner.isClosed

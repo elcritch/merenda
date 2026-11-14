@@ -1,10 +1,10 @@
 ## An in-flight parser must finish during Nim global destruction, before the
 ## parser's globals disappear. C atexit hooks are too late under ARC/ORC.
-import std/[atomics, monotimes, os, times, unittest]
+import std/[atomics, monotimes, os, strtabs, strutils, times, unittest]
 
 import sigils/[core, threads]
 import terminex/workerthreads
-import merenda/nimkit/foundation/backgroundworkers
+import merenda/nimkit/foundation/[backgroundprocesses, backgroundworkers]
 import ./fixtures/markdownworkerlifetime
 import merenda/nimkit/text/markdownparsing
 
@@ -21,6 +21,12 @@ var
   # stops the worker pool before the fixture checks it during teardown.
   integrationWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
   releaseWorkerAtExit {.used.}: ReleaseWorkerAtExit
+
+proc releaseWorkerForFailedExit*() =
+  ## quit bypasses the module destructor that normally releases this worker.
+  if workerStarted.load(moAcquire):
+    exitStarted.store(true, moRelease)
+    shutdownNimkitBackgroundWorkers()
 
 proc parseAtExit(worker: AgentProxy[ExitParseWorker]) {.signal.}
 
@@ -44,6 +50,26 @@ suite "NimKit direct-import worker shutdown":
     shutdownNimkitBackgroundWorkers()
     shutdownNimkitBackgroundWorkers()
 
+  test "a failed test releases the active worker before process exit":
+    if getEnv("MERENDA_TEST_FORCE_SHUTDOWN_FAILURE") != "1":
+      let environment = newStringTable(modeCaseSensitive)
+      for key, value in envPairs():
+        environment[key] = value
+      environment["MERENDA_TEST_FORCE_SHUTDOWN_FAILURE"] = "1"
+      let child = runBackgroundCommand(
+        getAppFilename(),
+        [
+          "NimKit direct-import worker shutdown::joins active parsing before dependency globals are destroyed"
+        ],
+        timeoutMilliseconds = 60_000,
+        environment = environment,
+        diagnosticName = "Shutdown failure regression",
+      )
+      check child.output != "Shutdown failure regression timed out"
+      check child.exitCode == 1
+      check "Check failed: false" in child.output
+      check "main thread did not begin shutdown" notin child.output
+
   test "joins active parsing before dependency globals are destroyed":
     var actor = ExitParseWorker()
     workerPool = nimkitWorkerPool()
@@ -56,5 +82,7 @@ suite "NimKit direct-import worker shutdown":
       sleep(1)
     require workerStarted.load(moAcquire)
     check not workerFinished.load(moAcquire)
+    if getEnv("MERENDA_TEST_FORCE_SHUTDOWN_FAILURE") == "1":
+      check false
     # Deliberately leave the task active. ReleaseWorkerAtExit lets it parse
     # during teardown; CheckWorkerExit asserts that the module guard joined it.

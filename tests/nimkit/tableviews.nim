@@ -1307,6 +1307,27 @@ suite "NimKit TableView":
 
     check secondName.width == 170.0'f32
 
+  test "table state saves when removed from its window":
+    let
+      workspaceId = "tnimkit.table.workspace.removed"
+      window = newWindow("Table removal save", frame = rect(0, 0, 320, 160))
+      root = newView(frame = rect(0, 0, 320, 160))
+      tableView = newTableView(frame = rect(0, 0, 240, 80))
+      column = newTableColumn("name", "Name", width = 90.0)
+      store = workspaceTableViewStateStore(workspaceId)
+
+    tableView.autosaveName = "people.removed"
+    tableView.workspaceIdentifier = workspaceId
+    tableView.addColumn(column)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    column.width = 170.0
+    tableView.removeFromSuperview()
+
+    check tableView.window().isNil
+    check store.hasState("people.removed")
+    check store.state("people.removed").columns[0].width == 170.0'f32
+
   test "table state can resolve document-scoped storage from responder chain":
     let
       documentId = "document:file:///tmp/table-state.nim"

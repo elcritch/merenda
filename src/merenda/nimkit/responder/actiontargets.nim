@@ -17,6 +17,11 @@ type
     receiver: BackRef[T]
     handler: proc(receiver: T, sender: DynamicAgent) {.nimcall.}
 
+  ContextActionTarget[T, C] = ref object of ActionAdapter
+    receiver: BackRef[T]
+    context: C
+    handler: proc(receiver: T, context: C, sender: DynamicAgent) {.nimcall.}
+
   ActionTargetKind = enum
     atkWeak
     atkOwned
@@ -101,12 +106,7 @@ proc newReceiverActionTarget[T: Responder](
   discard adapter.replaceMethod(action, DynamicMethod(invokeReceiverAction[T]))
   result = adapter
 
-macro newActionTarget*(
-    action: ActionSelector, receiver: typed, handler: untyped
-): untyped =
-  ## Create a retained adapter with a zeroing receiver link. The handler takes
-  ## (receiver, sender) and is not called after the receiver is released.
-  ## Inline handlers are marked nimcall before typing their body, rejecting captures.
+proc nonCapturingHandler(handler: NimNode): NimNode =
   let callback = handler.copyNimTree()
   if callback.kind in {nnkDo, nnkLambda, nnkProcDef}:
     if callback.pragma.kind == nnkEmpty:
@@ -119,4 +119,58 @@ macro newActionTarget*(
         hasNimcall = true
     if not hasNimcall:
       callback.pragma.add ident("nimcall")
-  result = newCall(bindSym"newReceiverActionTarget", action, receiver, callback)
+  callback
+
+proc invokeContextAction[T: Responder, C](
+    self: DynamicAgent, invocation: var Invocation
+) =
+  let adapter = ContextActionTarget[T, C](self)
+  let receiver = adapter.receiver{}
+  invocation.setResult(())
+  if not receiver.isNil and not adapter.handler.isNil:
+    adapter.handler(receiver, adapter.context, invocation.argsAs(ActionArgs).sender)
+
+proc newContextActionTarget[T: Responder, C](
+    action: ActionSelector,
+    receiver: T,
+    context: C,
+    handler: proc(receiver: T, context: C, sender: DynamicAgent) {.nimcall.},
+): ActionAdapter =
+  let adapter = ContextActionTarget[T, C](context: context, handler: handler)
+  initResponder(adapter)
+  adapter.receiver.target = receiver
+  discard adapter.replaceMethod(action, DynamicMethod(invokeContextAction[T, C]))
+  result = adapter
+
+type MissingActionArgument = object
+
+# Nim 2.2 can type an inline callback as a closure when these forms are
+# separate macro overloads, before the macro can mark it nimcall.
+macro newActionTarget*(
+    action: ActionSelector,
+    receiver: Responder,
+    context: untyped = MissingActionArgument(),
+    handler: untyped = MissingActionArgument(),
+): untyped =
+  ## Create an adapter with a zeroing receiver link and a non-capturing
+  ## handler taking (receiver, sender). An optional context argument precedes
+  ## the handler, which then takes (receiver, context, sender). Context follows
+  ## normal Nim value semantics; owning references in it remain owning references.
+  if handler.kind in {nnkCall, nnkObjConstr} and
+      handler[0].eqIdent("MissingActionArgument"):
+    result = newCall(
+      bindSym"newReceiverActionTarget", action, receiver, nonCapturingHandler(context)
+    )
+  elif context.kind in {nnkCall, nnkObjConstr} and
+      context[0].eqIdent("MissingActionArgument"):
+    result = newCall(
+      bindSym"newReceiverActionTarget", action, receiver, nonCapturingHandler(handler)
+    )
+  else:
+    result = newCall(
+      bindSym"newContextActionTarget",
+      action,
+      receiver,
+      context,
+      nonCapturingHandler(handler),
+    )
