@@ -3,6 +3,7 @@
 import std/[algorithm, math, monotimes, os, strformat, strutils, times]
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/directviews
 from merenda/nimkit/view/viewconstraints import solveBlocked
 
 type

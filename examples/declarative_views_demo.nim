@@ -1,6 +1,7 @@
 ## Value descriptions with the same controller and keyed observations as direct_views_demo.
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/declarative
 import ./declarative_tasks
 
 proc taskTitle(task: TaskItem, owner: TaskController): ViewSpec =

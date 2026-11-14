@@ -1,6 +1,7 @@
 import std/[monotimes, os, times, unittest]
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/directviews
 import merenda/nimkit/directviews/dsl
 import merenda/nimkit/foundation/mainthreadwork
 

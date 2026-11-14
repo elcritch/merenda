@@ -2,6 +2,7 @@
 import std/options
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/declarative
 import ./two_document_tasks
 
 proc taskRow(task: EditorTask, owner: EditorController): ViewSpec =

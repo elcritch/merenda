@@ -4,6 +4,7 @@
 ## Optional: --rows:10,100,300 --samples:5
 import std/[algorithm, math, monotimes, os, strformat, strutils, times]
 import merenda/nimkit
+import merenda/nimkit/declarative
 from merenda/nimkit/view/viewconstraints import solveBlocked
 
 type

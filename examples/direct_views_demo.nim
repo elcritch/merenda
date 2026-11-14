@@ -1,6 +1,7 @@
 ## Direct views: ordinary components and view-owned, keyed collection bindings.
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/directviews
 import ./declarative_tasks
 
 proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =

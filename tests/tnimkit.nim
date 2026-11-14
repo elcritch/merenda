@@ -49,6 +49,8 @@ else:
   import nimkit/dockviews
   import nimkit/documents
   import nimkit/documenttabs
+  import nimkit/experimentalboundary
+  import nimkit/taskdemochecks
   import nimkit/filebrowsers
   import nimkit/filesearch
   import nimkit/font_layout

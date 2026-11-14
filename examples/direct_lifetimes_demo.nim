@@ -1,6 +1,7 @@
 ## Explicit controller visibility policy; document work need not share this lifetime.
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/directviews
 
 type LifetimeController* = ref object of ViewController
   count*: Sigil[int]

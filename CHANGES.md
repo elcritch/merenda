@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require explicit `merenda/nimkit/declarative` or `merenda/nimkit/directviews`
+  imports for the experimental view DSLs. Their APIs may change incompatibly.
+
 - Use existing weak ActionTarget receivers with checked controller methods, and
   add explicit DirectView suspension/resumption.
   The lifetime and form examples demonstrate appearance policy and real

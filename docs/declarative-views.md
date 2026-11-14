@@ -1,5 +1,8 @@
 # Declarative views: first prototype
 
+This experimental API requires an explicit `merenda/nimkit/declarative` import
+and may change incompatibly without a stability promise.
+
 The evaluation point is an editable task list. Inserting or reordering other rows,
 changing an unrelated counter, and rebuilding a description must preserve the
 same text field, field editor, focus, selection, and marked text. Actions must
@@ -19,6 +22,7 @@ the live model. Preview controls are drawing content, not interactive controls.
 
 ```nim
 import merenda/nimkit
+import merenda/nimkit/declarative
 
 proc taskRow(task: Task, owner: TaskController): ViewSpec =
   viewBody:

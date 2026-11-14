@@ -1,6 +1,7 @@
 import std/[monotimes, os, tempfiles, times, unittest]
 import sigils/[core, reactive, threads]
 import merenda/nimkit
+import merenda/nimkit/directviews
 import ../../examples/[form_drafts, form_editors]
 
 proc waitForSave(document: FormDocument): bool =

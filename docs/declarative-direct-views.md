@@ -1,5 +1,8 @@
 # Direct NimKit views with MVC and owned bindings
 
+This experimental API requires an explicit `merenda/nimkit/directviews` import
+and may change incompatibly without a stability promise.
+
 This is the P7 experiment in [the declarative design comparison](../TODO-declarative.md#proposed-alternative-prototypes).
 It does not construct a `ViewSpec` tree. A declaration finds or creates actual
 NimKit views and configures them through their existing APIs. Controllers own
@@ -15,6 +18,9 @@ commands, and stale-drag rejection. Their differences are in view construction
 and the scope of structural rebuilding, not domain behavior.
 
 ```nim
+import merenda/nimkit
+import merenda/nimkit/directviews
+
 proc taskRow(context: DirectNode, task: Task, controller: TaskController) =
   context.viewBody:
     TextField:

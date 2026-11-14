@@ -4,6 +4,8 @@
 import std/[os, tempfiles]
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/declarative
+import merenda/nimkit/directviews
 import ./form_drafts
 
 type FormPanel = ref object of Responder

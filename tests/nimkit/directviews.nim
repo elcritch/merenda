@@ -3,6 +3,7 @@ import sigils/core
 import sigils/reactive
 import merenda/nimkit/foundation/mainthreadwork
 import merenda/nimkit
+import merenda/nimkit/directviews
 import merenda/nimkit/directviews/dsl
 import merenda/nimkit/containers/stackviews
 import merenda/nimkit/text/textfields

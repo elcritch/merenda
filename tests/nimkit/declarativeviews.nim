@@ -1,6 +1,7 @@
 import std/unittest
 import sigils/reactive
 import merenda/nimkit
+import merenda/nimkit/declarative
 import merenda/nimkit/foundation/mainthreadwork
 
 type

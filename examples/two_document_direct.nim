@@ -2,6 +2,7 @@
 import std/options
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/directviews
 import ./two_document_tasks
 
 proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =

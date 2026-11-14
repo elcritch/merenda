@@ -1,6 +1,7 @@
 import std/[monotimes, os, times, unittest]
 import sigils/[core, reactive]
 import merenda/nimkit
+import merenda/nimkit/[declarative, directviews]
 import merenda/nimkit/foundation/mainthreadwork
 import ../../examples/[two_document_tasks, two_document_direct, two_document_spec]
 
