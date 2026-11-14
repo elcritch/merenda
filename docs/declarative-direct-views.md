@@ -141,10 +141,12 @@ state; unrelated counters are outside that snapshot.
 - Collection notifications distinguish item/order/snapshot changes; existing
   ArrayController bridges still queue coarse keyed reconciliation. Large datasets
   require TableView/CollectionView virtualization and explicit draft ownership.
-- Dynamic dependencies for general bindings, async domain revision/cancellation,
-  formatted fields, IME interactions, and undo grouping need further evaluation.
-- The shared layout/capture bottleneck remains. The cleanup is preparation for the
-  next multi-component/document experiment, not completion of that experiment.
+- Dynamic dependencies for general bindings, formatted fields, native IME
+  interactions, and undo grouping need further evaluation.
+- The [two-document experiment](declarative-two-documents.md) now covers
+  document-owned drafts/undo, generation-qualified commands, and revision checks
+  for simulated delayed validation. External request cancellation and virtualized
+  editor lifetime remain open, as does the shared layout/capture bottleneck.
 
 ## What the Figuro implementation demonstrates
 

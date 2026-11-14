@@ -64,10 +64,62 @@ notification, not a solved layout bottleneck or native input-latency claim.
 both runs and their exclusions. The final shared NimKit suite and complete
 example compilation pass.
 
-The next experiment remains deferred: reuse the task editor twice across two
-documents, preserve drafts/IME/undo through changes, and close a document while
-async validation is outstanding. The cleanup provides a better basis for that
-comparison; it does not pre-judge its result.
+The two-document experiment is now implemented for both renderers; its policy,
+acceptance checks, and limitations are recorded in
+[the experiment report](docs/declarative-two-documents.md). The earlier cleanup
+measurements above remain unchanged; this experiment adds behavioral evidence.
+
+## Property handoffs and two-document experiment — 2026-11-14
+
+The second reviewer debate exposed two text handoff defects. Direct views could
+retain bound text when returning to an earlier authored value, and both renderers
+could invoke the previous binding's edit command while restoring plain text.
+Commit `071572ef` retires the old text owner before replacement and resets the
+direct authored-value cache when ownership changes. Regressions cover omitted
+passes, queued work, source/receiver changes, and different or empty binding IDs.
+The handoff contract is scoped to `bindTextField` and the DSL text setter;
+arbitrary setters in independent scopes still require one deliberate writer.
+
+The paired experiment uses
+[one shared document/controller implementation](examples/two_document_tasks.nim),
+[direct components](examples/two_document_direct.nim), and
+[ViewSpec helpers](examples/two_document_spec.nim). The same task editor is mounted
+twice with independent documents. Each document owns its observable collection,
+provisional drafts, and NimKit undo manager. Undo targets the document, so it
+survives replacement of the original editor controller. A controller owns one
+switched model-observation scope; views own their composition scopes. No
+application-managed session list is required.
+
+The shared acceptance checks cover validated commits and rejected drafts, reorder
+with retained field-editor selection/marked text, removal and draft restoration,
+stale row callbacks before queued reconciliation, stale validation after edits or
+document switches, actual `Document.close()`, same-ID reopen, and controller
+release. Presentation generation is part of row identity and command context;
+document revisions protect delayed results. The queue is a deterministic fake
+service delivered through the example's **Complete queued** action.
+
+**Validation:** implementation `5ed1d43c` passes five paired tests per renderer
+within the 1,577-test NimKit suite, and the full `nim integration` task passes.
+The complete example bundle compiles. Both native macOS examples were
+smoke-tested through text entry, validation, undo,
+switching with queued work, and closing one document; screenshots confirmed the
+layout and resulting values. Native IME composition was not simulated.
+
+**Design result:** MVC reuse carries most of the correctness here. Both renderers
+can use the same document, undo, draft, and stale-result policy. Direct views
+remain the main candidate because they use the existing typed widget API and
+support independently observed components. ViewSpec remains a useful baseline
+with structural inspection/preflight, although binding recipes are opaque and
+the spec is not a complete description of live text. This experiment does not
+establish a new performance advantage for either representation.
+
+**Remaining limits:** validation invalidation is document-wide and discards
+obsolete replies on delivery; it does not cancel actual workers or network
+requests. Draft typing is separate from committed-value undo. Removed drafts
+are retained for the document lifetime, rows are eager, and snapshot costs remain.
+Marked-text tests use NimKit's headless editor APIs, not an operating-system IME.
+Virtualized editor lifetime, formatted-field conflicts, undo grouping, bounded
+draft/history storage, and arbitrary observer exception recovery remain open.
 
 The sections below preserve the earlier P0/P7 designs and measurements as historical
 comparison points. Current usage/contracts are in the two guides and

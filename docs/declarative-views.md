@@ -102,6 +102,10 @@ Detached materialization uses ordinary property values and ignores recipes.
 Neither binding setup nor arbitrary widget setters have transactional rollback;
 duplicate structural identities are still validated before mounting/updating.
 
+The [two-document experiment](declarative-two-documents.md) uses this same binding
+layer and document/controller policy for both renderers, including independent
+drafts/undo and stale-result rejection across document switches and closure.
+
 ## Actions beside the layout
 
 ```nim
