@@ -976,7 +976,8 @@ exercise the table/collection boundary as a separate viewport comparison.
 or binding metadata. Conditional dependencies, omitted-property policy, pre-mutation
 key validation, accepted versus provisional edits, and preview isolation remain
 explicit contracts. Sigils currently connects observed reads but does not replace
-obsolete dependencies automatically. No performance improvement is claimed yet.
+obsolete dependencies automatically. Performance claims require the dated
+measurements below; eliminating ViewSpec alone is not evidence of a faster app.
 
 See [the focused design](docs/declarative-direct-views.md) for the Figuro source
 review, exact MVC/binding responsibilities, current NimKit gaps, and staged tests.
@@ -1008,11 +1009,77 @@ Keep each implementation, behavior fix, measurement, and resulting assessment in
 logical commits. Shared fixes must be identified and measured consistently across
 variants; preserve the original P0 measurements rather than silently replacing them.
 
+## P7 implementation result — 2026-11-14
+
+Implemented a separate `session.viewBody` path that finds/creates actual widgets,
+with static slots, explicit keys and typed factories. `this` is a real view;
+binding scopes own controller signals, explicit Sigil inputs and text edit
+commands. Structural regions are independently updated sessions. The original
+ViewSpec API remains available for comparison.
+
+The evaluation demo separates controller commands, validation and undo from the
+layout. It binds the counter without rebuilding rows, retains editors on keyed
+moves, and builds detached Dragology candidates from the same row builder with
+copied task values. Drag commits check their snapshot and only replace task data.
+Shared MVC improvements retain collection items by ID and allow table delegates
+to opt into retained-cell updates through `configureCellView`.
+
+Focused tests cover binding source/context replacement, coalescing, stale queued
+work, omitted bindings, weak receivers, controller teardown, text echo handling,
+custom widgets, active editors/selection/marked text, and keyed MVC updates.
+See [the implemented contract and limitations](docs/declarative-direct-views.md).
+
+**Measured tradeoff:** at 100 rows, full P7 recomposition is 0.507 ms versus
+1.066 ms for rebuilt P0 and 0.384 ms for cached P0. A scoped counter signal and
+explicit binding flush is 0.0083 ms; this avoids body evaluation and is not an
+equal-work allocation comparison. Mount/close is 33.358 ms versus P0's 32.576 ms,
+and one preview capture is 190.555 ms versus 184.521 ms. Both variants still hit
+the 500 ms solver limit at 300 rows. See [raw results and methodology](docs/benchmarks/direct-views/README.md),
+including the distinction between per-row benchmark signals and the demo's collection-wide
+Sigil. No heap allocation count or input-to-present latency was
+measured.
+
+**Decision:** retain P7 for iteration. Its useful result is owned, scoped MVC
+updates without ViewSpec. It does not remove the cost of layout, keyed reconciliation
+or fresh preview construction. The API is more explicit and currently more verbose;
+it requires explicit signals/getters and separate sessions for reusable structural
+regions. Constructor versus repeated setter semantics, dynamic dependencies,
+preflight validation, and nested composition helpers need comparison before
+choosing a final authoring syntax. Inline callback adapter churn also remains.
+
+**First simplification:** the demo originally used separate structure, title and
+snapshot notifications, a controller-owned binding scope, and forwarding
+getter/setter procs. It now stores `tasks: Sigil[TaskRows]`: commands publish plain
+snapshots through one undoable `replaceTasks` path. A computed ID projection
+updates row structure; field and preview bindings observe the snapshot, with
+queued/coalesced work. This removes custom change signals and the external
+binding scope. Direct Sigil-to-widget and Sigil-to-editor overloads reuse the
+existing owned binding implementation. The collection-wide signal still
+invalidates all title getters, so it trades finer notification granularity for
+simpler model ownership. Tests cover validation, undo/redo, editor identity,
+no row-body evaluation on title changes, queued previews and subscription cleanup.
+
+The actual demo comparison measures a three-row edit plus preview flush at
+4.102 ms before and 4.126 ms after the Sigil refactor. At 100 rows it is
+159.325 → 160.168 ms. Queue-only edit publication increases from 6.441 to
+10.054 µs at 100 rows; simplicity has a small measurable publication cost.
+The [benchmark report](docs/benchmarks/direct-views/README.md#actual-demo-before-and-after-the-sigil-simplification)
+records batching and exclusions. Layout policies are matched in the final runs.
+
+**Validation:** the full `nim integration` suite passed for the P7 foundation;
+the final shared NimKit suite passed after the Sigil simplification (including
+28 direct binding, MVC, composition and actual-demo tests). The example bundle
+compiled, and the final native demo rendered successfully through dev-control.
+Live input-to-present latency and physical IME behavior remain unmeasured.
+
 ## Next logical steps
 
-- [ ] **Prototype P7's MVC/binding boundary:** follow the
-  [direct-view proposal](docs/declarative-direct-views.md), keeping plain models,
+- [x] **Prototype P7's MVC/binding boundary:** implemented in
+  [directviews](src/merenda/nimkit/directviews.nim) and
+  [the direct demo](examples/direct_views_demo.nim), keeping plain task values,
   explicit observed inputs, real widget identity, and isolated snapshot previews.
+  The [design and current limitations](docs/declarative-direct-views.md) distinguish
+  the implemented subset from later work.
 - [ ] **Specify semantic edges first:** conditional helper roots, key reuse,
   cross-parent moves, focused-row deletion, formatted input, and teardown with
   externally retained controls. Carry the same acceptance tests to every design.

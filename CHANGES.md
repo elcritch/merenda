@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add a separate experimental direct-view DSL (`session.viewBody`) with retained
+  typed widgets, owned controller/Sigil bindings, and controller-driven text
+  editing. The MVC evaluation demo includes validation, undo/redo and detached
+  Dragology previews. Keep the ViewSpec prototype for comparison; see
+  `docs/declarative-direct-views.md`.
+- Preserve keyed CollectionView items through model updates. Table delegates can
+  opt into retained hosted cells with `configureCellView`; existing delegates
+  continue receiving fresh cells on reload. Owned ArrayController bridges queue
+  model refreshes for both containers.
+
 - Add an experimental NimKit declarative view DSL with typed descriptions,
   keyed retained updates, and detached Dragology preview construction. The
   editable task-list demo exercises focus, selection, and callback identity

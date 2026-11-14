@@ -1,11 +1,139 @@
-# Proposal: direct NimKit views with MVC and owned bindings
+# Direct NimKit views with MVC and owned bindings
 
-This is the proposed P7 experiment in [the declarative design comparison](../TODO-declarative.md#proposed-alternative-prototypes).
+This is the P7 experiment in [the declarative design comparison](../TODO-declarative.md#proposed-alternative-prototypes).
 It does not construct a `ViewSpec` tree. A declaration finds or creates actual
 NimKit views and configures them through their existing APIs. Controllers own
 application operations and collection structure; bindings connect changes to the
-appropriate live views. This is a design proposal, not an implemented API or a
-performance result.
+appropriate live views. The first prototype is implemented alongside P0; the
+sections below retain the broader design goals, including work still deferred.
+
+## Implemented prototype (2026-11-14)
+
+Run `nim ic -r examples/direct_views_demo.nim`. Compare it with
+`examples/declarative_views_demo.nim`. Both exercise keyed editable rows and
+detached Dragology candidates. The direct version also has controller-owned
+validation and undo/redo, a Sigil counter, and separately invalidated row structure.
+
+```nim
+let session = newDirectViewSession(newStackView())
+session.viewBody:
+  VStack:
+    this.spacing = 10
+    for task in controller.tasks:
+      keyed(task.id):
+        TextField:
+          this.identifier = "task-" & $task.id
+          arrangedSizing(svspFillAvailableWidth)
+          bindingScope.bindTextField(
+            "title", controller.tasks, controller, task.id,
+            titleFor, this, editTitle,
+          )
+# At controller teardown:
+session.close()
+```
+
+`this` is the actual typed widget. Capitalized node names map to `new<Type>()`
+factories; VStack/HStack select StackView orientation. Constructor arguments run
+only when creating a node. Statements inside the block run on each structural
+evaluation, through ordinary NimKit setters. `arrangedSizing` configures the
+parent StackView's sizing policy. Custom factories do not need a ViewSpec enum
+case, although child composition currently requires StackView containers.
+
+Static declarations have structural slots. Repeated siblings require `keyed(id)`;
+same-parent key/type matches keep the real widget, and changed types replace it.
+`this.stringValue = value` remembers the last authored text to preserve provisional
+editing on unrelated structural updates. Other setters execute as written; the
+prototype does not remember every widget property.
+
+Every node owns a `BindingScope`. `bindValue` observes an explicit controller
+signal; `bindSigilValue` observes one explicit `Sigil[T]` input. The general forms take a weak
+receiver, value context, typed getter, weak target and typed setter. Reusing an ID
+updates its context and switches subscriptions when necessary. Omitted bindings
+are removed at the end of a structural pass. `bindTextField` adds the edit command
+and last-model-text guard; its controller callback decides validation and undo.
+Use this helper for two-way text updates so programmatic writes do not echo into
+the edit command.
+
+The common Sigil-to-widget case needs only an input and a weak target:
+
+```nim
+Label:
+  bindingScope.bindValue("counter", controller.counter, this) do(label: Label, count: int):
+    label.stringValue = "Count: " & $count
+```
+
+This overload reuses the same owned binding implementation. It removes the dummy
+context, repeated controller argument and separate forwarding getter from the
+demo. `bindTextField` can observe either a controller signal or a Sigil snapshot;
+its edit callback still routes through a weak controller.
+
+Changes coalesce through NimKit's main-thread work queue. `flushBindings` is also
+available for deterministic tests and explicit pumping. Scope disposal cancels
+pending work and disconnects subscriptions. Controller and widget links are
+zeroing weak references. A binding retains its Sigil input until replacement or
+disposal because Sigils currently lacks an equivalent zeroing weak reference.
+All scope operations belong on the GUI thread; worker changes must first marshal
+to that thread.
+
+`bindCollectionModel` and `bindTableModel` connect ArrayController notifications to
+the existing data-source/delegate views. Collection items retain identity across
+updates. Table delegates opt into retained cells with `configureCellView`; legacy
+delegates retain the reload behavior of requesting their cells again. No DSL loop
+is needed to instantiate every virtualized row. These bridges are deliberately
+limited to ArrayController; typed application controllers can use the existing
+protocols and bindings directly.
+
+The demo stores `tasks: Sigil[TaskRows]`. Task rows and drag/undo snapshots remain
+plain values. All commands share one undoable `replaceTasks` path that publishes
+a new snapshot with `<-`; no custom change signals or controller-owned observer
+scope are needed. A `computedNow[seq[int]]` projection of task IDs drives row
+structure. Because Sigils publishes that projection only when the ID sequence
+changes, title edits do not rerun the row builder. Field bindings and the preview
+observe the task snapshot itself, and all their view work coalesces on the GUI
+queue. Undo restores a plain snapshot through the same command path.
+
+This collection-wide Sigil deliberately invalidates every row title binding.
+Unchanged title values are skipped before invoking widget setters, but getters
+still run. It is simple for this eager demo, not a substitute for per-item MVC
+notifications in a large list. Commands copy and publish snapshots; mutating
+`tasks{}` in place would bypass notifications and is outside this contract.
+The preview binding skips an equal model, so the queued update after a drag
+commit does not cancel the drag model that Dragology just accepted.
+
+A detached session (`detached = true`) builds fresh widgets, performs initial
+reads, and suppresses framework-installed observers and action handlers.
+`takeDetachedRoot()` transfers its single root and disposes its binding metadata.
+The demo passes only copied task values to this builder and checks that the drag
+snapshot is still current before applying a proposal. Counter changes cannot be
+overwritten by a task-only drag commit.
+
+### Current limitations
+
+- Dependencies are explicit fixed inputs, not automatic tracking of arbitrary
+  fields or dynamic `Sigil{}` read sets. Structural regions are separate sessions;
+  reusable nested composition helpers and general custom-container protocols
+  remain open design work.
+- Duplicate sibling keys raise during streaming execution. Earlier setters may
+  already have run; there is no whole-tree preflight or transactional rollback.
+  Applications should validate model IDs before invoking the builder.
+- Removing a binding leaves its last property value. Reset or transfer ownership
+  explicitly. Cross-parent moves recreate views, and deletion/offscreen recycling
+  does not promise to preserve an editor for an absent item.
+- Inline `onAction`/`onChange` reuse the installed gateway but still create callback
+  adapters when their structural block runs. Dedicated text bindings reuse their
+  connection and current item context. No heap-allocation counts are claimed.
+- Close owned sessions and dispose external scopes during controller teardown,
+  particularly when another object retains their controls. Arbitrary statements
+  and custom constructors are ordinary Nim code: detached mode cannot prevent
+  them from performing application side effects or retaining live objects.
+- Controller collection notifications currently trigger keyed reconciliation of
+  the presentation order; this is not a minimal edit script. Stable-ID scans and
+  existing StackView reorder/layout costs remain. The eager list is not a
+  replacement for virtualized TableView/CollectionView.
+- Native event latency, offscreen editor policy, general formatted inputs,
+  dynamic dependencies, worker delivery and cross-platform behavior need further
+  evaluation. See TODO-declarative.md for measurements and remaining acceptance
+  work; the prototype is not a finished replacement for P0.
 
 ## What the Figuro implementation demonstrates
 
