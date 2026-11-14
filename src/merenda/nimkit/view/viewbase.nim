@@ -119,6 +119,11 @@ type
 
   ViewTrackingOptions* = set[ViewTrackingOption]
 
+  ViewProperty* = enum
+    vpDraggable ## Marks a subtree for declarative dragging.
+    vpAccessibilityElement ## Explicitly exposes the view as an accessibility element.
+    vpAccessibilityIgnored ## Excludes the view from accessibility traversal.
+
   ViewCursorRect* = object
     rect*: Rect
     cursor*: string
@@ -202,11 +207,7 @@ type
   View* = ref object of Responder
     xTag*: int
     xIdentifier*: string
-    dragId*: string
-      ## Marks this subtree as draggable inside a declarative drag host.
-      ## Empty means unmarked. Nonempty IDs must be unique, non-nested and
-      ## stable across candidate layouts; the builder's root must be unmarked.
-      ## Independent of `identifier`, and read when a drag preview is captured.
+    xProps*: set[ViewProperty]
     xFrame*: Rect
     xBounds*: Rect
     xFlipped*: bool
@@ -230,8 +231,6 @@ type
     xWidgetStates*: set[WidgetState]
     xHasAccessibilityRole*: bool
     xAccessibilityRole*: AccessibilityRole
-    xAccessibilityElement*: bool
-    xAccessibilityIgnored*: bool
     xAccessibilityLabel*: string
     xAccessibilityValue*: string
     xAccessibilityHelp*: string

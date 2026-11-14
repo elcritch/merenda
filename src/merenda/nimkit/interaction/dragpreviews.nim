@@ -41,9 +41,10 @@ proc find*(preview: DragPreview, id: string): int =
   -1
 
 proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview =
-  ## Every nonempty `dragId` marks an independently draggable subtree.
-  ## Ordinary view identifiers do not opt views into dragging.
-  ## IDs must be unique and non-nested. Builders must return fresh detached trees
+  ## `vpDraggable` marks an independently draggable subtree; its `identifier`
+  ## must be nonempty and unique. Marked subtrees must not be nested or be the
+  ## root. Unmarked identifiers do not opt views into dragging.
+  ## Builders must return fresh detached trees
   ## without timers, actions, subscriptions to live models, or native resources.
   if root.isNil or not root.superview.isNil or not root.window.isNil:
     raise newException(ValueError, "drag preview requires a detached root")
@@ -54,16 +55,20 @@ proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview 
   var nodes: seq[View]
   var ids = initHashSet[string]()
   proc visit(view: View, insideElement: bool) =
-    if view.dragId.len > 0:
-      if insideElement or view == root or view.dragId in ids:
+    let marked = view[vpDraggable]
+    if marked:
+      let id = view.identifier
+      if id.len == 0:
+        raise newException(ValueError, "draggable views require a nonempty identifier")
+      if insideElement or view == root or id in ids:
         raise newException(
-          ValueError, "dragId must identify unique, non-nested descendants"
+          ValueError, "draggable identifiers must be unique, non-nested descendants"
         )
-      ids.incl view.dragId
+      ids.incl id
       if not view.isHiddenOrHasHiddenAncestor():
         nodes.add view
     for child in view.subviews:
-      visit(child, insideElement or view.dragId.len > 0)
+      visit(child, insideElement or marked)
 
   visit(root, false)
   for node in nodes:
@@ -80,7 +85,7 @@ proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview 
         clip = clip.intersection(root.rectFromView(ancestor.bounds, ancestor))
       ancestor = ancestor.superview
     result.elements.add DragElementPreview(
-      id: node.dragId,
+      id: node.identifier,
       frame: frame,
       clip: clip,
       drawingOrigin: node.frame.origin,

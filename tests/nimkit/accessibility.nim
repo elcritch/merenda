@@ -48,6 +48,27 @@ proc newAccessibilityTableDelegate(): AccessibilityTableDelegate =
   discard result.withProtocol(AccessibilityTableDelegateMethods)
 
 suite "nimkit accessibility":
+  test "accessibility properties share storage with protocol setters":
+    let view = newView()
+    view.properties = {vpDraggable, vpAccessibilityElement}
+    check view[vpDraggable]
+    check view[vpAccessibilityElement]
+    check not view[vpAccessibilityIgnored]
+    check view.isAccessibilityElement()
+    view[vpAccessibilityIgnored] = true
+    check view.isAccessibilityIgnored()
+    check vpAccessibilityIgnored in view.properties
+    check vpDraggable in view.properties
+    view.accessibilityIgnored = false
+    check vpAccessibilityIgnored notin view.properties
+    view.accessibilityElement = false
+    check not view[vpAccessibilityElement]
+    check vpAccessibilityElement notin view.properties
+    check not view.isAccessibilityElement()
+    view.accessibilityLabel = "Name"
+    check vpAccessibilityElement in view.properties
+    check vpDraggable in view.properties
+
   test "views expose explicit accessibility metadata and attributes":
     let view = newView(frame = rect(10, 20, 80, 24))
 

@@ -33,13 +33,14 @@ Mark each draggable subtree explicitly in the builder:
 
 ```nim
 let card = newStackView(laVertical)
-card.dragId = itemId
+card.identifier = itemId
+card[vpDraggable] = true
 ```
 
-The whole card, including its child views, moves together. An empty `dragId`
-leaves a view unmarked. The ordinary `identifier` remains available for view
-lookup and does not make a view draggable. Builders written against the initial
-port should replace their drag-marker `identifier` assignments with `dragId`.
+The whole card, including its child views, moves together. An identifier alone
+does not make a view draggable; add `vpDraggable` to its properties. Builders
+written against the earlier `dragId` API should assign the value to `identifier`
+and add `vpDraggable`.
 
 - Use plain value models, or immutable referenced data. A model containing mutable
   references needs an application-owned snapshot before it enters the host.
@@ -47,11 +48,12 @@ port should replace their drag-marker `identifier` assignments with `dragId`.
   drawing protocols. It receives the host's bounds and immutable appearance.
   Return a **fresh detached tree** each time. Do not start timers, workers, native
   windows, actions, or subscriptions to live data inside the builder.
-- Set a nonempty `dragId` on each independently moving subtree. Drag IDs must be
-  unique and stable across candidates. Marked subtrees cannot contain other
-  drag-marked subtrees; unmarked containers and child labels are fine, including
-  those with ordinary identifiers. The root must be unmarked. Duplicate, nested
-  and root drag IDs raise `ValueError`.
+- Mark each independently moving subtree with `vpDraggable` and give it a
+  nonempty `identifier`. Marked identifiers must be unique and stable across
+  candidates. Marked subtrees cannot contain other marked subtrees; unmarked
+  containers and child labels are fine, including those with identifiers. The
+  root must be unmarked. Missing, duplicate, nested and root markers raise
+  `ValueError`.
 - Enumerate local successors, not all permutations. The current model is included
   automatically as the first candidate. Missing dragged IDs make an outcome
   ineligible. Empty successors safely leave the original model unchanged.
