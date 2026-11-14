@@ -11,6 +11,7 @@ type Model = ref object of Responder
   edits: int
   observable: Sigil[int]
   triggerOnRead: bool
+  sourceReads: int
 
 type Target = ref object of Responder
   value: int
@@ -26,6 +27,10 @@ proc writeValue(target: Target, value: int) =
 
 proc readObservable(model: Model, context: int): int =
   model.observable{} + context
+
+proc observableInput(model: Model): Sigil[int] =
+  inc model.sourceReads
+  model.observable
 
 proc readText(model: Model, context: int): string =
   model.text
@@ -48,6 +53,20 @@ proc writeText(field: TextField, text: string) =
   field.stringValue = text
 
 suite "direct owned bindings":
+  test "binding source expressions are evaluated once per registration":
+    let model = Model(observable: newSigil(1))
+    let target = Target()
+    let scope = newBindingScope()
+    defer:
+      scope.dispose()
+    scope.bindSigilValue(
+      "value", model.observableInput(), model, 0, readObservable, target, writeValue
+    )
+    check model.sourceReads == 1
+    model.observable <- 2
+    discard drainMainThreadWork()
+    check target.value == 2
+    check model.sourceReads == 1
   test "direct Sigil binding switches inputs and keeps its widget weak":
     let first = newSigil(1)
     let second = newSigil(4)

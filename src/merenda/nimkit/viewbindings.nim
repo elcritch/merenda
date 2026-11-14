@@ -238,6 +238,7 @@ template bindValueImpl(
     textBinding: bool,
 ) =
   block:
+    let bindingInput = source
     let binding = createValueBinding(
       scope,
       id,
@@ -246,13 +247,15 @@ template bindValueImpl(
       getter,
       target,
       setter,
-      cast[pointer](source),
+      cast[pointer](bindingInput),
       astToStr(signal),
       textBinding,
     )
-    if binding.needsConnect and not scope.preview and not source.isNil:
-      proc makeDisconnect(input: typeof(source)): proc(owned: Binding) {.closure.} =
-        var sourceRef: BackRef[typeof(source)]
+    if binding.needsConnect and not scope.preview and not bindingInput.isNil:
+      proc makeDisconnect(
+          input: typeof(bindingInput)
+      ): proc(owned: Binding) {.closure.} =
+        var sourceRef: BackRef[typeof(bindingInput)]
         sourceRef{} = input
         result = proc(owned: Binding) =
           let current = sourceRef{}
@@ -260,8 +263,8 @@ template bindValueImpl(
             current.disconnect(signal, owned, invalidate)
 
       binding.needsConnect = false
-      source.connect(signal, Binding(binding), invalidate, true)
-      binding.disconnectSource = makeDisconnect(source)
+      bindingInput.connect(signal, Binding(binding), invalidate, true)
+      binding.disconnectSource = makeDisconnect(bindingInput)
     if initialApply:
       binding.applyValue(binding)
 
@@ -288,6 +291,7 @@ template bindSigilValueImpl(
 ) =
   ## Explicit fixed Sigil input; rebind to replace its subscription.
   block:
+    let bindingInput = source
     let binding = createValueBinding(
       scope,
       id,
@@ -296,18 +300,20 @@ template bindSigilValueImpl(
       getter,
       target,
       setter,
-      cast[pointer](source),
+      cast[pointer](bindingInput),
       "sigil.change",
       textBinding,
     )
-    if binding.needsConnect and not scope.preview and not source.isNil:
-      proc makeDisconnect(input: typeof(source)): proc(owned: Binding) {.closure.} =
+    if binding.needsConnect and not scope.preview and not bindingInput.isNil:
+      proc makeDisconnect(
+          input: typeof(bindingInput)
+      ): proc(owned: Binding) {.closure.} =
         result = proc(owned: Binding) =
           input.disconnect(change, owned, invalidate)
 
       binding.needsConnect = false
-      source.connect(change, Binding(binding), invalidate, true)
-      binding.disconnectSource = makeDisconnect(source)
+      bindingInput.connect(change, Binding(binding), invalidate, true)
+      binding.disconnectSource = makeDisconnect(bindingInput)
     if initialApply:
       binding.applyValue(binding)
 
