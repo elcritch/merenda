@@ -31,6 +31,7 @@ type
     identity, widgetType: string
     authoredText: string
     hasAuthoredText, detached, applying, closed, component: bool
+    collectingBody: bool
     target: DirectTarget
 
   DirectView* = ref object of StackView
@@ -227,6 +228,14 @@ proc componentChild*(parent: DirectNode, id, widgetType: string): DirectNode =
       nil,
   )
   result.component = true
+  result.collectingBody = true
+  if not result.bodyBindings.isNil:
+    result.bodyBindings.beginBindings()
+
+proc endComponent*(node: DirectNode) =
+  if not node.bodyBindings.isNil:
+    node.bodyBindings.endBindings()
+  node.collectingBody = false
 
 proc setAction*(node: DirectNode, button: Button, action: ViewAction) =
   if node.detached:
@@ -308,6 +317,8 @@ proc bindBody*[S; R: Responder, T](
   ## bindings without removing this subscription. Receiver and context are weak.
   if node.bodyBindings.isNil:
     node.bodyBindings = newBindingScope(preview = node.detached)
+    if node.collectingBody:
+      node.bodyBindings.beginBindings()
   type Input = tuple[source: S, draw: typeof(draw)]
   proc read(owner: R, input: Input): BodyValue[R, T] =
     result.owner.target = owner

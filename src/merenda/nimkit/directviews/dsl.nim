@@ -32,7 +32,10 @@ macro viewBody*(session, body: untyped): untyped =
         result.add quote do:
           block:
             let `node` = componentChild(`parent`, `id`, `kind`)
-            `call`
+            try:
+              `call`
+            finally:
+              endComponent(`node`)
       elif item.kind in {nnkCall, nnkCommand} and item.len >= 2 and
           item[0].kind in {nnkIdent, nnkSym} and item[^1].kind == nnkStmtList and
           (item[0].strVal[0].isUpperAscii or item[0].eqIdent("keyed")):

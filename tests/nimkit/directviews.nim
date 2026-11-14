@@ -44,7 +44,65 @@ proc counterComponent(context: DirectNode, owner: DirectController, value: int) 
 proc observedCounter(context: DirectNode, owner: DirectController, value: Sigil[int]) =
   context.bindBody(value, owner, counterComponent)
 
+proc conditionalComponent(
+    context: DirectNode, owner: DirectController, value: Sigil[int], observe: bool
+) =
+  if observe:
+    context.bindBody(value, owner, counterComponent)
+  else:
+    context.counterComponent(owner, 99)
+
+proc changingRoot(context: DirectNode, owner: DirectController, value: int) =
+  context.viewBody:
+    if value == 0:
+      Button:
+        this.identifier = "old-component-root"
+    else:
+      Label:
+        this.identifier = "new-component-root"
+
+proc observedChangingRoot(
+    context: DirectNode, owner: DirectController, value: Sigil[int]
+) =
+  context.bindBody(value, owner, changingRoot)
+
 suite "direct view composition":
+  test "omitting a component body binding retires its old subscription":
+    let host = newDirectView()
+    let owner = DirectController()
+    let value = newSigil(1)
+    var observed = true
+    proc render() =
+      host.viewBody:
+        component(conditionalComponent, owner, value, observed)
+
+    render()
+    let button = Button(host.viewWithIdentifier("component-button"))
+    observed = false
+    render()
+    check value.subcriptions.len == 0
+    value <- 2
+    discard drainMainThreadWork()
+    check button.title == "99"
+
+  test "independent component root replacement updates its parent's actual children":
+    let host = newDirectView()
+    let owner = DirectController()
+    let value = newSigil(0)
+    host.viewBody:
+      Label:
+        this.identifier = "before"
+      component(observedChangingRoot, owner, value)
+      Label:
+        this.identifier = "after"
+    let old = host.arrangedSubviews[1]
+    value <- 1
+    discard drainMainThreadWork()
+    check old.superview.isNil
+    check host.arrangedSubviews.len == 3
+    check host.arrangedSubviews[0].identifier == "before"
+    check host.arrangedSubviews[1].identifier == "new-component-root"
+    check host.arrangedSubviews[2].identifier == "after"
   test "owned components reuse views and retire bindings without session bookkeeping":
     let owner = DirectController()
     let count = newSigil(1)
