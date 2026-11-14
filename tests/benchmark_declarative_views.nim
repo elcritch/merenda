@@ -14,6 +14,8 @@ type
   BenchReceiver = ref object of Responder
     calls: int
 
+  InvalidLayoutError = object of CatchableError
+
 var
   checksum: int
   sampleCount = 5
@@ -55,13 +57,20 @@ proc elapsedUs(start: MonoTime): float64 =
   (getMonoTime() - start).inNanoseconds.float64 / 1000.0
 
 proc checkLayout(view: View) =
-  doAssert not view.layoutFeedbackBlocked()
-  doAssert not view.solveBlocked(lsmLayout)
-  doAssert not view.solveBlocked(lsmFitting)
+  if view.layoutFeedbackBlocked():
+    raise
+      newException(InvalidLayoutError, "layout feedback blocked: " & view.identifier)
+  for mode in [lsmLayout, lsmFitting]:
+    if view.solveBlocked(mode):
+      raise newException(
+        InvalidLayoutError,
+        "view=" & view.identifier & " mode=" & $mode & " diagnostic=" &
+          $view.xLastLayoutSolveDiagnostic,
+      )
   for child in view.subviews:
     child.checkLayout()
 
-proc measure(name: string, count: int, operation: proc() {.closure.}) =
+proc measureSamples(name: string, count: int, operation: proc() {.closure.}) =
   # Two warmups, then one calibration operation. Calibrate to roughly 20 ms
   # per batch, capped at 2000 operations. Heavy cases use one operation per batch.
   operation()
@@ -76,12 +85,25 @@ proc measure(name: string, count: int, operation: proc() {.closure.}) =
       operation()
     let perOperation = elapsedUs(started) / iterations.float64
     samples.add perOperation
-    if not csv.isNil:
-      csv.writeLine(&"{count},{name},{sample},{iterations},{perOperation:.6f}")
-      csv.flushFile()
+  # Publish samples only after every operation completed valid work. A late
+  # budget failure must not leave apparently successful timing rows in the CSV.
+  if not csv.isNil:
+    for i, sample in samples:
+      csv.writeLine(&"{count},{name},{i + 1},{iterations},{sample:.6f},ok")
+    csv.flushFile()
   samples.sort()
   echo &"rows={count:>3} {name:<27} median_us={samples[samples.len div 2]:>12.3f} " &
     &"min_us={samples[0]:.3f} max_us={samples[^1]:.3f} batch={iterations}"
+
+proc measure(name: string, count: int, operation: proc() {.closure.}) =
+  try:
+    measureSamples(name, count, operation)
+  except InvalidLayoutError as error:
+    echo &"rows={count:>3} {name:<27} BLOCKED: {error.msg}"
+    if not csv.isNil:
+      let reason = ("blocked: " & error.msg).replace("\"", "\"\"")
+      csv.writeLine(&"{count},{name},0,0,,\"{reason}\"")
+      csv.flushFile()
 
 proc run(count: int) =
   var tasks: seq[Task]
@@ -112,8 +134,7 @@ proc run(count: int) =
     counterLabel = Label(host.viewWithIdentifier("counter"))
   defer:
     host.clear()
-  host.layoutSubtreeIfNeeded()
-  host.checkLayout()
+  # Update-only cases never flush layout. Dirty flags may coalesce between calls.
   measure(
     "cached_noop_update",
     count,
@@ -187,9 +208,9 @@ proc run(count: int) =
       inc counter
       host.update(body(tasks, counter, receiver))
       host.layoutSubtreeIfNeeded()
+      host.checkLayout()
       checksum += host.updateStats.reused,
   )
-  host.checkLayout()
   measure(
     "direct_counter_set",
     count,
@@ -217,11 +238,6 @@ proc run(count: int) =
       checksum += StackView(detached).arrangedSubviews.len,
   )
   let environment = DragEnvironment(bounds: frame, appearance: initAppearance())
-  block:
-    let detached = buildDetachedView(spec)
-    let preview = captureDragPreview(detached, environment)
-    doAssert preview.elements.len == count
-    detached.checkLayout()
   measure(
     "drag_preview_capture",
     count,
@@ -229,7 +245,7 @@ proc run(count: int) =
       let detached = buildDetachedView(spec)
       let preview = captureDragPreview(detached, environment)
       doAssert preview.elements.len == count
-      doAssert not detached.layoutFeedbackBlocked()
+      detached.checkLayout()
       checksum += preview.elements.len,
   )
   doAssert receiver.calls == 0
@@ -253,7 +269,7 @@ proc main() =
     if not csv.isNil:
       csv.close()
   if not csv.isNil:
-    csv.writeLine("rows,case,sample,iterations,us_per_op")
+    csv.writeLine("rows,case,sample,iterations,us_per_op,status")
   echo "Nim ",
     NimVersion,
     " / ",
