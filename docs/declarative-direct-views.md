@@ -371,8 +371,23 @@ editor or document, outside the widget tree.
 Presentation detachment and document closure are separate domain operations.
 An editor generation can reject obsolete validation results without cancelling a
 document-owned save. Neither hiding a view nor releasing its bindings automatically
-cancels external work. No suspension API or application-maintained session list is
-required for this ownership contract.
+cancels external work. No application-maintained session list is required.
+
+Call `suspendUpdates()` explicitly to pause a DirectView's structural and property
+bindings while retaining its widgets and subscriptions. Queued writes are revoked;
+notifications accumulate as pending changes. `resumeUpdates()` reads those sources
+at their current values, with structural parents applied before their surviving
+children. It does not replay intermediate values. Sources must still notify when
+changed; unsignaled mutations are not detected. Text-edit commands and ordinary
+action callbacks remain enabled, so drafts continue to belong to the controller:
+suspension pauses model-to-view refresh, not command dispatch.
+
+Composition must finish before suspension. Explicit composition while suspended
+raises `ValueError`; `clear()` retires the content and preserves the host's paused
+state. Both operations are idempotent where applicable. For controller-owned
+visibility policy, [direct_lifetimes_demo.nim](../examples/direct_lifetimes_demo.nim)
+connects `didDisappear` to suspension and `willAppear` to resumption. Hiding a view
+without that explicit policy continues to leave its bindings active.
 
 See the executable coverage in
 [directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in

@@ -43,15 +43,44 @@ Changes, owner disposal and actual document closure invalidate it. Hiding a reta
 view does not dispose the owner or cancel its validation. Clearing a form disconnects
 its view bindings while leaving durable draft state intact.
 
-This is not a network or worker cancellation implementation. It does not provide
+Validation is not a network or worker cancellation implementation. It does not provide
 per-field concurrent merging, draft persistence, native operating-system IME
 coverage or a universal Save/Close policy. It establishes the smaller contracts
 before exposing a toolkit-wide form abstraction.
 
-The generation and weak-owner checks remain explicit example code. A reusable
-guarded-command helper, hidden-view suspension/resume and a document-owned
-asynchronous save example have not been implemented. Existing controller
-appearance hooks are not wired to an automatic suspension policy.
+`GuardedCommand` now packages a weak receiver, a context snapshot and a
+noncapturing validity predicate. `perform` resolves the receiver and checks the
+predicate immediately before calling its handler. The two-document examples pass
+these values through the existing `onAction` API; they have one task-context
+predicate instead of repeated generation checks in each action. Context follows
+Nim value semantics, so embedded references retain their usual ownership. This
+helper neither owns requests nor cancels document work.
+
+The separate [visibility example](../examples/direct_lifetimes_demo.nim) wires
+controller appearance signals to explicit DirectView suspension/resumption.
+The toolkit does not automatically equate hiding with suspension or disposal.
+
+## Document-owned asynchronous save
+
+**Async Save** captures the document's accepted value and revision and sends them
+to a Sigils actor on NimKit's worker pool. The demo writes into its own temporary
+directory, shown in the window. Only one write per document can be in flight.
+Completion returns to the document's owning thread; no initiating view or editor
+is retained. A successful write marks history clean only if the captured revision
+is still current. A newer edit remains dirty. Errors are reported without marking
+the document clean.
+
+Closing the document suppresses late result publication and clean-state changes;
+it does not cancel an already submitted file write. The completion clears only
+the in-flight bookkeeping for a closed document. This is a real worker/write
+example, distinct from the manually delivered validation queue. It is not a
+production persistence layer: atomic file replacement, recovery, external file
+conflicts and cancellation are outside its scope. **Save / Close** remains the
+separate in-memory checkpoint policy described above.
+
+Tests release the initiating DirectView before delivery, verify saved bytes and
+worker/owning thread identities, preserve dirty state after newer edits, and cover
+write failure and closure. They wait on observable state with monotonic deadlines.
 
 ## History and layout
 
@@ -68,6 +97,13 @@ Behavioral coverage is in [formdrafts.nim](../tests/nimkit/formdrafts.nim) and
 NimKit runner. The former separates domain policy from widget editing checks;
 the latter checks hidden observation, queued work retirement and rebuilding.
 
-The frozen shared NimKit suite passes all 1,594 tests, and the complete example
-bundle compiles. Widget editing coverage dispatches keys through a headless NimKit
-window; it does not establish native OS IME behavior or input-to-display latency.
+The final shared NimKit suite passes all 1,622 tests, Tekton passes 49 tests, and
+the complete example bundle compiles. Widget editing coverage dispatches keys
+through a headless NimKit window; it does not establish native OS IME behavior or
+input-to-display latency.
+
+The broader integration attempts were not clean: one hit a Git subprocess bad-file-
+descriptor error; a retry passed Kosmo but failed a native window-key assertion
+and a shutdown assertion. The native activation and shutdown tests subsequently
+passed in isolated runs. These results do not constitute a passing full integration
+run; those failures remain recorded separately from the feature-suite results.

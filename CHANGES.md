@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add weak context-guarded commands and explicit DirectView suspension/resumption.
+  The lifetime and form examples demonstrate appearance policy and real
+  document-owned asynchronous saving without retaining the initiating view.
+- Add opt-in intrinsic measurement caching with `vpCacheIntrinsicSize` and combine
+  layout feedback reset with ancestor dirty propagation outside transactions.
+  Fitting proposals remain uncached; custom intrinsic inputs must invalidate on change.
 - Add opt-in typed undo coalescing, explicit gesture boundaries and a total
   undo/redo group limit. See `docs/undo-history.md` for checkpoint and replay
   contracts. The formatted-form experiment demonstrates local/shared drafts,
