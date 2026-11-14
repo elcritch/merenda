@@ -185,3 +185,36 @@ baseline `b51cd079`; the test file is unchanged between `2356437` and that
 baseline. Thus this matching CI failure predates the branch. Its underlying
 cause is unknown, and the logs do not establish a connection to the separately
 investigated `Bad file descriptor` failure above.
+
+### Linux Git subprocess investigation and repair
+
+On a Linux x86_64 container with Nim 2.2.10 and Xvfb, the original failing
+Kosmo test reproduced on iteration 14. Its Git snapshot reported `Bad file
+descriptor` while running `rev-parse` and contained no files
+(`/tmp/merenda-linux-kosmo-repro.log`). That observation identifies a failed
+Git command rather than a successful listing that omitted `sibling.txt`.
+
+Merenda now starts POSIX background commands with separate stdout and stderr
+pipes and drains both non-blockingly, avoiding Nim's aliased-handle close in
+its own command wrapper. Its combined output preserves all bytes subject to the
+existing output limit; relative ordering between the two streams is not
+promised. Focused lifecycle tests cover large stdout-only, stderr-only, and
+simultaneous output, concurrent commands, output limits, timeout, and cleanup.
+The macOS Nim 2.4.2 suite passed (`/tmp/merenda-process-fix-macos-final.log`),
+and the Linux Nim 2.2.10 suite passed with the same production wrapper
+(`/tmp/merenda-linux-process-green.log`). GitHub CLI integration also passed
+on macOS (`/tmp/merenda-process-fix-macos-github.log`).
+
+The wrapper change alone did not eliminate the failure: the same test failed
+on Linux iteration 30 with an empty Git error and, with a diagnostic Git
+wrapper, on iteration 6 with `Bad file descriptor`
+(`/tmp/merenda-linux-kosmo-fixed-repeat.log` and
+`/tmp/merenda-linux-kosmo-traced-repeat.log`). Moe's editor Git diff and branch
+jobs also used merged osproc handles while the test ran. Its POSIX Git jobs
+were changed in fork commit `bbbd4247df78b7a536ba25ec269dfd6ebef043ca` to
+avoid those aliased handles and parent working-directory changes. With both
+fixes, the original Linux test passed 30 consecutive runs
+(`/tmp/merenda-linux-kosmo-combined-repeat.log`). The fork's focused Git diff
+and cache tests passed on Nim 2.2.10. These observations and the independent
+osproc probe support the descriptor-race diagnosis; the repetitions are finite
+and the failure was not captured with a syscall trace.
