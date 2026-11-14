@@ -28,8 +28,8 @@ Atlas dependency tree. The comparison baseline is `origin/main`
 The worker timeout is a secondary failure mechanism: after any unittest failure,
 `tests/tintegrations.nim` calls `quit(getProgramResult())`. The worker fixture
 waits for the `ReleaseWorkerAtExit` module destructor to set `exitStarted`,
-but Nim documents that `quit` bypasses destructors. The runner and fixture are
-unchanged from the baseline. This explains why a preceding failure can block
+but Nim documents that `quit` bypasses destructors. At the time of the
+historical failures, the runner and fixture were unchanged from the baseline. This explains why a preceding failure can block
 this fixture during teardown; it does not establish the cause of the earlier
 native activation failure.
 
@@ -93,6 +93,12 @@ passed both native activation tests in the full shared runner
 cannot establish whether the branch's intermittent native activation failure
 is a regression; its cause remains unresolved.
 
+The C-backend baseline runner ultimately failed at
+`tests/integrations/resourcelifetimes.nim:239`: the observed child-process count
+was 0, equal to the initial 0, when the test expected an increase. It did not
+complete the remaining integration tests. This baseline failure is separate
+from the branch failures listed above.
+
 ## Shutdown failure-path regression
 
 A controlled branch reproduction set `MERENDA_TEST_FORCE_SHUTDOWN_FAILURE=1`
@@ -106,11 +112,6 @@ regression checks the intentional failure path, while the ordinary successful
 path continues to test global destructor ordering. The focused suite passed
 (`/tmp/merenda-shutdown-fix-tests.log`); the full integration result is
 recorded separately when available.
-The C-backend baseline runner ultimately failed at
-`tests/integrations/resourcelifetimes.nim:239`: the observed child-process count
-was 0, equal to the initial 0, when the test expected an increase. It did not
-complete the remaining integration tests. This baseline failure is separate
-from the branch failures listed above.
 
 ## Final component checks
 
@@ -165,3 +166,22 @@ and the passing full branch runner narrow the observation but do not reproduce
 or explain the historical failure. The checkpoints remain in the branch test
 to capture the owner, pre-session key window, saved key window, and restored
 key window if it recurs.
+
+## Later Linux Kosmo CI failure
+
+The [build-full run 43637983423](https://github.com/elcritch/merenda/actions/runs/43637983423)
+at `fa78d0e2714d40254bc49eac610b675ab4f0207b` failed Linux Kosmo job
+[132578923897](https://github.com/elcritch/merenda/actions/runs/43637983423/job/132578923897)
+on Ubuntu 26.04, Nim 2.2.10, and X11. The test `diff shortcut finds the
+nearest repository of the selected editor file` failed `siblingIncluded` at
+`tests/kosmo/gitdiff.nim:2316`.
+
+The same test and assertion had already failed on `main` with the same Linux,
+Nim, and X11 configuration in [run 42834219040](https://github.com/elcritch/merenda/actions/runs/42834219040)
+at `2356437eca145cacfb60472884de9d1f858cecfd`, and twice in
+[run 41943714107](https://github.com/elcritch/merenda/actions/runs/41943714107)
+at `dd4163b492718796ca41bd2d4022620bbcb0c156`. Both commits are ancestors of
+baseline `b51cd079`; the test file is unchanged between `2356437` and that
+baseline. Thus this matching CI failure predates the branch. Its underlying
+cause is unknown, and the logs do not establish a connection to the separately
+investigated `Bad file descriptor` failure above.
