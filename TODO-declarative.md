@@ -2,8 +2,8 @@
 
 DirectViews (P7), backed by ordinary MVC objects and scope-owned Sigils bindings,
 is our main experimental direction. ViewSpec (P0) remains a comparison baseline.
-[PR #224](https://github.com/elcritch/merenda/pull/224) contains both prototypes;
-merging it would make the experiments available, not stabilize their APIs.
+[PR #224](https://github.com/elcritch/merenda/pull/224) introduces both prototypes;
+their inclusion does not stabilize their APIs.
 
 Both DSLs require explicit imports:
 
@@ -182,7 +182,7 @@ sampled workloads; that is not a guarantee of zero overhead. The early full-layo
 comparison still encountered a 500 ms solver limit at 300 rows. The later plain-view
 ordering benchmark does not establish that this solver limit is fixed.
 
-## Before merging this experimental PR
+## Validation and merge policy
 
 - [x] Require explicit DSL imports, preserve shared MVC/binding exports, and add
   compile-time checks of the import boundary.
@@ -190,19 +190,24 @@ ordering benchmark does not establish that this solver limit is fixed.
   independent baseline; record exact revisions and limits in the
   [validation report](docs/declarative-validation.md). The earlier intermittent
   native-focus failure still requires careful interpretation despite fresh passes.
-- [ ] Check the final pushed revision's GitHub workflows and resolve or explicitly
-  account for failures. Earlier local focused passes do not make CI green.
 - [x] Refresh the PR description and this status with implemented scope and
   explicit validation results; keep final-head CI status in the PR.
 
-Fresh local runs passed 1,623 NimKit tests, 49 Tekton tests, 587 Kosmo tests,
-and all 176 tests in the shared integration runner; the example bundle compiled.
-These were separate commands and compiler configurations, recorded in the report.
-Earlier Git subprocess, native activation, and shutdown-teardown failures remain
-documented there, including the limits of attributing intermittent failures.
+The merge gate is successful CI on the final revision. Current workflow status
+lives in the PR checks; earlier local passes and pre-existing failure evidence
+do not replace resolving the failing checks.
+
+Local validation covers NimKit, Tekton, Kosmo, the shared integration runner,
+and example compilation. The full NimKit sanitizer follow-up passed 1,624 tests
+with ASan and UBSan configured to stop on error. Exact revisions, commands,
+counts, earlier failures, and attribution limits are recorded in the report.
 The CI run on `fa78d0e2` reproduced a Linux Kosmo repository-scope assertion that
-also failed in two earlier `main` workflows. The report links those independent
-reproductions; this establishes prior occurrence, not the underlying cause.
+also failed on `main`. A local Linux reproduction exposed a Git descriptor error;
+both Merenda and the pinned Moe dependency needed fixes to POSIX output-handle
+ownership. The combined fix passed 30 repetitions of the failing test. A full
+macOS sanitizer run also exposed a DirectView root freed during a reentrant binding
+flush. The runtime now retains the active node through the flush, with explicit
+lifetime assertions. The validation report records reproductions and final checks.
 The later experiments below need not all be completed before an experimental merge.
 
 ## Next experiments, in order

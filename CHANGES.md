@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Retain DirectView nodes while flushing bindings so reentrant clearing cannot
+  free the active traversal. Guard nil responder conversions during table,
+  document-notification, and menu updates.
+- Drain separate stdout/stderr pipes for POSIX background commands to avoid
+  aliased process-handle cleanup closing a reused descriptor. Combined output
+  remains bounded; relative ordering between stdout and stderr is unspecified.
+- Pin Moe's POSIX Git launcher fixes, preserving Git markers while avoiding
+  aliased handles and temporary changes to the parent process's working directory.
+
 - Preserve non-capturing receiver action handlers on Nim 2.2 when the contextual
   ActionTarget form is also available.
 

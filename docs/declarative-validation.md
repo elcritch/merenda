@@ -218,3 +218,43 @@ fixes, the original Linux test passed 30 consecutive runs
 and cache tests passed on Nim 2.2.10. These observations and the independent
 osproc probe support the descriptor-race diagnosis; the repetitions are finite
 and the failure was not captured with a syscall trace.
+
+## DirectView lifetime and sanitizer follow-up
+
+The macOS job on `29ddf452`
+([132582482949](https://github.com/elcritch/merenda/actions/runs/43639132954/job/132582482949))
+reported allocator free-block corruption during HarfBuzz allocation while the
+README Markdown test waited for layout. That allocation is the detection site,
+not proof of the corrupting write.
+
+A full local Nim 2.2.10 sanitizer run found a concrete earlier use-after-free in
+`DirectNode.flushBindings`: a child binding called `host.clear()`, releasing the
+root while the active traversal still borrowed it. The existing reentrant-clear
+lifetime test exposed the invalid access. Commit `0be531c1` makes the traversal
+own its node through a `sink` parameter. Generated C retains the root before the
+call and releases it on exit; weak-root assertions verify survival during the
+callback and release afterwards.
+
+UBSan also exposed nil base-object conversions in table removal, document
+notifications, and menu removal. Commits `ba2ffe70` and `78d75b2b` guard those
+specific boundaries. These are separate findings, not evidence that the nil
+conversions caused the allocator crash.
+
+The full suite then passed **1,624 tests**, with no ASan or UBSan diagnostics,
+using these commands from the Merenda checkout:
+
+```sh
+/Users/elcritch/.local/share/grabnim/nim-2.2.10/bin/nim c \
+  --nimcache:/tmp/merenda-macos-asan-cache \
+  -o:/tmp/merenda-macos-asan-tnimkit -d:nimkitSanitizers tests/tnimkit.nim
+UBSAN_OPTIONS=halt_on_error=1 MERENDA_BACKGROUND=1 /tmp/merenda-macos-asan-tnimkit
+```
+
+Project/test configuration selected ARC, threads, release, `useMalloc`,
+`noSignalHandler`, and address/undefined sanitizers with frame pointers. The
+successful run is `/tmp/merenda-macos-asan-strict-full.log`; the original ASan
+failure is `/tmp/merenda-macos-asan-full.log`. The host was macOS 15 / Darwin
+24.6.0 arm64, whereas CI used macOS 26 / Darwin 25. The repaired use-after-free
+could explain subsequent heap damage, but this does not conclusively identify
+the writer behind the CI allocator report. Final-revision CI remains the merge
+gate, with its current results recorded in PR #224.
