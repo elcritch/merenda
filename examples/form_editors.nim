@@ -1,0 +1,153 @@
+## FormView is an ordinary leaf composed alongside either declarative host.
+## Saving here is an in-memory checkpoint, not disk persistence.
+import sigils/[core, reactive]
+import merenda/nimkit
+import ./form_drafts
+
+type FormPanel = ref object of Responder
+  draft: FormDraft
+  scope: BindingScope
+  form: FormView
+  pending: FormValidation
+
+proc newFormPanel(draft: FormDraft): FormPanel =
+  result = FormPanel(draft: draft)
+  initResponder(result)
+
+proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
+  if form.rows.len == 0:
+    let field = newTextField("")
+    field.identifier = "amount"
+    field.objectParseContext =
+      initObjectParseContext(expectedKind = ovInt, emptyPolicy = oepInvalid)
+    let status = newLabel("")
+    status.identifier = "status"
+    form.minFieldWidth = 180
+    form.addRow(newLabel("Amount"), field)
+    form.addRow(newLabel("Status"), status)
+    form.addRow(newLabel("Accepted"), newLabel(""))
+  let field = TextField(form.rows[0].field)
+  let status = Label(form.rows[1].field)
+  scope.bindTextField("number", draft.raw, draft, 0, rawText, field, editText)
+  scope.bindValue("accepted", draft.document.accepted, Label(form.rows[2].field)) do(
+    label: Label, value: int
+  ):
+    label.stringValue = $value
+  scope.bindValue("status", draft.status, status) do(label: Label, value: string):
+    label.stringValue = value
+
+proc newDraftForm*(draft: FormDraft): DirectView =
+  ## The FormView node owns its subscriptions; the draft outlives this widget.
+  result = newDirectView()
+  result.viewBody:
+    FormView:
+      configureForm(this, bindingScope, draft)
+
+proc apply(panel: FormPanel) =
+  discard panel.draft.apply()
+
+proc cancel(panel: FormPanel) =
+  panel.draft.cancel()
+
+proc queue(panel: FormPanel) =
+  panel.pending = panel.draft.requestValidation()
+
+proc complete(panel: FormPanel) =
+  discard panel.pending.complete()
+
+proc external(panel: FormPanel) =
+  panel.draft.document.accept(99)
+
+proc undo(panel: FormPanel) =
+  discard panel.draft.document.undoManagerFor().performUndo()
+
+proc save(panel: FormPanel) =
+  discard panel.draft.saveAndClose()
+
+proc directActions(panel: FormPanel): DirectView =
+  result = newDirectView()
+  result.viewBody:
+    VStack:
+      HStack:
+        Button("Apply", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.apply()
+        Button("Undo", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.undo()
+        Button("Cancel", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.cancel()
+        Button("Save / Close", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.save()
+      HStack:
+        Button("Queue validation", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.queue()
+        Button("Complete", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.complete()
+        Button("External 99", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.external()
+
+proc specActions(panel: FormPanel): DeclarativeView =
+  let body = viewBody:
+    VStack:
+      HStack:
+        Button("Apply", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.apply()
+        Button("Undo", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.undo()
+        Button("Cancel", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.cancel()
+        Button("Save / Close", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.save()
+      HStack:
+        Button("Queue validation", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.queue()
+        Button("Complete", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.complete()
+        Button("External 99", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.external()
+  newDeclarativeView(body)
+
+proc runFormEditors*() =
+  let document = newFormDocument(12)
+  # Use the same draft here for shared edits; make a second draft for local edits.
+  let shared = newFormDraft(document)
+  let first = newFormPanel(shared)
+  let second = newFormPanel(shared)
+  let local = newFormPanel(newFormDraft(document))
+  let root = newStackView(laVertical)
+  root.spacing = 12
+  root.edgeInsets = insets(12)
+  root.addArrangedSubview(
+    newLabel("Shared draft: DirectView"),
+    newDraftForm(first.draft),
+    directActions(first),
+  )
+  root.addArrangedSubview(
+    newLabel("Shared draft: ViewSpec toolbar + DirectView form"),
+    newDraftForm(second.draft),
+    specActions(second),
+  )
+  root.addArrangedSubview(
+    newLabel("Independent local draft"), newDraftForm(local.draft), directActions(local)
+  )
+  sharedApplication().runWindow(
+    newWindow("Form drafts", frame = rect(80, 80, 850, 650)), root
+  )
+  shared.dispose()
+  local.draft.dispose()
+
+when isMainModule and not defined(merendaTests):
+  runFormEditors()
