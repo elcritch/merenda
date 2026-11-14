@@ -36,6 +36,9 @@ else:
   import nimkit/daterangepickers
   import nimkit/declarativedragging
   import nimkit/declarativeviews
+  import nimkit/directbindings
+  import nimkit/directmodels
+  import nimkit/directviews
   import nimkit/devcontrol
   import nimkit/diagnostics
   import nimkit/dockviews
