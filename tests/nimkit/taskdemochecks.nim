@@ -12,6 +12,25 @@ proc findDemoView(controller: TaskController, id: string): View =
 
 template taskDemoChecks*(suiteName: string, factory: untyped) =
   suite suiteName:
+    test "rejected snapshots leave history alone and stale drag proposals cannot overwrite edits":
+      let controller = factory()
+      let original = controller.tasks{}
+      expect ValueError:
+        controller.replaceTasks(@[original[0], original[0]], "Invalid duplicate")
+      check controller.tasks{} == original
+      check not controller.history.canUndo
+      controller.editTitle(1, "New accepted title")
+      check not controller.acceptTasksProposal(original, @[original[1], original[0]])
+      check controller.tasks[1].title == "New accepted title"
+      let current = controller.tasks{}
+      controller.counter <- 7
+      check controller.acceptTasksProposal(
+        current, @[current[1], current[0], current[2]]
+      )
+      check controller.counter{} == 7
+      discard drainMainThreadWork()
+      check controller.preview.model == controller.tasks{}
+
     test "one commit path validates edits and restores structural and title changes":
       let controller = factory()
       controller.tasks <- @[

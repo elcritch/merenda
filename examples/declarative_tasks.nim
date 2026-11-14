@@ -89,6 +89,12 @@ proc successors*(tasks: TaskRows, id: string): seq[TaskRows] =
     next.insert(dragged, i)
     result.add next
 
+proc acceptTasksProposal*(controller: TaskController, previous, next: TaskRows): bool =
+  ## Drag proposals cannot overwrite edits made since their snapshot.
+  if controller.tasks{} == previous:
+    controller.replaceTasks(next, "Dragged a task")
+    result = true
+
 proc newTaskModelController*(): TaskController =
   result = TaskController(
     tasks: newCollectionSigil(
@@ -118,9 +124,8 @@ proc createPreview*(
     successors = successors,
     commit = proc(previous, next: TaskRows): bool =
       let receiver = owner{}
-      if not receiver.isNil and receiver.tasks{} == previous:
-        receiver.replaceTasks(next, "Dragged a task")
-        result = true
+      if not receiver.isNil:
+        result = receiver.acceptTasksProposal(previous, next)
     ,
     frame = rect(0, 0, 470, 330),
   )
