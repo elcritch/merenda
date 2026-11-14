@@ -6,6 +6,71 @@ This records the current prototype, not a commitment to its final architecture.
 See [the usage guide](docs/declarative-views.md) and
 [the editable-list demo](examples/declarative_views_demo.nim).
 
+## Cleanup after the maintainability review
+
+The reviewer debate identified model granularity, reusable components and ownership
+as more decisive than the DSL spelling. The cleanup now implements:
+
+- **Collection observation first.** `CollectionSigil[K, T]` owns indexed plain
+  snapshots and exposes read-only order/item projections. Duplicate keys fail
+  before mutation, observers see a coherent snapshot, and only changed item
+  projections notify. Whole snapshot publication is still O(n + observed items).
+  The local integration is committed in `4d578611`; the native Sigils proposal is
+  [draft PR #70](https://github.com/elcritch/sigils/pull/70), including retained
+  temporary computed projections. Dependency adoption is a separate step.
+- **Shared binding ownership.** `nimkit/viewbindings` serves both implementations.
+  ViewSpec nodes can carry typed weak-owner recipes; `ownsText` hands live text
+  ownership to the editor binding so a structural update cannot erase a rejected
+  draft. P0 can bind its root body to collection order rather than refresh on every
+  edit. Detached materialization ignores binding recipes.
+- **Direct components without application sessions.** `newDirectView()` owns the
+  metadata tree. `component(builder, args...)` invokes an ordinary Nim helper with
+  a child context and adds no wrapper widget. A component can `bindBody` to an
+  input and update independently. Retiring it cancels its subscriptions/queued
+  work; releasing the root also disables externally retained control actions.
+  The old session API remains available for externally supplied hosts.
+- **Same domain policy in both demos.** They share
+  [declarative_tasks.nim](examples/declarative_tasks.nim): validation, undo/redo,
+  indexed title reads, task-only snapshots, preview coalescing, and stale-drag
+  rejection. Counter/title changes update bindings, not whole bodies. P0 still
+  rebuilds its host description for membership/order changes; P7 rebuilds its row
+  component. The paired tests run the same command/preview/teardown assertions.
+
+Constructor arguments in P7 remain creation-only. Ordinary setter statements run
+on each body evaluation; omitted setters leave the existing value. Removing a
+binding disconnects it but does not reset arbitrary properties. P0 text recipes
+explicitly declare ownership, and removing that recipe restores description-driven
+text. These rules are documented rather than hidden behind a presumed SwiftUI or
+React execution model.
+
+The cleanup does **not** settle large-app scaling. P0 still needs a widget adapter
+for each new type, while its plain helpers and structural preflight remain useful.
+P7 now has reusable components but still streams arbitrary setters without rollback.
+Both retain inline action-adapter creation on structural updates, snapshot-copy
+costs, eager rows, and the shared layout/capture bottleneck. Virtualized presentation,
+formatted editing, draft conflicts, async request revisions/cancellation, undo
+coalescing and real IME/native latency remain open. Automatic view ownership does
+not mean that closing a controller destroys a view retained by another window.
+
+**Measured cleanup:** the collection/binding workload at 1,000 rows changes from
+489.109 µs to 44.257 µs per edit, with getter calls falling from 1,000 to one.
+In the actual 100-row demo, command-only publication rises from 9.675 µs to
+11.322 µs; edit plus preview capture is 166.827 → 158.983 ms, and reversal plus
+capture remains about 164.1 ms. These headless batches demonstrate targeted
+notification, not a solved layout bottleneck or native input-latency claim.
+[Methodology and raw CSV](docs/benchmarks/collection-sigils/README.md) preserve
+both runs and their exclusions. The final shared NimKit suite and complete
+example compilation pass.
+
+The next experiment remains deferred: reuse the task editor twice across two
+documents, preserve drafts/IME/undo through changes, and close a document while
+async validation is outstanding. The cleanup provides a better basis for that
+comparison; it does not pre-judge its result.
+
+The sections below preserve the earlier P0/P7 designs and measurements as historical
+comparison points. Current usage/contracts are in the two guides and
+[collection-sigils.md](docs/collection-sigils.md).
+
 ## What this approach actually does
 
 `viewBody:` rewrites capitalized `VStack`, `HStack`, `Label`, `Button`, and

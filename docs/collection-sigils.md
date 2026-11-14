@@ -42,7 +42,8 @@ state or promise delivery to remaining subscribers.
 Projections are allocated only on demand. Repeated `item(id)` calls share a live
 observation. A projection retains its collection; the collection keeps a zeroing
 weak reference back. Dropping subscriptions/projections releases them without a
-cycle. Expired item entries are pruned on the next changed publication.
+cycle. Expired item entries are pruned on changed publication and amortized allocation
+sweeps. Repeated lookups of live projections do not scan the cache.
 
 This prototype lives in NimKit rather than changing the Sigils dependency. Its
 observation channels use the same signals/slots and scoped read mechanism. All
@@ -55,3 +56,10 @@ only changed observations notify bindings. Indexed lookup is expected O(1).
 Single-item assignment still copies and validates a snapshot; it is not an O(1)
 persistent-data-structure update. Undo snapshots, sorting/filtering, and virtualized
 table/collection presentation remain controller responsibilities.
+
+The local NimKit prototype uses the currently installed Sigils version: retain an
+order/item handle when using it in `computedNow` (as in the example above).
+Bindings retain their input automatically. The proposed native implementation in
+[Sigils PR #70](https://github.com/elcritch/sigils/pull/70) additionally retains
+temporary projections read by computations and disconnects projections no longer
+read. That upstream dependency change is deliberately a separate review.

@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- Add a separate experimental direct-view DSL (`session.viewBody`) with retained
+- Add keyed collection observations with read-only item/order projections and
+  indexed lookup. Both declarative demos now share collection-backed MVC commands,
+  validation, undo and stale-drag checks. ViewSpec mounts support owned bindings;
+  direct views own reusable component lifetimes without application-managed sessions.
+  See `docs/collection-sigils.md` and the declarative guides.
+- Add a separate experimental direct-view DSL (`view.viewBody`) with retained
   typed widgets, owned controller/Sigil bindings, and controller-driven text
   editing. The MVC evaluation demo includes validation, undo/redo and detached
   Dragology previews. Keep the ViewSpec prototype for comparison; see

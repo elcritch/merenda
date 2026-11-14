@@ -60,6 +60,44 @@ Declarative stacks default to `svdNatural` distribution, keeping controls at the
 fitting sizes. Use a child's `sizing` to consume spare space, or set the stack's
 `distribution` explicitly when equal or proportional filling is intended.
 
+## Collection and property bindings
+
+The demo now shares its commands, validation, undo/redo and stale-drag policy
+with the direct-view demo in `examples/declarative_tasks.nim`. Its
+`CollectionSigil[int, TaskItem]` publishes whole snapshots, order changes and
+individual item changes separately. [Collection contracts](collection-sigils.md)
+explain publication and ownership.
+
+`host.bindBody(input, owner, builder)` owns a structural observation. The demo
+observes `tasks.order`, so editing a title or incrementing the counter does not
+rebuild its ViewSpec tree. Membership changes still rebuild the host's body; P7
+can instead rebuild an independently observed component.
+
+A description can also carry a typed binding recipe:
+
+```nim
+result = textFieldSpec(task.title, identifier = "title-" & $task.id)
+result.binding = viewBinding(owner, task.id,
+  proc(scope: BindingScope, owner: TaskController, id: int, field: TextField) =
+    scope.bindTextField(
+      "title", owner.tasks.item(id), owner, id, titleFor, field, editTitle),
+  ownsText = true,
+)
+```
+
+Recipes hold a weak owner and explicit context. Each mounted node owns its scope;
+repeating an identity reconfigures its bindings, and omitted bindings disconnect.
+`ownsText = true` assigns live text updates to the binding: the spec's text is the
+initial/detached value, and structural rebuilds cannot erase a rejected draft.
+Removing that recipe restores ordinary description-driven text on the next update.
+Other binding properties retain their last value unless explicitly reset.
+
+Dropping the host releases subscriptions and disables retained action gateways.
+`clear()` explicitly retires content while the host itself is still retained.
+Detached materialization uses ordinary property values and ignores recipes.
+Neither binding setup nor arbitrary widget setters have transactional rollback;
+duplicate structural identities are still validated before mounting/updating.
+
 ## Actions beside the layout
 
 ```nim

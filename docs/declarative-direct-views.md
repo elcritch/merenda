@@ -7,133 +7,115 @@ application operations and collection structure; bindings connect changes to the
 appropriate live views. The first prototype is implemented alongside P0; the
 sections below retain the broader design goals, including work still deferred.
 
-## Implemented prototype (2026-11-14)
+## Current prototype: collections and owned components
 
-Run `nim ic -r examples/direct_views_demo.nim`. Compare it with
-`examples/declarative_views_demo.nim`. Both exercise keyed editable rows and
-detached Dragology candidates. The direct version also has controller-owned
-validation and undo/redo, a Sigil counter, and separately invalidated row structure.
+Run `nim ic -r examples/direct_views_demo.nim`. Both demos now share
+`examples/declarative_tasks.nim`: the same collection, validation, undo/redo,
+commands, and stale-drag rejection. Their differences are in view construction
+and the scope of structural rebuilding, not domain behavior.
 
 ```nim
-let session = newDirectViewSession(newStackView())
-session.viewBody:
+proc taskRow(context: DirectNode, task: Task, controller: TaskController) =
+  context.viewBody:
+    TextField:
+      bindingScope.bindTextField(
+        "title", controller.tasks.item(task.id), controller, task.id,
+        titleFor, this, editTitle,
+      )
+
+let view = newDirectView()
+view.viewBody:
   VStack:
-    this.spacing = 10
-    for task in controller.tasks:
+    for task in controller.tasks{}:
       keyed(task.id):
-        TextField:
-          this.identifier = "task-" & $task.id
-          arrangedSizing(svspFillAvailableWidth)
-          bindingScope.bindTextField(
-            "title", controller.tasks, controller, task.id,
-            titleFor, this, editTitle,
-          )
-# At controller teardown:
-session.close()
+        component(taskRow, task, controller)
 ```
 
-`this` is the actual typed widget. Capitalized node names map to `new<Type>()`
-factories; VStack/HStack select StackView orientation. Constructor arguments run
-only when creating a node. Statements inside the block run on each structural
-evaluation, through ordinary NimKit setters. `arrangedSizing` configures the
-parent StackView's sizing policy. Custom factories do not need a ViewSpec enum
-case, although child composition currently requires StackView containers.
+`DirectView` owns its composition metadata. `component(builder, args...)` invokes
+an ordinary procedure with a child context, giving the helper its own identity
+namespace. A component has exactly one root and adds **no wrapper widget**.
+Reusing a key and component builder retains that component; changing the builder
+replaces it. Same-parent key/type matches retain real widgets and editors.
 
-Static declarations have structural slots. Repeated siblings require `keyed(id)`;
-same-parent key/type matches keep the real widget, and changed types replace it.
-`this.stringValue = value` remembers the last authored text to preserve provisional
-editing on unrelated structural updates. Other setters execute as written; the
-prototype does not remember every widget property.
-
-Every node owns a `BindingScope`. `bindValue` observes an explicit controller
-signal; `bindSigilValue` observes one explicit `Sigil[T]` input. The general forms take a weak
-receiver, value context, typed getter, weak target and typed setter. Reusing an ID
-updates its context and switches subscriptions when necessary. Omitted bindings
-are removed at the end of a structural pass. `bindTextField` adds the edit command
-and last-model-text guard; its controller callback decides validation and undo.
-Use this helper for two-way text updates so programmatic writes do not echo into
-the edit command.
-
-The common Sigil-to-widget case needs only an input and a weak target:
+A component can own an independently observed body:
 
 ```nim
-Label:
-  bindingScope.bindValue("counter", controller.counter, this) do(label: Label, count: int):
-    label.stringValue = "Count: " & $count
+proc showRows(context: DirectNode, owner: TaskController, ids: seq[int]) =
+  context.taskRows(owner.tasks{}, owner)
+
+proc observedRows(context: DirectNode, owner: TaskController) =
+  context.bindBody(owner.tasks.order, owner, showRows)
+
+view.viewBody:
+  VStack:
+    component(observedRows, controller)
 ```
 
-This overload reuses the same owned binding implementation. It removes the dummy
-context, repeated controller argument and separate forwarding getter from the
-demo. `bindTextField` can observe either a controller signal or a Sigil snapshot;
-its edit callback still routes through a weak controller.
+The component owns the subscription separately from the bindings declared by its
+body. The renderer and owner are explicit; the owner and update target are weak.
+Removing the component disconnects its bindings and cancels queued updates.
+Releasing the root view releases the metadata tree automatically, including nested
+components. Retained controls lose their action owner and become inert. A view
+still retained by a window or another owner remains live; release that ownership
+or call `view.clear()` when retiring its content explicitly. No application list
+of sessions or custom destruction hook is required. `DirectViewSession` remains
+as a lower-level compatibility API for externally owned StackView hosts.
 
-Changes coalesce through NimKit's main-thread work queue. `flushBindings` is also
-available for deterministic tests and explicit pumping. Scope disposal cancels
-pending work and disconnects subscriptions. Controller and widget links are
-zeroing weak references. A binding retains its Sigil input until replacement or
-disposal because Sigils currently lacks an equivalent zeroing weak reference.
-All scope operations belong on the GUI thread; worker changes must first marshal
-to that thread.
+`this` is the actual typed widget. Capitalized names map to `new<Type>()` factories;
+VStack/HStack choose orientation. Constructor arguments run **only on creation**.
+Ordinary block statements run on each structural evaluation. `arrangedSizing`
+sets the parent's sizing policy. Custom factories need no ViewSpec enum case;
+child arrangement currently requires StackView containers.
 
-`bindCollectionModel` and `bindTableModel` connect ArrayController notifications to
-the existing data-source/delegate views. Collection items retain identity across
-updates. Table delegates opt into retained cells with `configureCellView`; legacy
-delegates retain the reload behavior of requesting their cells again. No DSL loop
-is needed to instantiate every virtualized row. These bridges are deliberately
-limited to ArrayController; typed application controllers can use the existing
-protocols and bindings directly.
+Property ownership is explicit:
 
-The demo stores `tasks: Sigil[TaskRows]`. Task rows and drag/undo snapshots remain
-plain values. All commands share one undoable `replaceTasks` path that publishes
-a new snapshot with `<-`; no custom change signals or controller-owned observer
-scope are needed. A `computedNow[seq[int]]` projection of task IDs drives row
-structure. Because Sigils publishes that projection only when the ID sequence
-changes, title edits do not rerun the row builder. Field bindings and the preview
-observe the task snapshot itself, and all their view work coalesces on the GUI
-queue. Undo restores a plain snapshot through the same command path.
+- Ordinary setters run as written. Omitting a setter leaves its previous value.
+- `this.stringValue = value` remembers the authored value to preserve provisional
+  TextField edits when an unchanged model value is repeated.
+- A binding owns updates to the properties its setter writes. Omitting a binding
+  disconnects it but leaves its last value; assign a replacement value explicitly.
+- Constructor arguments are not reactive properties; put changing configuration
+  in the body or a binding.
 
-This collection-wide Sigil deliberately invalidates every row title binding.
-Unchanged title values are skipped before invoking widget setters, but getters
-still run. It is simple for this eager demo, not a substitute for per-item MVC
-notifications in a large list. Commands copy and publish snapshots; mutating
-`tasks{}` in place would bypass notifications and is outside this contract.
-The preview binding skips an equal model, so the queued update after a drag
-commit does not cancel the drag model that Dragology just accepted.
+The shared binding module is `nimkit/viewbindings`. `bindValue` accepts controller
+signals, Sigils, and collection projections. It coalesces changes on the owning
+GUI thread; `flushBindings` supports deterministic pumping. `bindTextField` adds
+last-model-text tracking, programmatic-echo suppression, and an edit command routed
+through a weak controller. Invalid drafts remain in the editor. External accepted
+model changes replace the draft; a richer conflict/commit policy is future work.
 
-A detached session (`detached = true`) builds fresh widgets, performs initial
-reads, and suppresses framework-installed observers and action handlers.
-`takeDetachedRoot()` transfers its single root and disposes its binding metadata.
-The demo passes only copied task values to this builder and checks that the drag
-snapshot is still current before applying a proposal. Counter changes cannot be
-overwritten by a task-only drag commit.
+The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
+undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
+text. Indexed lookup avoids scanning the sequence in every getter. Unchanged rows
+receive no item notification. Snapshot publication still validates/indexes O(n)
+values and compares observed items; it is not O(1) mutation. See
+[collection contracts](collection-sigils.md). The native upstream implementation
+is proposed in [Sigils PR #70](https://github.com/elcritch/sigils/pull/70); the local
+prototype does not change the installed dependency yet.
 
-### Current limitations
+Detached `newDirectView(detached = true)` construction uses the same component
+builders with plain snapshot values, then `takeDetachedRoot()` transfers its fresh
+root. Framework bindings perform initial reads without observing; actions are not
+installed. Arbitrary user statements can still have side effects, so detached
+mode is not a sandbox. Drag commits check their task snapshot against current
+state; unrelated counters are outside that snapshot.
 
-- Dependencies are explicit fixed inputs, not automatic tracking of arbitrary
-  fields or dynamic `Sigil{}` read sets. Structural regions are separate sessions;
-  reusable nested composition helpers and general custom-container protocols
-  remain open design work.
-- Duplicate sibling keys raise during streaming execution. Earlier setters may
-  already have run; there is no whole-tree preflight or transactional rollback.
-  Applications should validate model IDs before invoking the builder.
-- Removing a binding leaves its last property value. Reset or transfer ownership
-  explicitly. Cross-parent moves recreate views, and deletion/offscreen recycling
-  does not promise to preserve an editor for an absent item.
-- Inline `onAction`/`onChange` reuse the installed gateway but still create callback
-  adapters when their structural block runs. Dedicated text bindings reuse their
-  connection and current item context. No heap-allocation counts are claimed.
-- Close owned sessions and dispose external scopes during controller teardown,
-  particularly when another object retains their controls. Arbitrary statements
-  and custom constructors are ordinary Nim code: detached mode cannot prevent
-  them from performing application side effects or retaining live objects.
-- Controller collection notifications currently trigger keyed reconciliation of
-  the presentation order; this is not a minimal edit script. Stable-ID scans and
-  existing StackView reorder/layout costs remain. The eager list is not a
-  replacement for virtualized TableView/CollectionView.
-- Native event latency, offscreen editor policy, general formatted inputs,
-  dynamic dependencies, worker delivery and cross-platform behavior need further
-  evaluation. See TODO-declarative.md for measurements and remaining acceptance
-  work; the prototype is not a finished replacement for P0.
+### Remaining limitations
+
+- Direct execution streams mutations. Duplicate keys fail when encountered;
+  earlier setters may have run. Collection publication now prevalidates model
+  keys, but arbitrary UI trees have no transactional rollback or whole-tree preflight.
+- Components require one root, sibling keys and StackView arrangement. Cross-parent
+  moves recreate views; offscreen/deleted editor lifetime is not solved here.
+- Inline actions still allocate adapters on structural evaluation. Neither an
+  allocation-count reduction nor native input latency improvement is claimed.
+- Collection notifications distinguish item/order/snapshot changes; existing
+  ArrayController bridges still queue coarse keyed reconciliation. Large datasets
+  require TableView/CollectionView virtualization and explicit draft ownership.
+- Dynamic dependencies for general bindings, async domain revision/cancellation,
+  formatted fields, IME interactions, and undo grouping need further evaluation.
+- The shared layout/capture bottleneck remains. The cleanup is preparation for the
+  next multi-component/document experiment, not completion of that experiment.
 
 ## What the Figuro implementation demonstrates
 
@@ -267,11 +249,11 @@ Each binding needs a defined record/contract, regardless of its eventual syntax:
 - Owned subscriptions, pending/active state, and a generation for reuse/teardown.
 - A last authored value where needed to distinguish a model change from a local edit.
 
-The controller owns the root session. A mounted row owns its row bindings; those
+The root view owns its composition state. A mounted row owns its row bindings; those
 bindings do not strongly capture the owning controller or keep a removed view alive.
 Retain bindings while the same row identity moves. When reusing a widget for a new
 entity, disconnect its old dependencies and refresh context before it can emit an
-edit. A queued update for an old generation must be ignored. Destroying the session
+edit. A queued update for an old generation must be ignored. Releasing the root view
 disconnects subscriptions and makes externally retained controls inert.
 
 The current `bindSigilEvents` helper adds connections when reads execute; it does
@@ -319,11 +301,10 @@ A typed domain controller can implement the same data-source hooks without copyi
 all application state into a second `ModelItem` store.
 [Model controllers](../src/merenda/nimkit/app/modelcontrollers.nim).
 
-Some underlying behavior needs improvement too. CollectionView currently clears
-all item slots during its update operations. Table row updates recycle cell slots,
-although they also contain selection/editing-ID preservation logic. Neither path
-alone proves that a hosted custom TextField keeps its exact editor through a move.
-Fix and test those shared mechanisms rather than conceal resets in the binding DSL.
+The implemented MVC changes retain CollectionView items by identity and let TableView
+delegates opt into retained hosted cells with `configureCellView`. Tests cover
+editor identity across insert/move. Virtualized recycling and offscreen drafts
+still need a separate evaluation; keyed retention alone does not settle them.
 [Collection updates](../src/merenda/nimkit/containers/collectionviews.nim),
 [table updates](../src/merenda/nimkit/tables/tablerows.nim).
 
