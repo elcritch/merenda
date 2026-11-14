@@ -48,6 +48,11 @@ per-field concurrent merging, draft persistence, native operating-system IME
 coverage or a universal Save/Close policy. It establishes the smaller contracts
 before exposing a toolkit-wide form abstraction.
 
+The generation and weak-owner checks remain explicit example code. A reusable
+guarded-command helper, hidden-view suspension/resume and a document-owned
+asynchronous save example have not been implemented. Existing controller
+appearance hooks are not wired to an automatic suspension policy.
+
 ## History and layout
 
 The experiment uses existing document inverses. The separate
