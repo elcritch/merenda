@@ -465,10 +465,10 @@ and checks that its task assumptions still hold.
 
 ### Next comparison to run
 
-The most useful next experiment is **controller-owned scoped declarative updates**
-using the existing retained widgets. It can retain `viewBody`, inline action wiring,
-and the detached preview path while testing MVC reuse independently of a syntax
-rewrite or a new state system:
+The next experiment is **direct views with MVC-owned bindings (P7)**, described in
+[the Figuro-based proposal](docs/declarative-direct-views.md). Keep scoped value
+bodies (P2) as a comparison. Both test controller-owned update boundaries while
+retaining inline actions and a shared layout path for isolated previews:
 
 1. Put reusable model operations behind controller methods, and connect mount
    teardown to controller teardown. Exercise menu/keyboard/button parity and
@@ -710,6 +710,7 @@ or any unimplemented NimKit alternative. Several choices can be combined.
 | Persistent descriptions with cached handlers/subtrees | Reduce allocation and unchanged-body traversal while keeping the current reconciler. | Correct invalidation, current event context, bounded retained memory, and a measurable improvement over cached-description updates. |
 | Geometry/render descriptions without speculative widgets | Reduce Dragology candidate construction and capture work. | Identical placement, text metrics, theme resolution, clipping, and accessibility/focus separation; avoid maintaining a second inconsistent layout engine. |
 | Virtualized/lazy keyed collections | Bound work by visible rows for large lists. | Focused/marked text during scrolling, off-screen state lifetime, key lookup, drag targets for unmounted rows, and scroll anchoring. |
+| Direct views with MVC-owned bindings | Use Figuro-style typed widget reuse and NimKit's existing controller/property APIs without a ViewSpec tree. | Stable keyed identity, owned/rebindable subscriptions, editor-safe writeback, model-driven collections, and isolated previews; see P7. |
 
 Keep syntax, identity, state ownership, invalidation, widget adaptation, and
 preview materialization as separate comparison axes. Replacing `viewBody` syntax
@@ -734,8 +735,9 @@ The alternatives deliberately vary different parts of the design:
 | P4: Generated retained patch code | Is interpreting a transient description tree the important remaining cost? | Macro generates retained slots and direct property/structure patches. | Controller/model and generated mount storage. | Same explicit scopes as P2, with one keyed loop and conditional. |
 | P5: Composition runtime with observed inputs | Is automatic dependency and local-state management worth a larger runtime? | Execute registered component bodies within tracked identity groups. | Controller/domain model plus explicitly scoped component state. | Counter, keyed editable rows, and one conditional local-state example. |
 | P6: CollectionView with declarative rows | Can the existing collection infrastructure bound live widget work? | Collection owns visible item membership; each row has a declarative mount. | Model/selection controller; collection and row mounts. | Fixed-height scrolling list after collection identity fixes. |
+| P7: Direct views with MVC-owned bindings | Can Figuro's actual-view approach support model-driven controls without ViewSpec? | Create/reuse typed views; bindings update values and MVC adapters update structure. | Controller/model; views own editors; scopes own subscriptions. | Eager keyed rows and two binding sources, followed by collection integration. |
 
-P1, P2, P4, and P5 are different ways to coordinate live updates. P3 changes the
+P1, P2, P4, P5, and P7 are different ways to coordinate live updates. P3 changes the
 description/extension boundary, and P6 changes repeated-content hosting; those can
 be combined with other prototypes after independent evaluation. For example,
 P2 + P3 is a plausible design, but introducing both at once would obscure which
@@ -773,7 +775,7 @@ snapshots. Preview geometry reuse does not waive that requirement.
 
 Run three distinct measurement tracks:
 
-- **Same eager content:** P0 through P5 use the existing 10/100/300-row workload,
+- **Same eager content:** P0 through P5 and P7 use the existing 10/100/300-row workload,
   logical widgets, layout settings, solver budget, and build configuration. Match
   layout containers where possible and disclose extra region/adapter host widgets.
   Separate description/body work, update work, and layout. Record budget failures
@@ -950,15 +952,43 @@ Advance if it passes the equal-viewport editing contract and improves measured l
 work. Do not claim that it solves whole-list Dragology evaluation: a later geometry
 or candidate-range experiment must preserve the agreed drag semantics independently.
 
+### P7: Direct views with MVC-owned bindings
+
+**Design.** Adopt Figuro's pattern of finding/creating a real typed widget and
+running its configuration block. Keep keyed identity rather than its current
+position-based matching. Owned bindings react to explicit controller signals or
+selected `Sigil[T]` reads; controllers and collection adapters own model changes,
+validation, undo, selection, and row structure. There is no `ViewSpec` tree.
+
+This differs from P1: the system owns binding lifetime and scoped reevaluation,
+instead of leaving all ongoing widget synchronization to manual controller code.
+It also differs from P5: component-local state storage and a general composition
+runtime are not prerequisites. Existing view/controller identity is the starting
+point. P6's collection integration can be reused once its identity gaps are fixed.
+
+**Small experiment.** Directly compose the eager editable list, a counter bound
+to a Sigil, and a row title bound to a controller change signal. Verify keyed moves,
+editor preservation, connection ownership, row rebind, and queued-update teardown.
+Build detached candidates with the same layout code and snapshot inputs. Then
+exercise the table/collection boundary as a separate viewport comparison.
+
+**Costs and decision.** Eliminating descriptions does not eliminate reconciliation
+or binding metadata. Conditional dependencies, omitted-property policy, pre-mutation
+key validation, accepted versus provisional edits, and preview isolation remain
+explicit contracts. Sigils currently connects observed reads but does not replace
+obsolete dependencies automatically. No performance improvement is claimed yet.
+
+See [the focused design](docs/declarative-direct-views.md) for the Figuro source
+review, exact MVC/binding responsibilities, current NimKit gaps, and staged tests.
+
 ### Suggested sequence and decision record
 
-Start with **P2**, because it directly tests unnecessary whole-body work while
-preserving the current description and preview APIs. Build **P1** as the complete
-MVC control comparison. Evaluate **P3** next for extension quality, then measure a combined
-P2 + P3 version if both earn their place. Pursue **P6** as a separate scrolling
-track after shared collection identity fixes. Try **P4** if profiling still points
-to description/dispatch overhead, and **P5** if real component use exposes enough
-manual dependency/state bookkeeping to justify its larger contract.
+Start with **P7**, focusing on actual views, MVC, and binding ownership. Keep **P0**
+as the measured baseline, **P2** as the scoped-description comparison, and **P1**
+as the explicit MVC control. Pursue **P6** as a separate scrolling track after
+shared collection identity fixes. **P3** remains an alternative if typed descriptions
+prove useful; **P4** and **P5** require evidence that generated patch code or a
+larger state runtime solves problems the simpler variants cannot address cleanly.
 
 A geometry-only Dragology backend is a separate later experiment. It should consume
 the same model/description semantics and reuse established layout rules; creating a
@@ -980,6 +1010,9 @@ variants; preserve the original P0 measurements rather than silently replacing t
 
 ## Next logical steps
 
+- [ ] **Prototype P7's MVC/binding boundary:** follow the
+  [direct-view proposal](docs/declarative-direct-views.md), keeping plain models,
+  explicit observed inputs, real widget identity, and isolated snapshot previews.
 - [ ] **Specify semantic edges first:** conditional helper roots, key reuse,
   cross-parent moves, focused-row deletion, formatted input, and teardown with
   externally retained controls. Carry the same acceptance tests to every design.
