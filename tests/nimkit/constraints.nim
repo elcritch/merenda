@@ -4,13 +4,28 @@ import sigils/core
 
 import merenda/nimkit
 import merenda/nimkit/view/viewbase
-from merenda/nimkit/view/viewgeometry import setFrameFromLayout
+from merenda/nimkit/view/viewgeometry import
+  setFrameFromLayout, markConstraintStorageChanged, layoutInvalidationAncestorVisits
 
 type LayoutInvalidationSpy = ref object of Agent
   reasons: seq[LayoutInvalidationReason]
 
 proc record(spy: LayoutInvalidationSpy, reason: LayoutInvalidationReason) {.slot.} =
   spy.reasons.add reason
+
+type ReentrantLayoutSpy = ref object of Agent
+  root: View
+  events: seq[(string, LayoutInvalidationReason, uint64)]
+
+proc recordLeaf(spy: ReentrantLayoutSpy, reason: LayoutInvalidationReason) {.slot.} =
+  spy.events.add ("leaf", reason, spy.root.xLayoutInputRevision)
+  spy.root.markConstraintStorageChanged()
+
+proc recordMiddle(spy: ReentrantLayoutSpy, reason: LayoutInvalidationReason) {.slot.} =
+  spy.events.add ("middle", reason, spy.root.xLayoutInputRevision)
+
+proc recordRoot(spy: ReentrantLayoutSpy, reason: LayoutInvalidationReason) {.slot.} =
+  spy.events.add ("root", reason, spy.root.xLayoutInputRevision)
 
 type ManualInsetView = ref object of View
 
@@ -928,6 +943,41 @@ suite "nimkit constraints":
     root.addSubview(newView(frame = rect(0, 0, 10, 10)))
     check lisContainer in root.xLayoutInputCache.aggregateDirtySources
     check root.xLayoutInputCache.aggregateStructureDirty
+
+  test "nested layout notifications preserve order and revision progress":
+    let
+      root = newView()
+      middle = newView()
+      leaf = newView()
+      spy = ReentrantLayoutSpy(root: root)
+    root.addSubview(middle)
+    middle.addSubview(leaf)
+    root.layoutSubtreeIfNeeded()
+    leaf.connect(layoutInputChanged, spy, recordLeaf)
+    middle.connect(layoutInputChanged, spy, recordMiddle)
+    root.connect(layoutInputChanged, spy, recordRoot)
+    let revision = root.xLayoutInputRevision
+    leaf.invalidateIntrinsicContentSize()
+    check spy.events ==
+      @[
+        ("leaf", lirIntrinsic, revision + 1),
+        ("root", lirConstraints, revision + 2),
+        ("middle", lirDescendantIntrinsic, revision + 3),
+        ("root", lirDescendantIntrinsic, revision + 4),
+      ]
+    check lisUser in root.xLayoutInputCache.aggregateDirtySources
+    check lisIntrinsic in root.xLayoutInputCache.aggregateDirtySources
+
+  test "external layout invalidation fuses feedback and dirty ancestor walks":
+    let nodes = [newView(), newView(), newView(), newView(), newView()]
+    for i in 0 ..< nodes.high:
+      nodes[i].addSubview(nodes[i + 1])
+    nodes[0].layoutSubtreeIfNeeded()
+    layoutInvalidationAncestorVisits = 0
+    nodes[^1].invalidateIntrinsicContentSize()
+    # Five emitted signals visit 5 + 4 + 3 + 2 + 1 ancestors. Previously,
+    # feedback reset and aggregate marking each visited that same chain.
+    check layoutInvalidationAncestorVisits == 15
 
   test "appearance propagation emits one root layout invalidation":
     let

@@ -30,6 +30,8 @@ type
 const MaxLayoutResolutionDepth = 128
 
 var layoutResolutionStack {.threadvar.}: seq[LayoutResolutionFrame]
+when defined(merendaTests):
+  var layoutInvalidationAncestorVisits* {.threadvar.}: int
 
 func operationName(operation: LayoutResolutionOperation): string =
   case operation
@@ -131,10 +133,15 @@ proc markConstraintStorageChangedRaw(view: View) =
   view.xPrivProps.incl {vipNeedsUpdateConstraints, vipNeedsLayout}
 
 proc markAggregateLayoutInputDirty(
-    view: View, source: LayoutInputSource, structureDirty: bool
+    view: View, source: LayoutInputSource, structureDirty: bool, resetFeedback = false
 ) =
   var current = view
   while not current.isNil:
+    when defined(merendaTests):
+      inc layoutInvalidationAncestorVisits
+    if resetFeedback:
+      current.xLayoutFeedbackCycles = 0
+      current.xLastLayoutInvalidation = LayoutInvalidationDiagnostic()
     inc current.xLayoutInputRevision
     current.xLayoutInputCache.aggregateDirtySources.incl source
     if structureDirty:
@@ -160,8 +167,13 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
       view.xAutoresizingState.inputsDirty = true
     else:
       discard
-    view.noteLayoutInvalidation(reason, affectsConstraints = true)
-    view.markAggregateLayoutInputDirty(source, structureDirty)
+    if activeLayoutTransaction.isNil:
+      # Outside a transaction, noteLayoutInvalidation only resets feedback on
+      # this same chain. Fuse that reset with aggregate dirty propagation.
+      view.markAggregateLayoutInputDirty(source, structureDirty, resetFeedback = true)
+    else:
+      view.noteLayoutInvalidation(reason, affectsConstraints = true)
+      view.markAggregateLayoutInputDirty(source, structureDirty)
 
 protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
   proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
