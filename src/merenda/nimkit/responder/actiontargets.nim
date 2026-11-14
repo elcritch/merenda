@@ -121,15 +121,6 @@ proc nonCapturingHandler(handler: NimNode): NimNode =
       callback.pragma.add ident("nimcall")
   callback
 
-macro newActionTarget*(
-    action: ActionSelector, receiver: typed, handler: untyped
-): untyped =
-  ## Create a retained adapter with a zeroing receiver link. The handler takes
-  ## (receiver, sender) and is not called after the receiver is released.
-  ## Inline handlers are marked nimcall before typing their body, rejecting captures.
-  let callback = nonCapturingHandler(handler)
-  result = newCall(bindSym"newReceiverActionTarget", action, receiver, callback)
-
 proc invokeContextAction[T: Responder, C](
     self: DynamicAgent, invocation: var Invocation
 ) =
@@ -151,16 +142,35 @@ proc newContextActionTarget[T: Responder, C](
   discard adapter.replaceMethod(action, DynamicMethod(invokeContextAction[T, C]))
   result = adapter
 
+type MissingActionArgument = object
+
+# Nim 2.2 can type an inline callback as a closure when these forms are
+# separate macro overloads, before the macro can mark it nimcall.
 macro newActionTarget*(
-    action: ActionSelector, receiver, context: typed, handler: untyped
+    action: ActionSelector,
+    receiver: Responder,
+    context: untyped = MissingActionArgument(),
+    handler: untyped = MissingActionArgument(),
 ): untyped =
-  ## Bind explicit context (for example a row ID) to a weak receiver and a
-  ## non-capturing handler taking (receiver, context, sender). Context follows
+  ## Create an adapter with a zeroing receiver link and a non-capturing
+  ## handler taking (receiver, sender). An optional context argument precedes
+  ## the handler, which then takes (receiver, context, sender). Context follows
   ## normal Nim value semantics; owning references in it remain owning references.
-  result = newCall(
-    bindSym"newContextActionTarget",
-    action,
-    receiver,
-    context,
-    nonCapturingHandler(handler),
-  )
+  if handler.kind in {nnkCall, nnkObjConstr} and
+      handler[0].eqIdent("MissingActionArgument"):
+    result = newCall(
+      bindSym"newReceiverActionTarget", action, receiver, nonCapturingHandler(context)
+    )
+  elif context.kind in {nnkCall, nnkObjConstr} and
+      context[0].eqIdent("MissingActionArgument"):
+    result = newCall(
+      bindSym"newReceiverActionTarget", action, receiver, nonCapturingHandler(handler)
+    )
+  else:
+    result = newCall(
+      bindSym"newContextActionTarget",
+      action,
+      receiver,
+      context,
+      nonCapturingHandler(handler),
+    )
