@@ -39,6 +39,7 @@ else:
   import nimkit/declarativedemo
   import nimkit/declarativeviews
   import nimkit/directbindings
+  import nimkit/directlifetimes
   import nimkit/directdemo
   import nimkit/directmodels
   import nimkit/directviews
@@ -52,6 +53,7 @@ else:
   import nimkit/font_layout
   import nimkit/fontpickers
   import nimkit/formviews
+  import nimkit/formdrafts
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews

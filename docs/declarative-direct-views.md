@@ -359,6 +359,25 @@ responder-chain command. Ordinary event callbacks run outside dependency collect
 Controller operations perform validation, undo registration, and model mutation;
 programmatic property patches do not reissue those operations.
 
+## Retained lifetime and visibility
+
+Hiding a retained `DirectView` does not suspend its bindings. Model changes still
+update its widgets, so showing it again exposes current state. `clear()` instead
+retires the content, disconnects its scopes and makes retained old control actions
+inert, including work queued before the clear. The host can then compose a fresh
+body from the current model. Drafts that must survive this operation belong to an
+editor or document, outside the widget tree.
+
+Presentation detachment and document closure are separate domain operations.
+An editor generation can reject obsolete validation results without cancelling a
+document-owned save. Neither hiding a view nor releasing its bindings automatically
+cancels external work. No suspension API or application-maintained session list is
+required for this ownership contract.
+
+See the executable coverage in
+[directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in
+[form_editors.nim](../examples/form_editors.nim).
+
 ## Dragology does not require ViewSpec
 
 `newDeclarativeDragView` already accepts a builder returning `View`. The current
