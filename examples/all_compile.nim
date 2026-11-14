@@ -20,6 +20,7 @@ import constraint_playground_demo
 import controls_showcase
 import css_theme_demo
 import declarative_drag_demo
+import declarative_views_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
