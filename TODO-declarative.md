@@ -8,6 +8,16 @@ See [the usage guide](docs/declarative-views.md) and
 
 ## Cleanup after the maintainability review
 
+The subsequent MVC-focused work adds an ordinary formatted-form experiment,
+explicit shared or local drafts, typed undo coalescing and bounded group history,
+and targeted layout improvements. See [the form report](docs/declarative-forms.md),
+[undo contracts](docs/undo-history.md), and
+[layout measurements](docs/benchmarks/layout/README.md). The form comparison uses
+ViewSpec actions around a DirectView-owned custom form; it does not add a general
+ViewSpec custom-widget adapter. Persistent measurement caches, reduced ancestor
+invalidation, incremental solvers, worker cancellation and native input latency
+remain future work.
+
 The reviewer debate identified model granularity, reusable components and ownership
 as more decisive than the DSL spelling. The cleanup now implements:
 

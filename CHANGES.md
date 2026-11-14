@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add opt-in typed undo coalescing, explicit gesture boundaries and a total
+  undo/redo group limit. See `docs/undo-history.md` for checkpoint and replay
+  contracts. The formatted-form experiment demonstrates local/shared drafts,
+  explicit acceptance and owned bindings in `examples/form_editors.nim`.
+- Batch DirectView stack ordering and reuse FormView child measurements within
+  each layout pass. Synthetic arrangement measurements and their limits are in
+  `docs/benchmarks/layout/README.md`.
 - Support named property shorthand such as `Button(title = "Remove")` in the
   direct-view DSL, with an optional body. Properties use existing widget setters
   on every body evaluation. The first positional Button argument also updates its
