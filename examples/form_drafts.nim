@@ -1,14 +1,31 @@
 ## A small form policy shared by direct and declarative hosts.
 ## Draft identity is explicit: pass the same FormDraft to share an edit session.
-import sigils/[core, reactive]
+import sigils/[core, reactive, threadProxies, threads]
+import merenda/nimkit/foundation/backgroundworkers
 import merenda/nimkit
 
 type
+  FormSaveState* = enum
+    fssIdle
+    fssSaving
+    fssSaved
+    fssFailed
+    fssClosed
+
+  FormSaveWorker = ref object of AgentActor
+
   FormDocument* = ref object of Document
     value*: int
     savedValue*: int
     accepted*: Sigil[int]
     revision*: int
+    saveState*: FormSaveState
+    saveInFlight*: bool
+    saveStatus*: Sigil[string]
+    saveError*: string
+    saveWorkerThread*: int
+    saveCompletionThread*: int
+    saveWorker: AgentProxy[FormSaveWorker]
 
   FormDraft* = ref object of Responder
     document*: FormDocument
@@ -23,9 +40,85 @@ type
     generation, revision: int
     raw: string
 
+proc saveDocumentClosed(document: FormDocument) {.slot.} =
+  document.saveState = fssClosed
+  document.saveStatus <- "Document closed; an in-flight write may still finish"
+
 proc newFormDocument*(value: int): FormDocument =
-  result = FormDocument(value: value, savedValue: value, accepted: newSigil(value))
+  result = FormDocument(
+    value: value,
+    savedValue: value,
+    accepted: newSigil(value),
+    saveStatus: newSigil("No file save requested"),
+  )
   initDocument(result)
+  result.connect(didCloseDocument, result, saveDocumentClosed)
+
+proc writeFormSnapshot(
+  worker: AgentProxy[FormSaveWorker], path: string, value, revision: int
+) {.signal.}
+
+proc formSnapshotWritten(
+  worker: FormSaveWorker, value, revision: int, error: string, workerThread: int
+) {.signal.}
+
+proc writeFormSnapshot(
+    worker: FormSaveWorker, path: string, value, revision: int
+) {.slot.} =
+  var error = ""
+  try:
+    writeFile(path, $value & "\n")
+  except CatchableError:
+    error = getCurrentExceptionMsg()
+  emit worker.formSnapshotWritten(value, revision, error, getThreadId())
+
+proc finishFormSave(
+    document: FormDocument, value, revision: int, error: string, workerThread: int
+) {.slot.} =
+  # A closed document no longer publishes completion or marks history clean.
+  # The already submitted worker may still finish writing its snapshot.
+  if not document.saveInFlight:
+    return
+  document.saveInFlight = false
+  if document.isClosed or document.saveState != fssSaving:
+    return
+  document.saveCompletionThread = getThreadId()
+  document.saveWorkerThread = workerThread
+  document.saveError = error
+  if error.len > 0:
+    document.saveState = fssFailed
+    document.saveStatus <- "Save failed: " & error
+  else:
+    document.savedValue = value
+    document.saveState = fssSaved
+    if document.revision == revision:
+      document.undoManagerFor().markCleanState()
+      document.saveStatus <- "Saved accepted value " & $value
+    else:
+      document.saveStatus <- "Saved " & $value & "; newer accepted changes remain"
+
+proc startSave*(document: FormDocument, path: string): bool =
+  ## Write a snapshot on a worker. Only one save may be in flight per document.
+  ## Call from the document's owning thread; completion is delivered there.
+  if document.isClosed or document.saveState == fssSaving or path.len == 0:
+    return
+  if document.saveWorker.isNil:
+    var worker = FormSaveWorker()
+    document.saveWorker = worker.moveToThread(nimkitWorkerPool())
+    connectThreaded(
+      document.saveWorker, writeFormSnapshot, document.saveWorker, writeFormSnapshot
+    )
+    connectThreaded(
+      document.saveWorker, formSnapshotWritten, document, FormDocument.finishFormSave()
+    )
+  let value = document.value
+  let revision = document.revision
+  document.saveError = ""
+  document.saveState = fssSaving
+  document.saveInFlight = true
+  document.saveStatus <- "Saving accepted value " & $value
+  emit document.saveWorker.writeFormSnapshot(path, value, revision)
+  result = true
 
 proc newFormDraft*(document: FormDocument): FormDraft =
   result = FormDraft(

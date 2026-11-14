@@ -1,7 +1,16 @@
-import std/unittest
-import sigils/[core, reactive]
+import std/[monotimes, os, tempfiles, times, unittest]
+import sigils/[core, reactive, threads]
 import merenda/nimkit
 import ../../examples/[form_drafts, form_editors]
+
+proc waitForSave(document: FormDocument): bool =
+  let deadline = getMonoTime() + initDuration(seconds = 60)
+  while document.saveInFlight and getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    if document.saveInFlight:
+      sleep(1)
+  discard getCurrentSigilThread().pollAll(NonBlocking)
+  result = not document.saveInFlight
 
 suite "form draft policy":
   test "independent and explicitly shared drafts retain raw incomplete input":
@@ -135,3 +144,78 @@ suite "form draft policy":
     check draft.raw{} == "25"
     check field.stringValue == "10"
     check not draft.disposed
+
+suite "document-owned asynchronous form saves":
+  test "save survives retiring the initiating form and publishes on its owner thread":
+    let directory = createTempDir("merenda-form-test-", "")
+    defer:
+      removeDir(directory)
+    let path = directory / "accepted.txt"
+    let document = newFormDocument(12)
+    let draft = newFormDraft(document)
+    var host = newDraftForm(draft)
+    var weakHost: BackRef[DirectView]
+    weakHost.target = host
+    check document.startSave(path)
+    check document.saveInFlight
+    check not document.startSave(path)
+    host.clear()
+    host = nil
+    draft.dispose()
+    check weakHost.isNil
+    require document.waitForSave()
+    check document.saveState == fssSaved
+    check readFile(path) == "12\n"
+    check document.savedValue == 12
+    check document.saveCompletionThread == getThreadId()
+    check document.saveWorkerThread != document.saveCompletionThread
+    check document.undoManagerFor().isAtCleanState()
+
+  test "a later accepted edit stays dirty when an earlier snapshot finishes":
+    let directory = createTempDir("merenda-form-test-", "")
+    defer:
+      removeDir(directory)
+    let path = directory / "accepted.txt"
+    let document = newFormDocument(12)
+    let draft = newFormDraft(document)
+    check document.startSave(path)
+    draft.edit("30")
+    check draft.apply()
+    require document.waitForSave()
+    check document.saveState == fssSaved
+    check readFile(path) == "12\n"
+    check document.savedValue == 12
+    check document.value == 30
+    check not document.undoManagerFor().isAtCleanState()
+    check document.saveStatus{} == "Saved 12; newer accepted changes remain"
+
+  test "write failures are reported without changing saved state":
+    let directory = createTempDir("merenda-form-test-", "")
+    defer:
+      removeDir(directory)
+    let document = newFormDocument(4)
+    let draft = newFormDraft(document)
+    draft.edit("5")
+    check draft.apply()
+    check document.startSave(directory / "missing" / "file")
+    require document.waitForSave()
+    check document.saveState == fssFailed
+    check document.saveError.len > 0
+    check document.savedValue == 4
+    check not document.undoManagerFor().isAtCleanState()
+
+  test "closing suppresses late publication while an in-flight write finishes":
+    let directory = createTempDir("merenda-form-test-", "")
+    defer:
+      removeDir(directory)
+    let path = directory / "accepted.txt"
+    let document = newFormDocument(7)
+    check document.startSave(path)
+    discard document.close()
+    check document.saveState == fssClosed
+    check not document.startSave(path)
+    require document.waitForSave()
+    check readFile(path) == "7\n"
+    check document.saveState == fssClosed
+    check document.saveCompletionThread == 0
+    check document.saveStatus{} == "Document closed; an in-flight write may still finish"

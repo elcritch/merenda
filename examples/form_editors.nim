@@ -1,17 +1,20 @@
 ## FormView is an ordinary leaf composed alongside either declarative host.
-## Saving here is an in-memory checkpoint, not disk persistence.
+## Async Save writes only accepted data into a private temporary directory.
+## Save / Close is the separate in-memory draft checkpoint.
+import std/[os, tempfiles]
 import sigils/[core, reactive]
 import merenda/nimkit
 import ./form_drafts
 
 type FormPanel = ref object of Responder
   draft: FormDraft
+  savePath: string
   scope: BindingScope
   form: FormView
   pending: FormValidation
 
-proc newFormPanel(draft: FormDraft): FormPanel =
-  result = FormPanel(draft: draft)
+proc newFormPanel(draft: FormDraft, savePath: string): FormPanel =
+  result = FormPanel(draft: draft, savePath: savePath)
   initResponder(result)
 
 proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
@@ -26,6 +29,7 @@ proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
     form.addRow(newLabel("Amount"), field)
     form.addRow(newLabel("Status"), status)
     form.addRow(newLabel("Accepted"), newLabel(""))
+    form.addRow(newLabel("File save"), newLabel(""))
   let field = TextField(form.rows[0].field)
   let status = Label(form.rows[1].field)
   scope.bindTextField("number", draft.raw, draft, 0, rawText, field, editText)
@@ -33,6 +37,10 @@ proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
     label: Label, value: int
   ):
     label.stringValue = $value
+  scope.bindValue("saveStatus", draft.document.saveStatus, Label(form.rows[3].field)) do(
+    label: Label, value: string
+  ):
+    label.stringValue = value
   scope.bindValue("status", draft.status, status) do(label: Label, value: string):
     label.stringValue = value
 
@@ -61,6 +69,9 @@ proc external(panel: FormPanel) =
 proc undo(panel: FormPanel) =
   discard panel.draft.document.undoManagerFor().performUndo()
 
+proc saveFile(panel: FormPanel) =
+  discard panel.draft.document.startSave(panel.savePath)
+
 proc save(panel: FormPanel) =
   discard panel.draft.saveAndClose()
 
@@ -78,6 +89,9 @@ proc directActions(panel: FormPanel): DirectView =
         Button("Cancel", acceptsFirstResponder = false):
           onAction(panel) do(p: FormPanel, sender: DynamicAgent):
             p.cancel()
+        Button("Async Save accepted", acceptsFirstResponder = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.saveFile()
         Button("Save / Close", acceptsFirstResponder = false):
           onAction(panel) do(p: FormPanel, sender: DynamicAgent):
             p.save()
@@ -105,6 +119,9 @@ proc specActions(panel: FormPanel): DeclarativeView =
         Button("Cancel", focusable = false):
           onAction(panel) do(p: FormPanel, sender: DynamicAgent):
             p.cancel()
+        Button("Async Save accepted", focusable = false):
+          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+            p.saveFile()
         Button("Save / Close", focusable = false):
           onAction(panel) do(p: FormPanel, sender: DynamicAgent):
             p.save()
@@ -121,15 +138,17 @@ proc specActions(panel: FormPanel): DeclarativeView =
   newDeclarativeView(body)
 
 proc runFormEditors*() =
+  let savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"
   let document = newFormDocument(12)
   # Use the same draft here for shared edits; make a second draft for local edits.
   let shared = newFormDraft(document)
-  let first = newFormPanel(shared)
-  let second = newFormPanel(shared)
-  let local = newFormPanel(newFormDraft(document))
+  let first = newFormPanel(shared, savePath)
+  let second = newFormPanel(shared, savePath)
+  let local = newFormPanel(newFormDraft(document), savePath)
   let root = newStackView(laVertical)
   root.spacing = 12
   root.edgeInsets = insets(12)
+  root.addArrangedSubview(newLabel("Async Save writes accepted data to: " & savePath))
   root.addArrangedSubview(
     newLabel("Shared draft: DirectView"),
     newDraftForm(first.draft),
