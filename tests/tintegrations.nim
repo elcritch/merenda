@@ -34,4 +34,5 @@ import integrations/backgroundworkershutdown
 when isMainModule:
   # Nim ic can otherwise exit successfully after unittest records a failure.
   if getProgramResult() != 0:
+    releaseWorkerForFailedExit()
     quit(getProgramResult())
