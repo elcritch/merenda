@@ -121,6 +121,7 @@ type
     xTableDataSource*: DynamicAgent
     xTableDelegate*: DynamicAgent
     xCellSlots*: seq[TableCellSlot]
+    xPresentedRowIdentifiers*: seq[string]
     xReusableCellViews: Table[string, seq[View]]
     xHeaderSettings*: TableHeaderSettings
     xHoveredColumn*: TableColumn
@@ -146,6 +147,7 @@ type
     xHeaderTracking*: TableHeaderTracking
 
   TableCellSlot* = object
+    identifier*: string
     row*: int
     column*: TableColumn
     view*: View
@@ -240,6 +242,16 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn
   ): View {.optional.}
     ## Provides a hosted view for a cell instead of standard cell drawing.
+
+  method configureCellView*(
+    tableView: TableView,
+    row: int,
+    column: TableColumn,
+    objectValue: ObjectValue,
+    view: View,
+  ) {.optional.}
+    ## Updates a retained cell after a model refresh. Preserve any active edit
+    ## when the model value has not changed.
 
   method tableRowHeight*(tableView: TableView, row: int): float32 {.optional.}
     ## Returns the preferred height for a row.
@@ -926,6 +938,26 @@ proc tableRowHeaderRect*(tableView: TableView): Rect =
 proc validCell*(tableView: TableView, row: int, column: TableColumn): bool =
   row in 0 ..< tableView.rowCount() and not column.isNil and
     column.tableView() == tableView
+
+proc queryTableCellObjectValue*(
+    tableView: TableView, row: int, column: TableColumn
+): ObjectValue =
+  if not tableView.validCell(row, column):
+    return nilObjectValue()
+  let source = tableView.dataSource()
+  if source.isNil:
+    return emptyObjectValue()
+  let value = source.trySendLocal(
+    objectValueForCell(), (tableView: tableView, row: row, column: column)
+  )
+  if value.isSome:
+    return value.get()
+  let text =
+    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
+  if text.isSome:
+    toObj(text.get())
+  else:
+    emptyObjectValue()
 
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string =
   if not tableView.validCell(row, column):
@@ -2010,6 +2042,7 @@ proc `dataSource=`*(tableView: TableView, dataSource: DynamicAgent) =
   if not dataSource.isNil:
     discard dataSource.adopt(TableViewDataSource)
   tableView.clearTableCellSlots()
+  tableView.xPresentedRowIdentifiers.setLen(0)
   tableView.xTableDataSource = dataSource
   tableView.requestTableReload()
 

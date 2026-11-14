@@ -741,11 +741,19 @@ proc syncVisibleTableCells(tableView: TableView) =
           cellView.hidden = false
           cellView.setWidgetState(ssDisabled, not tableView.rowEnabled(row))
           tableView.applyCellAccessibility(row, column, cellView)
-          nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
+          nextSlots.add TableCellSlot(
+            identifier: tableView.tableRowIdentifier(row),
+            row: row,
+            column: column,
+            view: cellView,
+          )
   for index, slot in previousSlots:
     if not used[index]:
       tableView.recycleCellSlot(slot)
   tableView.xCellSlots = nextSlots
+  if tableView.xPresentedRowIdentifiers.len == 0:
+    for row in 0 ..< tableView.len():
+      tableView.xPresentedRowIdentifiers.add tableView.tableRowIdentifier(row)
 
 proc rowItemStyle(
     tableView: TableView, context: DrawContext, states: set[WidgetState]

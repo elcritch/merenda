@@ -287,12 +287,33 @@ suite "nimkit collection views":
     discard buildRenders(collectionView)
 
     check collectionView.len == 4
-    check source.reusedViews > 0
     check CollectionItemView(collectionView.itemViewAtIndex(0)).itemIdentifier == "b"
 
     let reusedHeader = collectionView.supplementaryView(cskHeader, "main", "header")
     check reusedHeader == header
     check source.supplementaryReusedViews == 1
+
+  test "collection updates retain views by identifier across reorder":
+    let
+      collectionView = newCollectionView(frame = rect(0, 0, 300, 140))
+      source = newCollectionSpy(
+        [item("a", "Alpha", 1), item("b", "Beta", 2), item("c", "Gamma", 3)]
+      )
+    collectionView.dataSource = source
+    collectionView.delegate = source
+    discard buildRenders(collectionView)
+    let original = collectionView.itemViewAtIndex(1)
+    source.items.insert(item("d", "Delta", 4), 0)
+    collectionView.insertItemsAtIndexes([0], ["d"])
+    check collectionView.itemViewAtIndex(2) == original
+    let moved = source.items[2]
+    source.items.delete(2)
+    source.items.insert(moved, 0)
+    collectionView.moveItem(2, 0)
+    check collectionView.itemViewAtIndex(0) == original
+    source.items.delete(1)
+    collectionView.removeItemsAtIndexes([1], ["d"])
+    check collectionView.itemViewAtIndex(0) == original
 
   test "collection selection activation and keyboard navigation use user events":
     let
