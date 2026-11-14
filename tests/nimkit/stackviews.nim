@@ -290,6 +290,59 @@ suite "nimkit stack views":
     check stack.arrangedSubviews[^1] == explicit
     check stack.arrangedSubviewSizingPolicy(explicit) == svspFillAvailableWidth
 
+  test "batch order preserves unarranged slots and remaining sizing policies":
+    let
+      stack = newStackView(laVertical)
+      a = newView()
+      decoration = newView()
+      b = newView()
+      c = newView()
+    stack.addArrangedSubview(a, svspFillAvailableWidth)
+    stack.addSubview(decoration)
+    stack.addArrangedSubview(b, svspFillAvailableSpace)
+    stack.addArrangedSubview(c)
+    c.hidden = true
+
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspFillAvailableWidth),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+
+    check stack.arrangedSubviews == @[c, a, b]
+    check stack.subviews() == @[c, decoration, a, b]
+    check stack.arrangedSubviewSizingPolicy(c) == svspFillAvailableWidth
+    check stack.arrangedSubviewSizingPolicy(a) == svspAutomatic
+    check stack.arrangedSubviewSizingPolicy(b) == svspFillAvailableSpace
+    check a.superview == stack
+    check b.superview == stack
+    check c.superview == stack
+    stack.needsLayout = false
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspFillAvailableWidth),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+    check not stack.needsLayout
+    stack.arrangeSubviewPrefix(
+      [
+        ArrangedSubview(view: c, sizingPolicy: svspAutomatic),
+        ArrangedSubview(view: a, sizingPolicy: svspAutomatic),
+      ]
+    )
+    check stack.needsLayout
+
+    expect ValueError:
+      stack.arrangeSubviewPrefix([ArrangedSubview(view: a), ArrangedSubview(view: a)])
+    check stack.arrangedSubviews == @[c, a, b]
+    let newcomer = newView()
+    stack.arrangeSubviewPrefix([ArrangedSubview(view: newcomer)])
+    check stack.arrangedSubviews == @[newcomer, c, a, b]
+    check newcomer.superview == stack
+    check stack.subviews() == @[newcomer, decoration, c, a, b]
+
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let
       stack = newStackView(laHorizontal, frame = rect(0, 0, 100, 24))

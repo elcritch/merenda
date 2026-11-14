@@ -4,9 +4,11 @@ import merenda/nimkit
 
 type FixedIntrinsicView = ref object of View
   naturalSize: Size
+  measurements: int
 
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
+    inc view.measurements
     initIntrinsicSize(view.naturalSize)
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
@@ -44,6 +46,27 @@ suite "nimkit form views":
     check nameField.frame() == rect(70.0, 1.0, 100.0, 20.0)
     check longLabel.frame() == rect(2.0, 34.0, 60.0, 14.0)
     check roleField.frame() == rect(70.0, 26.0, 100.0, 30.0)
+
+  test "one form layout measures each visible child once":
+    let
+      form = newFormView(frame = rect(0, 0, 240, 48))
+      label = newFixedIntrinsicView(48, 14)
+      field = newFixedIntrinsicView(80, 20)
+      hidden = newFixedIntrinsicView(100, 30)
+    form.spacing[dcol] = 12
+    form.addRow(label, field)
+    form.addRow(hidden, nil)
+    hidden.hidden = true
+    label.measurements = 0
+    field.measurements = 0
+    hidden.measurements = 0
+
+    discard form.sendLocalIfHandled(layoutSubviews())
+    check label.measurements == 1
+    check field.measurements == 1
+    check hidden.measurements == 0
+    check label.frame() == rect(0, 3, 48, 14)
+    check field.frame() == rect(60, 0, 180, 20)
 
   test "field column stretches while labels keep natural width":
     let

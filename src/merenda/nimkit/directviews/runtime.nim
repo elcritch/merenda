@@ -160,12 +160,10 @@ proc arrangeChildren(node: DirectNode) =
     raise newException(ValueError, "direct view children require a StackView")
   if node.view of StackView:
     let stack = StackView(node.view)
-    for i, child in node.children:
-      let arranged = stack.arrangedSubviews
-      if i >= arranged.len or arranged[i] != child.view:
-        stack.insertArrangedSubview(child.view, i, child.sizing)
-      elif stack.arrangedSubviewSizingPolicy(child.view) != child.sizing:
-        stack.setArrangedSubviewSizingPolicy(child.view, child.sizing)
+    var children: seq[ArrangedSubview]
+    for child in node.children:
+      children.add ArrangedSubview(view: child.view, sizingPolicy: child.sizing)
+    stack.arrangeSubviewPrefix(children)
 
 proc endChildren*(node: DirectNode) =
   if node.view of TextField and node.bindings.ownsText(TextField(node.view)):

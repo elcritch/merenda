@@ -39,6 +39,7 @@ type
     labelWidth: float32
     fieldWidth: float32
     rowHeights: seq[float32]
+    labelSizes, fieldSizes: seq[Size]
 
 func normalizedSpacing(value: float32): float32 =
   max(value, 0.0'f32)
@@ -74,22 +75,24 @@ proc visibleRows(formView: FormView): seq[FormRow] =
     if not label.isNil or not field.isNil:
       result.add FormRow(label: label, field: field)
 
-proc formMetrics(formView: FormView): FormMetrics =
+proc formMetrics(formView: FormView, rows: openArray[FormRow]): FormMetrics =
   result.fieldWidth = formView.xMinimumFieldWidth
-  for row in formView.visibleRows():
+  for row in rows:
     let
       labelSize = row.label.fittingSize()
       fieldSize = row.field.fittingSize()
     result.labelWidth = max(result.labelWidth, labelSize.width)
     result.fieldWidth = max(result.fieldWidth, fieldSize.width)
     result.rowHeights.add max(labelSize.height, fieldSize.height)
+    result.labelSizes.add labelSize
+    result.fieldSizes.add fieldSize
 
 func hasColumns(metrics: FormMetrics): bool =
   metrics.labelWidth > 0.0'f32 and metrics.fieldWidth > 0.0'f32
 
 proc naturalSize(formView: FormView): Size =
   let
-    metrics = formView.formMetrics()
+    metrics = formView.formMetrics(formView.visibleRows())
     rowCount = metrics.rowHeights.len
     colSpacing =
       if metrics.hasColumns:
@@ -144,7 +147,7 @@ proc boundedRowFrame(
 proc layoutFormRows(formView: FormView) =
   let
     rows = formView.visibleRows()
-    metrics = formView.formMetrics()
+    metrics = formView.formMetrics(rows)
     content = formView.contentRect()
     colSpacing =
       if metrics.hasColumns:
@@ -160,8 +163,8 @@ proc layoutFormRows(formView: FormView) =
   for index, row in rows:
     let
       rowHeight = metrics.rowHeights[index]
-      labelSize = row.label.fittingSize()
-      fieldSize = row.field.fittingSize()
+      labelSize = metrics.labelSizes[index]
+      fieldSize = metrics.fieldSizes[index]
 
     if not row.label.isNil:
       let
