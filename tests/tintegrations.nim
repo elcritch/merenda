@@ -1,5 +1,6 @@
 ## Shared runner for tests requiring cross-component or process-level integration.
 import std/exitprocs
+import integrations/fixtures/backgroundcommand
 import integrations/fixtures/devcontrol
 import integrations/fixtures/atomicsavefailure
 import integrations/fixtures/githubcli

@@ -38,7 +38,9 @@ proc runBackgroundCommand*(
     environment: StringTableRef = nil,
     diagnosticName = "Background command",
 ): BackgroundCommandResult =
-  ## Execute argument vectors directly, drain bounded output, and reap on every exit.
+  ## Execute arguments directly, drain bounded output, and reap on every exit.
+  ## On POSIX stdout and stderr are drained separately, so their relative order
+  ## in the combined output is not guaranteed.
   result.exitCode = -1
   var process: Process
   try:
@@ -52,17 +54,11 @@ proc runBackgroundCommand*(
         var arguments = @["-C", workingDirectory, "--", executable]
         arguments.add args
         process = startProcess(
-          "/usr/bin/env",
-          args = arguments,
-          env = environment,
-          options = {poStdErrToStdOut},
+          "/usr/bin/env", args = arguments, env = environment, options = {}
         )
       else:
         process = startProcess(
-          executable,
-          args = args,
-          env = environment,
-          options = {poUsePath, poStdErrToStdOut},
+          executable, args = args, env = environment, options = {poUsePath}
         )
     else:
       process = startProcess(
@@ -74,20 +70,39 @@ proc runBackgroundCommand*(
       )
     let handle = process.outputHandle()
     when defined(posix):
-      let flags = fcntl(handle, F_GETFL)
-      if flags < 0 or fcntl(handle, F_SETFL, flags or O_NONBLOCK) < 0:
-        raiseOSError(osLastError())
+      # Nim's POSIX osproc closes stdout and stderr separately. Keep them as
+      # distinct pipes so merged handles cannot be closed twice after reuse.
+      let handles = [handle, process.errorHandle()]
+      for output in handles:
+        let flags = fcntl(output, F_GETFL)
+        if flags < 0 or fcntl(output, F_SETFL, flags or O_NONBLOCK) < 0:
+          raiseOSError(osLastError())
     let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
     var buffer: array[16_384, char]
     var exited = false
     while true:
       if not cancelled.isNil and cancelled():
         raise newException(IOError, diagnosticName & " cancelled")
-      var count = 0
+      var received = false
       when defined(posix):
-        count = posix.read(handle, addr buffer[0], buffer.len).int
-        if count < 0 and errno notin [EAGAIN, EINTR]:
-          raiseOSError(osLastError())
+        var interrupted = false
+        for output in handles:
+          let count = posix.read(output, addr buffer[0], buffer.len).int
+          if count < 0:
+            if errno == EINTR:
+              interrupted = true
+            elif errno != EAGAIN:
+              raiseOSError(osLastError())
+          if count > 0:
+            received = true
+            if maxOutputBytes > 0 and result.output.len + count > maxOutputBytes:
+              result.outputLimitExceeded = true
+              raise newException(
+                IOError, diagnosticName & " output exceeded the configured limit"
+              )
+            let offset = result.output.len
+            result.output.setLen(offset + count)
+            copyMem(addr result.output[offset], addr buffer[0], count)
       elif defined(windows):
         var available, bytesRead: DWORD
         if PeekNamedPipe(cast[HANDLE](handle), nil, 0, nil, addr available, nil) != 0 and
@@ -100,25 +115,31 @@ proc runBackgroundCommand*(
             nil,
           ) == 0:
             raiseOSError(osLastError())
-          count = bytesRead.int
-      if count > 0:
-        if maxOutputBytes > 0 and result.output.len + count > maxOutputBytes:
-          result.outputLimitExceeded = true
-          raise newException(
-            IOError, diagnosticName & " output exceeded the configured limit"
-          )
-        let offset = result.output.len
-        result.output.setLen(offset + count)
-        copyMem(addr result.output[offset], addr buffer[0], count)
-      elif exited:
-        result.exitCode = process.waitForExit()
-        break
-      elif not process.running():
-        # Drain once more after observing exit; output may have arrived between
-        # the empty nonblocking read and the child closing its pipe.
-        exited = true
-      else:
-        sleep(5)
+          let count = bytesRead.int
+          if count > 0:
+            received = true
+            if maxOutputBytes > 0 and result.output.len + count > maxOutputBytes:
+              result.outputLimitExceeded = true
+              raise newException(
+                IOError, diagnosticName & " output exceeded the configured limit"
+              )
+            let offset = result.output.len
+            result.output.setLen(offset + count)
+            copyMem(addr result.output[offset], addr buffer[0], count)
+      when defined(posix):
+        if interrupted and not received:
+          if getMonoTime() >= deadline:
+            raise newException(IOError, diagnosticName & " timed out")
+          continue
+      if not received:
+        if exited:
+          result.exitCode = process.waitForExit()
+          break
+        elif not process.running():
+          # Drain again after observing exit to include the child's final output.
+          exited = true
+        else:
+          sleep(5)
       if getMonoTime() >= deadline:
         raise newException(IOError, diagnosticName & " timed out")
   except CatchableError:

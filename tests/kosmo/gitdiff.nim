@@ -2313,6 +2313,12 @@ suite "Kosmo editor repository diff":
       for file in frontend.gitDiffPanel.snapshot.files:
         if file.path == "sibling.txt":
           siblingIncluded = true
+      checkpoint "root=" & root & " snapshotRoot=" &
+        frontend.gitDiffPanel.snapshot.rootPath & " scope=" &
+        frontend.gitDiffPanel.snapshot.scopePath & " error=" &
+        frontend.gitDiffPanel.snapshot.errorMessage & " files=" &
+        $frontend.gitDiffPanel.snapshot.files & " reads=" &
+        $frontend.gitDiffPanel.repositoryReadCount()
       check siblingIncluded
       let index =
         frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
