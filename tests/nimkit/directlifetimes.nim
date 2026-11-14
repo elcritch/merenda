@@ -5,9 +5,11 @@ import merenda/nimkit/directviews/dsl
 import merenda/nimkit/foundation/mainthreadwork
 
 type LifetimeOwner = ref object of Responder
-  calls: int
+  calls, draws: int
+  nested: Sigil[int]
 
 proc lifetimeBody(context: DirectNode, owner: LifetimeOwner, value: int) =
+  inc owner.draws
   context.viewBody:
     Button($value):
       onAction(owner, value) do(
@@ -17,6 +19,18 @@ proc lifetimeBody(context: DirectNode, owner: LifetimeOwner, value: int) =
 
 proc observedLifetime(context: DirectNode, owner: LifetimeOwner, input: Sigil[int]) =
   context.bindBody(input, owner, lifetimeBody)
+
+proc conditionalBody(context: DirectNode, owner: LifetimeOwner, visible: bool) =
+  context.viewBody:
+    if visible:
+      component(observedLifetime, owner, owner.nested)
+    else:
+      Button("gone")
+
+proc conditionalLifetime(
+    context: DirectNode, owner: LifetimeOwner, input: Sigil[bool]
+) =
+  context.bindBody(input, owner, conditionalBody)
 
 proc settleTitle(button: Button, expected: string) =
   let deadline = getMonoTime() + initDuration(seconds = 60)
@@ -61,3 +75,95 @@ suite "direct view activation and lifetime":
     check owner.calls == 3
     host.clear()
     check input.subcriptions.len == 0
+
+  test "explicit suspension retains content and coalesces current state":
+    let
+      owner = LifetimeOwner()
+      input = newSigil(1)
+      host = newDirectView()
+    host.viewBody:
+      component(observedLifetime, owner, input)
+    let button = Button(host.arrangedSubviews[0])
+    check owner.draws == 1
+    input <- 2
+    host.suspendUpdates()
+    host.suspendUpdates()
+    input <- 3
+    input <- 4
+    discard drainMainThreadWork()
+    host.flushBindings()
+    check button.title == "1"
+    check owner.draws == 1
+    check input.subcriptions.len == 1
+    expect ValueError:
+      host.viewBody:
+        Button("should not be mounted")
+    host.resumeUpdates()
+    check host.arrangedSubviews[0] == button
+    check button.title == "4"
+    check owner.draws == 2
+    host.resumeUpdates()
+    discard drainMainThreadWork()
+    check owner.draws == 2
+    host.clear()
+    check input.subcriptions.len == 0
+
+  test "clear while suspended cancels updates and remains suspended":
+    let
+      owner = LifetimeOwner()
+      input = newSigil(1)
+      host = newDirectView()
+    host.viewBody:
+      component(observedLifetime, owner, input)
+    let button = Button(host.arrangedSubviews[0])
+    host.suspendUpdates()
+    input <- 2
+    host.clear()
+    check input.subcriptions.len == 0
+    discard drainMainThreadWork()
+    check button.title == "1"
+    expect ValueError:
+      host.viewBody:
+        component(observedLifetime, owner, input)
+    host.resumeUpdates()
+    host.viewBody:
+      component(observedLifetime, owner, input)
+    check Button(host.arrangedSubviews[0]).title == "2"
+    host.clear()
+
+  test "resume retires stale descendants before their pending updates":
+    let
+      owner = LifetimeOwner(nested: newSigil(1))
+      show = newSigil(true)
+      host = newDirectView()
+    host.viewBody:
+      component(conditionalLifetime, owner, show)
+    let oldButton = Button(host.arrangedSubviews[0])
+    check owner.draws == 1
+    host.suspendUpdates()
+    owner.nested <- 2
+    show <- false
+    host.resumeUpdates()
+    check Button(host.arrangedSubviews[0]).title == "gone"
+    check oldButton.title == "1"
+    check owner.draws == 1
+    check owner.nested.subcriptions.len == 0
+    discard drainMainThreadWork()
+    check oldButton.title == "1"
+    host.clear()
+    check show.subcriptions.len == 0
+
+  test "suspension during composition fails without changing the scope":
+    let
+      owner = LifetimeOwner()
+      input = newSigil(1)
+      host = newDirectView()
+    discard host.beginUpdate()
+    expect ValueError:
+      host.suspendUpdates()
+    host.endUpdate()
+    host.viewBody:
+      component(observedLifetime, owner, input)
+    input <- 2
+    Button(host.arrangedSubviews[0]).settleTitle("2")
+    host.clear()

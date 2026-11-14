@@ -12,7 +12,7 @@ type
     preview: bool
     disposed: bool
     schedule: proc() {.closure.}
-    collecting, scheduled: bool
+    collecting, scheduled, suspended: bool
     ticket: uint64
     seen: Table[string, bool]
 
@@ -54,7 +54,13 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
   if not receiver.isNil and not target.isNil:
     let generation = binding.generation
     let value = binding.getter(receiver, binding.context)
+    let scope = binding.scope{}
     if not binding.active or binding.generation != generation:
+      return
+    if scope.isNil or scope.disposed:
+      return
+    if scope.suspended:
+      binding.pending = true
       return
     when compiles(value == binding.lastValue):
       if binding.skipUnchanged and binding.hasLast and value == binding.lastValue:
@@ -70,7 +76,9 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
 proc textEdited(editor: EditBinding, sender: DynamicAgent) {.slot.} =
   let owner = editor.owner{}
   if not owner.isNil and owner.active and not owner.updating:
-    editor.invoke(editor)
+    let scope = owner.scope{}
+    if not scope.isNil and not scope.disposed and not scope.suspended:
+      editor.invoke(editor)
 
 proc invokeEdit[R: Responder, C](base: EditBinding) =
   let editor = TextEditBinding[R, C](base)
@@ -96,7 +104,7 @@ proc invalidate(binding: Binding) {.slot.} =
   let scope = binding.scope{}
   if binding.active and not binding.pending and not scope.isNil and not scope.disposed:
     binding.pending = true
-    if not scope.scheduled:
+    if not scope.suspended and not scope.scheduled:
       scope.scheduled = true
       inc scope.ticket
       if not scope.schedule.isNil:
@@ -113,6 +121,20 @@ proc invalidate(binding: Binding) {.slot.} =
               current.flushBindings()
             false
         )
+
+proc suspendBindings*(scope: BindingScope) =
+  ## Keep subscriptions and ownership, while deferring source reads and writes.
+  if not scope.isNil and not scope.disposed and not scope.suspended:
+    scope.suspended = true
+    scope.scheduled = false
+    inc scope.ticket
+
+proc resumeBindings*(scope: BindingScope, flush = true) =
+  ## Re-enable a scope and, by default, apply its pending current values.
+  if not scope.isNil and not scope.disposed and scope.suspended:
+    scope.suspended = false
+    if flush:
+      scope.flushBindings()
 
 proc removeBinding*(scope: BindingScope, id: string)
 
@@ -186,7 +208,7 @@ proc dispose*(scope: BindingScope) =
 
 proc flushBindings*(scope: BindingScope) =
   ## One pass: invalidations raised while applying wait for the next pass.
-  if scope.isNil or scope.disposed:
+  if scope.isNil or scope.disposed or scope.suspended:
     return
   scope.scheduled = false
   inc scope.ticket
@@ -197,7 +219,20 @@ proc flushBindings*(scope: BindingScope) =
       pending.add (binding, binding.generation)
   for item in pending:
     if item.binding.active and item.binding.generation == item.generation:
-      item.binding.applyValue(item.binding)
+      if scope.disposed:
+        break
+      if scope.suspended:
+        item.binding.pending = true
+      else:
+        item.binding.applyValue(item.binding)
+
+proc applyOrDefer(binding: Binding) =
+  let scope = binding.scope{}
+  if not scope.isNil and not scope.disposed:
+    if scope.suspended:
+      binding.pending = true
+    else:
+      binding.applyValue(binding)
 
 proc createValueBinding[R: Responder, C; V: Responder, T](
     scope: BindingScope,
@@ -255,7 +290,8 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
   result.setter = setter
   result.receiver.target = receiver
   result.target.target = target
-  result.pending = false
+  if not scope.suspended:
+    result.pending = false
 
 template bindValueImpl(
     scope: BindingScope,
@@ -295,7 +331,7 @@ template bindValueImpl(
       bindingInput.connect(signal, Binding(binding), invalidate, true)
       binding.disconnectSource = makeDisconnect(bindingInput)
     if initialApply:
-      binding.applyValue(binding)
+      binding.applyOrDefer()
 
 template bindValue*(
     scope: BindingScope,
@@ -344,7 +380,7 @@ template bindSigilValueImpl(
       bindingInput.connect(change, Binding(binding), invalidate, true)
       binding.disconnectSource = makeDisconnect(bindingInput)
     if initialApply:
-      binding.applyValue(binding)
+      binding.applyOrDefer()
 
 template bindSigilValue*(
     scope: BindingScope,
@@ -458,7 +494,7 @@ template bindTextField*(
       installTextEdit(binding, receiver, context, field, edit)
     else:
       binding.skipUnchanged = true
-    binding.applyValue(binding)
+    binding.applyOrDefer()
 
 template bindTextField*(
     scope: BindingScope,
@@ -488,4 +524,4 @@ template bindTextField*[T](
     binding.textTarget.target = field
     if not scope.preview:
       installTextEdit(binding, receiver, context, field, edit)
-    binding.applyValue(binding)
+    binding.applyOrDefer()

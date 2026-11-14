@@ -291,3 +291,68 @@ suite "direct owned bindings":
     scope = nil
     field.stringValue = "local"
     check model.edits == 0
+
+  test "suspension coalesces notifications and a source handoff":
+    let
+      first = Model(value: 1)
+      second = Model(value: 10)
+      target = Target()
+      scope = newBindingScope()
+    scope.bindValue("value", first, changed, first, 0, readValue, target, writeValue)
+    first.value = 2
+    emit first.changed(0)
+    scope.suspendBindings()
+    discard drainMainThreadWork()
+    check target.value == 1
+    scope.bindValue("value", second, changed, second, 0, readValue, target, writeValue)
+    check first.subcriptions.len == 0
+    check second.subcriptions.len == 1
+    second.value = 11
+    emit second.changed(0)
+    second.value = 12
+    emit second.changed(0)
+    scope.flushBindings()
+    check target.value == 1
+    check target.writes == 1
+    scope.resumeBindings()
+    check target.value == 12
+    check target.writes == 2
+    scope.resumeBindings()
+    discard drainMainThreadWork()
+    check target.writes == 2
+    scope.dispose()
+    check second.subcriptions.len == 0
+
+  test "disposal while suspended cancels queued and deferred writes":
+    let
+      model = Model(value: 1)
+      target = Target()
+      scope = newBindingScope()
+    scope.bindValue("value", model, changed, model, 0, readValue, target, writeValue)
+    scope.suspendBindings()
+    model.value = 2
+    emit model.changed(0)
+    scope.dispose()
+    scope.resumeBindings()
+    discard drainMainThreadWork()
+    check target.value == 1
+    check target.writes == 1
+    check model.subcriptions.len == 0
+
+  test "suspension preserves text draft until the model value changes":
+    let
+      model = Model(text: "original")
+      field = newTextField()
+      scope = newBindingScope()
+    scope.bindTextField("text", model, changed, model, 0, readText, field, editText)
+    scope.suspendBindings()
+    field.stringValue = "draft"
+    emit model.changed(0)
+    scope.resumeBindings()
+    check field.stringValue == "draft"
+    scope.suspendBindings()
+    model.text = "new model value"
+    emit model.changed(0)
+    scope.resumeBindings()
+    check field.stringValue == "new model value"
+    scope.dispose()

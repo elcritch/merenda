@@ -31,7 +31,7 @@ type
     identity, widgetType: string
     authoredText: string
     hasAuthoredText, detached, applying, closed, component: bool
-    collectingBody: bool
+    collectingBody, suspended: bool
     target: DirectTarget
 
   DirectView* = ref object of StackView
@@ -122,8 +122,14 @@ proc close*(session: DirectViewSession) =
 
 proc clear*(view: DirectView) =
   ## Explicitly retire content while keeping the host available for a new body.
+  let
+    suspended = view.root.suspended
+    detached = view.root.detached
   view.root.clearNode()
-  view.root = newRoot(view, view.root.detached)
+  view.root = newRoot(view, detached)
+  if suspended:
+    view.root.suspended = true
+    view.root.bindings.suspendBindings()
 
 proc beginChildren*(node: DirectNode) =
   node.bindings.beginBindings()
@@ -140,6 +146,8 @@ proc beginChildren*(node: DirectNode) =
 proc beginUpdate*(node: DirectNode): DirectNode =
   if node.closed or node.applying:
     raise newException(ValueError, "closed or recursively updating direct view context")
+  if node.suspended:
+    raise newException(ValueError, "cannot update a suspended direct view context")
   node.applying = true
   node.beginChildren()
   node
@@ -297,11 +305,63 @@ proc setChange*(node: DirectNode, field: TextField, action: ViewAction) =
   node.target.changed = action
 
 proc flushBindings*(node: DirectNode) =
-  if not node.isNil and not node.closed:
+  if not node.isNil and not node.closed and not node.suspended:
     node.bodyBindings.flushBindings()
-    node.bindings.flushBindings()
+    if not node.closed and not node.suspended:
+      node.bindings.flushBindings()
+      for child in node.children:
+        if node.closed or node.suspended:
+          break
+        child.flushBindings()
+
+proc hasApplyingNode(node: DirectNode): bool =
+  if not node.isNil and not node.closed:
+    if node.applying:
+      return true
     for child in node.children:
-      child.flushBindings()
+      if child.hasApplyingNode():
+        return true
+
+proc suspendNode(node: DirectNode) =
+  if not node.isNil and not node.closed and not node.suspended:
+    node.suspended = true
+    node.bodyBindings.suspendBindings()
+    node.bindings.suspendBindings()
+    for child in node.children:
+      child.suspendNode()
+
+proc resumeNode(node: DirectNode) =
+  if not node.isNil and not node.closed and node.suspended:
+    node.suspended = false
+    node.bodyBindings.resumeBindings(flush = false)
+    node.bindings.resumeBindings(flush = false)
+    for child in node.children:
+      child.resumeNode()
+
+proc suspendUpdates*(session: DirectViewSession) =
+  ## Pause observed writes without detaching the retained view tree. An active
+  ## composition must finish first. Action callbacks remain enabled.
+  if not session.isNil:
+    if session.root.hasApplyingNode():
+      raise newException(ValueError, "cannot suspend during a direct view update")
+    session.root.suspendNode()
+
+proc suspendUpdates*(view: DirectView) =
+  if not view.isNil:
+    if view.root.hasApplyingNode():
+      raise newException(ValueError, "cannot suspend during a direct view update")
+    view.root.suspendNode()
+
+proc resumeUpdates*(session: DirectViewSession) =
+  ## Apply coalesced pending changes from current sources.
+  if not session.isNil and not session.root.closed and session.root.suspended:
+    session.root.resumeNode()
+    session.root.flushBindings()
+
+proc resumeUpdates*(view: DirectView) =
+  if not view.isNil and not view.root.closed and view.root.suspended:
+    view.root.resumeNode()
+    view.root.flushBindings()
 
 proc flushBindings*(session: DirectViewSession) =
   session.root.flushBindings()
