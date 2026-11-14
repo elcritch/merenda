@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Support named property shorthand such as `Button(title = "Remove")` in the
+  direct-view DSL, with an optional body. Properties use existing widget setters
+  on every body evaluation; positional constructor inputs remain creation-only.
 - Add keyed collection observations with read-only item/order projections and
   indexed lookup. Both declarative demos now share collection-backed MVC commands,
   validation, undo and stale-drag checks. ViewSpec mounts support owned bindings;

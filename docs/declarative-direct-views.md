@@ -62,7 +62,24 @@ of sessions or custom destruction hook is required. `DirectViewSession` remains
 as a lower-level compatibility API for externally owned StackView hosts.
 
 `this` is the actual typed widget. Capitalized names map to `new<Type>()` factories;
-VStack/HStack choose orientation. Constructor arguments run **only on creation**.
+VStack/HStack choose orientation. Positional constructor arguments run **only on
+creation**. Named arguments are property assignments, applied on each structural
+evaluation before the optional body:
+
+```nim
+view.viewBody:
+  Button(title = "Remove", identifier = "remove"):
+    this.acceptsFirstResponder = false
+  Label(stringValue = "Ready")
+```
+
+`Button(title = value)` is shorthand for a `Button:` block containing
+`this.title = value`. It calls the existing typed setter, and the body can override
+the value afterward. `TextField(stringValue = value)` also uses the same text patch
+as `this.stringValue = value`, preserving drafts when the model text is unchanged.
+Use actual widget property names; constructor-only parameters can still be supplied
+positionally.
+
 Ordinary block statements run on each structural evaluation. `arrangedSizing`
 sets the parent's sizing policy. Custom factories need no ViewSpec enum case;
 child arrangement currently requires StackView containers.
@@ -74,8 +91,8 @@ Property ownership is explicit:
   TextField edits when an unchanged model value is repeated.
 - A binding owns updates to the properties its setter writes. Omitting a binding
   disconnects it but leaves its last value; assign a replacement value explicitly.
-- Constructor arguments are not reactive properties; put changing configuration
-  in the body or a binding.
+- Positional constructor arguments are not reactive properties. Named properties
+  and body setters rerun with the body; a binding updates independently of it.
 
 The shared binding module is `nimkit/viewbindings`. `bindValue` accepts controller
 signals, Sigils, and collection projections. It coalesces changes on the owning

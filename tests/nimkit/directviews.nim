@@ -20,6 +20,11 @@ type
 
   CustomDirectView = ref object of View
 
+  PropertyDirectView = ref object of View
+    seed: int
+    xCaption: string
+    writes: int
+
 proc directChanged(model: DirectBindingModel, value: int) {.signal.}
 proc readDirect(model: DirectBindingModel, context: int): int =
   model.value
@@ -30,6 +35,17 @@ proc writeDirect(field: TextField, value: int) =
 proc newCustomDirectView(): CustomDirectView =
   result = CustomDirectView()
   initViewFields(result)
+
+proc newPropertyDirectView(seed: int): PropertyDirectView =
+  result = PropertyDirectView(seed: seed)
+  initViewFields(result)
+
+proc `caption=`(view: PropertyDirectView, value: string) =
+  view.xCaption = value
+  inc view.writes
+
+proc caption(view: PropertyDirectView): string =
+  view.xCaption
 
 proc counterComponent(context: DirectNode, owner: DirectController, value: int) =
   context.viewBody:
@@ -66,7 +82,90 @@ proc observedChangingRoot(
 ) =
   context.bindBody(value, owner, changingRoot)
 
+static:
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
+      host.viewBody:
+        Button(title: "Remove")
+  )
+
 suite "direct view composition":
+  test "named properties update retained widgets before the optional body":
+    let host = newDirectView()
+    var title = "First"
+    var reads = 0
+    proc readTitle(): string =
+      inc reads
+      title
+
+    proc render() =
+      host.viewBody:
+        Button(title = readTitle(), identifier = "short")
+        Button(title = title):
+          this.identifier = this.title
+          this.title = "Body: " & this.title
+
+    render()
+    let short = Button(host.arrangedSubviews[0])
+    let extended = Button(host.arrangedSubviews[1])
+    check short.title == "First"
+    check short.identifier == "short"
+    check extended.identifier == "First"
+    check extended.title == "Body: First"
+    check reads == 1
+    title = "Second"
+    render()
+    check host.arrangedSubviews[0] == short
+    check host.arrangedSubviews[1] == extended
+    check short.title == "Second"
+    check extended.identifier == "Second"
+    check extended.title == "Body: Second"
+    check reads == 2
+
+  test "positional arguments construct once and named properties call custom setters":
+    let host = newDirectView()
+    var creations = 0
+    var caption = "First"
+    proc nextSeed(): int =
+      inc creations
+      creations
+
+    proc render() =
+      host.viewBody:
+        PropertyDirectView(nextSeed(), caption = caption)
+
+    render()
+    let view = PropertyDirectView(host.arrangedSubviews[0])
+    check creations == 1
+    check view.seed == 1
+    check view.caption == "First"
+    check view.writes == 1
+    caption = "Second"
+    render()
+    check host.arrangedSubviews[0] == view
+    check creations == 1
+    check view.seed == 1
+    check view.caption == "Second"
+    check view.writes == 2
+
+  test "named text preserves drafts on unchanged input and applies new model text":
+    let host = newDirectView()
+    var value = "Model"
+    proc render() =
+      host.viewBody:
+        TextField(stringValue = value)
+
+    render()
+    let field = TextField(host.arrangedSubviews[0])
+    field.stringValue = "Draft"
+    render()
+    check field.stringValue == "Draft"
+    value = "New model"
+    render()
+    check host.arrangedSubviews[0] == field
+    check field.stringValue == "New model"
+
   test "omitting a component body binding retires its old subscription":
     let host = newDirectView()
     let owner = DirectController()
@@ -195,8 +294,7 @@ suite "direct view composition":
   test "detached construction transfers a fresh root":
     let session = newDirectViewSession(newStackView(), detached = true)
     session.viewBody:
-      Label:
-        this.stringValue = "preview"
+      Label(stringValue = "preview")
     let preview = session.takeDetachedRoot()
     check preview of Label
     check Label(preview).stringValue == "preview"

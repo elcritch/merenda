@@ -29,10 +29,11 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
             this,
             editTitle,
           )
-      Button:
-        this.title = "Remove"
-        this.identifier = "remove-" & $task.id
-        this.acceptsFirstResponder = false
+      Button(
+        title = "Remove",
+        identifier = "remove-" & $task.id,
+        acceptsFirstResponder = false,
+      ):
         onAction(owner, task.id) do(
           receiver: TaskController, id: int, sender: DynamicAgent
         ):
@@ -75,34 +76,23 @@ proc buildChrome(controller: TaskController): DirectView =
       HStack:
         this.distribution = svdNatural
         this.spacing = 8
-        Button:
-          this.title = "Insert at top"
-          this.identifier = "insert"
-          this.acceptsFirstResponder = false
+        Button(
+          title = "Insert at top", identifier = "insert", acceptsFirstResponder = false
+        ):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.insertTask()
-        Button:
-          this.title = "Reverse"
-          this.identifier = "reverse"
-          this.acceptsFirstResponder = false
+        Button(title = "Reverse", identifier = "reverse", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.reverseTasks()
-        Button:
-          this.title = "Counter +1"
-          this.identifier = "counter"
-          this.acceptsFirstResponder = false
+        Button(
+          title = "Counter +1", identifier = "counter", acceptsFirstResponder = false
+        ):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.counter <- receiver.counter{} + 1
-        Button:
-          this.title = "Undo"
-          this.identifier = "undo"
-          this.acceptsFirstResponder = false
+        Button(title = "Undo", identifier = "undo", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performUndo()
-        Button:
-          this.title = "Redo"
-          this.identifier = "redo"
-          this.acceptsFirstResponder = false
+        Button(title = "Redo", identifier = "redo", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performRedo()
       Label:

@@ -36,12 +36,12 @@ macro viewBody*(session, body: untyped): untyped =
               `call`
             finally:
               endComponent(`node`)
-      elif item.kind in {nnkCall, nnkCommand} and item.len >= 2 and
-          item[0].kind in {nnkIdent, nnkSym} and item[^1].kind == nnkStmtList and
+      elif item.kind in {nnkCall, nnkCommand} and item.len >= 1 and
+          item[0].kind in {nnkIdent, nnkSym} and
           (item[0].strVal[0].isUpperAscii or item[0].eqIdent("keyed")):
         let name = item[0].strVal
         if name.normalize == "keyed":
-          if item.len != 3:
+          if item.len != 3 or item[^1].kind != nnkStmtList:
             error("Keyed requires one identity and a block", item)
           let k = genSym(nskLet, "key")
           let nested = statements(item[^1], parent, k)
@@ -72,10 +72,29 @@ macro viewBody*(session, body: untyped): untyped =
             newCall(bindSym"newTextField")
           else:
             newCall(ident("new" & name))
-        for i in 1 ..< item.len - 1:
-          factory.add item[i].copyNimTree()
+        let hasBody = item[^1].kind == nnkStmtList
+        let argsEnd =
+          if hasBody:
+            item.len - 1
+          else:
+            item.len
+        let configuration = newStmtList()
+        for i in 1 ..< argsEnd:
+          let arg = item[i]
+          if arg.kind == nnkExprEqExpr:
+            # Named properties use exactly the same setter/patch path as the body.
+            let assignment = newAssignment(
+              newDotExpr(ident"this", arg[0].copyNimTree()), arg[1].copyNimTree()
+            )
+            assignment.copyLineInfo(arg)
+            configuration.add assignment
+          else:
+            factory.add arg.copyNimTree()
+        if hasBody:
+          for statement in item[^1]:
+            configuration.add statement.copyNimTree()
         let widgetType = newLit(name.normalize)
-        let nested = statements(item[^1], node, newEmptyNode())
+        let nested = statements(configuration, node, newEmptyNode())
         result.add quote do:
           block:
             let `node` = child(
