@@ -20,6 +20,7 @@ type
     orderRef: BackRef[CollectionValue[seq[K]]]
     itemRefs: Table[K, BackRef[CollectionValue[Option[T]]]]
     publishing: bool
+    newItems, pruneAfter: int
 
 proc change*(source: CollectionSource, attrs: set[SigilAttributes]) {.signal.}
 
@@ -79,6 +80,16 @@ proc item*[K, T](source: CollectionSigil[K, T], key: K): CollectionValue[Option[
     var link: BackRef[CollectionValue[Option[T]]]
     link.set(result, result.xBackRefs)
     source.itemRefs[key] = link
+    inc source.newItems
+    if source.newItems >= source.pruneAfter:
+      var expired: seq[K]
+      for id, entry in source.itemRefs:
+        if entry.isNil:
+          expired.add id
+      for id in expired:
+        source.itemRefs.del(id)
+      source.newItems = 0
+      source.pruneAfter = max(64, source.itemRefs.len)
 
 proc setValue*[K, T](source: CollectionSigil[K, T], values: seq[T]) =
   ## Validate and index the entire snapshot before mutation. Publish one whole
@@ -140,7 +151,7 @@ proc newCollectionSigil*[K, T](
 ): CollectionSigil[K, T] =
   if keyOf.isNil:
     raise newException(ValueError, "collection key getter cannot be nil")
-  result = CollectionSigil[K, T](keyOf: keyOf)
+  result = CollectionSigil[K, T](keyOf: keyOf, pruneAfter: 64)
   result.setValue(values)
 
 proc `[]=`*[K, T](source: CollectionSigil[K, T], key: K, value: T) =

@@ -14,6 +14,10 @@ type
     writes: int
     value: Option[Row]
 
+  RecursiveWriter = ref object of Responder
+    rows: CollectionSigil[int, Row]
+    rejected: bool
+
 proc key(row: Row): int =
   row.id
 
@@ -21,7 +25,22 @@ proc record(watcher: Watcher, value: Option[Row]) =
   inc watcher.writes
   watcher.value = value
 
+proc writeRecursively(writer: RecursiveWriter, attrs: set[SigilAttributes]) {.slot.} =
+  try:
+    writer.rows <- @[]
+  except ValueError:
+    writer.rejected = true
+
 suite "keyed collection Sigils":
+  test "recursive publication cannot interleave snapshots":
+    let rows = newCollectionSigil(@[Row(id: 1)], key)
+    let writer = RecursiveWriter(rows: rows)
+    rows.connect(change, writer, writeRecursively)
+    rows <- @[Row(id: 2)]
+    check writer.rejected
+    check rows.len == 1
+    check 2 in rows
+
   test "item changes notify only that identity and preserve structural projections":
     let rows =
       newCollectionSigil(@[Row(id: 1, text: "one"), Row(id: 2, text: "two")], key)
