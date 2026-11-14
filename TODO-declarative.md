@@ -186,17 +186,20 @@ ordering benchmark does not establish that this solver limit is fixed.
 
 - [x] Require explicit DSL imports, preserve shared MVC/binding exports, and add
   compile-time checks of the import boundary.
-- [ ] Finish final local validation and classify integration failures against an
+- [x] Run final local validation and investigate earlier failures against an
   independent baseline; record exact revisions and limits in the
-  [validation report](docs/declarative-validation.md).
+  [validation report](docs/declarative-validation.md). The earlier intermittent
+  native-focus failure still requires careful interpretation despite fresh passes.
 - [ ] Check the final pushed revision's GitHub workflows and resolve or explicitly
   account for failures. Earlier local focused passes do not make CI green.
-- [ ] Refresh the PR description and this status after final validation.
+- [x] Refresh the PR description and this status with implemented scope and
+  explicit validation results; keep final-head CI status in the PR.
 
-The last completed focused NimKit run before this cleanup passed 1,621 tests and
-compiled the example bundle. Broad integration attempts encountered Git subprocess,
-native activation, and shutdown-teardown failures. Their investigation belongs in
-the validation report; they must not be silently relabeled as a passing full suite.
+Fresh local runs passed 1,623 NimKit tests, 49 Tekton tests, 587 Kosmo tests,
+and all 176 tests in the shared integration runner; the example bundle compiled.
+These were separate commands and compiler configurations, recorded in the report.
+Earlier Git subprocess, native activation, and shutdown-teardown failures remain
+documented there, including the limits of attributing intermittent failures.
 The later experiments below need not all be completed before an experimental merge.
 
 ## Next experiments, in order

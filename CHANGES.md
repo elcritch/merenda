@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve non-capturing receiver action handlers on Nim 2.2 when the contextual
+  ActionTarget form is also available.
+
 - Require explicit `merenda/nimkit/declarative` or `merenda/nimkit/directviews`
   imports for the experimental view DSLs. Their APIs may change incompatibly.
 
