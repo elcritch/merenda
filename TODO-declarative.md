@@ -715,6 +715,269 @@ Keep syntax, identity, state ownership, invalidation, widget adaptation, and
 preview materialization as separate comparison axes. Replacing `viewBody` syntax
 alone will not fix StackView ordering or layout costs.
 
+## Proposed alternative prototypes
+
+These are unimplemented design proposals based on the preceding source review,
+MVC comparison, framework research, and benchmark results. The names below label
+experiments, not proposed public API names. Keep the current implementation as
+**P0**, with its existing measurements and acceptance tests, so each experiment
+has a reproducible reference. This section proposes work; it does not mark any
+alternative as implemented or faster.
+
+The alternatives deliberately vary different parts of the design:
+
+| Prototype | Main question | Description/update strategy | State owner | Initial scope |
+| --- | --- | --- | --- | --- |
+| P1: Construction DSL with explicit MVC updates | How much runtime machinery do we need beyond readable construction? | Construct widgets once; controller updates properties and row membership. | Controller/model and existing widgets. | Complete eager editable-list control implementation. |
+| P2: Controller-scoped value bodies | Can narrow invalidation keep the current API practical? | Existing `ViewSpec` reconciliation inside explicitly owned regions. | Controller/model; mounts own widget identity. | Separate counter and task-list regions, then one keyed row scope. |
+| P3: Typed descriptions with open adapters | Can components and controls extend the DSL without editing its central variant? | Typed value descriptions; generic create/patch/dispose operations. | Controller/model; typed mounts own widgets. | Existing nodes plus one custom control. |
+| P4: Generated retained patch code | Is interpreting a transient description tree the important remaining cost? | Macro generates retained slots and direct property/structure patches. | Controller/model and generated mount storage. | Same explicit scopes as P2, with one keyed loop and conditional. |
+| P5: Composition runtime with observed inputs | Is automatic dependency and local-state management worth a larger runtime? | Execute registered component bodies within tracked identity groups. | Controller/domain model plus explicitly scoped component state. | Counter, keyed editable rows, and one conditional local-state example. |
+| P6: CollectionView with declarative rows | Can the existing collection infrastructure bound live widget work? | Collection owns visible item membership; each row has a declarative mount. | Model/selection controller; collection and row mounts. | Fixed-height scrolling list after collection identity fixes. |
+
+P1, P2, P4, and P5 are different ways to coordinate live updates. P3 changes the
+description/extension boundary, and P6 changes repeated-content hosting; those can
+be combined with other prototypes after independent evaluation. For example,
+P2 + P3 is a plausible design, but introducing both at once would obscure which
+change improved performance or complicated ownership.
+
+### Shared contracts and comparison controls
+
+Preserve `viewBody` and capitalized node spelling where the experiment supports
+that syntax. Keep inline event wiring beside controls, existing ActionTarget weak
+receiver semantics, and ordinary Nim helpers. A prototype must explain any change
+to when a body executes; identical spelling must not hide a new lifetime contract.
+All API examples added during implementation must be labeled experimental until
+their semantics and diagnostics have been evaluated.
+
+Use the existing editable-list evaluation contract for every live implementation:
+same editor/focus/selection/marked text through unrelated changes and keyed moves;
+current action context; inert removed controls; duplicate-key rejection before
+mutation; and deterministic teardown. Add the same validation, undo, conditional
+identity, and external-model-change cases to each implementation. Record unsupported
+cases as gaps rather than removing them from a competitor's test suite.
+
+Keep domain data and scalar properties as plain value types. Observe only inputs
+that actually require observation. Every managed widget/property needs one owner;
+direct controller writes and declarative patches must not compete for the same
+property. Setters with invalidation or responder side effects remain the write
+boundary. Reusable operations belong to controllers/domain code, with explicit
+named-command routing where needed.
+
+All preview paths must consume coherent snapshots, remain isolated from live
+editors/subscriptions, and register no undo or application effects while evaluating
+candidates. Use the same commit policy across prototypes: for example, validate a
+task-move operation against the current model while preserving unrelated state.
+If a prototype keeps whole-model replacement, it must reject or refresh stale
+snapshots. Preview geometry reuse does not waive that requirement.
+
+Run three distinct measurement tracks:
+
+- **Same eager content:** P0 through P5 use the existing 10/100/300-row workload,
+  logical widgets, layout settings, solver budget, and build configuration. Match
+  layout containers where possible and disclose extra region/adapter host widgets.
+  Separate description/body work, update work, and layout. Record budget failures
+  as blocked.
+- **Same scrolling viewport:** compare P6 with an equally sized viewport and the
+  same logical data, scrolling, and edit operations. Report visible/mounted counts;
+  do not present fewer mounted widgets as a like-for-like eager-list speedup.
+- **Same drag workload:** use the same candidate set, environment, geometry
+  checks, and commit semantics. Include construction, capture validity, total
+  candidate evaluation time, and peak memory; an image alone is not a valid preview.
+
+Alongside timings, collect body-evaluation and handler-allocation counts, retained
+memory, widget/editor identity, and clean/incremental build cost. Compare application
+code and supporting runtime code separately, including code duplicated for preview
+construction. Syntax brevity and a fast counter setter alone are insufficient.
+
+### P1: Construction DSL with explicit MVC updates
+
+**Design.** Lower the familiar layout declaration to retained widget construction
+once. The controller keeps the handles it needs, wires events inline through
+ActionTarget, and applies model changes through widget setters. A table keyed by
+task ID holds row handles for explicit insertion, deletion, and moves. There is no
+generic description diff or automatic recomposition. The DSL is a construction convenience;
+calling a helper again creates another widget rather than updating an existing one.
+
+**Small experiment.** Implement the complete eager task-list demo this way,
+including keyed reordering, teardown, and validated edit/undo behavior. Generate
+detached widgets from the same layout declaration with snapshot inputs and event
+installation disabled. If this requires duplicate layout or property policy code,
+record that duplication as part of the result.
+
+**Hypothesis.** This establishes the cost and maintenance burden of a complete MVC
+control implementation, beyond the existing direct-label-setter lower bound.
+Known-property updates should avoid description traversal, but structural changes
+still require correct reconciliation and can incur the same layout cost as P0.
+
+**Costs and decision.** Manual handle tables, event wiring lifetime, and model/view
+synchronization can grow quickly; separately written preview logic can drift.
+Retain it as a viable design only if the full acceptance contract remains readable
+without pervasive special cases. Even if it is unattractive as the public DSL, keep
+it as a benchmark/control implementation for evaluating the other proposals.
+
+### P2: Controller-scoped value bodies
+
+**Design.** Keep `ViewSpec`, keys, and existing patch behavior. Add explicit mount
+regions owned by a controller: initially a counter region and a task-list region.
+Controller operations mark affected regions dirty; a GUI-thread queue coalesces
+updates, with an explicit flush for tests and synchronous consumers. The list region
+owns row membership/order; later, a row region can own that row's content. A helper
+call alone does not create a region, and regions must not overlap property ownership.
+
+**Small experiment.** Change the counter without evaluating any task-row body or
+allocating row handlers. Then update one title without reevaluating unrelated rows.
+Exercise two mutations before a flush, a mutation during a flush, and teardown with
+pending work. Define whether reentrant invalidation runs in a subsequent pass, and
+make the completed state observable. Keep drag snapshot state coherent even when
+its visible geometry has not changed.
+
+**Hypothesis.** Explicit MVC boundaries remove most unrelated work without requiring
+a new description representation or general state system. Stable mount adapters
+can receive updated value context without repeated installation.
+
+**Costs and decision.** Developers must maintain dependency mappings, particularly
+for derived values, sorting/filtering, and conditional content. Per-row regions
+also add retained bookkeeping. Compare an explicit-invalidation version first;
+then optionally try selected Sigil subscriptions with the same regions. Do not
+assume existing signals automatically track arbitrary Nim field reads. Advance
+P2 if the measured reduction comes with a small, auditable invalidation contract.
+
+### P3: Typed descriptions with open widget adapters
+
+**Design.** Replace the closed public `ViewSpec` variant with typed component
+description values. Use ordinary generic procs/overloads to create, patch, and
+dispose widgets for those values. Keep any type erasure needed for heterogeneous
+runtime children private to the mounting boundary, with owned storage and a type
+compatibility check before reuse. Do not introduce a parallel public value/ref
+representation for every property or require a central kind enum for each control.
+
+**Small experiment.** Express the current four node kinds and one existing custom
+control through adapters, without editing a central interpreter to register that
+control. Cover a runtime conditional, a keyed loop, and a component whose root
+changes type. The same adapter/property rules must support detached construction;
+live event connections are a separate installation step. Reuse for a new entity
+needs a distinct reset policy from updating the same entity.
+
+**Hypothesis.** Typed props and open adapters improve extension and diagnostics,
+and may reduce unnecessary fields/copies. They do not automatically reduce body
+evaluations, introduce observed dependencies, or make layout cheaper.
+
+**Costs and decision.** Heterogeneous children and runtime branches need careful
+storage, ARC ownership, and dispatch design. Specialization may increase compile
+time and binary size; a poorly designed erased container can erase performance
+benefits too. Initially use P0's full-update schedule to isolate this change.
+Advance it if a third-party control fits cleanly and lifecycle/type errors are
+understandable, with measured runtime and build costs. Compare P2 + P3 separately.
+
+### P4: Generated retained patch code
+
+**Design.** Compile a component's `viewBody` into widget slots, remembered authored
+properties, keyed child maps, and direct setter calls. Refresh executes generated
+patch code instead of materializing and interpreting a complete `ViewSpec` tree.
+Keep explicit inputs/invalidation boundaries as in P2; examining syntax does not
+prove the dependencies or purity of arbitrary Nim helper calls.
+
+**Small experiment.** Generate one counter region and one keyed list containing a
+conditional child. Show the expansion in compiler diagnostics and verify that
+handlers are installed once while receiver/context values remain current. Produce
+live-update and detached-build paths from shared adapter/property rules so preview
+behavior is not a separately maintained implementation.
+
+**Hypothesis.** Specialization can remove transient descriptions and generic
+dispatch where profiling still shows those costs after scoped invalidation.
+It does not eliminate keyed matching, setter costs, or layout work.
+
+**Costs and decision.** This moves complexity into a code generator: branch and
+helper identity, type changes, overload resolution, source locations, and error
+messages become compiler-facing problems. Generated code can grow substantially.
+Test invalid DSL input and incremental builds alongside runtime behavior. Advance
+only if gains over P2/P3 justify that cost while preserving the same identity and
+preview semantics. A faster narrow example with restricted control flow is not
+enough evidence to replace the existing macro.
+
+### P5: Composition runtime with observed inputs
+
+**Design.** Treat component execution as operations within a managed composition.
+The runtime stores identity groups, opt-in observed-input dependencies, local state
+slots, and live bindings between executions. Explicit keys distinguish repeated
+calls. State initialization occurs once per defined component lifetime; removal
+disposes subscriptions and state. Ordinary helpers remain ordinary Nim unless
+explicitly registered/transformed as composition participants.
+
+**Small experiment.** Implement selective counter/row updates and a row-local
+expanded flag. Move rows, temporarily remove a branch, change a helper's root type,
+and delete a row; assert when the flag is retained or reset. Start with explicit
+observable input access rather than promising interception of every model write.
+Specify batched scheduling, failed evaluation, and stale subscription removal
+before adding asynchronous effects.
+
+**Hypothesis.** Tracked dependencies can reduce manual invalidation bookkeeping,
+and managed local state can make reusable components more self-contained.
+
+**Costs and decision.** This is the largest semantic departure: call-site identity,
+state type/lifetime, read tracking, reentrancy, cleanup, and debugging become runtime
+contracts. Component state can accidentally duplicate domain/editor state. Detached
+previews need an isolated evaluation context with explicit snapshot/preview-state
+inputs and effects disabled; they must not borrow live state slots or subscriptions.
+Advance only if these conveniences solve demonstrated application complexity beyond
+P2, and the lifetime rules are teachable. Defer a general `remember`/effects API
+until this small prototype proves its behavior and preview isolation.
+
+### P6: CollectionView as the host for declarative rows
+
+**Design.** Let CollectionView own viewport/layout, item membership, selection, and
+reuse. Each visible item contains a P2- or P3-style row mount. The data source uses
+stable task IDs, while reuse IDs describe compatible row shapes. Retain a row mount
+when the same entity moves; reset/rebind it only when a view is reused for a different
+entity. Fix the shared collection implementation's current clear-all update behavior
+before claiming it preserves editor identity.
+
+**Small experiment.** Use fixed-height rows and a fixed viewport; edit a visible
+row while inserting, reversing, and scrolling. Choose and test an editor policy
+when that row leaves the viewport, such as pinning the active editor's row until
+editing finishes. Test deletion separately so pinned rows cannot outlive removed
+entities. Keep the existing full-content preview path as a control initially,
+and report its unchanged cost or failure even if live scrolling becomes cheaper.
+
+**Hypothesis.** Fewer live widgets can address the eager list's layout/memory cost,
+while collection improvements benefit traditional and declarative callers alike.
+
+**Costs and decision.** Virtualization complicates focus, scroll anchoring, row-height
+changes, and off-screen drag targets. Default visible-index enumeration also needs
+measurement; widget reuse alone does not bound all computation to visible rows.
+Advance if it passes the equal-viewport editing contract and improves measured live
+work. Do not claim that it solves whole-list Dragology evaluation: a later geometry
+or candidate-range experiment must preserve the agreed drag semantics independently.
+
+### Suggested sequence and decision record
+
+Start with **P2**, because it directly tests unnecessary whole-body work while
+preserving the current description and preview APIs. Build **P1** as the complete
+MVC control comparison. Evaluate **P3** next for extension quality, then measure a combined
+P2 + P3 version if both earn their place. Pursue **P6** as a separate scrolling
+track after shared collection identity fixes. Try **P4** if profiling still points
+to description/dispatch overhead, and **P5** if real component use exposes enough
+manual dependency/state bookkeeping to justify its larger contract.
+
+A geometry-only Dragology backend is a separate later experiment. It should consume
+the same model/description semantics and reuse established layout rules; creating a
+second layout engine now would confound the live-UI comparison. First make invalid
+capture results explicit in every variant, including P0.
+
+For each experiment, add a dated result entry containing:
+
+- The commit, exact variant, supported syntax, and implemented scope.
+- Acceptance results and known gaps, including ownership and preview validity.
+- Raw benchmark output/configuration, body/allocation counts, and build costs.
+- Application/API examples, required runtime machinery, and diagnostics encountered.
+- A decision to retain, combine, revise, or stop the experiment, with the evidence
+  and the next unanswered question. An unimplemented hypothesis stays labeled so.
+
+Keep each implementation, behavior fix, measurement, and resulting assessment in
+logical commits. Shared fixes must be identified and measured consistently across
+variants; preserve the original P0 measurements rather than silently replacing them.
+
 ## Next logical steps
 
 - [ ] **Specify semantic edges first:** conditional helper roots, key reuse,
