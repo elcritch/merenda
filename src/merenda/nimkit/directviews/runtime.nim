@@ -1,57 +1,91 @@
 ## Retained real-view composition; mutation and flushing belong to the GUI thread.
 import std/[sets, tables]
-import sigils/[core, selectors]
+import sigils/[core, reactive, selectors]
 import ../view/views
 import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
 import ../responder/actiontargets
-import ../foundation/selectors
+import ../foundation/[selectors, types]
+import ../app/collectionsigils
 import ../declarative/actions
 import ./bindings
 
 type
   DirectTarget = ref object of ActionAdapter
     active: bool
+    lifetime: BackRef[DirectNode]
     callback, changed: ViewAction
 
-  DirectNode* = ref object
-    view*: View
+  DirectNode* = ref object of Responder
+    ## Owned composition context. Pass it to ordinary component builder procs.
+    ownedView: View
+    hostRef: BackRef[StackView]
+    parent: BackRef[DirectNode]
     bindings*: BindingScope
+    bodyBindings: BindingScope
     sizing*: StackViewSizingPolicy
     children: seq[DirectNode]
     previous: Table[string, DirectNode]
     seen: HashSet[string]
     identity, widgetType: string
     authoredText: string
-    hasAuthoredText: bool
+    hasAuthoredText, detached, applying, closed, component: bool
     target: DirectTarget
 
+  DirectView* = ref object of StackView
+    root: DirectNode
+
   DirectViewSession* = ref object
+    ## Low-level compatibility API for an externally supplied host.
     host*: StackView
     detached*: bool
     root: DirectNode
-    applying, closed: bool
+
+  BodyValue[R, T] = object
+    owner: BackRef[R]
+    value: T
+    draw: proc(context: DirectNode, owner: R, value: T) {.nimcall.}
 
 let DirectAction = actionSelector("directViewAction")
+
+proc view*(node: DirectNode): View =
+  if node.component:
+    if node.children.len == 1:
+      result = node.children[0].view
+  elif not node.ownedView.isNil:
+    result = node.ownedView
+  else:
+    result = node.hostRef{}
 
 proc invokeAction(self: DynamicAgent, invocation: var Invocation) =
   let target = DirectTarget(self)
   let callback = target.callback
-  if target.active:
+  if target.active and not target.lifetime.isNil:
     callback.dispatchViewAction(invocation.argsAs(ActionArgs).sender)
   invocation.setResult(())
 
 proc fieldChanged(target: DirectTarget, sender: DynamicAgent) {.slot.} =
   let callback = target.changed
-  if target.active:
+  if target.active and not target.lifetime.isNil:
     callback.dispatchViewAction(sender)
+
+proc newRoot(host: StackView, detached: bool): DirectNode =
+  result = DirectNode(bindings: newBindingScope(preview = detached), detached: detached)
+  result.hostRef.target = host
+
+proc newDirectView*(frame = AutoRect, detached = false): DirectView =
+  ## The view owns all composition and binding state. No session teardown needed.
+  result = DirectView()
+  initStackViewFields(result, laVertical, frame)
+  result.spacing = 0
+  result.distribution = svdNatural
+  result.root = newRoot(result, detached)
 
 proc newDirectViewSession*(host: StackView, detached = false): DirectViewSession =
   if host.isNil:
     raise newException(ValueError, "direct view host cannot be nil")
-  result = DirectViewSession(host: host, detached: detached)
-  result.root = DirectNode(view: host, bindings: newBindingScope(preview = detached))
+  DirectViewSession(host: host, detached: detached, root: newRoot(host, detached))
 
 proc retire(node: DirectNode) =
   if node.isNil:
@@ -63,21 +97,32 @@ proc retire(node: DirectNode) =
     if node.view of TextField:
       TextField(node.view).disconnect(textDidChange, node.target, fieldChanged)
   node.bindings.dispose()
+  node.bodyBindings.dispose()
   for child in node.children:
     child.retire()
-  node.view.removeFromSuperview()
+  if not node.view.isNil:
+    node.view.removeFromSuperview()
   node.children.setLen(0)
+  node.closed = true
+
+proc clearNode(node: DirectNode) =
+  if node.applying:
+    raise newException(ValueError, "cannot clear during a direct view update")
+  for child in node.children:
+    child.retire()
+  node.children.setLen(0)
+  node.bindings.dispose()
+  node.bodyBindings.dispose()
+  node.closed = true
 
 proc close*(session: DirectViewSession) =
-  if session.isNil or session.closed:
-    return
-  if session.applying:
-    raise newException(ValueError, "cannot close during a direct view update")
-  for child in session.root.children:
-    child.retire()
-  session.root.children.setLen(0)
-  session.root.bindings.dispose()
-  session.closed = true
+  if not session.isNil and not session.root.closed:
+    session.root.clearNode()
+
+proc clear*(view: DirectView) =
+  ## Explicitly retire content while keeping the host available for a new body.
+  view.root.clearNode()
+  view.root = newRoot(view, view.root.detached)
 
 proc beginChildren*(node: DirectNode) =
   node.bindings.beginBindings()
@@ -91,21 +136,25 @@ proc beginChildren*(node: DirectNode) =
     node.previous[child.identity] = child
   node.children = @[]
 
-proc beginUpdate*(session: DirectViewSession): DirectNode =
-  if session.closed or session.applying:
-    raise newException(ValueError, "closed or recursively updating direct view session")
-  session.applying = true
-  result = session.root
-  result.beginChildren()
+proc beginUpdate*(node: DirectNode): DirectNode =
+  if node.closed or node.applying:
+    raise newException(ValueError, "closed or recursively updating direct view context")
+  node.applying = true
+  node.beginChildren()
+  node
 
-proc endChildren*(node: DirectNode) =
-  node.bindings.endBindings()
-  if not node.target.isNil:
-    node.target.active = true
-  for id, child in node.previous:
-    if id notin node.seen:
-      child.retire()
-  node.previous.clear()
+proc beginUpdate*(session: DirectViewSession): DirectNode =
+  session.root.beginUpdate()
+
+proc beginUpdate*(view: DirectView): DirectNode =
+  view.root.beginUpdate()
+
+proc arrangeChildren(node: DirectNode) =
+  if node.component:
+    let parent = node.parent{}
+    if not parent.isNil and not parent.applying:
+      parent.arrangeChildren()
+    return
   if node.children.len > 0 and not (node.view of StackView):
     raise newException(ValueError, "direct view children require a StackView")
   if node.view of StackView:
@@ -117,21 +166,38 @@ proc endChildren*(node: DirectNode) =
       elif stack.arrangedSubviewSizingPolicy(child.view) != child.sizing:
         stack.setArrangedSubviewSizingPolicy(child.view, child.sizing)
 
-proc endUpdate*(session: DirectViewSession) =
+proc endChildren*(node: DirectNode) =
+  node.bindings.endBindings()
+  if not node.target.isNil:
+    node.target.active = true
+  for id, child in node.previous:
+    if id notin node.seen:
+      child.retire()
+  node.previous.clear()
+  if node.component:
+    if node.children.len != 1:
+      raise newException(ValueError, "a direct component requires exactly one root")
+    node.sizing = node.children[0].sizing
+  node.arrangeChildren()
+
+proc endUpdate*(node: DirectNode) =
   try:
-    session.root.endChildren()
+    node.endChildren()
   finally:
-    session.applying = false
+    node.applying = false
+
+proc endUpdate*(session: DirectViewSession) =
+  session.root.endUpdate()
+
+proc endUpdate*(view: DirectView) =
+  view.root.endUpdate()
 
 proc abortUpdate*(session: DirectViewSession) =
-  ## Complete the partially streamed update to leave the session usable.
+  ## Complete a partially streamed update; this is not a rollback.
   session.endUpdate()
 
 proc child*[T: View](
-    session: DirectViewSession,
-    parent: DirectNode,
-    id, widgetType: string,
-    factory: proc(): T {.closure.},
+    parent: DirectNode, id, widgetType: string, factory: proc(): T {.closure.}
 ): DirectNode =
   if id in parent.seen:
     raise newException(ValueError, "duplicate direct view sibling identity: " & id)
@@ -142,22 +208,32 @@ proc child*[T: View](
     result = nil
   if result.isNil:
     result = DirectNode(
-      view: factory(),
+      ownedView: factory(),
       identity: id,
       widgetType: widgetType,
-      bindings: newBindingScope(preview = session.detached),
+      bindings: newBindingScope(preview = parent.detached),
+      detached: parent.detached,
     )
+    result.parent.target = parent
   parent.children.add result
   result.sizing = svspAutomatic
-  result.beginChildren()
 
-proc setAction*(
-    session: DirectViewSession, node: DirectNode, button: Button, action: ViewAction
-) =
-  if session.detached:
+proc componentChild*(parent: DirectNode, id, widgetType: string): DirectNode =
+  ## A metadata-only identity boundary; components add no wrapper widgets.
+  result = parent.child(
+    id,
+    widgetType,
+    proc(): View =
+      nil,
+  )
+  result.component = true
+
+proc setAction*(node: DirectNode, button: Button, action: ViewAction) =
+  if node.detached:
     return
   if node.target.isNil:
     node.target = DirectTarget()
+    node.target.lifetime.target = node
     initResponder(node.target)
     discard node.target.replaceMethod(DirectAction, DynamicMethod(invokeAction))
     button.target = ActionAdapter(node.target)
@@ -177,39 +253,73 @@ proc patchText*(node: DirectNode, field: TextField, value: string) =
 
 proc disposeBindings(node: DirectNode) =
   node.bindings.dispose()
+  node.bodyBindings.dispose()
   for child in node.children:
     child.disposeBindings()
 
-proc takeDetachedRoot*(session: DirectViewSession): View =
-  ## Transfer the sole fresh preview root without installing actions or observers.
-  if not session.detached or session.closed or session.applying or
-      session.root.children.len != 1:
+proc takeRoot(node: DirectNode): View =
+  if not node.detached or node.closed or node.applying or node.children.len != 1:
     raise newException(ValueError, "expected one completed detached root")
-  let node = session.root.children[0]
-  result = node.view
+  let child = node.children[0]
+  result = child.view
   result.removeFromSuperview()
-  session.root.children.setLen(0)
-  node.disposeBindings()
-  session.root.bindings.dispose()
-  session.closed = true
+  node.children.setLen(0)
+  child.disposeBindings()
+  node.bindings.dispose()
+  node.bodyBindings.dispose()
+  node.closed = true
 
-proc setChange*(
-    session: DirectViewSession, node: DirectNode, field: TextField, action: ViewAction
-) =
-  if session.detached:
+proc takeDetachedRoot*(session: DirectViewSession): View =
+  session.root.takeRoot()
+
+proc takeDetachedRoot*(view: DirectView): View =
+  view.root.takeRoot()
+
+proc setChange*(node: DirectNode, field: TextField, action: ViewAction) =
+  if node.detached:
     return
   if node.target.isNil:
     node.target = DirectTarget()
+    node.target.lifetime.target = node
     initResponder(node.target)
     field.connect(textDidChange, node.target, fieldChanged)
   node.target.changed = action
 
-proc flushNode(node: DirectNode) =
-  node.bindings.flushBindings()
-  for child in node.children:
-    child.flushNode()
+proc flushBindings*(node: DirectNode) =
+  if not node.isNil and not node.closed:
+    node.bodyBindings.flushBindings()
+    node.bindings.flushBindings()
+    for child in node.children:
+      child.flushBindings()
 
 proc flushBindings*(session: DirectViewSession) =
-  ## Flush pending value updates without replaying structural composition.
-  if not session.isNil and not session.closed:
-    session.root.flushNode()
+  session.root.flushBindings()
+
+proc flushBindings*(view: DirectView) =
+  view.root.flushBindings()
+
+proc bindBody*[S; R: Responder, T](
+    node: DirectNode,
+    input: S,
+    owner: R,
+    draw: proc(context: DirectNode, owner: R, value: T) {.nimcall.},
+) =
+  ## A component-owned structural binding. The body may update its own child
+  ## bindings without removing this subscription. Receiver and context are weak.
+  if node.bodyBindings.isNil:
+    node.bodyBindings = newBindingScope(preview = node.detached)
+  type Input = tuple[source: S, draw: typeof(draw)]
+  proc read(owner: R, input: Input): BodyValue[R, T] =
+    result.owner.target = owner
+    result.draw = input.draw
+    unBindSigilEvents:
+      result.value = input.source{}
+
+  proc apply(node: DirectNode, value: BodyValue[R, T]) =
+    let owner = value.owner{}
+    if not owner.isNil:
+      value.draw(node, owner, value.value)
+
+  bindSigilValue(
+    node.bodyBindings, "body", input, owner, (input, draw), read, node, apply
+  )

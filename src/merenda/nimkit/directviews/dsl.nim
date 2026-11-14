@@ -15,7 +15,25 @@ macro viewBody*(session, body: untyped): untyped =
   proc statements(body, parent, key: NimNode): NimNode =
     result = newStmtList()
     for item in body:
-      if item.kind in {nnkCall, nnkCommand} and item.len >= 2 and
+      if item.kind in {nnkCall, nnkCommand} and item[0].eqIdent("component"):
+        if item.len < 2:
+          error("component requires a builder proc and its arguments", item)
+        inc slot
+        let id =
+          if key.kind == nnkEmpty:
+            newLit("slot:" & $slot)
+          else:
+            key
+        let node = genSym(nskLet, "component")
+        let kind = newLit("component:" & item[1].repr)
+        let call = newCall(item[1], node)
+        for i in 2 ..< item.len:
+          call.add item[i]
+        result.add quote do:
+          block:
+            let `node` = componentChild(`parent`, `id`, `kind`)
+            `call`
+      elif item.kind in {nnkCall, nnkCommand} and item.len >= 2 and
           item[0].kind in {nnkIdent, nnkSym} and item[^1].kind == nnkStmtList and
           (item[0].strVal[0].isUpperAscii or item[0].eqIdent("keyed")):
         let name = item[0].strVal
@@ -58,7 +76,6 @@ macro viewBody*(session, body: untyped): untyped =
         result.add quote do:
           block:
             let `node` = child(
-              `session`,
               `parent`,
               `id`,
               `widgetType`,
@@ -67,10 +84,11 @@ macro viewBody*(session, body: untyped): untyped =
             )
             let this {.inject.} = typeof(`factory`)(`node`.view)
             let bindingScope {.inject.} = `node`.bindings
+            discard beginUpdate(`node`)
             try:
               `nested`
             finally:
-              endChildren(`node`)
+              endUpdate(`node`)
       elif item.kind == nnkAsgn and item[0].kind == nnkDotExpr and
           item[0][0].eqIdent("this") and item[0][1].eqIdent("stringValue"):
         result.add newCall(bindSym"patchText", parent, ident"this", item[1])
@@ -98,7 +116,7 @@ macro viewBody*(session, body: untyped): untyped =
             bindSym"setAction"
           else:
             bindSym"setChange"
-        result.add newCall(setter, session, parent, ident"this", action)
+        result.add newCall(setter, parent, ident"this", action)
       else:
         result.add item.copyNimTree()
 

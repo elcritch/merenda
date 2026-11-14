@@ -1,5 +1,7 @@
 import std/unittest
 import sigils/core
+import sigils/reactive
+import merenda/nimkit/foundation/mainthreadwork
 import merenda/nimkit
 import merenda/nimkit/directviews/dsl
 import merenda/nimkit/containers/stackviews
@@ -29,7 +31,72 @@ proc newCustomDirectView(): CustomDirectView =
   result = CustomDirectView()
   initViewFields(result)
 
+proc counterComponent(context: DirectNode, owner: DirectController, value: int) =
+  context.viewBody:
+    Button:
+      this.identifier = "component-button"
+      this.title = $value
+      onAction(owner, value) do(
+        receiver: DirectController, count: int, sender: DynamicAgent
+      ):
+        receiver.calls += count
+
+proc observedCounter(context: DirectNode, owner: DirectController, value: Sigil[int]) =
+  context.bindBody(value, owner, counterComponent)
+
 suite "direct view composition":
+  test "owned components reuse views and retire bindings without session bookkeeping":
+    let owner = DirectController()
+    let count = newSigil(1)
+    var host = newDirectView()
+    var show = true
+    proc render() =
+      host.viewBody:
+        if show:
+          component(observedCounter, owner, count)
+
+    render()
+    let button = Button(host.viewWithIdentifier("component-button"))
+    count <- 2
+    discard drainMainThreadWork()
+    check host.viewWithIdentifier("component-button") == button
+    check button.title == "2"
+    render()
+    check count.subcriptions.len == 1
+    count <- 3
+    show = false
+    render()
+    discard drainMainThreadWork()
+    check count.subcriptions.len == 0
+    check button.title == "2"
+    discard button.send(performClick(), ActionArgs(sender: button))
+    check owner.calls == 0
+    show = true
+    render()
+    let retained = Button(host.viewWithIdentifier("component-button"))
+    var weakHost: BackRef[DirectView]
+    weakHost.target = host
+    count <- 4
+    host = nil
+    check weakHost.isNil
+    check count.subcriptions.len == 0
+    discard drainMainThreadWork()
+    discard retained.send(performClick(), ActionArgs(sender: retained))
+    check owner.calls == 0
+    check retained.title == "3"
+
+  test "the same reusable component has independent sibling identities":
+    let owner = DirectController()
+    let host = newDirectView()
+    host.viewBody:
+      component(counterComponent, owner, 1)
+      component(counterComponent, owner, 2)
+    let left = Button(host.arrangedSubviews[0])
+    let right = Button(host.arrangedSubviews[1])
+    check left != right
+    discard left.send(performClick(), ActionArgs(sender: left))
+    discard right.send(performClick(), ActionArgs(sender: right))
+    check owner.calls == 3
   test "keyed rows move in place and retain provisional text":
     let host = newStackView()
     let session = newDirectViewSession(host)
