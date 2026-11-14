@@ -11,7 +11,7 @@ import ./readerpresentation
 import ./themetargets
 import ./scrolling
 
-import ./[github, searchbar, viewerbuttons, viewersearch, vscodegrammars]
+import ./[github, hintsmode, searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 export github
 
@@ -422,6 +422,29 @@ protocol GitHubReaderPresentation of KosmoReaderPresentationProtocol:
   method applyReaderStyle(panel: KosmoGitHubPanel, style: nimkit.MarkdownStyle) =
     panel.markdownStyle = style
 
+proc githubHintWorkingDirectory(panel: KosmoGitHubPanel): string =
+  ## Resolve hint paths against the repository the reader displays, like the
+  ## Git diff panel; readers without a repository fall back to the process
+  ## working directory.
+  if panel.rootPath.len > 0:
+    panel.rootPath
+  else:
+    getCurrentDir()
+
+protocol KosmoGitHubHintSurface of KosmoHintSurfaceProtocol:
+  method showKosmoHintMode(panel: KosmoGitHubPanel, args: KosmoHintModeArgs): bool =
+    ## Present hint markers over the reader's rendered Markdown and run the
+    ## request's action on the selected snippet. Terminal insertion is
+    ## declined; only the focused terminal attaches the insert hook.
+    if panel.isNil or panel.closed or not args.kosmoHintActionSupported():
+      return false
+    let textView = panel.markdownView.textView()
+    presentKosmoHints(
+      textView,
+      textView.collectTextViewHints(args.kind, panel.githubHintWorkingDirectory()),
+    ) do(hint: KosmoHint):
+      discard runKosmoHintAction(hint, args.action, args.activation)
+
 proc newKosmoGitHubPanel(
     snapshot: GitHubSnapshot,
     executable: string,
@@ -449,6 +472,7 @@ proc newKosmoGitHubPanel(
   result.markdownView.scrollView().controlScrollMultiplier =
     KosmoControlScrollMultiplier
   discard result.withProtocol(GitHubReaderPresentation)
+  discard result.withProtocol(KosmoGitHubHintSurface)
   result.markdownView.matterGrammarSources =
     installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true

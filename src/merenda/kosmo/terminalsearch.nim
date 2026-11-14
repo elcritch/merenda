@@ -7,7 +7,7 @@ import sigils/core
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
 import ../nimkit/text/searchmatching
-import ./terminalinput
+import ./[hintsmode, terminalinput]
 import ./scrolling
 
 export terminalinput
@@ -260,6 +260,29 @@ protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(view: KosmoTerminalView) =
     view.resizeToFit()
 
+protocol KosmoTerminalHintSurface of KosmoHintSurfaceProtocol:
+  method showKosmoHintMode(view: KosmoTerminalView, args: KosmoHintModeArgs): bool =
+    ## Present hint markers over the terminal's visible screen and run the
+    ## request's action on the selected snippet. Insertion types the text
+    ## into this terminal, so the surface attaches its own insert hook; the
+    ## hook holds the view weakly because the overlay is the view's subview
+    ## for the session's lifetime.
+    if view.isNil or view.session().isNil:
+      return false
+    let
+      weakView = view.unsafeWeakRef()
+      info = view.session().screenInfo()
+    var request = args
+    request.activation.insertText = proc(text: string): bool =
+      if not weakView.isNil:
+        weakView[].pasteText(text)
+      else:
+        false
+    presentKosmoHints(
+      view, view.collectMonoTextHints(request.kind, info.currentDirectory)
+    ) do(hint: KosmoHint):
+      discard runKosmoHintAction(hint, request.action, request.activation)
+
 proc newKosmoTerminalView*(
     session: nimkit.TerminalViewSession = nil,
     frame: nimkit.Rect = nimkit.AutoRect,
@@ -293,6 +316,7 @@ proc newKosmoTerminalView*(
   )
   discard result.withProtocol(KosmoTerminalKeyEquivalents)
   discard result.withProtocol(KosmoTerminalViewLayout)
+  discard result.withProtocol(KosmoTerminalHintSurface)
 
   let terminal = result.unsafeWeakRef()
   result.search = nimkit.newTextSearchController(

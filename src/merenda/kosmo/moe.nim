@@ -716,7 +716,11 @@ proc configureNimdexService(editor: Editor, command: string) =
     config.args = args[1 .. ^1]
   service.setConfig("nim", config)
 
-proc setHostMessage(editor: KosmoEditor, message: string, warning = false) =
+proc setHostMessage*(editor: KosmoEditor, message: string, warning = false) =
+  ## Show `message` in the editor's status bar, taking precedence over Moe's
+  ## own status until the deadline. Embedders report user-facing feedback —
+  ## search outcomes, declined requests — through this channel so ordinary
+  ## refreshes keep displaying it.
   if editor.isNil or message.len == 0:
     return
   editor.hostMessage = strutils.splitWhitespace(message).join(" ")
@@ -1455,6 +1459,27 @@ proc fitCursorToVisibleRows*(editor: KosmoEditor, visibleRows: int): bool =
   )
   result =
     viewport.topLine != previousLine or viewport.topWrapOffset != previousWrapOffset
+
+proc gridTextArea*(editor: KosmoEditor): tuple[firstRow, lastRow, firstColumn: int] =
+  ## Return the rendered grid rows (half-open) and first text column holding
+  ## buffer text, skipping Moe's tab line, status area, and line-number
+  ## gutters. Hint mode restricts its grid scan to this area.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let
+    engine = editor.editor
+    window = engine.activeWindow
+  if window.isNil:
+    return
+  let
+    viewport = window.viewport
+    tabOffset = if engine.showTabLine: 1 else: 0
+  (
+    firstRow: viewport.y + tabOffset,
+    lastRow:
+      viewport.y + max(viewport.height - engine.calculateReservedLines() - tabOffset, 0),
+    firstColumn: viewport.x + engine.gutterWidth(window),
+  )
 
 proc bufferCursor*(editor: KosmoEditor): KosmoBufferCursor =
   ## Return the logical cursor position in the active text buffer.

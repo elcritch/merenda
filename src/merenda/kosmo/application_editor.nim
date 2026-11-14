@@ -66,6 +66,10 @@ proc syncKeyModeChoices(controller: KosmoDockController)
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusToolToolbar(controller: KosmoDockController): bool
+proc showHintMode(
+  controller: KosmoDockController, kind: KosmoHintKind, action: KosmoHintAction
+): bool
+
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc focusFromSidebar(controller: KosmoDockController): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
@@ -3010,6 +3014,28 @@ protocol KosmoEditorKeyViewParticipation of nimkit.ViewProtocol:
   method canBecomeKeyView(view: KosmoEditorView): bool =
     false
 
+protocol KosmoEditorHintSurface of KosmoHintSurfaceProtocol:
+  method showKosmoHintMode(view: KosmoEditorView, args: KosmoHintModeArgs): bool =
+    ## Present hint markers over the editor's visible text area. The scan skips
+    ## Moe's tab line, status area, and line-number gutters, and only reads the
+    ## rendered grid, so register, search, hover, and completion state stays
+    ## untouched. Terminal insertion is declined; only the focused terminal
+    ## attaches the insert hook.
+    if view.isNil or not args.kosmoHintActionSupported():
+      return false
+    let area = view.editor.gridTextArea()
+    presentKosmoHints(
+      view,
+      view.collectMonoTextHints(
+        args.kind,
+        view.editor.workingDirectory(),
+        area.firstRow,
+        area.lastRow,
+        area.firstColumn,
+      ),
+    ) do(hint: KosmoHint):
+      discard runKosmoHintAction(hint, args.action, args.activation)
+
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result = KosmoEditorView(
     editor: editor,
@@ -3035,6 +3061,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
   discard result.withProtocol(KosmoEditorKeyViewParticipation)
+  discard result.withProtocol(KosmoEditorHintSurface)
   discard result.withProtocol(KosmoEditorHoverEvents)
   discard result.withProtocol(KosmoEditorHoverToolTip)
   discard result.withProtocol(KosmoEditorHoverLifecycle)
@@ -4243,6 +4270,16 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       # Route through the pane as well as the content view so pane-hosted tools
       # in detached windows can toggle focus to their toolbars.
       return controller.focusToolToolbar()
+    of KosmoHintOpenUrlAction:
+      return controller.showHintMode(khkLink, khaOpen)
+    of KosmoHintOpenPathAction:
+      return controller.showHintMode(khkPath, khaOpen)
+    of KosmoHintCopyWordAction:
+      return controller.showHintMode(khkWord, khaCopy)
+    of KosmoHintCopyHashAction:
+      return controller.showHintMode(khkHash, khaCopy)
+    of KosmoHintInsertAction:
+      return controller.showHintMode(khkPath, khaInsert)
     of KosmoCopyAction:
       group.editorView.editorCopy()
     of KosmoCutAction:
@@ -4388,11 +4425,33 @@ protocol MarkdownReaderPresentation of KosmoReaderPresentationProtocol:
   method applyReaderStyle(view: KosmoMarkdownView, style: nimkit.MarkdownStyle) =
     view.markdownStyle = style
 
+proc markdownHintWorkingDirectory(view: KosmoMarkdownView): string =
+  if not view.editorView.isNil:
+    view.editorView[].editor.workingDirectory()
+  else:
+    getCurrentDir()
+
+protocol KosmoMarkdownHintSurface of KosmoHintSurfaceProtocol:
+  method showKosmoHintMode(view: KosmoMarkdownView, args: KosmoHintModeArgs): bool =
+    ## Present hint markers over rendered Markdown text. Embedded code blocks
+    ## are separate text views and stay unhinted for now. Terminal insertion is
+    ## declined; only the focused terminal attaches the insert hook.
+    if view.isNil or not args.kosmoHintActionSupported():
+      return false
+    let
+      textView = view.textView()
+      workingDirectory = view.markdownHintWorkingDirectory()
+    presentKosmoHints(
+      textView, textView.collectTextViewHints(args.kind, workingDirectory)
+    ) do(hint: KosmoHint):
+      discard runKosmoHintAction(hint, args.action, args.activation)
+
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
   result.scrollView().controlScrollMultiplier = KosmoControlScrollMultiplier
   discard result.withProtocol(MarkdownReaderPresentation)
+  discard result.withProtocol(KosmoMarkdownHintSurface)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.previewGrammarRevision = editorView.editor.viewerGrammarRevision()
   result.editorView = editorView.unsafeWeakRef()
