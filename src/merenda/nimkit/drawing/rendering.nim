@@ -302,7 +302,10 @@ proc collectRenderFrames(
     parentViewId = 0.RenderViewId,
     parentLevel = DefaultDrawLevel,
     parentOrigin = ZeroPoint,
+    excluded: seq[View] = @[],
 ) =
+  if view in excluded:
+    return
   let visibleRect = view.visibleRect()
   if visibleRect.isEmpty:
     view.finishDisplaySubtree()
@@ -345,7 +348,7 @@ proc collectRenderFrames(
     absoluteFrame.origin.addPoints(cacheKey.bounds.boundsTranslation())
   for child in view.subviews:
     scene.collectRenderFrames(
-      child, appearance, frames, revisions, viewId, level, contentOrigin
+      child, appearance, frames, revisions, viewId, level, contentOrigin, excluded
     )
 
 proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
@@ -412,3 +415,17 @@ proc renderResources*(root: View): RenderResourceManifest =
   if root.isNil:
     return nil
   root.xCachedRenderResources
+
+proc captureRenderScene*(
+    root: View, appearance: Appearance, excluded: seq[View] = @[]
+): RenderScene =
+  ## Captures an independent scene, optionally omitting subtrees without changing
+  ## their layout or visibility. Use detached trees for speculative rendering.
+  root.layoutSubtreeIfNeeded()
+  result = newRenderScene()
+  var frames: seq[RenderViewFrame]
+  var revisions: seq[DisplayRevisionSnapshot]
+  result.collectRenderFrames(
+    root, unsafeAddr appearance, frames, revisions, excluded = excluded
+  )
+  discard result.reconcile(frames, DefaultDrawLevel)

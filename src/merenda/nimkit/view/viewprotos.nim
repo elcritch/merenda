@@ -27,6 +27,7 @@ proc isContainerLayoutFrame(view: View): bool =
 protocol ViewProtocol {.setterStyle: nim.} from View:
   property tag -> int
   property identifier -> string
+  property properties -> set[ViewProperty]
   property frame -> Rect
   property bounds -> Rect
   property needsDisplay -> bool
@@ -55,6 +56,13 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
 
   method `identifier=`(self: View, identifier: string) =
     self.xIdentifier = identifier
+
+  method properties(self: View): set[ViewProperty] =
+    ## Optional view behaviors. Set via `properties=` to retain the protocol hook.
+    self.xProps
+
+  method `properties=`(self: View, properties: set[ViewProperty]) =
+    self.xProps = properties
 
   method frame(self: View): Rect =
     self.xFrame
@@ -427,6 +435,21 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
         return bestHit
 
     if inside: self else: nil
+
+proc `[]`*(view: View, property: ViewProperty): bool =
+  ## Read an individual view property through the protocol getter.
+  property in view.properties
+
+proc `[]=`*(view: View, property: ViewProperty, enabled: bool) =
+  ## Change one property through the protocol setter, preserving the others.
+  if view[property] == enabled:
+    return
+  let properties = view.properties
+  view.properties =
+    if enabled:
+      properties + {property}
+    else:
+      properties - {property}
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect) =
   let clipped = rect.intersection(view.visibleRect())

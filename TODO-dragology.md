@@ -1,7 +1,12 @@
 # TODO: Declarative dragging for NimKit
 
-Source review: 2026-11-06. This is an implementation plan; no Dragology support
-has been implemented or benchmarked as part of this review.
+Source review: 2026-11-06. Implementation update: 2026-11-13.
+
+The discrete native port now lives in `nimkit/interaction/`, with a two-column
+example and shared NimKit tests. See [the usage guide](docs/declarative-dragging.md)
+for implemented behavior and explicit limitations. The checklist below remains
+the broader acceptance roadmap: performance/memory measurements, continuous
+composition, and large-collection work are still outstanding.
 
 Implement an optional NimKit interaction layer inspired by declarative dragging
 (D2). Applications describe reachable model states, and the engine derives drag
@@ -103,8 +108,8 @@ commit(expectedRevision, model)  -> accepted/rejected
   specifications, and evaluation results. Use a controller/host GUI object for
   session identity; keep ordinary session state in plain fields.
 - [ ] Require semantic IDs unique within a drag host and stable across reorder
-  and reparent operations. A scoped `DragElementId` may map to existing view
-  identifiers, with duplicate detection.
+  and reparent operations. A scoped `DragElementId` may wrap identifiers of
+  views marked with `vpDraggable`, with duplicate detection.
 - [ ] Define model snapshot ownership explicitly. An `object` containing mutable
   references is not automatically isolated. Applications must supply independent
   state or an immutable representation; speculation must not mutate shared data.

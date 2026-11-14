@@ -69,6 +69,7 @@ type
 ## returning ``false`` means the event was not handled and should continue to the
 ## next responder in the chain.
 protocol ResponderEventProtocol:
+  method mouseCancelled*() {.optional.}
   method mouseDown*(event: MouseEvent): bool {.optional.}
   method mouseUp*(event: MouseEvent): bool {.optional.}
   method rightMouseDown*(event: MouseEvent): bool {.optional.}
