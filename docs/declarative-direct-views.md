@@ -62,20 +62,23 @@ of sessions or custom destruction hook is required. `DirectViewSession` remains
 as a lower-level compatibility API for externally owned StackView hosts.
 
 `this` is the actual typed widget. Capitalized names map to `new<Type>()` factories;
-VStack/HStack choose orientation. Positional constructor arguments run **only on
-creation**. Named arguments are property assignments, applied on each structural
-evaluation before the optional body:
+VStack/HStack choose orientation. A Button’s first positional argument is its
+title; other positional constructor arguments run **only on creation**. Named
+arguments are property assignments, applied on each structural evaluation before
+the optional body:
 
 ```nim
 view.viewBody:
-  Button(title = "Remove", identifier = "remove"):
+  Button("Remove", identifier = "remove"):
     this.acceptsFirstResponder = false
   Label(stringValue = "Ready")
 ```
 
-`Button(title = value)` is shorthand for a `Button:` block containing
+`Button(value)` and `Button(title = value)` are shorthand for a `Button:` block containing
 `this.title = value`. It calls the existing typed setter, and the body can override
-the value afterward. `TextField(stringValue = value)` also uses the same text patch
+the value afterward. Supplying both forms for the same Button is an error;
+positional arguments must precede named properties.
+`TextField(stringValue = value)` also uses the same text patch
 as `this.stringValue = value`, preserving drafts when the model text is unchanged.
 Use actual widget property names; constructor-only parameters can still be supplied
 positionally.
@@ -91,8 +94,9 @@ Property ownership is explicit:
   TextField edits when an unchanged model value is repeated.
 - A binding owns updates to the properties its setter writes. Omitting a binding
   disconnects it but leaves its last value; assign a replacement value explicitly.
-- Positional constructor arguments are not reactive properties. Named properties
-  and body setters rerun with the body; a binding updates independently of it.
+- The positional Button title, named properties, and body setters rerun with the
+  body; other positional constructor arguments run only on creation. A binding
+  updates independently of the body.
 
 The shared binding module is `nimkit/viewbindings`. `bindValue` accepts controller
 signals, Sigils, and collection projections. It coalesces changes on the owning

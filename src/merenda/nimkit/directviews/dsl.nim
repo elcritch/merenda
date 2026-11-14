@@ -79,9 +79,33 @@ macro viewBody*(session, body: untyped): untyped =
           else:
             item.len
         let configuration = newStmtList()
+        if name.normalize == "button":
+          var hasNamed = false
+          for i in 1 ..< argsEnd:
+            if item[i].kind == nnkExprEqExpr:
+              hasNamed = true
+            elif hasNamed:
+              error(
+                "Button positional arguments must precede named properties", item[i]
+              )
+        let buttonTitle =
+          name.normalize == "button" and argsEnd > 1 and item[1].kind != nnkExprEqExpr
+        if buttonTitle:
+          for i in 2 ..< argsEnd:
+            if item[i].kind == nnkExprEqExpr and item[i][0].eqIdent("title"):
+              error(
+                "Button title cannot be supplied both positionally and by name", item[i]
+              )
+          # Reserve the constructor's title position for any remaining arguments.
+          factory.add newLit("")
         for i in 1 ..< argsEnd:
           let arg = item[i]
-          if arg.kind == nnkExprEqExpr:
+          if buttonTitle and i == 1:
+            let assignment =
+              newAssignment(newDotExpr(ident"this", ident"title"), arg.copyNimTree())
+            assignment.copyLineInfo(arg)
+            configuration.add assignment
+          elif arg.kind == nnkExprEqExpr:
             # Named properties use exactly the same setter/patch path as the body.
             let assignment = newAssignment(
               newDotExpr(ident"this", arg[0].copyNimTree()), arg[1].copyNimTree()

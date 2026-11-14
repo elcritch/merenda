@@ -36,7 +36,8 @@ as more decisive than the DSL spelling. The cleanup now implements:
   rebuilds its host description for membership/order changes; P7 rebuilds its row
   component. The paired tests run the same command/preview/teardown assertions.
 
-Positional constructor arguments in P7 remain creation-only. Named properties such
+Positional constructor arguments in P7 remain creation-only except for the first
+Button argument, which updates its title each evaluation. Named properties such
 as `Button(title = value)` apply through the same setter path as `this.title = value`,
 before the optional body. Both run on each body evaluation; omitted setters leave
 the existing value. Removing a binding disconnects it but does not reset arbitrary

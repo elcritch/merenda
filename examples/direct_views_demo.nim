@@ -29,11 +29,7 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
             this,
             editTitle,
           )
-      Button(
-        title = "Remove",
-        identifier = "remove-" & $task.id,
-        acceptsFirstResponder = false,
-      ):
+      Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
         onAction(owner, task.id) do(
           receiver: TaskController, id: int, sender: DynamicAgent
         ):
@@ -76,23 +72,19 @@ proc buildChrome(controller: TaskController): DirectView =
       HStack:
         this.distribution = svdNatural
         this.spacing = 8
-        Button(
-          title = "Insert at top", identifier = "insert", acceptsFirstResponder = false
-        ):
+        Button("Insert at top", identifier = "insert", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.insertTask()
-        Button(title = "Reverse", identifier = "reverse", acceptsFirstResponder = false):
+        Button("Reverse", identifier = "reverse", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.reverseTasks()
-        Button(
-          title = "Counter +1", identifier = "counter", acceptsFirstResponder = false
-        ):
+        Button("Counter +1", identifier = "counter", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.counter <- receiver.counter{} + 1
-        Button(title = "Undo", identifier = "undo", acceptsFirstResponder = false):
+        Button("Undo", identifier = "undo", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performUndo()
-        Button(title = "Redo", identifier = "redo", acceptsFirstResponder = false):
+        Button("Redo", identifier = "redo", acceptsFirstResponder = false):
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performRedo()
       Label:

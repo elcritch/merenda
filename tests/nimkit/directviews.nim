@@ -90,7 +90,72 @@ static:
         Button(title: "Remove")
   )
 
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
+      host.viewBody:
+        Button("First", title = "Second")
+  )
+
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
+      host.viewBody:
+        Button(identifier = "x", "Title")
+  )
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
+      host.viewBody:
+        Button(title = "Named", "Positional")
+  )
+
 suite "direct view composition":
+  test "positional button title updates once per evaluation and before the body":
+    let host = newDirectView()
+    let owner = DirectController()
+    var title = "First"
+    var reads = 0
+    var frames = 0
+    proc readTitle(): string =
+      inc reads
+      title
+
+    proc readFrame(): Rect =
+      inc frames
+      rect(1, 2, 100, 40)
+
+    proc render() =
+      host.viewBody:
+        Button(readTitle(), readFrame(), identifier = "positional"):
+          this.identifier = this.title
+          onAction(owner, reads) do(
+            receiver: DirectController, count: int, sender: DynamicAgent
+          ):
+            receiver.calls += count
+        Button(readTitle())
+
+    render()
+    let button = Button(host.arrangedSubviews[0])
+    let bodyless = Button(host.arrangedSubviews[1])
+    check button.title == "First"
+    check button.frame() == rect(1, 2, 100, 40)
+    check button.identifier == "First"
+    check bodyless.title == "First"
+    check reads == 2
+    check frames == 1
+    title = "Second"
+    render()
+    check host.arrangedSubviews[0] == button
+    check host.arrangedSubviews[1] == bodyless
+    check button.title == "Second"
+    check button.identifier == "Second"
+    check bodyless.title == "Second"
+    check reads == 4
+    check frames == 1
+    discard button.send(performClick(), ActionArgs(sender: button))
+    check owner.calls == 3
+
   test "named properties update retained widgets before the optional body":
     let host = newDirectView()
     var title = "First"
