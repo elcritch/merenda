@@ -54,6 +54,7 @@ import ./nimkit/controls/matrices
 import ./nimkit/controls/segmentedcontrols
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
+import ./nimkit/app/collectionsigils
 import ./nimkit/text/markdownviews
 import ./nimkit/text/matterhighlighting
 import ./nimkit/text/monotextviews
@@ -158,6 +159,7 @@ export matrices
 export segmentedcontrols
 export menus
 export modelcontrollers
+export collectionsigils
 export markdownviews
 export matterhighlighting
 export monotextviews

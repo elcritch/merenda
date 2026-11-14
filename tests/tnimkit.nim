@@ -24,6 +24,7 @@ else:
   import nimkit/canvasviews
   import nimkit/cascadingviews
   import nimkit/collectionviews
+  import nimkit/collectionsigils
   import nimkit/colorpicker
   import nimkit/comboboxes
   import nimkit/constraints

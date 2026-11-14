@@ -4,6 +4,7 @@ import sigils/[core, reactive, selectors]
 import ../responder/responders
 import ../foundation/mainthreadwork
 import ../text/textfields
+import ../app/collectionsigils
 
 type
   BindingScope* = ref object of Responder
@@ -340,6 +341,31 @@ proc bindValue*[T; V: Responder](
   proc readInput(target: V, input: Sigil[T]): T {.nimcall.} =
     unBindSigilEvents:
       result = input{}
+
+  bindSigilValue(scope, id, input, target, input, readInput, target, apply)
+
+proc bindValue*[T; V: Responder](
+    scope: BindingScope,
+    id: string,
+    input: CollectionValue[T],
+    target: V,
+    apply: proc(target: V, value: T) {.nimcall.},
+) =
+  ## Read-only collection projection, sharing the normal binding lifetime.
+  proc readInput(target: V, input: CollectionValue[T]): T {.nimcall.} =
+    input.snapshot()
+
+  bindSigilValue(scope, id, input, target, input, readInput, target, apply)
+
+proc bindValue*[K, T; V: Responder](
+    scope: BindingScope,
+    id: string,
+    input: CollectionSigil[K, T],
+    target: V,
+    apply: proc(target: V, value: seq[T]) {.nimcall.},
+) =
+  proc readInput(target: V, input: CollectionSigil[K, T]): seq[T] {.nimcall.} =
+    input.snapshot()
 
   bindSigilValue(scope, id, input, target, input, readInput, target, apply)
 
