@@ -7,13 +7,23 @@ type
   UndoOperation* = proc() {.closure.}
 
   UndoValueApplyProc*[T] = proc(value: T) {.closure.}
+  UndoMergeApplyProc*[T] = proc(value: T) {.closure, raises: [].}
   UndoCollectionIndexProc* = proc(index: int) {.closure.}
   UndoCollectionInsertProc*[T] = proc(index: int, value: T) {.closure.}
   UndoCollectionMoveProc* = proc(fromIndex, toIndex: int) {.closure.}
 
+  UndoValuePayloadBase = ref object of RootObj
+
+  UndoValuePayload[T] = ref object of UndoValuePayloadBase
+    before, after: T
+    apply: UndoMergeApplyProc[T]
+
   UndoCommand = object
     actionName: string
     operation: UndoOperation
+    valueOperation: proc(manager: UndoManager) {.closure.}
+    mergeKey: string
+    valuePayload: UndoValuePayloadBase
 
   UndoGroup = object
     actionName: string
@@ -50,6 +60,8 @@ type
     xBranchSerial: int
     xCleanBranchSerial: int
     xHasCleanState: bool
+    xCanMerge: bool
+    xHistoryLimit: Natural
 
 protocol UndoManagerEvents:
   proc stateDidChange*(manager: UndoManager, sender: UndoManager) {.signal.}
@@ -100,17 +112,36 @@ proc mergeGroup(target: var UndoGroup, source: sink UndoGroup) =
   for command in source.commands:
     target.commands.add command
 
-proc commitNormalGroup(manager: UndoManager, group: sink UndoGroup) =
+proc pruneHistory(manager: UndoManager) =
+  if manager.xHistoryLimit == 0:
+    return
+  while manager.xUndoStack.len + manager.xRedoStack.len > manager.xHistoryLimit.int:
+    if manager.xUndoStack.len > 0:
+      manager.xUndoStack.delete(0)
+    else:
+      manager.xRedoStack.delete(0)
+
+proc commitNormalGroup(manager: UndoManager, group: sink UndoGroup, canMerge = false) =
   if group.commands.len == 0:
     return
   if group.actionName.len == 0 and manager.xNextActionName.len > 0:
     group.actionName = manager.xNextActionName
-  if manager.xRedoStack.len > 0:
+  if manager.xRedoStack.len > 0 or (
+    manager.xHasCleanState and manager.xCleanIndex > manager.xChangeIndex and
+    manager.xCleanBranchSerial == manager.xBranchSerial
+  ):
+    let cleanOnRetainedPath =
+      manager.xHasCleanState and manager.xCleanBranchSerial == manager.xBranchSerial and
+      manager.xCleanIndex <= manager.xChangeIndex
     inc manager.xBranchSerial
+    if cleanOnRetainedPath:
+      manager.xCleanBranchSerial = manager.xBranchSerial
     manager.xRedoStack.setLen(0)
   manager.xNextActionName = ""
   manager.xUndoStack.add group
   inc manager.xChangeIndex
+  manager.pruneHistory()
+  manager.xCanMerge = canMerge and manager.xUndoStack.len > 0
   manager.notifyStateChanged()
 
 proc commitEndedGroup(manager: UndoManager, group: sink UndoGroup) =
@@ -165,6 +196,7 @@ proc redoActionName*(manager: UndoManager): string =
     manager.xRedoStack[^1].actionName
 
 proc beginUndoGrouping*(manager: UndoManager) =
+  manager.xCanMerge = false
   manager.xGroupStack.add UndoGroup()
 
 proc endUndoGrouping*(manager: UndoManager): bool {.discardable.} =
@@ -191,6 +223,7 @@ proc setActionName*(manager: UndoManager, actionName: string) =
     manager.xNextActionName = actionName
 
 proc disableUndoRegistration*(manager: UndoManager) =
+  manager.xCanMerge = false
   inc manager.xDisabledDepth
 
 proc enableUndoRegistration*(manager: UndoManager) =
@@ -209,6 +242,7 @@ template withUndoRegistrationDisabled*(manager: UndoManager, body: untyped): unt
 proc registerUndo*(manager: UndoManager, operation: UndoOperation, actionName = "") =
   if manager.isNil or operation.isNil or manager.xDisabledDepth > 0:
     return
+  manager.xCanMerge = false
   let command = UndoCommand(actionName: actionName, operation: operation)
   if manager.xGroupStack.len > 0:
     manager.xGroupStack[^1].addCommand(command)
@@ -220,6 +254,70 @@ proc registerUndo*(manager: UndoManager, operation: UndoOperation, actionName = 
     var group = UndoGroup(actionName: actionName)
     group.addCommand(command)
     manager.commitNormalGroup(group)
+
+proc breakUndoCoalescing*(manager: UndoManager) =
+  ## End the current coalescing gesture without changing history.
+  manager.xCanMerge = false
+
+proc historyLimit*(manager: UndoManager): Natural =
+  ## Maximum number of retained undo and redo groups; zero means unlimited.
+  manager.xHistoryLimit
+
+proc `historyLimit=`*(manager: UndoManager, limit: Natural) =
+  ## Prune the most distant groups immediately when reducing the limit.
+  manager.xCanMerge = false
+  manager.xHistoryLimit = limit
+  manager.pruneHistory()
+  manager.notifyStateChanged()
+
+proc registerMergeableValueChange*[T](
+    manager: UndoManager,
+    apply: UndoMergeApplyProc[T],
+    before, after: T,
+    mergeKey: string,
+    actionName = "",
+) =
+  ## Register a value change already applied by the caller. `apply` must apply
+  ## a value without raising or registering another inverse. A nonempty key
+  ## uniquely identifies the document, target and property for one gesture;
+  ## call `breakUndoCoalescing` when
+  ## that gesture ends. Equal adjacent values are required for continuity.
+  if manager.isNil or apply.isNil or manager.xDisabledDepth > 0 or before == after:
+    return
+  if mergeKey.len > 0 and manager.xCanMerge and manager.xGroupStack.len == 0 and
+      not manager.xIsUndoing and not manager.xIsRedoing and manager.xRedoStack.len == 0 and
+      manager.xUndoStack.len > 0:
+    let group = addr manager.xUndoStack[^1]
+    if group.commands.len == 1:
+      let command = addr group.commands[0]
+      if command.mergeKey == mergeKey and command.valuePayload of UndoValuePayload[T]:
+        let payload = UndoValuePayload[T](command.valuePayload)
+        if payload.after == before:
+          payload.after = after
+          manager.notifyStateChanged()
+          return
+  let payload = UndoValuePayload[T](before: before, after: after, apply: apply)
+  let command = UndoCommand(
+    actionName: actionName,
+    mergeKey: mergeKey,
+    valuePayload: payload,
+    valueOperation: proc(manager: UndoManager) =
+      manager.registerMergeableValueChange(
+        payload.apply, payload.after, payload.before, "", actionName
+      )
+      payload.apply(payload.before),
+  )
+  manager.xCanMerge = false
+  if manager.xGroupStack.len > 0:
+    manager.xGroupStack[^1].addCommand(command)
+  elif manager.xIsUndoing:
+    manager.xRedoReplayGroup.addCommand(command)
+  elif manager.xIsRedoing:
+    manager.xUndoReplayGroup.addCommand(command)
+  else:
+    var group = UndoGroup(actionName: actionName)
+    group.addCommand(command)
+    manager.commitNormalGroup(group, canMerge = mergeKey.len > 0)
 
 proc registerValueChange*[T](
     manager: UndoManager, apply: UndoValueApplyProc[T], oldValue: T, actionName = ""
@@ -282,6 +380,7 @@ proc registerCollectionMove*(
   )
 
 proc performUndo*(manager: UndoManager): bool {.discardable.} =
+  manager.xCanMerge = false
   if manager.xUndoStack.len == 0 or manager.xIsUndoing or manager.xIsRedoing:
     return false
   let group = manager.xUndoStack.pop()
@@ -291,7 +390,10 @@ proc performUndo*(manager: UndoManager): bool {.discardable.} =
     var index = group.commands.len - 1
     while index >= 0:
       let command = group.commands[index]
-      command.operation()
+      if command.valueOperation.isNil:
+        command.operation()
+      else:
+        command.valueOperation(manager)
       dec index
   finally:
     manager.xIsUndoing = false
@@ -303,6 +405,7 @@ proc performUndo*(manager: UndoManager): bool {.discardable.} =
   true
 
 proc performRedo*(manager: UndoManager): bool {.discardable.} =
+  manager.xCanMerge = false
   if manager.xRedoStack.len == 0 or manager.xIsUndoing or manager.xIsRedoing:
     return false
   let group = manager.xRedoStack.pop()
@@ -312,7 +415,10 @@ proc performRedo*(manager: UndoManager): bool {.discardable.} =
     var index = group.commands.len - 1
     while index >= 0:
       let command = group.commands[index]
-      command.operation()
+      if command.valueOperation.isNil:
+        command.operation()
+      else:
+        command.valueOperation(manager)
       dec index
   finally:
     manager.xIsRedoing = false
@@ -324,16 +430,19 @@ proc performRedo*(manager: UndoManager): bool {.discardable.} =
   true
 
 proc clearUndo*(manager: UndoManager) =
+  manager.xCanMerge = false
   if manager.xUndoStack.len > 0:
     manager.xUndoStack.setLen(0)
     manager.notifyStateChanged()
 
 proc clearRedo*(manager: UndoManager) =
+  manager.xCanMerge = false
   if manager.xRedoStack.len > 0:
     manager.xRedoStack.setLen(0)
     manager.notifyStateChanged()
 
 proc clearAll*(manager: UndoManager) =
+  manager.xCanMerge = false
   if manager.xUndoStack.len > 0 or manager.xRedoStack.len > 0 or
       manager.xGroupStack.len > 0:
     manager.xUndoStack.setLen(0)
@@ -342,12 +451,14 @@ proc clearAll*(manager: UndoManager) =
     manager.notifyStateChanged()
 
 proc markCleanState*(manager: UndoManager) =
+  manager.xCanMerge = false
   manager.xCleanIndex = manager.xChangeIndex
   manager.xCleanBranchSerial = manager.xBranchSerial
   manager.xHasCleanState = true
   manager.notifyStateChanged()
 
 proc clearCleanState*(manager: UndoManager) =
+  manager.xCanMerge = false
   manager.xHasCleanState = false
   manager.notifyStateChanged()
 
