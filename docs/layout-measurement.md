@@ -130,10 +130,13 @@ feedback logic.
 ## Experimental persistent solver
 
 Compile with `-d:merendaPersistentLayout` and set
-`root{vpPersistentLayout} = true` to opt a stable live root into a conservative
-solver cache. Fitting remains fresh. Every view must use autoresizing constraints,
-and the tree must have no active authored constraints or CSS layout rules.
-Unverified changes fall back to a fresh solve.
+`root{vpPersistentLayout} = true` to opt a stable live root into a retained
+solver. Fitting remains fresh. Trees with CSS layout rules are ineligible;
+autoresizing, intrinsic, container and authored constraints are supported. Each
+reuse regenerates and compares every input, replaces changed constraints in place,
+and falls back to a fresh solve when the hierarchy or constraint count changes.
+Non-required constraints can tie, so equivalence with a fresh solve is tested, not
+proven.
 The [prototype comparison](benchmarks/persistent-layout/README.md) records its
 lifecycle, budget semantics, correctness coverage, and measured limitations.
 

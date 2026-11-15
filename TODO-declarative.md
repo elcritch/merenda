@@ -243,8 +243,11 @@ prove that a large editable application scales.
   budget and local-failure behavior; address that before expanding eligibility.
 - [x] Prototype a separate [persistent solver](docs/benchmarks/persistent-layout/README.md)
   and compare it with fresh solves for a stable fixed-size tree.
-- [ ] Investigate persistent reuse for intrinsic-sized trees, memory overhead,
-  and native latency; the prototype does not yet help the demo.
+- [x] Extend persistent reuse to intrinsic, container and authored constraints;
+  the demo's edit and counter layouts roughly halve. See the
+  [persistent-layout report](docs/benchmarks/persistent-layout/README.md).
+- [ ] Measure persistent-solver memory overhead and native latency, and support
+  hierarchy reorders without a full rebuild.
 - [ ] Investigate further ancestor propagation reduction while preserving observers,
   revisions, reentrancy, and active-transaction behavior.
 - [x] Compare cached and uncached built-in controls across content, font, style,

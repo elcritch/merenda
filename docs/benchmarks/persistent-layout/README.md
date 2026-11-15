@@ -16,14 +16,24 @@ Hierarchy changes are checked on the next layout; until then, the old solver's
 allocation can remain attached to the root, but it does not retain removed views.
 
 Only normal layout is retained. Fitting uses a fresh solver and separate
-variables. This first implementation requires every view in the solve tree to
-use autoresizing constraints, with no active authored constraints or CSS layout
-rules. It verifies the hierarchy and regenerated equations on each attempted
-reuse; only constants in the root pins and geometry stays may change. All
-rectangles must be fixed by the required autoresizing equations. Any rejected
-constraint prevents a cache from being saved. A changed hierarchy, CSS, authored
-constraint, unsupported graph, changed internal equation, budget failure, or
-incremental conflict discards the retained solver and uses the fresh path.
+variables. A tree is eligible unless any view has CSS layout rules: autoresizing,
+intrinsic, container and authored constraints are all supported. Each attempted
+reuse verifies the hierarchy order and regenerates every input in the same order
+as a fresh solve. The number of constraints must match; any constraint whose
+expression, relation, strength or constant differs is removed and re-added in the
+retained solver. Any rejected constraint prevents a cache from being saved. A
+changed hierarchy, CSS, a different constraint count, budget failure, or incremental
+conflict discards the retained solver and uses the fresh path.
+
+The first version accepted only trees fully determined by required autoresizing
+equations, because non-required constraints can have several equally good
+solutions and an incrementally updated solver might choose a different one than a
+fresh solve. Weak stays toward current frames make such ties rare but do not rule
+them out. A seeded 120-step test edits text, sizes, constraint constants and
+priorities in an intrinsic StackView tree with competing authored priorities, and
+requires every frame to equal a fresh solve after each step; the demo comparison
+below matched frame fingerprints in every sample. Neither proves equivalence for
+arbitrary graphs.
 
 Updates to Kiwi happen before frames are applied. A failed incremental update
 discards the mutated tableau before a fresh solve; it is not used as a rollback
@@ -95,6 +105,26 @@ adds one constraint; an incremental insertion scope removes and adds one changed
 constraint. Profile counters distinguish persistent builds, reuses and fallbacks.
 An abandoned incremental attempt is counted as a fallback and contributes timing,
 but is not an additional `solverPasses` count; the subsequent fresh attempt is.
+
+## Intrinsic-sized trees
+
+After intrinsic, container and authored constraints became eligible, a re-run on
+the same machine and method (off, on, on, off; medians of ten samples at 100 rows,
+milliseconds) gave:
+
+| Operation | Demo live fresh / persistent | Demo + preview fresh / persistent | Fixed fresh / persistent |
+| --- | ---: | ---: | ---: |
+| Edit | 114.98 / 61.03 | 233.82 / 180.58 | 44.00 / 4.05 |
+| Counter | 113.26 / 61.15 | 116.36 / 62.66 | 44.81 / 4.23 |
+| Reorder | 115.71 / 116.44 | 235.51 / 236.82 | 78.05 / 80.83 |
+| Resize | 102.04 / 84.43 | 221.69 / 204.78 | 45.68 / 20.67 |
+
+The demo now reused its solver on every edit, counter and resize sample; reorder
+changes hierarchy order and rebuilt on every sample. Fresh demo times are lower than
+in the table above because intrinsic caching is now on by default. Live-tree frame
+fingerprints matched between configurations for every operation, with no solver
+failures. The detached preview is still built fresh. These are headless wall times on
+one machine, not native input latency.
 
 ## Reproduce
 
