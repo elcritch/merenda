@@ -84,7 +84,7 @@ proc applyProperties(view: View, previous, next: ViewSpec, initial: bool) =
   if initial or previous.identifier != next.identifier:
     view.identifier = next.identifier
   if initial or previous.draggable != next.draggable:
-    view[vpDraggable] = next.draggable
+    view{vpDraggable} = next.draggable
   if initial or previous.background != next.background:
     view.backgroundColor = next.background
   case next.kind

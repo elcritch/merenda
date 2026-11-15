@@ -29,7 +29,7 @@ for count in [10, 100, 300]:
     stack.spacing = 0
     for i in 0 ..< count:
       let child = measuredView()
-      child[vpCacheIntrinsicSize] = enabled
+      child{vpCacheIntrinsicSize} = enabled
       stack.addArrangedSubview(child)
     discard stack.sendLocalIfHandled(layoutSubviews())
     discard stack.intrinsicContentSize()

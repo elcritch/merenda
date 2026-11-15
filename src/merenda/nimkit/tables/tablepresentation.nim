@@ -633,39 +633,39 @@ proc clearPointerHighlights*(tableView: TableView) =
 proc `usesAlternatingRowBackgrounds=`*(tableView: TableView, value: bool) =
   if (tvoAlternatingRowBackgrounds in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoAlternatingRowBackgrounds] = value
+  tableView.xOptions{tvoAlternatingRowBackgrounds} = value
   tableView.invalidateTableRows()
 
 proc `showsRowSeparators=`*(tableView: TableView, value: bool) =
   if (tvoRowSeparators in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoRowSeparators] = value
+  tableView.xOptions{tvoRowSeparators} = value
   tableView.invalidateTableRows()
 
 proc `tracksPointerRowHighlights=`*(tableView: TableView, value: bool) =
   if (tvoPointerRowHighlights in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoPointerRowHighlights] = value
+  tableView.xOptions{tvoPointerRowHighlights} = value
   if not value:
     tableView.clearPointerRowHighlight()
 
 proc `tracksPointerColumnHighlights=`*(tableView: TableView, value: bool) =
   if (tvoPointerColumnHighlights in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoPointerColumnHighlights] = value
+  tableView.xOptions{tvoPointerColumnHighlights} = value
   if not value:
     tableView.clearPointerColumnHighlight()
 
 proc `showsFocusedRowHighlight=`*(tableView: TableView, value: bool) =
   if (tvoFocusedRowHighlight in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoFocusedRowHighlight] = value
+  tableView.xOptions{tvoFocusedRowHighlight} = value
   tableView.invalidateTableRows()
 
 proc `showsFocusedColumnHighlight=`*(tableView: TableView, value: bool) =
   if (tvoFocusedColumnHighlight in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoFocusedColumnHighlight] = value
+  tableView.xOptions{tvoFocusedColumnHighlight} = value
   tableView.invalidateTableRows()
 
 proc defaultDropTargetForDraggingLocation(

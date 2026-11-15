@@ -129,7 +129,7 @@ suite "editable virtual collection demo":
       let stack = StackView(row.arrangedSubviews[0])
       let field = TextField(stack.arrangedSubviews[1])
       when defined(merendaIntrinsicCache):
-        check field[vpCacheIntrinsicSize] == cache
+        check field{vpCacheIntrinsicSize} == cache
       require window.makeFirstResponder(field)
       let editor = TextView(field.currentEditor)
       editor.selectedRange = initTextRange(1, 2)

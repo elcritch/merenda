@@ -18,7 +18,7 @@ proc buildList(model: seq[string], env: DragEnvironment): View =
     let height = if id == "B": 50.0'f32 else: 30.0'f32
     let row = newView(rect(0, y, 160, height))
     row.identifier = id
-    row[vpDraggable] = true
+    row{vpDraggable} = true
     row.backgroundColor = color(0.2, 0.5, 0.8, 1)
     nested.addSubview(row)
     y += height + 10
@@ -78,7 +78,7 @@ suite "NimKit declarative dragging":
     check preview.find("B") >= 0
     check root.viewWithIdentifier("A") == row
 
-    row[vpDraggable] = false
+    row{vpDraggable} = false
     let unmarked = captureDragPreview(root, env)
     check unmarked.elements.len == 1
     check unmarked.find("A") == -1
@@ -88,7 +88,7 @@ suite "NimKit declarative dragging":
     proc identifiedList(model: seq[string], env: DragEnvironment): View =
       result = buildList(model, env)
       for row in result.subviews[0].subviews:
-        row[vpDraggable] = false
+        row{vpDraggable} = false
 
     let host = newDeclarativeDragView(
       @["A", "B"], identifiedList, successors, frame = rect(0, 0, 240, 250)
@@ -103,15 +103,15 @@ suite "NimKit declarative dragging":
       DragEnvironment(bounds: rect(0, 0, 240, 250), appearance: initAppearance())
     let root = buildList(@["A", "B"], env)
     root.identifier = "board"
-    root[vpDraggable] = true
+    root{vpDraggable} = true
     expect ValueError:
       discard captureDragPreview(root, env)
-    root[vpDraggable] = false
+    root{vpDraggable} = false
     root.subviews[0].identifier = "list"
-    root.subviews[0][vpDraggable] = true
+    root.subviews[0]{vpDraggable} = true
     expect ValueError:
       discard captureDragPreview(root, env)
-    root.subviews[0][vpDraggable] = false
+    root.subviews[0]{vpDraggable} = false
     root.subviews[0].subviews[0].identifier = ""
     expect ValueError:
       discard captureDragPreview(root, env)

@@ -31,7 +31,7 @@ proc blocked(view: View): bool =
 
 proc applyPolicy(view: View, policy: CachePolicy) =
   if view of TextField or view of Button:
-    view[vpCacheIntrinsicSize] = policy == cpLeafControls
+    view{vpCacheIntrinsicSize} = policy == cpLeafControls
   for child in view.subviews:
     child.applyPolicy(policy)
 

@@ -725,7 +725,7 @@ proc activateCellAtIndex*(
 proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
   if (tvoColumnSelection in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoColumnSelection] = value
+  tableView.xOptions{tvoColumnSelection} = value
   if not value:
     tableView.xSelectedColumns.setLen(0)
     tableView.clearPointerColumnHighlight()

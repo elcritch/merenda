@@ -16,11 +16,11 @@ proc buildCollectionRow(
       this.spacing = 8
       Label:
         when defined(merendaIntrinsicCache):
-          this[vpCacheIntrinsicSize] = cache
+          this{vpCacheIntrinsicSize} = cache
         this.stringValue = "#" & id
       TextField:
         when defined(merendaIntrinsicCache):
-          this[vpCacheIntrinsicSize] = cache
+          this{vpCacheIntrinsicSize} = cache
         arrangedSizing(svspFillAvailableWidth)
         bindingScope.bindTextField(
           "title", controller, arrayControllerDidChange, id, rowTitle, this,
@@ -28,7 +28,7 @@ proc buildCollectionRow(
         )
       Button("Remove", acceptsFirstResponder = false):
         when defined(merendaIntrinsicCache):
-          this[vpCacheIntrinsicSize] = cache
+          this{vpCacheIntrinsicSize} = cache
         onAction(controller, id) do(
           receiver: ArrayController, key: string, sender: DynamicAgent
         ):

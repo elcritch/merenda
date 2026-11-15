@@ -175,8 +175,8 @@ suite "nimkit stack views":
     test "intrinsic caching cannot be enabled without the compile flag":
       let child = newFixedIntrinsicView(20, 10)
       expect ValueError:
-        child[vpCacheIntrinsicSize] = true
-      check not child[vpCacheIntrinsicSize]
+        child{vpCacheIntrinsicSize} = true
+      check not child{vpCacheIntrinsicSize}
       static:
         doAssert not compiles(child.xIntrinsicCache)
 
@@ -189,7 +189,7 @@ suite "nimkit stack views":
       stack.spacing = 0
       stack.alignment = svaLeading
       stack.addArrangedSubview(child)
-      child[vpCacheIntrinsicSize] = true
+      child{vpCacheIntrinsicSize} = true
       child.measurements = 0
       check stack.intrinsicContentSize() == initIntrinsicSize(20, 10)
       check child.measurements == 1
