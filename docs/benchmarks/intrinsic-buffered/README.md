@@ -16,23 +16,21 @@ therefore are not directly comparable to the table below.
 
 ## Current default-on implementation
 
-After enabling the default and adding a subtree eligibility check, four
+With the default enabled and eligibility maintained by propagated counts, four
 unprofiled headless runs on the same machine used alternating policy order and
 two warmups plus seven measured samples per policy. The medians below combine
 28 samples per policy. The harness checks matching frames, view trees, item
 identifiers and field text for each paired sample. Only row controls change
 policy; CollectionView itself opts out in both cases. These numbers include
-the original recursive subtree check but do not characterize deep trees or native
-display latency. The check has since been replaced with propagated counts; these
-measurements predate that change.
+the propagated-count check but do not characterize native display latency.
 
 | Operation | Row cache off | Row cache on | Change |
 | --- | ---: | ---: | ---: |
-| Edit active field | 20.18 ms | 13.35 ms | −33.8% |
-| Scroll, retaining editor | 26.55 ms | 20.81 ms | −21.6% |
-| Insert | 20.93 ms | 13.92 ms | −33.5% |
-| Reorder | 20.09 ms | 13.19 ms | −34.3% |
-| Resize | 11.71 ms | 9.23 ms | −21.2% |
+| Edit active field | 20.17 ms | 13.22 ms | −34.5% |
+| Scroll, retaining editor | 26.73 ms | 19.65 ms | −26.5% |
+| Insert | 20.90 ms | 13.91 ms | −33.4% |
+| Reorder | 20.19 ms | 13.22 ms | −34.5% |
+| Resize | 11.63 ms | 9.12 ms | −21.6% |
 
 ## Eligibility check on deep trees
 
