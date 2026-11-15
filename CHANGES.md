@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add virtualized DirectView rows for `CollectionView` and `ArrayController`,
+  retaining an offscreen active editor and retiring bindings on removal or reuse.
+  Reentrant model and selection teardown defers unsafe signal disconnections.
+- Forward macOS marked-text composition, selection, and candidate geometry between
+  the native text input client and the active NimKit editor, including UTF-16 ranges.
+  Default marked text inherits the active foreground color while underlined.
 - Retain DirectView nodes while flushing bindings so reentrant clearing cannot
   free the active traversal. Guard nil responder conversions during table,
   document-notification, and menu updates.
@@ -21,7 +27,8 @@
   add explicit DirectView suspension/resumption.
   The lifetime and form examples demonstrate appearance policy and real
   document-owned asynchronous saving without retaining the initiating view.
-- Add opt-in intrinsic measurement caching with `vpCacheIntrinsicSize` and combine
+- Add opt-in intrinsic measurement caching with `-d:merendaIntrinsicCache` and
+  `vpCacheIntrinsicSize`, and combine
   layout feedback reset with ancestor dirty propagation outside transactions.
   Fitting proposals remain uncached; custom intrinsic inputs must invalidate on change.
 - Add opt-in typed undo coalescing, explicit gesture boundaries and a total

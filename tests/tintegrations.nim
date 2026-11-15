@@ -21,6 +21,7 @@ import integrations/kosmocliopen
 import integrations/kosmoterminalenvironment
 import integrations/kosmoterminalinput
 import integrations/nativewindowactivation
+import integrations/nativecomposition
 import integrations/nativeeventloop
 import integrations/nativewindowlifecycle
 import integrations/nativewindowrepaint

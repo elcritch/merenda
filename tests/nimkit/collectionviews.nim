@@ -444,3 +444,30 @@ suite "nimkit collection views":
     collectionView.removeItemsAtIndexes([0], ["a"])
 
     check signals.updateKinds == @[cukInsert, cukReload, cukMove, cukRemove]
+
+  test "fixed-layout visible ranges match rectangle intersections":
+    var items: seq[ModelItem]
+    for i in 0 ..< 35:
+      items.add modelItem($i, objectValue = toObj($i))
+    let controller = newArrayController(items)
+    let collection = newCollectionView(frame = rect(0, 0, 170, 83))
+    collection.collectionLayout = newCollectionViewLayout(
+      clkGrid,
+      itemSize = initSize(50, 21),
+      minimumInteritemSpacing = 7,
+      minimumLineSpacing = 9,
+      edgeInsets = insets(5),
+      columnCount = 3,
+    )
+    bindCollectionView(collection, controller)
+    for offset in [0, 1, 20, 21, 25, 29, 30, 63, 300, 900]:
+      collection.scrollView.contentOffset = initPoint(0, offset.float32)
+      let viewport =
+        rect(collection.scrollView.contentOffset, collection.scrollView.viewportSize)
+      var expected: seq[int]
+      for index in 0 ..< controller.len:
+        let item =
+          rect(5 + (index mod 3).float32 * 57, 5 + (index div 3).float32 * 30, 50, 21)
+        if not item.intersection(viewport).isEmpty:
+          expected.add index
+      check collection.visibleItemIndexes == expected

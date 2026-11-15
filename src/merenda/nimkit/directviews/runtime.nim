@@ -116,6 +116,22 @@ proc clearNode(node: DirectNode) =
   node.bodyBindings.dispose()
   node.closed = true
 
+proc retireEffects(node: DirectNode) =
+  if not node.isNil and not node.closed:
+    if not node.target.isNil:
+      node.target.active = false
+      node.target.callback = ViewAction()
+      node.target.changed = ViewAction()
+    node.bindings.dispose()
+    node.bodyBindings.dispose()
+    for child in node.children:
+      child.retireEffects()
+
+proc retireEffects*(view: DirectView) =
+  ## Disconnect effects before an owning container ends an active editor.
+  if not view.isNil:
+    view.root.retireEffects()
+
 proc close*(session: DirectViewSession) =
   if not session.isNil and not session.root.closed:
     session.root.clearNode()

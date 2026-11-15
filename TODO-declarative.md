@@ -103,8 +103,9 @@ document save may finish independently.
   remains separate from adopting [Sigils PR #70](https://github.com/elcritch/sigils/pull/70).
 - **Property ownership and retained editing:** binding-to-property transitions,
   row reorder/removal, and field-editor focus/selection/marked-text coverage.
-  CollectionView identity retention and opt-in TableView retained-cell refresh are
-  available; a virtualized DirectView editor experiment is still outstanding.
+  CollectionView identity retention, experimental virtualized DirectView rows, and
+  opt-in TableView retained-cell refresh are available. The [row comparison](docs/benchmarks/collection-rows/README.md)
+  records a fixed-viewport diagnostic; native IME and input latency still need measurement.
 - **Two documents:** independent drafts/history, switching, actual closure and
   same-ID reopening, stale queued results, and teardown checks for both renderers.
   See the [experiment and its acceptance checks](docs/declarative-two-documents.md).
@@ -130,7 +131,11 @@ document save may finish independently.
 - **Layout work:** P7 commits StackView child order in one batch; FormView reuses
   measurements within a pass. Outside an active layout transaction, feedback
   reset and dirty marking share an ancestor walk while preserving notifications.
-  Opt-in `view[vpCacheIntrinsicSize] = true` caches resolved intrinsic measurements.
+  With `-d:merendaIntrinsicCache`, opt-in `view[vpCacheIntrinsicSize] = true`
+  caches resolved intrinsic measurements.
+  The DirectView task demo opts its built-in text controls in at creation when
+  compiled with the flag, so
+  inserted rows participate as well. Other views remain opt-in.
   See [cache contracts](docs/layout-measurement.md) and
   [layout measurements](docs/benchmarks/layout/README.md).
 
@@ -141,7 +146,8 @@ document save may finish independently.
   respect. Neither is an application transaction system.
 - Components currently have one actual root, and general child reconciliation is
   centered on StackView. Custom containers require explicit integration.
-- Both list demos eagerly create rows. Collection observation is more selective,
+- The existing list demos eagerly create rows; the CollectionView adapter is a
+  separate experiment. Collection observation is more selective,
   but snapshot copying/publication and structural action-adapter creation remain.
   We have not measured heap allocation counts or native input latency.
 - Draft preservation and stale-result rejection require explicit domain policy.
@@ -152,8 +158,8 @@ document save may finish independently.
   be expensive. External updates currently use a conservative history policy.
 - The async-save example is not production atomic persistence, recovery, or a
   multi-writer conflict protocol.
-- The intrinsic cache is default-off and stores one entry/revision per view even
-  when disabled. Standard mutation paths invalidate conservatively; custom or
+- The intrinsic cache requires a compile flag and, when compiled in, stores one
+  entry/revision per view even when disabled. Standard mutation paths invalidate conservatively; custom or
   external inputs and protocol replacement need explicit invalidation. Proposal
   and bounds fallback remain freshly resolved. It is not a constraint-solver cache.
 - The ancestor notification cascade remains quadratic with depth. Fusing two
@@ -214,26 +220,38 @@ The later experiments below need not all be completed before an experimental mer
 
 ### 1. Virtualized editable collections through MVC
 
-- [ ] Host DirectView rows in existing CollectionView/TableView presentation with
-  thousands of model items and a bounded viewport.
-- [ ] Define offscreen active-editor behavior, focus restoration, removal, and reuse.
-  Keep durable drafts in the model/controller, independent of row lifetime.
-- [ ] Test reorder/removal while editing, scrolling away/back, and same-ID reuse.
-  Measure live view count, getter calls, allocation, and edit/scroll latency.
+- [x] Host DirectView rows in CollectionView with 1,000 model items and a
+  bounded viewport.
+- [x] Define offscreen active field-editor behavior, removal, and reuse. Keep
+  durable drafts in the model/controller, independent of row lifetime.
+- [x] Test selection, insertion, reorder, removal, scrolling away/back, and
+  same-ID replacement while editing.
+- [ ] Measure getter calls, allocation, and input-to-presentation edit/scroll
+  latency in a live application. The headless comparison records mounted rows.
 
 This is the next major scalability test. Better collection signals alone do not
 prove that a large editable application scales.
 
 ### 2. Profile and improve the full layout pipeline
 
-- [ ] Measure constraint construction/installation/solve separately from intrinsic
-  measurement, arrangement, capture, and drawing on representative editor trees.
-- [ ] Investigate smaller constraint graphs or persistent solving only after those
-  measurements identify the dominant phase.
+- [x] Measure the headless DirectView editor's binding, measurement, constraint,
+  arrangement, preview capture, and drawing phases. See the [pipeline profile](docs/benchmarks/layout-pipeline/README.md).
+- [x] Count intrinsic-cache decisions by widget category and compare explicit
+  leaf-control caching with the uncached demo. See the [reuse experiment](docs/benchmarks/intrinsic-reuse/README.md).
+- [ ] Evaluate smaller independent constraint graphs. The opt-in fixed-row
+  prototype and its conservative fallbacks are described in [layout measurement](docs/layout-measurement.md).
+  The [paired comparison](docs/benchmarks/row-boundary/README.md) found different
+  budget and local-failure behavior; address that before expanding eligibility.
+- [x] Prototype a separate [persistent solver](docs/benchmarks/persistent-layout/README.md)
+  and compare it with fresh solves for a stable fixed-size tree.
+- [ ] Investigate persistent reuse for intrinsic-sized trees, memory overhead,
+  and native latency; the prototype does not yet help the demo.
 - [ ] Investigate further ancestor propagation reduction while preserving observers,
   revisions, reentrancy, and active-transaction behavior.
-- [ ] Exercise cache invalidation under content/font/style/visibility changes and
-  custom measurement dependencies; expand caching only when evidence supports it.
+- [x] Compare cached and uncached built-in controls across content, font, style,
+  visibility, editor input and frame changes, plus reentrant invalidation.
+- [ ] Exercise other custom measurement dependencies and native IME; expand
+  caching beyond explicit opt-in only when evidence supports it.
 
 ### 3. Evaluate the complete Dragology interaction
 

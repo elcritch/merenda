@@ -16,6 +16,7 @@ import ../drawing/images
 import ../foundation/notifications
 import ../foundation/objectvalues
 import ../foundation/private/itemcollections
+import ../foundation/sourcedispatch
 import ../foundation/types
 import ../responder/responders
 
@@ -126,7 +127,12 @@ proc postSelectionNotification(controller: SelectionController) =
   )
 
 proc notifySelectionControllerDidChange(controller: SelectionController) =
-  emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  let source = Agent(controller)
+  beginSourceDispatch(source)
+  try:
+    emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  finally:
+    endSourceDispatch(source)
   controller.postSelectionNotification()
 
 proc notifyObjectControllerDidChange(
@@ -156,7 +162,12 @@ proc notifyArrayControllerDidChange(
     keys: openArray[string] = [],
     index = -1,
 ) =
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  let source = Agent(controller)
+  beginSourceDispatch(source)
+  try:
+    emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  finally:
+    endSourceDispatch(source)
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       nkModelMutationDidChange,
