@@ -1,6 +1,8 @@
 ## Compare explicit intrinsic-cache opt-in for the demo's built-in leaf controls.
 ## Run the profiled and unprofiled builds separately; detailed counts require
 ## -d:merendaProfile. No native window or GPU is involved.
+when not defined(merendaIntrinsicCache):
+  {.error: "build with -d:merendaIntrinsicCache for the cache comparison".}
 import std/[hashes, monotimes, os, tables, times]
 include "../examples/direct_views_demo.nim"
 import merenda/nimkit/foundation/[mainthreadwork, viewprofiling]

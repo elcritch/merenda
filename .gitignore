@@ -28,3 +28,8 @@ nimbledeps
 .DS_Store
 .claude
 .nimcache*
+
+# Benchmark summaries belong in Git; raw measurements stay local.
+/docs/benchmarks/**/*.csv
+/docs/benchmarks/**/*.txt
+/docs/benchmarks/**/*.log

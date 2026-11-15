@@ -1,6 +1,7 @@
 # Intrinsic measurement and retained layout
 
-Views can opt into one bounded intrinsic-size cache entry:
+Compile with `-d:merendaIntrinsicCache` to include intrinsic-cache storage and
+then opt individual views into one bounded intrinsic-size cache entry:
 
 ```nim
 let field = newTextField("Amount")
@@ -10,7 +11,9 @@ discard field.sizeThatFits() # reuses the intrinsic result if inputs are unchang
 field.stringValue = "A different amount" # normal setters invalidate measurements
 ```
 
-Caching is off by default, including for custom widgets. The cache wraps
+Without that compile flag, the fields are absent from every view and attempting
+to enable `vpCacheIntrinsicSize` raises `ValueError`. With the flag, caching is
+off by default, including for custom widgets. The cache wraps
 `resolvedIntrinsicContentSize`; it does not cache a constraint solve, arrangement,
 or the full result of `sizeThatFits`. A fitting proposal and any fallback to current
 bounds are still evaluated for each call. Direct calls to a concrete widget's

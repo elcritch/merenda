@@ -14,10 +14,12 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
       this.edgeInsets = insets(10)
       this.backgroundColor = color(0.16, 0.24, 0.32, 0.16)
       Label:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.stringValue = "#" & $task.id
       TextField:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.identifier = "title-" & $task.id
         arrangedSizing(svspFillAvailableWidth)
         if owner.isNil:
@@ -33,7 +35,8 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
             editTitle,
           )
       Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         onAction(owner, task.id) do(
           receiver: TaskController, id: int, sender: DynamicAgent
         ):
@@ -51,7 +54,8 @@ proc taskRows(context: DirectNode, tasks: TaskRows, owner: TaskController = nil)
           component(taskRow, task, owner)
       if tasks.len == 0:
         Label:
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           this.stringValue = "No tasks. Add one to continue."
 
 proc showTaskRows(context: DirectNode, owner: TaskController, ids: seq[int]) =
@@ -69,38 +73,46 @@ proc buildChrome(controller: TaskController): DirectView =
       this.edgeInsets = insets(16)
       bindingScope.bindPreview(controller)
       Label:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.stringValue = "Direct views + MVC bindings"
         this.labelStyle = lsHeading
       Label:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.stringValue =
           "Edit a title, then insert, reverse, undo or change the counter."
       HStack:
         this.distribution = svdNatural
         this.spacing = 8
         Button("Insert at top", identifier = "insert", acceptsFirstResponder = false):
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.insertTask()
         Button("Reverse", identifier = "reverse", acceptsFirstResponder = false):
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.reverseTasks()
         Button("Counter +1", identifier = "counter", acceptsFirstResponder = false):
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             receiver.counter <- receiver.counter{} + 1
         Button("Undo", identifier = "undo", acceptsFirstResponder = false):
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performUndo()
         Button("Redo", identifier = "redo", acceptsFirstResponder = false):
-          this[vpCacheIntrinsicSize] = true
+          when defined(merendaIntrinsicCache):
+            this[vpCacheIntrinsicSize] = true
           onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
             discard receiver.history.performRedo()
       Label:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.identifier = "counter-value"
         bindingScope.bindValue("counter", controller.counter, this) do(
           label: Label, value: int
@@ -108,7 +120,8 @@ proc buildChrome(controller: TaskController): DirectView =
           label.stringValue = "Unrelated counter: " & $value
       component(observedTaskRows, controller)
       Label:
-        this[vpCacheIntrinsicSize] = true
+        when defined(merendaIntrinsicCache):
+          this[vpCacheIntrinsicSize] = true
         this.identifier = "status"
         this.labelStyle = lsStatus
         bindingScope.bindValue("status", controller.status, this) do(

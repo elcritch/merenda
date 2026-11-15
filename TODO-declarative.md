@@ -131,8 +131,10 @@ document save may finish independently.
 - **Layout work:** P7 commits StackView child order in one batch; FormView reuses
   measurements within a pass. Outside an active layout transaction, feedback
   reset and dirty marking share an ancestor walk while preserving notifications.
-  Opt-in `view[vpCacheIntrinsicSize] = true` caches resolved intrinsic measurements.
-  The DirectView task demo opts its built-in text controls in at creation, so
+  With `-d:merendaIntrinsicCache`, opt-in `view[vpCacheIntrinsicSize] = true`
+  caches resolved intrinsic measurements.
+  The DirectView task demo opts its built-in text controls in at creation when
+  compiled with the flag, so
   inserted rows participate as well. Other views remain opt-in.
   See [cache contracts](docs/layout-measurement.md) and
   [layout measurements](docs/benchmarks/layout/README.md).
@@ -156,8 +158,8 @@ document save may finish independently.
   be expensive. External updates currently use a conservative history policy.
 - The async-save example is not production atomic persistence, recovery, or a
   multi-writer conflict protocol.
-- The intrinsic cache is default-off and stores one entry/revision per view even
-  when disabled. Standard mutation paths invalidate conservatively; custom or
+- The intrinsic cache requires a compile flag and, when compiled in, stores one
+  entry/revision per view even when disabled. Standard mutation paths invalidate conservatively; custom or
   external inputs and protocol replacement need explicit invalidation. Proposal
   and bounds fallback remain freshly resolved. It is not a constraint-solver cache.
 - The ancestor notification cascade remains quadratic with depth. Fusing two

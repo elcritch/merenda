@@ -65,12 +65,18 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     when defined(merendaPersistentLayout):
       let persistenceChanged =
         (vpPersistentLayout in self.xProps) != (vpPersistentLayout in properties)
-    if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
-      when defined(merendaProfile):
-        if self.xIntrinsicCacheValid:
-          self.xIntrinsicProfileInvalidation = "cacheOptionChanged"
-      self.xIntrinsicCacheValid = false
-      inc self.xIntrinsicRevision
+    when defined(merendaIntrinsicCache):
+      if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
+        when defined(merendaProfile):
+          if self.xIntrinsicCacheValid:
+            self.xIntrinsicProfileInvalidation = "cacheOptionChanged"
+        self.xIntrinsicCacheValid = false
+        inc self.xIntrinsicRevision
+    else:
+      if vpCacheIntrinsicSize in properties:
+        raise newException(
+          ValueError, "intrinsic caching requires -d:merendaIntrinsicCache"
+        )
     self.xProps = properties
     when defined(merendaPersistentLayout):
       if persistenceChanged:

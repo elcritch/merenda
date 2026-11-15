@@ -16,6 +16,7 @@ import ../drawing/images
 import ../foundation/notifications
 import ../foundation/objectvalues
 import ../foundation/private/itemcollections
+import ../foundation/sourcedispatch
 import ../foundation/types
 import ../responder/responders
 
@@ -156,7 +157,12 @@ proc notifyArrayControllerDidChange(
     keys: openArray[string] = [],
     index = -1,
 ) =
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  let source = cast[pointer](controller)
+  beginSourceDispatch(source)
+  try:
+    emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  finally:
+    endSourceDispatch(source)
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       nkModelMutationDidChange,

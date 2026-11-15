@@ -1,8 +1,7 @@
 # DirectView collection rows: diagnostic comparison
 
 One sequential diagnostic run on Apple M3 Pro, macOS 15.7.9, Nim 2.4.2,
-release/ARC/threads/useMalloc with `-d:merendaProfile`. The [raw output](2026-11-15-profile.txt)
-contains all phase counts and inclusive timings. These are single observations,
+release/ARC/threads/useMalloc with `-d:merendaProfile`. These are single observations,
 not statistical estimates. Materialized cases run first and the initial case
 includes font initialization; there are no warmup iterations. Instrumentation has
 a cost, especially for each

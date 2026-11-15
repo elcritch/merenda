@@ -28,12 +28,7 @@ constraints are the largest **single** graph in an operation; passes count all
 solves. Insertion times cover all solves and include Kiwi's incremental
 optimization. They are exclusive of nested instrumented phases; do not add them
 to inclusive timings. The insertion scope has no nested instrumented phases, so
-its inclusive and exclusive times are equal. Raw files preserve every sample:
-
-- Demo: [off 1](demo-off-1.csv), [on 1](demo-on-1.csv),
-  [on 2](demo-on-2.csv), [off 2](demo-off-2.csv).
-- Fixed rows: [off 1](fixed-off-1.csv), [on 1](fixed-on-1.csv),
-  [on 2](fixed-on-2.csv), [off 2](fixed-off-2.csv).
+its inclusive and exclusive times are equal. Raw sample files are not tracked.
 
 ## Cost
 

@@ -3,6 +3,7 @@ import std/tables
 import sigils/[core, reactive, selectors]
 import ./responder/responders
 import ./foundation/mainthreadwork
+import ./foundation/sourcedispatch
 import ./foundation/viewprofiling
 import ./text/textfields
 import ./app/collectionsigils
@@ -165,8 +166,17 @@ proc removeBinding*(scope: BindingScope, id: string) =
     binding.editor = nil
     binding.pending = false
     if not binding.disconnectSource.isNil:
-      binding.disconnectSource(binding)
+      let disconnect = binding.disconnectSource
       binding.disconnectSource = nil
+      if sourceDispatchActive(binding.sourceKey):
+        let retired = binding
+        discard deferSourceWork(
+          binding.sourceKey,
+          proc() =
+            disconnect(retired),
+        )
+      else:
+        disconnect(binding)
     binding.scope.clear()
     scope.bindings.del(id)
 

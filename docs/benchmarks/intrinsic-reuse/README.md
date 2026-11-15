@@ -9,7 +9,8 @@ to the already constructed tree; the workload does not add new row instances.
 Caching remains off by default in NimKit.
 
 After this experiment, the demo opted its own built-in leaf controls into the
-cache as they are created, including inserted rows and detached preview rows.
+cache as they are created, including inserted rows and detached preview rows,
+when compiled with `-d:merendaIntrinsicCache`.
 The comparison harness explicitly disables them in its uncached variant. These
 historical measurements predate that change; they do not measure native latency
 or the cost of detached previews.
@@ -75,16 +76,13 @@ and group unrecognized types as `OtherView`. A custom classifier can distinguish
 additional types. The per-thread counters do not retain views. Disabled builds and
 builds without an installed classifier do not collect these category counts. The
 profiling build includes counting overhead; use the unprofiled timings for the
-A/B comparison. Raw samples: [plain 1](plain-run1-summary.csv),
-[profile 1 summary](profile-run1-summary.csv), [profile 1 counts](profile-run1-counts.csv),
-[plain 2](plain-run2-summary.csv), [profile 2 summary](profile-run2-summary.csv),
-and [profile 2 counts](profile-run2-counts.csv).
+A/B comparison. Raw sample files are not tracked.
 
 ## Reproduce
 
 ```sh
-nim ic --nimcache:deps/.nimcache/ -d:release -o:deps/benchmark_intrinsic_plain tests/benchmark_intrinsic_reuse.nim
-nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaProfile -o:deps/benchmark_intrinsic_profile tests/benchmark_intrinsic_reuse.nim
+nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaIntrinsicCache -o:deps/benchmark_intrinsic_plain tests/benchmark_intrinsic_reuse.nim
+nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaIntrinsicCache -d:merendaProfile -o:deps/benchmark_intrinsic_profile tests/benchmark_intrinsic_reuse.nim
 ./deps/benchmark_intrinsic_plain /tmp/intrinsic-plain-1
 ./deps/benchmark_intrinsic_profile /tmp/intrinsic-profile-1
 ./deps/benchmark_intrinsic_plain /tmp/intrinsic-plain-2

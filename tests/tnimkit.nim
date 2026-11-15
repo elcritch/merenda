@@ -43,6 +43,7 @@ else:
   import nimkit/directlifetimes
   import nimkit/directvisibility
   import nimkit/directdemo
+  import nimkit/directcollectiondemo
   import nimkit/directmodels
   import nimkit/directviews
   import nimkit/devcontrol
@@ -67,7 +68,8 @@ else:
   import nimkit/iconlabels
   import nimkit/images
   import nimkit/itemcollections
-  import nimkit/intrinsiccache
+  when defined(merendaIntrinsicCache):
+    import nimkit/intrinsiccache
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix
@@ -93,6 +95,7 @@ else:
   import nimkit/sizing
   import nimkit/splitviews
   import nimkit/stackviews
+  import nimkit/sourcedispatch
   import nimkit/styledruns
   import nimkit/svgimages
   import nimkit/svgpathloader

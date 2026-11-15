@@ -90,8 +90,7 @@ layout cost. Supporting intrinsic-sized controls, authored constraints or CSS
 requires a stronger proof of graph equivalence and conflict handling before reuse.
 Memory overhead and native interaction latency have not been measured.
 
-Raw samples: [off 1](off-1.csv), [on 1](on-1.csv), [on 2](on-2.csv),
-[off 2](off-2.csv). The insertion scope is inclusive. A fresh insertion scope
+Raw sample files are not tracked. The insertion scope is inclusive. A fresh insertion scope
 adds one constraint; an incremental insertion scope removes and adds one changed
 constraint. Profile counters distinguish persistent builds, reuses and fallbacks.
 An abandoned incremental attempt is counted as a fallback and contributes timing,

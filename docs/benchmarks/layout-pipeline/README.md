@@ -17,9 +17,7 @@ drains the real main-thread queue, and builds the live render tree. The operatio
 order is clean, counter, edit, reverse, resize; resize alternates the width between
 1200 and 1240. Undo history is cleared outside the timed interval. The four runs
 were ordered uninstrumented, instrumented, uninstrumented, instrumented. Tables
-show medians of ten individual samples. Raw CSVs retain every sample:
-[plain 1](plain-run1.csv), [profile 1](profile-run1.csv),
-[plain 2](plain-run2.csv), [profile 2](profile-run2.csv).
+show medians of ten individual samples. Raw sample files are not tracked.
 Phase and solver counters in the plain CSVs are zero because instrumentation is
 compiled out, not because those operations did no work.
 The numbers describe one machine, one order of workloads and no native window,
