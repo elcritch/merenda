@@ -12,10 +12,8 @@ requires "parsetoml >= 0.7.2"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# Includes native text composition, ABI/X11 fixes, and windowing fixes.
-requires "gh:elcritch/siwin#feat/native-ime-composition"
 # This revision loads Vulkan lazily so a missing driver can use OpenGL.
-requires "gh:elcritch/figdraw >= 0.46.4 [siwin]"
+requires "gh:elcritch/figdraw#feat/scene-cbor [siwin]"
 requires "harfbuzzy >= 0.7.0 [runtime]"
 requires "sigils >= 0.33.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
