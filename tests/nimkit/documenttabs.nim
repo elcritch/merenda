@@ -301,6 +301,14 @@ func center(rect: nimkitTypes.Rect): nimkitTypes.Point =
   )
 
 suite "nimkit document tabs":
+  test "mutable tab item changes intrinsic size without a reload":
+    let tabs = newDocumentTabs(frame = rect(0, 0, 1200, 48))
+    let item = newDocumentTabItem("Short", "doc")
+    discard tabs.addDocumentTabItem(item)
+    let before = tabs.resolvedIntrinsicContentSize()
+    item.title = "A considerably longer document tab title for intrinsic measurement"
+    check tabs.resolvedIntrinsicContentSize().width > before.width
+
   test "document tab models back metadata identity selection and ordering":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
@@ -395,12 +403,11 @@ suite "nimkit document tabs":
     check tabs.indexOfDocumentTabIdentifier("published") == 1
     check tabs.selectDocumentTabWithIdentifier("published")
 
-    source.models =
-      @[
-        initDocumentTabModel("published", "Published Updated"),
-        initDocumentTabModel("draft", "Draft"),
-        initDocumentTabModel("archived", "Archived", hidden = true),
-      ]
+    source.models = @[
+      initDocumentTabModel("published", "Published Updated"),
+      initDocumentTabModel("draft", "Draft"),
+      initDocumentTabModel("archived", "Archived", hidden = true),
+    ]
     tabs.reloadData()
 
     check tabs.len == 2

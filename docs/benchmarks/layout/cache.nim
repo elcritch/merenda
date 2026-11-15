@@ -1,6 +1,3 @@
-when not defined(merendaIntrinsicCache):
-  {.error: "build with -d:merendaIntrinsicCache for the cache comparison".}
-
 import std/[monotimes, strformat, times]
 import merenda/nimkit/containers/stackviews
 import merenda/nimkit/foundation/[selectors, types]

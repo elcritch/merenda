@@ -8,7 +8,7 @@ proc treeCount(view: View): int =
   for child in view.subviews:
     result += child.treeCount()
 
-let demo = newDirectCollectionDemo(5000, false)
+let demo = newDirectCollectionDemo(5000)
 let window = newWindow("Memory fixture", frame = rect(0, 0, 640, 480))
 window.setContentView(demo.view)
 discard window.buildRenders()

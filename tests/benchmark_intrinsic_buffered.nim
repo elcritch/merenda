@@ -1,14 +1,11 @@
 ## Paired intrinsic-cache comparison for the buffered editable collection.
-## Build with -d:release -d:merendaIntrinsicCache; add -d:merendaProfile for counters.
-when not defined(merendaIntrinsicCache):
-  {.error: "build with -d:merendaIntrinsicCache".}
-
+## Build with -d:release; add -d:merendaProfile for counters.
 import std/[hashes, monotimes, os, tables, times]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/viewprofiling
 import merenda/nimkit/intrinsicprofiling
-import ../examples/direct_collection_demo
+import ./intrinsic_collection_fixture
 from merenda/nimkit/view/viewconstraints import solveBlocked
 
 type Key = tuple[operation: string, sample: int]
@@ -55,7 +52,7 @@ when defined(merendaProfile):
 echo "cache,operation,sample,elapsed_us,mounted,buffered,visible,subscriptions,solver_views,solver_passes,intrinsic_calls,intrinsic_us,hits,misses,disabled,fingerprint"
 for cache in policies:
   for operation in ["edit", "scroll", "insert", "reorder", "resize"]:
-    let demo = newDirectCollectionDemo(5000, cache)
+    let demo = newIntrinsicCollectionFixture(5000, cache)
     let controller = ArrayController(demo.view.dataSource())
     let window = newWindow("Buffered cache comparison", frame = rect(0, 0, 640, 480))
     window.setContentView(demo.view)

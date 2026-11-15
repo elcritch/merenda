@@ -2452,6 +2452,8 @@ protocol DefaultCollectionViewAccessibility of AccessibilityProtocol:
 
 proc initCollectionViewFields*(collectionView: CollectionView, frame: Rect = AutoRect) =
   initControlFields(collectionView, frame)
+  # Layout objects and custom layout protocols can change independently.
+  collectionView{vpCacheIntrinsicSize} = false
   collectionView.xCollectionRole = srTableView
   collectionView.xItemRole = srRowItem
   collectionView.xItemCount = 0

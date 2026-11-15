@@ -62,22 +62,27 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.xProps
 
   method `properties=`(self: View, properties: set[ViewProperty]) =
+    let cacheChanged =
+      (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties)
     when defined(merendaPersistentLayout):
       let persistenceChanged =
         (vpPersistentLayout in self.xProps) != (vpPersistentLayout in properties)
-    when defined(merendaIntrinsicCache):
-      if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
-        when defined(merendaProfile):
-          if self.xIntrinsicMeasurement.valid:
-            self.xIntrinsicMeasurement.profileInvalidation = "cacheOptionChanged"
-        self.xIntrinsicMeasurement.valid = false
-        inc self.xIntrinsicMeasurement.revision
-    else:
-      if vpCacheIntrinsicSize in properties:
-        raise newException(
-          ValueError, "intrinsic caching requires -d:merendaIntrinsicCache"
-        )
+    if cacheChanged:
+      when defined(merendaProfile):
+        if self.xIntrinsicMeasurement.valid:
+          self.xIntrinsicMeasurement.profileInvalidation = "cacheOptionChanged"
+      self.xIntrinsicMeasurement.valid = false
+      inc self.xIntrinsicMeasurement.revision
     self.xProps = properties
+    if cacheChanged:
+      var ancestor = self.superviewBacklink()
+      while not ancestor.isNil:
+        when defined(merendaProfile):
+          if ancestor.xIntrinsicMeasurement.valid:
+            ancestor.xIntrinsicMeasurement.profileInvalidation = "cacheOptionChanged"
+        ancestor.xIntrinsicMeasurement.valid = false
+        inc ancestor.xIntrinsicMeasurement.revision
+        ancestor = ancestor.superviewBacklink()
     when defined(merendaPersistentLayout):
       if persistenceChanged:
         self.xPersistentLayout = default(PersistentLayoutCache)

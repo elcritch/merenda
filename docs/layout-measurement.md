@@ -1,19 +1,16 @@
 # Intrinsic measurement and retained layout
 
-Compile with `-d:merendaIntrinsicCache` to include intrinsic-cache storage and
-then opt individual views into one bounded intrinsic-size cache entry:
+Views cache one intrinsic-size result by default:
 
 ```nim
 let field = newTextField("Amount")
-field{vpCacheIntrinsicSize} = true
 discard field.sizeThatFits()
 discard field.sizeThatFits() # reuses the intrinsic result if inputs are unchanged
 field.stringValue = "A different amount" # normal setters invalidate measurements
+field{vpCacheIntrinsicSize} = false # opt out if dependencies cannot be tracked
 ```
 
-Without that compile flag, the fields are absent from every view and attempting
-to enable `vpCacheIntrinsicSize` raises `ValueError`. With the flag, caching is
-off by default, including for custom widgets. The cache wraps
+The cache wraps
 `resolvedIntrinsicContentSize`; it does not cache a constraint solve, arrangement,
 or the full result of `sizeThatFits`. A fitting proposal and any fallback to current
 bounds are still evaluated for each call. Direct calls to a concrete widget's
@@ -28,12 +25,19 @@ and dependent ancestors; unchanged layout frames preserve the entry. A separate
 measurement revision prevents a callback that invalidates during measurement from
 publishing its result as a valid cache entry.
 
-Opting in asserts that a custom view will call `invalidateIntrinsicContentSize()`
+Custom views must call `invalidateIntrinsicContentSize()`
 when any otherwise untracked measurement input changes. This includes external
 model state, direct custom-field mutations and replacement of the intrinsic
 protocol implementation. If an intrinsic callback depends on other views or
 external state, the application must establish the corresponding invalidation
-connection. Opt-in is not a promise that arbitrary custom callbacks are pure.
+connection. Set `vpCacheIntrinsicSize` to false for a view whose measurement
+dependencies cannot be tracked reliably.
+
+CollectionView, DocumentTabs and MenuBar opt out by default because their layout,
+tab items or menu items can be mutated independently. A view whose subtree
+contains an opted-out view also recomputes its intrinsic size so that an ancestor
+cannot retain an outdated result. Checking eligibility walks that subtree, which
+adds work even to a cache hit; measure it for large or deep view hierarchies.
 
 The audited built-in paths include:
 
@@ -47,22 +51,20 @@ The paired cache-on/off regression tests exercise state-dependent theme metrics,
 cell replacement, reserved titles, external dependencies, protocol replacement,
 reentrant invalidation, editing and composition, including resulting frames. They
 do not establish correctness for arbitrary user-defined measurement dependencies.
-Automatic opt-in for all views remains inappropriate until those dependencies can
-be invalidated reliably.
 
 The entry is a plain value stored on the view. It creates no Sigil or separate
 identity object per measurement. It retains one result rather than a map of
 proposals. Geometry invalidation is conservative: frame changes can invalidate a
 cache even when a particular widget's intrinsic measurement would be unchanged.
-On the measured arm64 build the flag adds 32 bytes per `View`, including padding,
-whether or not that view opts in; the exact size depends on compiler and target.
+On the measured arm64 build the cache adds 32 bytes per `View`, including padding,
+whether or not that view opts out; the exact size depends on compiler and target.
 
 ## What is reused
 
 FormView now records label and field measurements when collecting metrics and
 reuses them for placement. StackView already collected natural child sizes once
 per arrangement. Its additional reads occurred in separate intrinsic/constraint
-phases, where geometry can change. The opt-in cache allows those queries to reuse
+phases, where geometry can change. The cache allows those queries to reuse
 intrinsic results when dependencies remain valid; it does not blindly share a
 snapshot across a solver frame change.
 
@@ -108,7 +110,7 @@ measurement caching and excludes the subsequent solve and drawing.
 The [DirectView leaf-control experiment](benchmarks/intrinsic-reuse/README.md)
 compares explicit caching of the demo's Label, TextField and Button instances
 against the same uncached tree. It includes paired geometry and invalidation
-checks. This does not make caching automatic for controls or their subclasses.
+checks. It predates enabling caching by default.
 The [buffered collection comparison](benchmarks/intrinsic-buffered/README.md)
 adds editing, scrolling, insertion, reorder, resize, native render submission,
 and storage measurements for the current virtualized demo.

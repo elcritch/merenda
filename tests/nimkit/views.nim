@@ -238,7 +238,7 @@ proc newConstraintRemovingView(frame: Rect, target: View): ConstraintRemovingVie
 suite "nimkit views":
   test "replacing view properties preserves display and appearance state":
     let view = newView(frame = rect(0, 0, 100, 80))
-    check view.properties == {}
+    check view.properties == {vpCacheIntrinsicSize}
     check view.flipped
     check view.needsDisplay
     check view.usesThemedRootBackground

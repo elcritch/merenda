@@ -69,16 +69,18 @@ proc newSizingCell(size: IntrinsicSize): SizingCell =
   initCellFields(result)
   discard result.withProtocol(SizingCellMeasurement)
 
-suite "opt-in intrinsic measurement cache":
-  test "custom views are uncached by default; opting in retains one measurement":
+suite "intrinsic measurement cache":
+  test "views cache by default and can opt out":
     let view = newCountingView(initIntrinsicSize(40, 20))
+    check view{vpCacheIntrinsicSize}
     discard view.sizeThatFits()
     discard view.sizeThatFits()
-    check view.measurements == 2
-    view{vpCacheIntrinsicSize} = true
+    check view.measurements == 1
+    view{vpCacheIntrinsicSize} = false
     check view.sizeThatFits() == initSize(40, 20)
     discard view.sizeThatFits()
     check view.measurements == 3
+    view{vpCacheIntrinsicSize} = true
     view.intrinsic = initIntrinsicSize(80, 20)
     view.invalidateIntrinsicContentSize()
     check view.sizeThatFits() == initSize(80, 20)
@@ -132,6 +134,18 @@ suite "opt-in intrinsic measurement cache":
       cached.resolvedIntrinsicContentSize()
     check cached.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
     check cached.measurements == 2
+
+  test "an uncached descendant prevents stale ancestor measurements":
+    let child = newCountingView(initIntrinsicSize(40, 20))
+    let parent = newDependentView(child, true)
+    parent.addSubview(child)
+    check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(40, 20)
+    child{vpCacheIntrinsicSize} = false
+    child.intrinsic = initIntrinsicSize(75, 30)
+    check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
+    child{vpCacheIntrinsicSize} = true
+    check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
+    check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
 
   test "cell replacement and cell metrics invalidate an opted-in control":
     let first = newSizingCell(initIntrinsicSize(40, 20))

@@ -157,11 +157,11 @@ jobs:
           "$testExecutable"
         fi
 
-    - name: Test intrinsic measurement cache
+    - name: Test intrinsic cache diagnostics
       if: runner.os == 'Linux'
       run: |
-        xvfb-run -a atlas-run tests --nimcache:deps/.nimcache/ tests/nimkit/intrinsiccache.nim -- \
-          -d:merendaIntrinsicCache -d:merendaProfile
+        xvfb-run -a atlas-run tests --nimcache:deps/.nimcache/ nimkit -- \
+          -d:merendaProfile
 
     - name: Compile Tekton tests
       run: |

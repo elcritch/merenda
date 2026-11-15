@@ -235,6 +235,17 @@ proc modelItems(): seq[ModelItem] =
   ]
 
 suite "nimkit collection views":
+  test "mutable collection layout changes intrinsic size without a reload":
+    let collection = newCollectionView(frame = rect(0, 0, 260, 140))
+    let layout = newCollectionViewLayout(clkList, itemSize = initSize(60, 40))
+    let source = newCollectionSpy([item("a", "Alpha", 1), item("b", "Beta", 2)])
+    collection.collectionLayout = layout
+    collection.dataSource = source
+    let before = collection.resolvedIntrinsicContentSize()
+    layout.itemSize = initSize(60, 80)
+    let after = collection.resolvedIntrinsicContentSize()
+    check after.height > before.height
+
   test "collection view lays out model items and reuses item views":
     let
       collectionView = newCollectionView(frame = rect(0, 0, 260, 140))

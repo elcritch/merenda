@@ -9,6 +9,11 @@ controls in, and the cached policy explicitly opts the row's Label, TextField an
 Button in. This is a comparison of runtime opt-in, not the cost of compiling the
 cache into an otherwise uncached application.
 
+These are historical results from before intrinsic caching became the default.
+The original uncached policy left all views uncached; the current harness only
+switches the row controls, while other views use the new default. Its results
+therefore are not directly comparable to the table below.
+
 On Apple M3 Pro, macOS 15.7.9, Nim 2.4.2, release/ARC/threads/useMalloc, four
 unprofiled headless runs alternated policy order: off/on, on/off, on/off, off/on.
 Each operation has two warmups and seven measured samples per policy; the table
@@ -61,10 +66,10 @@ will generalize to other applications.
 ## Storage and process memory
 
 For this compiler and architecture, `sizeof(typeof(default(View)[]))` was 1,288
-bytes without the flag and 1,320 bytes with it, both before and after grouping the
+bytes without the cache and 1,320 bytes with it, both before and after grouping the
 intrinsic state in a value object. The 32-byte difference includes padding and is
-paid for every `View` in a flag-enabled build, even when the view isn't opted in.
-Opting in fills that existing entry and adds no per-view cache allocation. Profile
+paid for every `View` in a cache-enabled build, even when the view opts out.
+Using the cache fills that existing entry and adds no per-view cache allocation. Profile
 builds have additional diagnostic fields.
 
 In a separate headless 5,000-item fixture after scrolling with one pinned editor,
@@ -75,16 +80,15 @@ few KiB of inline fields, so these samples **do not establish a process-memory
 increase or decrease**. They include initialization and teardown, and the tree
 count excludes any detached reusable hosts.
 
-## Reproduce
+## Run the current harness
 
 Build first, then run each executable sequentially without concurrent builds:
 
 ```sh
-nim ic -d:release -d:merendaIntrinsicCache -o:deps/intrinsic-buffered tests/benchmark_intrinsic_buffered.nim
-nim ic -d:release -d:merendaIntrinsicCache -d:merendaProfile -o:deps/intrinsic-buffered-profile tests/benchmark_intrinsic_buffered.nim
-nim ic -d:release -d:merendaIntrinsicCache -o:deps/intrinsic-native tests/benchmark_intrinsic_native.nim
-nim ic -d:release -o:deps/intrinsic-memory-off tests/benchmark_intrinsic_memory.nim
-nim ic -d:release -d:merendaIntrinsicCache -o:deps/intrinsic-memory-on tests/benchmark_intrinsic_memory.nim
+nim ic -d:release -o:deps/intrinsic-buffered tests/benchmark_intrinsic_buffered.nim
+nim ic -d:release -d:merendaProfile -o:deps/intrinsic-buffered-profile tests/benchmark_intrinsic_buffered.nim
+nim ic -d:release -o:deps/intrinsic-native tests/benchmark_intrinsic_native.nim
+nim ic -d:release -o:deps/intrinsic-memory-on tests/benchmark_intrinsic_memory.nim
 ./deps/intrinsic-buffered
 ./deps/intrinsic-buffered reverse
 ./deps/intrinsic-buffered reverse
@@ -95,9 +99,9 @@ MERENDA_BACKGROUND=1 ./deps/intrinsic-native
 MERENDA_BACKGROUND=1 ./deps/intrinsic-native reverse
 MERENDA_BACKGROUND=1 ./deps/intrinsic-native reverse
 MERENDA_BACKGROUND=1 ./deps/intrinsic-native
-/usr/bin/time -l ./deps/intrinsic-memory-off
 /usr/bin/time -l ./deps/intrinsic-memory-on
 ```
 
-`/usr/bin/time -l` is macOS-specific. The recorded RSS comparison alternated the
-two memory binaries four times each. Raw measurements are not tracked.
+`/usr/bin/time -l` is macOS-specific. The historical RSS comparison alternated
+two memory binaries four times each; the cache-free build predates the current
+default. Raw measurements are not tracked.

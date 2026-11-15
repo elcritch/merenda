@@ -4,15 +4,15 @@ This experiment uses the actual DirectView task demo's live-only controller and
 row builder, with 100 tasks and a 1240 × 540 root. It does not create the demo's
 detached Dragology preview. The comparison leaves caching off or explicitly enables
 the existing `vpCacheIntrinsicSize` property on the fixture's Label, TextField and
-Button instances. StackViews and other views remain uncached. The policy is applied
+Button instances. StackViews and other views were uncached. The policy was applied
 to the already constructed tree; the workload does not add new row instances.
-Caching remains off by default in NimKit.
+Caching is now enabled by default. These measurements predate that change.
 
 After this experiment, the demo opted its own built-in leaf controls into the
 cache as they are created, including inserted rows and detached preview rows,
-when compiled with `-d:merendaIntrinsicCache`.
-The comparison harness explicitly disables them in its uncached variant. These
-historical measurements predate that change; they do not measure native latency
+when compiled with the former intrinsic-cache flag.
+The current comparison harness changes the leaf controls while other views use
+their default policy, so reruns differ from this historical baseline. The samples do not measure native latency
 or the cost of detached previews.
 
 Two profiled and two unprofiled runs were collected sequentially, in the order
@@ -81,8 +81,8 @@ A/B comparison. Raw sample files are not tracked.
 ## Reproduce
 
 ```sh
-nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaIntrinsicCache -o:deps/benchmark_intrinsic_plain tests/benchmark_intrinsic_reuse.nim
-nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaIntrinsicCache -d:merendaProfile -o:deps/benchmark_intrinsic_profile tests/benchmark_intrinsic_reuse.nim
+nim ic --nimcache:deps/.nimcache/ -d:release -o:deps/benchmark_intrinsic_plain tests/benchmark_intrinsic_reuse.nim
+nim ic --nimcache:deps/.nimcache/ -d:release -d:merendaProfile -o:deps/benchmark_intrinsic_profile tests/benchmark_intrinsic_reuse.nim
 ./deps/benchmark_intrinsic_plain /tmp/intrinsic-plain-1
 ./deps/benchmark_intrinsic_profile /tmp/intrinsic-profile-1
 ./deps/benchmark_intrinsic_plain /tmp/intrinsic-plain-2

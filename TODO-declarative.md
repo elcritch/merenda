@@ -131,11 +131,8 @@ document save may finish independently.
 - **Layout work:** P7 commits StackView child order in one batch; FormView reuses
   measurements within a pass. Outside an active layout transaction, feedback
   reset and dirty marking share an ancestor walk while preserving notifications.
-  With `-d:merendaIntrinsicCache`, opt-in `view[vpCacheIntrinsicSize] = true`
-  caches resolved intrinsic measurements.
-  The DirectView task demo opts its built-in text controls in at creation when
-  compiled with the flag, so
-  inserted rows participate as well. Other views remain opt-in.
+  Views cache resolved intrinsic measurements by default; individual views can
+  opt out.
   See [cache contracts](docs/layout-measurement.md) and
   [layout measurements](docs/benchmarks/layout/README.md). Paired buffered-row
   workloads and storage costs are recorded in the [intrinsic cache comparison](docs/benchmarks/intrinsic-buffered/README.md).
@@ -159,11 +156,11 @@ document save may finish independently.
   be expensive. External updates currently use a conservative history policy.
 - The async-save example is not production atomic persistence, recovery, or a
   multi-writer conflict protocol.
-- The intrinsic cache requires a compile flag and, when compiled in, stores one
-  entry/revision per view even when disabled. Built-in mutation and cell paths
+- The intrinsic cache stores one entry/revision per view even when individually
+  disabled. Built-in mutation and cell paths
   have paired coverage; custom or external inputs and protocol replacement need
   explicit invalidation. Proposal and bounds fallback remain freshly resolved.
-  It is not a constraint-solver cache or enabled by default.
+  It is not a constraint-solver cache.
 - The ancestor notification cascade remains quadratic with depth. Fusing two
   walks reduces repeated work without changing that asymptotic behavior.
 - Suspension must not occur during composition. It pauses refresh, not editing
@@ -252,8 +249,8 @@ prove that a large editable application scales.
   revisions, reentrancy, and active-transaction behavior.
 - [x] Compare cached and uncached built-in controls across content, font, style,
   visibility, editor input and frame changes, plus reentrant invalidation.
-- [ ] Exercise other custom measurement dependencies and native IME; expand
-  caching beyond explicit opt-in only when evidence supports it.
+- [ ] Exercise additional custom measurement dependencies and native IME;
+  custom views must invalidate their dependencies or opt out of caching.
 
 ### 3. Evaluate the complete Dragology interaction
 

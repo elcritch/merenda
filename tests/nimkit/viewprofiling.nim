@@ -93,45 +93,44 @@ when defined(merendaProfile):
       check profile.solverPasses == 1
       check profile.phases[vppSolve].calls == 1
 
-    when defined(merendaIntrinsicCache):
-      test "intrinsic counters distinguish cache decisions and invalidation causes":
-        setIntrinsicProfileClassifier(classifyProfileView)
-        defer:
-          setIntrinsicProfileClassifier(nil)
-          resetViewProfile()
+    test "intrinsic counters distinguish cache decisions and invalidation causes":
+      setIntrinsicProfileClassifier(classifyProfileView)
+      defer:
+        setIntrinsicProfileClassifier(nil)
         resetViewProfile()
-        let view = ProfileCountingView()
-        initViewFields(view, rect(0, 0, 25, 15))
-        discard view.withProtocol(ProfileCountingLayout)
+      resetViewProfile()
+      let view = ProfileCountingView()
+      initViewFields(view, rect(0, 0, 25, 15))
+      discard view.withProtocol(ProfileCountingLayout)
+      view{vpCacheIntrinsicSize} = false
+      discard view.resolvedIntrinsicContentSize()
+      view{vpCacheIntrinsicSize} = true
+      discard view.resolvedIntrinsicContentSize()
+      discard view.resolvedIntrinsicContentSize()
+      view.invalidateIntrinsicContentSize()
+      discard view.resolvedIntrinsicContentSize()
+      view.applyLayoutFrame(rect(2, 3, 60, 35), lfoContainer)
+      discard view.resolvedIntrinsicContentSize()
+      view.invalidateIntrinsicContentSize()
+      view.invalidateDuringMeasure = true
+      discard view.resolvedIntrinsicContentSize()
+      discard view.resolvedIntrinsicContentSize()
+      inc view.xIntrinsicMeasurement.revision
+      discard view.resolvedIntrinsicContentSize()
+      check intrinsicCount(ipeCacheDisabled) == 1
+      check intrinsicCount(ipeColdMiss) == 1
+      check intrinsicCount(ipeCacheHit) == 1
+      check intrinsicCount(ipeInvalidatedMiss, "lirIntrinsic") == 3
+      check intrinsicCount(ipeInvalidatedMiss, "layoutFrame") == 1
+      check intrinsicCount(ipeRevisionMismatch) == 1
+      check intrinsicCount(ipeDiscardedMeasurement, "invalidatedDuringMeasurement") == 1
+      view.invalidateIntrinsicContentSize()
+      view.failDuringMeasure = true
+      expect ValueError:
         discard view.resolvedIntrinsicContentSize()
-        view{vpCacheIntrinsicSize} = true
-        discard view.resolvedIntrinsicContentSize()
-        discard view.resolvedIntrinsicContentSize()
-        view.invalidateIntrinsicContentSize()
-        discard view.resolvedIntrinsicContentSize()
-        view.applyLayoutFrame(rect(2, 3, 60, 35), lfoContainer)
-        discard view.resolvedIntrinsicContentSize()
-        view.invalidateIntrinsicContentSize()
-        view.invalidateDuringMeasure = true
-        discard view.resolvedIntrinsicContentSize()
-        discard view.resolvedIntrinsicContentSize()
-        inc view.xIntrinsicMeasurement.revision
-        discard view.resolvedIntrinsicContentSize()
-        check intrinsicCount(ipeCacheDisabled) == 1
-        check intrinsicCount(ipeColdMiss) == 1
-        check intrinsicCount(ipeCacheHit) == 1
-        check intrinsicCount(ipeInvalidatedMiss, "lirIntrinsic") == 3
-        check intrinsicCount(ipeInvalidatedMiss, "layoutFrame") == 1
-        check intrinsicCount(ipeRevisionMismatch) == 1
-        check intrinsicCount(ipeDiscardedMeasurement, "invalidatedDuringMeasurement") ==
-          1
-        view.invalidateIntrinsicContentSize()
-        view.failDuringMeasure = true
-        expect ValueError:
-          discard view.resolvedIntrinsicContentSize()
-        check intrinsicCount(ipeMeasurementFailed) == 1
-        view.failDuringMeasure = false
-        discard view.resolvedIntrinsicContentSize()
+      check intrinsicCount(ipeMeasurementFailed) == 1
+      view.failDuringMeasure = false
+      discard view.resolvedIntrinsicContentSize()
 
     test "built-in classification separates labels from text fields and stacks":
       let label = newLabel("Label")
@@ -145,6 +144,7 @@ when defined(merendaProfile):
         resetViewProfile()
       resetViewProfile()
       for view in [View(label), View(field), View(button), View(stack), View(direct)]:
+        view{vpCacheIntrinsicSize} = false
         discard view.resolvedIntrinsicContentSize()
       var seen: set[range[0 .. 4]]
       for entry in currentIntrinsicProfile():

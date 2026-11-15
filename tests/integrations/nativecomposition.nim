@@ -8,6 +8,7 @@ when defined(macosx):
   import merenda/nimkit
   import merenda/nimkit/directviews
   import ../../examples/direct_collection_demo
+  import ../intrinsic_collection_fixture
 
   proc setNativeMarkedText(
     view: NSView, text: NSString, selected, replacement: NSRange
@@ -44,12 +45,9 @@ when defined(macosx):
 
   suite "native virtualized row composition":
     test "Cocoa marked text survives viewport eviction and commits":
-      when defined(merendaIntrinsicCache):
-        const policies = [false, true]
-      else:
-        const policies = [false]
+      const policies = [false, true]
       for cache in policies:
-        let demo = newDirectCollectionDemo(5000, cache)
+        let demo = newIntrinsicCollectionFixture(5000, cache)
         let window = newWindow("Native composition", frame = rect(0, 0, 640, 480))
         defer:
           demo.rows.close()
@@ -96,7 +94,7 @@ when defined(macosx):
 
     if getEnv("MERENDA_TEST_JAPANESE_IME") == "1":
       test "Japanese input method composes into the virtualized field":
-        let demo = newDirectCollectionDemo(5000, false)
+        let demo = newDirectCollectionDemo(5000)
         let window = newWindow("Japanese IME", frame = rect(0, 0, 640, 480))
         defer:
           demo.rows.close()

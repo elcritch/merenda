@@ -1,13 +1,10 @@
 ## Measure synthetic input through a live native renderer, not display scanout.
-## Run with MERENDA_BACKGROUND=1 and -d:release -d:merendaIntrinsicCache.
-when not defined(merendaIntrinsicCache):
-  {.error: "build with -d:merendaIntrinsicCache".}
-
+## Run with MERENDA_BACKGROUND=1 and -d:release.
 import std/[monotimes, os, strutils, times]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/app/backend
-import ../examples/direct_collection_demo
+import ./intrinsic_collection_fixture
 
 proc waitForRender(app: Application, window: Window, previous: Natural): bool =
   let deadline = getMonoTime() + initDuration(seconds = 10)
@@ -29,7 +26,7 @@ for cache in policies:
   for operation in ["edit", "scroll"]:
     let app = newApplication("Intrinsic cache native benchmark")
     app.renderExecutionMode = remMainThread
-    let demo = newDirectCollectionDemo(5000, cache)
+    let demo = newIntrinsicCollectionFixture(5000, cache)
     let window = newWindow("Intrinsic cache benchmark", frame = rect(80, 80, 640, 480))
     window.setContentView(demo.view)
     app.addWindow(window)
