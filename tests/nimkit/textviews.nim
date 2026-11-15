@@ -216,6 +216,22 @@ proc newTextViewCheckerSpy(): TextViewCheckerSpy =
   discard result.withProtocol(TextViewCheckerSpyProtocol)
 
 suite "nimkit text views":
+  test "default marked text preserves the foreground and supports an explicit override":
+    let textView = newTextView("abc", frame = rect(0, 0, 160, 24))
+    let foreground = color(0.9, 0.8, 0.7, 1)
+    textView.richText = false
+    textView.textColor = foreground
+    textView.selectedRange = initTextRange(1, 1)
+    textView.setMarkedTextValue("かな", initTextRange(2, 0), initTextRange(0, 0))
+    let marked = textView.displayedTextAttributesForTesting(1)
+    check marked.foregroundColor == foreground
+    check marked.underline
+    var custom = defaultTextAttributes(color(0.2, 0.4, 0.8, 1))
+    custom.underline = true
+    textView.markedTextAttributes = custom
+    check textView.displayedTextAttributesForTesting(1).foregroundColor ==
+      custom.foregroundColor
+
   test "rich text drawing reuses the managed layout":
     let textView = newTextView("Cached rich text")
     textView.frame = rect(0.0, 0.0, 240.0, 80.0)

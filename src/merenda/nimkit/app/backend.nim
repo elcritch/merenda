@@ -132,6 +132,17 @@ type
     isEscape*: bool
     isModifierChange*: bool
 
+  HostTextComposition* = object
+    text*: string
+    selectedStart*, selectedLength*: int
+    replacementStart*, replacementLength*: int
+
+  HostTextInputState* = object
+    valid*: bool
+    text*: string
+    selectedStart*, selectedLength*, markedStart*, markedLength*: int
+    caret*: Rect
+
   HostWindowCallbacks* = object
     onClose*: proc() {.closure.}
     onResize*: proc() {.closure.}
@@ -141,6 +152,9 @@ type
     onScroll*: proc(event: events.ScrollEvent) {.closure.}
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
+    onTextComposition*: proc(event: HostTextComposition) {.closure.}
+    onTextUnmark*: proc() {.closure.}
+    onTextInputState*: proc(): HostTextInputState {.closure.}
     onRender*: proc() {.closure.}
     onFocusChanged*: proc(focused: bool) {.closure.}
     onPopupDone*: proc() {.closure.}
@@ -1868,6 +1882,26 @@ func isNativeTextInput*(text: string): bool =
   true
 
 proc dispatchTextInput(host: HostWindow, event: siwinshim.TextInputEvent) =
+  when declared(siwinshim.textInputComposition):
+    case event.kind
+    of siwinshim.textInputComposition:
+      if not host.xCallbacks.onTextComposition.isNil:
+        host.xCallbacks.onTextComposition(
+          HostTextComposition(
+            text: event.text,
+            selectedStart: event.selectedStart,
+            selectedLength: event.selectedLength,
+            replacementStart: event.replacementStart,
+            replacementLength: event.replacementLength,
+          )
+        )
+      return
+    of siwinshim.textInputUnmark:
+      if not host.xCallbacks.onTextUnmark.isNil:
+        host.xCallbacks.onTextUnmark()
+      return
+    of siwinshim.textInputCommit:
+      discard
   if event.text.isNativeTextInput() and not host.xCallbacks.onTextInput.isNil:
     host.xCallbacks.onTextInput(event.text)
 
@@ -1944,6 +1978,25 @@ proc installEventHandlers(host: HostWindow) =
         host.xCallbacks.onFocusChanged(event.value)
     ,
   )
+  when declared(siwinshim.TextInputState):
+    host.xNativeWindow.eventsHandler.onTextInputState = proc(
+        event: siwinshim.AnyWindowEvent
+    ): siwinshim.TextInputState =
+      let current = hostForNativeWindow(event.window, ownerKey)
+      if not current.isNil and not current.xCallbacks.onTextInputState.isNil:
+        let state = current.xCallbacks.onTextInputState()
+        result = siwinshim.TextInputState(
+          valid: state.valid,
+          text: state.text,
+          selectedStart: state.selectedStart,
+          selectedLength: state.selectedLength,
+          markedStart: state.markedStart,
+          markedLength: state.markedLength,
+          caretX: state.caret.origin.x,
+          caretY: state.caret.origin.y,
+          caretWidth: state.caret.size.width,
+          caretHeight: state.caret.size.height,
+        )
 
 when defined(merenda.softwareRenderer) or defined(windows):
   proc initSoftwareRenderer(host: HostWindow) =

@@ -330,7 +330,26 @@ The model-to-view adapter translates changes at two granularities:
 - **Membership/order:** obtain the new visible ID ordering and reconcile row
   identities, preserving selection, the editing entity, and the viewport anchor.
 
-This adapter is missing glue, not something `bindTableView` already completes.
+`CollectionRows` connects an `ArrayController` to a `CollectionView` and builds
+DirectView rows for a bounded viewport. See the [editable collection example](../examples/direct_collection_demo.nim)
+and [adapter](../src/merenda/nimkit/directviews/collectionrows.nim). Its builder
+receives the stable model identifier; use that identifier for bindings and actions.
+The collection owns the adapter as its delegate, so call `rows.close()` before
+replacing the delegate or releasing the collection. Model updates are coalesced on
+the GUI thread; tests and synchronous callers can use `rows.flushBindings()`.
+
+An active field editor remains mounted when its row leaves the viewport; ordinary
+offscreen rows are recycled. Removing the edited identifier cancels its editor and
+retires its bindings before an identifier can be reused. Selection is synchronized
+with the controller. The viewport can retain one editing row in addition to visible
+rows. Virtualization does not require either experimental layout cache flag.
+
+On macOS, `tests/integrations/nativecomposition.nim` covers the Cocoa marked-text
+callbacks and caret/selection queries through a native window. To additionally
+exercise the Japanese input method, use an unlocked desktop session, select the
+Japanese Romaji input source, and run that test with
+`MERENDA_TEST_JAPANESE_IME=1`. Restore your usual input source afterwards.
+
 ArrayController's insert/remove/move notifications currently share `mmkItemsChanged`,
 and source indexes are not necessarily sorted/filtered presentation indexes. Begin
 with keyed order comparison; introduce precise deltas only with a clear contract.
@@ -338,10 +357,9 @@ A typed domain controller can implement the same data-source hooks without copyi
 all application state into a second `ModelItem` store.
 [Model controllers](../src/merenda/nimkit/app/modelcontrollers.nim).
 
-The implemented MVC changes retain CollectionView items by identity and let TableView
-delegates opt into retained hosted cells with `configureCellView`. Tests cover
-editor identity across insert/move. Virtualized recycling and offscreen drafts
-still need a separate evaluation; keyed retention alone does not settle them.
+CollectionView retains items by identity; TableView delegates can opt into retained
+hosted cells with `configureCellView`. Tests cover editor identity across insert/move.
+Applications still need a model policy for drafts that must outlive an editor.
 [Collection updates](../src/merenda/nimkit/containers/collectionviews.nim),
 [table updates](../src/merenda/nimkit/tables/tablerows.nim).
 
@@ -442,3 +460,38 @@ The main hypothesis is that real-view composition plus MVC-owned bindings provid
 the needed expressiveness with less intermediate representation and narrower update
 work. Whether it is faster, simpler, and more robust than P0/P2 remains the result
 this experiment must establish.
+
+## Experimental virtualized rows
+
+`newCollectionRows(collection, controller, builder)` uses an ArrayController as
+its data source and composes each mounted row into a DirectView. The builder is
+called with the stable model identifier and can use the ordinary DirectView DSL
+and scope-owned bindings. The adapter observes model and selection changes;
+`flushBindings` may be used to apply queued changes explicitly on the GUI thread.
+Call `close` when replacing the adapter or disposing its presentation.
+
+Rows outside the viewport are cleared before their host is reused, including
+bindings and action targets. A row containing the window's active field editor
+stays mounted offscreen, retaining its provisional text, marked text and
+selection. The next viewport reconciliation retires it after editing ends.
+Removing the item cancels its field editor and retires the row. A model or
+controller must own any draft that must survive the end of editing or a row's
+retirement; row identity is not a durable draft or asynchronous validity token.
+The adapter uses the collection's delegate and expects unique, stable item IDs.
+
+Programmatic selection changes through the collection or its controller preserve
+the active editor, including when revealing the selected row scrolls it offscreen.
+Pointer selection requests focus for the collection and follows the window's normal
+end-editing and validation behavior.
+
+Compile with `-d:merendaProfile` and import
+`merenda/nimkit/foundation/viewprofiling` to reset and read thread-local phase
+counters. Times are inclusive: solving includes construction and insertion, and
+intrinsic measurement may occur inside generation. Do not add the phase times.
+The profiler also reports exclusive times, excluding nested instrumented phases;
+the remaining uninstrumented work stays in its enclosing phase. Constraint
+insertion includes the solver's incremental optimization. Variable update is
+timed separately and only writes the already solved values.
+The drawing phase covers view draw callbacks, not GPU presentation. Solver size
+is the maximum recorded per pass; these counters are diagnostics, not a memory
+or input-latency measurement.

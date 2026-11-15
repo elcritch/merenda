@@ -1,4 +1,4 @@
-import std/[math, monotimes, options, os, tables, times]
+import std/[math, monotimes, options, os, tables, times, unicode]
 
 import pkg/chronicles
 import pkg/vmath as vmath
@@ -22,7 +22,8 @@ import ../foundation/events
 import ../foundation/terminaltrace
 import ../foundation/notifications
 import ../text/fieldeditors
-from ../text/textstorage import TextStorage
+import ../text/texttypes
+from ../text/textstorage import TextStorage, stringValue
 from ../text/textviews import
   TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
   isInsertableText, `insertionPointVisible=`
@@ -2982,6 +2983,97 @@ proc dispatchTextInput*(window: Window, text: string): bool =
     return false
   dispatchTextInputInChain(target, text).handled
 
+func utf16RuneIndex(text: string, offset: int): int =
+  var units = 0
+  for rune in text.runes:
+    let width = if rune.int > 0xffff: 2 else: 1
+    if units + width > max(offset, 0):
+      break
+    units += width
+    inc result
+
+func runeUtf16Index(text: string, offset: int): int =
+  var index = 0
+  for rune in text.runes:
+    if index >= max(offset, 0):
+      break
+    result += (if rune.int > 0xffff: 2 else: 1)
+    inc index
+
+func utf16TextRange(text: string, start, length: int): TextRange =
+  let first = text.utf16RuneIndex(start)
+  let endOffset =
+    if length > high(int) - max(start, 0):
+      high(int)
+    else:
+      max(start, 0) + max(length, 0)
+  initTextRange(first, text.utf16RuneIndex(endOffset) - first)
+
+proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool =
+  ## Native marked-text ranges use UTF-16; text input protocols use runes.
+  var responder = window.keyDispatchTarget()
+  while not responder.isNil:
+    var replacement = initTextRange(0, 0)
+    if event.replacementStart >= 0:
+      let text = responder.trySendLocal(
+        textInputAttributedSubstringForRange(), initTextRange(0, high(int))
+      )
+      if text.isSome and not text.get().isNil:
+        replacement = text.get().stringValue().utf16TextRange(
+            event.replacementStart, event.replacementLength
+          )
+    if responder.sendLocalIfHandled(
+      setMarkedText(),
+      (
+        text: event.text,
+        selectedRange:
+          event.text.utf16TextRange(event.selectedStart, event.selectedLength),
+        replacementRange: replacement,
+      ),
+    ):
+      return true
+    responder = responder.nextResponder()
+
+proc dispatchTextUnmark*(window: Window): bool =
+  var responder = window.keyDispatchTarget()
+  while not responder.isNil:
+    if responder.sendLocalIfHandled(unmarkText()):
+      return true
+    responder = responder.nextResponder()
+
+proc textInputState*(window: Window): HostTextInputState =
+  var responder = window.keyDispatchTarget()
+  while not responder.isNil:
+    let selected = responder.trySendLocal(textInputSelectedRange())
+    let content = responder.trySendLocal(
+      textInputAttributedSubstringForRange(), initTextRange(0, high(int))
+    )
+    if selected.isSome and content.isSome and not content.get().isNil:
+      let text = content.get().stringValue()
+      let selection = selected.get()
+      let start = text.runeUtf16Index(int(selection.location))
+      let stop = text.runeUtf16Index(int(selection.location + selection.length))
+      result.valid = true
+      result.text = text
+      result.selectedStart = start
+      result.selectedLength = stop - start
+      result.markedStart = -1
+      if responder.trySendLocal(textInputHasMarkedText()).get(false):
+        let marked = responder.trySendLocal(textInputMarkedRange())
+        if marked.isSome:
+          let range = marked.get()
+          result.markedStart = text.runeUtf16Index(int(range.location))
+          result.markedLength =
+            text.runeUtf16Index(int(range.location + range.length)) - result.markedStart
+      result.caret = responder
+        .trySendLocal(
+          textInputFirstRectForCharacterRange(),
+          initTextRange(int(selection.location), 0),
+        )
+        .get(rect(0, 0, 0, 0))
+      return
+    responder = responder.nextResponder()
+
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
 ): bool =
@@ -3612,6 +3704,14 @@ proc ensureNativeWindow*(window: Window) =
       window.dispatchHostKey(event),
     onTextInput: proc(text: string) =
       window.dispatchHostTextInput(text),
+    onTextComposition: proc(event: HostTextComposition) =
+      discard window.dispatchTextComposition(event)
+      discard window.requestNativeDisplayUpdateIfNeeded(),
+    onTextUnmark: proc() =
+      discard window.dispatchTextUnmark()
+      discard window.requestNativeDisplayUpdateIfNeeded(),
+    onTextInputState: proc(): HostTextInputState =
+      window.textInputState(),
     onRender: proc() =
       window.renderNativeWindow(),
     onFocusChanged: proc(focused: bool) =

@@ -6,6 +6,7 @@ import sigils/core
 import ../app/animations
 import ../responder/responders
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../foundation/types
 import ./viewconstraints
 import ../foundation/events
@@ -20,8 +21,9 @@ export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
   LayoutInputCache, LayoutSolveMode, LayoutSolveFailure, LayoutTransactionState,
-  activeLayoutTransaction, markLocalNeedsDisplay, markRenderSlotNeedsDisplay,
-  nextLayoutGeneration, noteLayoutInvalidation, hasBlockedLayoutAncestor
+  PersistentSolverView, PersistentLayoutCache, activeLayoutTransaction,
+  markLocalNeedsDisplay, markRenderSlotNeedsDisplay, nextLayoutGeneration,
+  noteLayoutInvalidation, hasBlockedLayoutAncestor
 export viewconstraints except
   generatedLayoutInputs, solveBlocked, applyConstraintsForSubtree
 export viewgeometry except
@@ -324,6 +326,7 @@ proc hasActiveLayoutAncestor(view: View): bool =
     current = current.superviewBacklink()
 
 proc layoutSubtreeIfNeeded*(view: View) =
+  profileViewPhase(vppLayoutTransaction)
   if view.hasActiveLayoutAncestor() or view.hasBlockedLayoutAncestor() or
       not view.hasPendingLayoutInSubtree():
     return
@@ -347,6 +350,13 @@ proc layoutSubtreeIfNeeded*(view: View) =
   view.xLayoutPhase = transaction.phase
   if not view.applyConstraintsForSubtree():
     return
+
+  when defined(merendaRowLayoutBoundaries):
+    # Match the full solve's order: resolve children before container layout can
+    # change their host's frame. Existing reconciliation handles later resizing.
+    for boundary in transaction.rowLayoutBoundaries:
+      if not boundary.applyConstraintsForSubtree():
+        return
 
   transaction.phase = ltpLayingOut
   view.xLayoutPhase = transaction.phase

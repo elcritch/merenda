@@ -1,4 +1,6 @@
 import std/tables
+when defined(merendaPersistentLayout):
+  import pkg/kiwiberry
 
 import ../responder/responders
 import ../themes
@@ -123,7 +125,8 @@ type
     vpDraggable ## Marks a subtree for declarative dragging.
     vpAccessibilityElement ## Explicitly exposes the view as an accessibility element.
     vpAccessibilityIgnored ## Excludes the view from accessibility traversal.
-    vpCacheIntrinsicSize ## Opt in when intrinsic inputs invalidate layout on change.
+    vpCacheIntrinsicSize ## Requires -d:merendaIntrinsicCache and valid invalidation.
+    vpPersistentLayout ## Retain a verified solver with -d:merendaPersistentLayout.
 
   ViewInternalProperty* = enum
     vipFlipped
@@ -133,6 +136,7 @@ type
     vipNeedsUpdateConstraints
     vipNeedsLayout
     vipNeedsLocalConstraintLayout
+    vipExperimentalRowLayoutBoundary
     vipLayoutSubtreeInProgress
     vipAutoresizingMaskConstraints
     vipHasCachedRenders
@@ -196,6 +200,19 @@ type
     aggregateStructureDirty*: bool
     sourceGenerations*: array[LayoutInputSource, Natural]
     generation*: Natural
+    partitioned*: bool
+
+  PersistentSolverView* = object
+    when defined(merendaPersistentLayout):
+      item*: BackRef[View]
+      left*, top*, width*, height*: Variable
+
+  PersistentLayoutCache* = object
+    when defined(merendaPersistentLayout):
+      valid*: bool
+      solver*: Solver
+      items*: seq[PersistentSolverView]
+      constraints*: seq[Constraint]
 
   LayoutInputSummary* = object
     source*: LayoutInputSource
@@ -217,6 +234,7 @@ type
     phase*: LayoutTransactionPhase
     followUpRequested*: bool
     lastInvalidation*: LayoutInvalidationDiagnostic
+    rowLayoutBoundaries*: seq[View]
 
   View* = ref object of Responder
     xTag*: int
@@ -259,10 +277,14 @@ type
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
     xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
     xLayoutInputRevision*: uint64
-    xIntrinsicRevision*: uint64
-    xIntrinsicCacheRevision*: uint64
-    xIntrinsicCacheValid*: bool
-    xIntrinsicCache*: IntrinsicSize
+    when defined(merendaIntrinsicCache):
+      xIntrinsicRevision*: uint64
+      xIntrinsicCacheRevision*: uint64
+      xIntrinsicCacheValid*: bool
+      xIntrinsicCache*: IntrinsicSize
+      when defined(merendaProfile):
+        xIntrinsicProfileHadEntry*: bool
+        xIntrinsicProfileInvalidation*: string
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
@@ -272,6 +294,8 @@ type
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xLayoutInputCache*: LayoutInputCache
+    when defined(merendaPersistentLayout):
+      xPersistentLayout*: PersistentLayoutCache
     xCssLayoutDiagnostics*: array[LayoutSolveMode, seq[CssLayoutDiagnostic]]
     xNextKeyView*: BackRef[View]
     xPreviousKeyView*: BackRef[View]
@@ -363,9 +387,13 @@ proc markLocalNeedsDisplay*(
 ) =
   if view.isNil:
     return
-  if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
-    inc view.xIntrinsicRevision
-    view.xIntrinsicCacheValid = false
+  when defined(merendaIntrinsicCache):
+    if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
+      when defined(merendaProfile):
+        if view.xIntrinsicCacheValid:
+          view.xIntrinsicProfileInvalidation = "layoutFrame"
+      inc view.xIntrinsicRevision
+      view.xIntrinsicCacheValid = false
   view.xDisplayRevision.advanceRevision()
   for revision in view.xRenderSlotRevisions.mvalues:
     revision.advanceRevision()
@@ -375,9 +403,13 @@ proc markLocalNeedsDisplay*(
   if propagateAncestors:
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
-      if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
-        inc ancestor.xIntrinsicRevision
-        ancestor.xIntrinsicCacheValid = false
+      when defined(merendaIntrinsicCache):
+        if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
+          when defined(merendaProfile):
+            if ancestor.xIntrinsicCacheValid:
+              ancestor.xIntrinsicProfileInvalidation = "descendantLayoutFrame"
+          inc ancestor.xIntrinsicRevision
+          ancestor.xIntrinsicCacheValid = false
       ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 

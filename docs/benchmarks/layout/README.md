@@ -55,7 +55,8 @@ measurement followed by one direct arrangement, repeated ten times per sample.
 It warms the fixture first so child frames are stable. It compares the same build
 with caching disabled and explicitly enabled on each child; this is a warm-cache
 microbenchmark, not a constraint solver, render, or complete layout transaction.
-Use the build command above with `cache.nim` and a distinct output path.
+Use the build command above with `cache.nim`, `-d:merendaIntrinsicCache`, and a
+distinct output path.
 
 | Rows | Disabled µs/pair | Enabled µs/pair | Intrinsic reads per 10 pairs, disabled / enabled |
 | ---: | ---: | ---: | ---: |
@@ -87,8 +88,7 @@ nim ic -d:release --nimcache:/tmp/merenda-layout-cache-<version>-ic \
 ```
 
 Each binary ran three times in alternating order, giving 15 samples per row
-count and version. The raw samples are [before](default-off-before.csv) and
-[after](default-off-after.csv). Median time changes follow; positive numbers mean
+count and version. Raw sample files are not tracked. Median time changes follow; positive numbers mean
 the cache build took longer.
 
 | Rows | Create | Measure | Layout | Reverse |

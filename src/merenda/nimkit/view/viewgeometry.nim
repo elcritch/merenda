@@ -3,6 +3,7 @@ import std/options
 import sigils/core
 
 import ../foundation/selectors
+import ../foundation/viewprofiling
 import ../themes
 import ../foundation/types
 import ./viewbase
@@ -27,9 +28,20 @@ type
     xView: View
     xKind: ViewLayoutPriorityKind
 
+  IntrinsicProfileClassifier* = proc(view: View): string {.nimcall, raises: [].}
+
 const MaxLayoutResolutionDepth = 128
 
 var layoutResolutionStack {.threadvar.}: seq[LayoutResolutionFrame]
+when defined(merendaProfile):
+  var intrinsicProfileClassifier {.threadvar.}: IntrinsicProfileClassifier
+
+proc setIntrinsicProfileClassifier*(classifier: IntrinsicProfileClassifier) =
+  ## Enable per-widget intrinsic counters on this thread, or pass nil to stop.
+  ## Return bounded category names; do not mutate the view or retain it.
+  when defined(merendaProfile):
+    intrinsicProfileClassifier = classifier
+
 when defined(merendaTests):
   var layoutInvalidationAncestorVisits* {.threadvar.}: int
 
@@ -129,16 +141,27 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
 func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
   reason in {lirSuperview, lirSubviews, lirHierarchy, lirHidden}
 
-proc invalidateIntrinsicMeasurement(view: View) =
-  if vpCacheIntrinsicSize in view.xProps:
-    inc view.xIntrinsicRevision
-    view.xIntrinsicCacheValid = false
+proc invalidateIntrinsicMeasurement(view: View, reason: LayoutInvalidationReason) =
+  when defined(merendaIntrinsicCache):
+    if vpCacheIntrinsicSize in view.xProps:
+      when defined(merendaProfile):
+        if view.xIntrinsicCacheValid:
+          view.xIntrinsicProfileInvalidation = $reason
+      inc view.xIntrinsicRevision
+      view.xIntrinsicCacheValid = false
+  else:
+    discard view
+    discard reason
 
 proc markConstraintStorageChangedRaw(view: View) =
   view.xPrivProps.incl {vipNeedsUpdateConstraints, vipNeedsLayout}
 
 proc markAggregateLayoutInputDirty(
-    view: View, source: LayoutInputSource, structureDirty: bool, resetFeedback = false
+    view: View,
+    source: LayoutInputSource,
+    structureDirty: bool,
+    reason: LayoutInvalidationReason,
+    resetFeedback = false,
 ) =
   var current = view
   while not current.isNil:
@@ -148,8 +171,11 @@ proc markAggregateLayoutInputDirty(
       current.xLayoutFeedbackCycles = 0
       current.xLastLayoutInvalidation = LayoutInvalidationDiagnostic()
     inc current.xLayoutInputRevision
-    current.invalidateIntrinsicMeasurement()
+    current.invalidateIntrinsicMeasurement(reason)
     current.xLayoutInputCache.aggregateDirtySources.incl source
+    if reason == lirAutoresizingMask:
+      # Translation changes whether intrinsic equations are generated.
+      current.xLayoutInputCache.aggregateDirtySources.incl lisIntrinsic
     if structureDirty:
       current.xLayoutInputCache.aggregateStructureDirty = true
     current.markConstraintStorageChangedRaw()
@@ -163,6 +189,8 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
       source = reason.sourceFor()
       structureDirty = reason.isStructureDirtyReason()
     view.xLayoutInputCache.dirtySources.incl source
+    if reason == lirAutoresizingMask:
+      view.xLayoutInputCache.dirtySources.incl lisIntrinsic
     if structureDirty:
       view.xLayoutInputCache.structureDirty = true
     case reason
@@ -176,10 +204,12 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
     if activeLayoutTransaction.isNil:
       # Outside a transaction, noteLayoutInvalidation only resets feedback on
       # this same chain. Fuse that reset with aggregate dirty propagation.
-      view.markAggregateLayoutInputDirty(source, structureDirty, resetFeedback = true)
+      view.markAggregateLayoutInputDirty(
+        source, structureDirty, reason, resetFeedback = true
+      )
     else:
       view.noteLayoutInvalidation(reason, affectsConstraints = true)
-      view.markAggregateLayoutInputDirty(source, structureDirty)
+      view.markAggregateLayoutInputDirty(source, structureDirty, reason)
 
 protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
   proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
@@ -382,26 +412,86 @@ proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
+  profileViewPhase(vppIntrinsicMeasurement)
   ## Opt-in caching applies only to the intrinsic result. Fitting proposals and
   ## bounds fallbacks are always resolved by sizeThatFits on each call.
   withLayoutResolutionGuard(view, lroIntrinsicContentSize):
-    let cacheEnabled = vpCacheIntrinsicSize in view.xProps
-    if cacheEnabled and view.xIntrinsicCacheValid and
-        view.xIntrinsicCacheRevision == view.xIntrinsicRevision:
-      return view.xIntrinsicCache
-    let revision = view.xIntrinsicRevision
-    let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
-    result =
-      if measured.isSome:
-        measured.get()
-      else:
-        view.intrinsicContentSize()
-    # An observer or custom measurement may invalidate during resolution.
-    if cacheEnabled and vpCacheIntrinsicSize in view.xProps and
-        view.xIntrinsicRevision == revision:
-      view.xIntrinsicCache = result
-      view.xIntrinsicCacheRevision = revision
-      view.xIntrinsicCacheValid = true
+    when defined(merendaIntrinsicCache):
+      let cacheEnabled = vpCacheIntrinsicSize in view.xProps
+      when defined(merendaProfile):
+        let widgetType =
+          if intrinsicProfileClassifier.isNil:
+            ""
+          else:
+            intrinsicProfileClassifier(view)
+        if not cacheEnabled:
+          recordIntrinsicProfile(widgetType, ipeCacheDisabled)
+        elif view.xIntrinsicCacheValid and
+            view.xIntrinsicCacheRevision != view.xIntrinsicRevision:
+          recordIntrinsicProfile(widgetType, ipeRevisionMismatch)
+        elif not view.xIntrinsicCacheValid:
+          if view.xIntrinsicProfileHadEntry:
+            recordIntrinsicProfile(
+              widgetType, ipeInvalidatedMiss, view.xIntrinsicProfileInvalidation
+            )
+          else:
+            recordIntrinsicProfile(widgetType, ipeColdMiss)
+      if cacheEnabled and view.xIntrinsicCacheValid and
+          view.xIntrinsicCacheRevision == view.xIntrinsicRevision:
+        when defined(merendaProfile):
+          recordIntrinsicProfile(widgetType, ipeCacheHit)
+        return view.xIntrinsicCache
+      when defined(merendaProfile):
+        var measurementFinished = false
+        defer:
+          if not measurementFinished:
+            recordIntrinsicProfile(widgetType, ipeMeasurementFailed)
+      let revision = view.xIntrinsicRevision
+      let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
+      result =
+        if measured.isSome:
+          measured.get()
+        else:
+          view.intrinsicContentSize()
+      # An observer or custom measurement may invalidate during resolution.
+      if cacheEnabled and vpCacheIntrinsicSize in view.xProps and
+          view.xIntrinsicRevision == revision:
+        view.xIntrinsicCache = result
+        view.xIntrinsicCacheRevision = revision
+        view.xIntrinsicCacheValid = true
+        when defined(merendaProfile):
+          view.xIntrinsicProfileHadEntry = true
+          view.xIntrinsicProfileInvalidation.setLen(0)
+      elif cacheEnabled:
+        when defined(merendaProfile):
+          let reason =
+            if vpCacheIntrinsicSize notin view.xProps:
+              "cacheDisabledDuringMeasurement"
+            else:
+              "invalidatedDuringMeasurement"
+          recordIntrinsicProfile(widgetType, ipeDiscardedMeasurement, reason)
+      when defined(merendaProfile):
+        measurementFinished = true
+    else:
+      when defined(merendaProfile):
+        let widgetType =
+          if intrinsicProfileClassifier.isNil:
+            ""
+          else:
+            intrinsicProfileClassifier(view)
+        recordIntrinsicProfile(widgetType, ipeCacheDisabled)
+        var measurementFinished = false
+        defer:
+          if not measurementFinished:
+            recordIntrinsicProfile(widgetType, ipeMeasurementFailed)
+      let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
+      result =
+        if measured.isSome:
+          measured.get()
+        else:
+          view.intrinsicContentSize()
+      when defined(merendaProfile):
+        measurementFinished = true
 
 proc resolvedLayoutStyleContext*(view: View): StyleContext =
   ## Concrete widgets own their semantic role/effective-state layout hook.
@@ -462,15 +552,17 @@ proc invalidateContainerMetrics*(view: View) =
     lirContainerMetrics, ancestorReason = lirDescendantIntrinsic
   )
 
-proc markIntrinsicContentSizeDirtySubtree(view: View) =
-  view.invalidateIntrinsicMeasurement()
+proc markIntrinsicContentSizeDirtySubtree(
+    view: View, reason: LayoutInvalidationReason
+) =
+  view.invalidateIntrinsicMeasurement(reason)
   view.xLayoutInputCache.dirtySources.incl lisIntrinsic
   view.markConstraintStorageChangedRaw()
   for child in view.xSubviews:
-    child.markIntrinsicContentSizeDirtySubtree()
+    child.markIntrinsicContentSizeDirtySubtree(reason)
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View, reason = lirIntrinsic) =
-  view.markIntrinsicContentSizeDirtySubtree()
+  view.markIntrinsicContentSizeDirtySubtree(reason)
   view.invalidateLayoutItemGeometry(reason, ancestorReason = lirDescendantIntrinsic)
 
 proc layoutPriority(

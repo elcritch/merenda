@@ -12,8 +12,8 @@ requires "parsetoml >= 0.7.2"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# Includes ABI/X11 fixes, nonactivating windows, and FigDraw's WinAPI fallback API.
-requires "siwin#5827ee9dadb5e2597db85375e0e87b8a2272174b"
+# Includes native text composition, ABI/X11 fixes, and windowing fixes.
+requires "gh:elcritch/siwin#feat/native-ime-composition"
 # This revision loads Vulkan lazily so a missing driver can use OpenGL.
 requires "gh:elcritch/figdraw >= 0.46.4 [siwin]"
 requires "harfbuzzy >= 0.7.0 [runtime]"
@@ -40,7 +40,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#bbbd4247df78b7a536ba25ec269dfd6ebef043ca"
+  requires "gh:elcritch/moe#fix/git-process-fd-ownership"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

@@ -3,6 +3,8 @@ import std/tables
 import sigils/[core, reactive, selectors]
 import ./responder/responders
 import ./foundation/mainthreadwork
+import ./foundation/sourcedispatch
+import ./foundation/viewprofiling
 import ./text/textfields
 import ./app/collectionsigils
 
@@ -48,6 +50,7 @@ type
     lastValue: T
 
 proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
+  profileViewPhase(vppBindingUpdate)
   let binding = ValueBinding[R, C, V, T](base)
   let receiver = binding.receiver{}
   let target = binding.target{}
@@ -163,8 +166,9 @@ proc removeBinding*(scope: BindingScope, id: string) =
     binding.editor = nil
     binding.pending = false
     if not binding.disconnectSource.isNil:
-      binding.disconnectSource(binding)
+      let disconnect = binding.disconnectSource
       binding.disconnectSource = nil
+      disconnect(binding)
     binding.scope.clear()
     scope.bindings.del(id)
 
@@ -251,13 +255,11 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
   if scope.collecting:
     scope.seen[id] = true
   if scope.bindings.hasKey(id) and scope.bindings[id] of ValueBinding[R, C, V, T]:
+    let existing = scope.bindings[id]
+    if existing.sourceKey != sourceKey or existing.signalKey != signalKey:
+      scope.removeBinding(id)
+  if scope.bindings.hasKey(id) and scope.bindings[id] of ValueBinding[R, C, V, T]:
     result = ValueBinding[R, C, V, T](scope.bindings[id])
-    if result.sourceKey != sourceKey or result.signalKey != signalKey:
-      result.hasLast = false
-      if not result.disconnectSource.isNil:
-        result.disconnectSource(result)
-      result.disconnectSource = nil
-      result.needsConnect = true
   else:
     scope.removeBinding(id)
     result = ValueBinding[R, C, V, T](active: true, needsConnect: true)
@@ -325,10 +327,27 @@ template bindValueImpl(
         result = proc(owned: Binding) =
           let current = sourceRef{}
           if not current.isNil:
-            current.disconnect(signal, owned, invalidate)
+            if sourceDispatchActive(Agent(current)):
+              discard deferSourceWork(
+                Agent(current),
+                proc() =
+                  current.disconnect(signal, owned, invalidate),
+              )
+            else:
+              current.disconnect(signal, owned, invalidate)
 
       binding.needsConnect = false
-      bindingInput.connect(signal, Binding(binding), invalidate, true)
+      if sourceDispatchActive(Agent(bindingInput)):
+        let pending = Binding(binding)
+        discard deferSourceWork(
+          Agent(bindingInput),
+          proc() =
+            if pending.active:
+              bindingInput.connect(signal, pending, invalidate, true)
+          ,
+        )
+      else:
+        bindingInput.connect(signal, Binding(binding), invalidate, true)
       binding.disconnectSource = makeDisconnect(bindingInput)
     if initialApply:
       binding.applyOrDefer()
