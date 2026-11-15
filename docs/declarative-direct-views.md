@@ -461,10 +461,19 @@ controller must own any draft that must survive the end of editing or a row's
 retirement; row identity is not a durable draft or asynchronous validity token.
 The adapter uses the collection's delegate and expects unique, stable item IDs.
 
+Programmatic selection changes through the collection or its controller preserve
+the active editor, including when revealing the selected row scrolls it offscreen.
+Pointer selection requests focus for the collection and follows the window's normal
+end-editing and validation behavior.
+
 Compile with `-d:merendaProfile` and import
 `merenda/nimkit/foundation/viewprofiling` to reset and read thread-local phase
 counters. Times are inclusive: solving includes construction and insertion, and
 intrinsic measurement may occur inside generation. Do not add the phase times.
+The profiler also reports exclusive times, excluding nested instrumented phases;
+the remaining uninstrumented work stays in its enclosing phase. Constraint
+insertion includes the solver's incremental optimization. Variable update is
+timed separately and only writes the already solved values.
 The drawing phase covers view draw callbacks, not GPU presentation. Solver size
 is the maximum recorded per pass; these counters are diagnostics, not a memory
 or input-latency measurement.
