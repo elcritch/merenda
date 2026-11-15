@@ -81,6 +81,11 @@ proc toggleDuringRemoval(
     observer.armed = false
     observer.child{vpCacheIntrinsicSize} = true
 
+proc toggleAfterAddition(observer: CachePolicyObserver, child: View) {.slot.} =
+  if observer.armed:
+    observer.armed = false
+    child{vpCacheIntrinsicSize} = false
+
 proc actualUncachedCount(view: View): uint32 =
   if not view{vpCacheIntrinsicSize}:
     inc result
@@ -184,6 +189,10 @@ suite "intrinsic measurement cache":
     first.checkUncachedCount()
     check branch.xIntrinsicMeasurement.uncachedSubtree == 2
     check first.xIntrinsicMeasurement.uncachedSubtree == 2
+    branch{vpCacheIntrinsicSize} = false
+    check first.xIntrinsicMeasurement.uncachedSubtree == 3
+    branch{vpCacheIntrinsicSize} = true
+    first.checkUncachedCount()
     first.insertSubview(branch, 0)
     first.checkUncachedCount()
     second.addSubview(branch)
@@ -206,6 +215,11 @@ suite "intrinsic measurement cache":
     check first.replaceSubview(branch, nil)
     first.checkUncachedCount()
     branch.checkUncachedCount()
+    let replacement = newView()
+    replacement{vpCacheIntrinsicSize} = false
+    first.addSubview(newView())
+    check first.replaceSubview(first.subviews[0], replacement)
+    first.checkUncachedCount()
     let window = newWindow("Cache hierarchy", frame = rect(0, 0, 80, 40))
     window.setContentView(branch)
     branch.checkUncachedCount()
@@ -227,6 +241,18 @@ suite "intrinsic measurement cache":
     check not observer.armed
     parent.checkUncachedCount()
     child.checkUncachedCount()
+
+  test "policy changes during addition bubble to the new parent":
+    let parent = newView()
+    let child = newView()
+    let observer = CachePolicyObserver(armed: true)
+    initResponder(observer)
+    parent.connect(didAddSubview, observer, toggleAfterAddition)
+    parent.addSubview(child)
+    parent.disconnect(didAddSubview, observer, toggleAfterAddition)
+    check not observer.armed
+    check parent.xIntrinsicMeasurement.uncachedSubtree == 1
+    parent.checkUncachedCount()
 
   test "cell replacement and cell metrics invalidate an opted-in control":
     let first = newSizingCell(initIntrinsicSize(40, 20))
