@@ -1,5 +1,8 @@
 # DirectView layout pipeline, 2026-11-15
 
+These historical samples predate the task demo's explicit leaf-control cache
+opt-in. Running the harness against the current demo also measures that change.
+
 Two instrumented and two uninstrumented runs on Apple M3 Pro, macOS 15.7.9,
 Nim 2.4.2, release/ARC/threads/useMalloc. Builds and tests were not running during
 measurements. The benchmark uses the actual DirectView task demo's controller,

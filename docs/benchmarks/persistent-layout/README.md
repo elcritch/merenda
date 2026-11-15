@@ -1,5 +1,8 @@
 # Persistent layout prototype
 
+The recorded demo samples predate its explicit leaf-control cache opt-in; a
+rerun with the current demo also includes that separate optimization.
+
 This experiment requires both `-d:merendaPersistentLayout` and an explicit
 `root[vpPersistentLayout] = true` on a stable layout root. Disabling the property
 or releasing generated layout inputs drops its retained solver. Views are held

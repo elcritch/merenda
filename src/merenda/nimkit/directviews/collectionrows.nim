@@ -5,6 +5,8 @@ import ../accessibility/accessibilityprotocols
 import ../app/[modelcontrollers, windows]
 import ../containers/collectionviews
 import ../foundation/selectors
+when defined(merendaRowLayoutBoundaries):
+  import ../view/viewbase
 import ../text/fieldeditors
 import ./[bindings, runtime]
 
@@ -73,6 +75,8 @@ protocol DirectCollectionRowsDelegate of CollectionViewDelegate:
         break
     if result.isNil:
       result = newDirectView()
+    when defined(merendaRowLayoutBoundaries):
+      result.xPrivProps.incl vipExperimentalRowLayoutBoundary
 
   method configureCollectionItemView(
       rows: CollectionRows,

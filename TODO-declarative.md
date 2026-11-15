@@ -132,6 +132,8 @@ document save may finish independently.
   measurements within a pass. Outside an active layout transaction, feedback
   reset and dirty marking share an ancestor walk while preserving notifications.
   Opt-in `view[vpCacheIntrinsicSize] = true` caches resolved intrinsic measurements.
+  The DirectView task demo opts its built-in text controls in at creation, so
+  inserted rows participate as well. Other views remain opt-in.
   See [cache contracts](docs/layout-measurement.md) and
   [layout measurements](docs/benchmarks/layout/README.md).
 
@@ -220,22 +222,34 @@ The later experiments below need not all be completed before an experimental mer
   bounded viewport.
 - [x] Define offscreen active field-editor behavior, removal, and reuse. Keep
   durable drafts in the model/controller, independent of row lifetime.
-- [ ] Test reorder/removal while editing, scrolling away/back, and same-ID reuse.
-  Measure live view count, getter calls, allocation, and edit/scroll latency.
+- [x] Test selection, insertion, reorder, removal, scrolling away/back, and
+  same-ID replacement while editing.
+- [ ] Measure getter calls, allocation, and input-to-presentation edit/scroll
+  latency in a live application. The headless comparison records mounted rows.
 
 This is the next major scalability test. Better collection signals alone do not
 prove that a large editable application scales.
 
 ### 2. Profile and improve the full layout pipeline
 
-- [ ] Measure constraint construction/installation/solve separately from intrinsic
-  measurement, arrangement, capture, and drawing on representative editor trees.
-- [ ] Investigate smaller constraint graphs or persistent solving only after those
-  measurements identify the dominant phase.
+- [x] Measure the headless DirectView editor's binding, measurement, constraint,
+  arrangement, preview capture, and drawing phases. See the [pipeline profile](docs/benchmarks/layout-pipeline/README.md).
+- [x] Count intrinsic-cache decisions by widget category and compare explicit
+  leaf-control caching with the uncached demo. See the [reuse experiment](docs/benchmarks/intrinsic-reuse/README.md).
+- [ ] Evaluate smaller independent constraint graphs. The opt-in fixed-row
+  prototype and its conservative fallbacks are described in [layout measurement](docs/layout-measurement.md).
+  The [paired comparison](docs/benchmarks/row-boundary/README.md) found different
+  budget and local-failure behavior; address that before expanding eligibility.
+- [x] Prototype a separate [persistent solver](docs/benchmarks/persistent-layout/README.md)
+  and compare it with fresh solves for a stable fixed-size tree.
+- [ ] Investigate persistent reuse for intrinsic-sized trees, memory overhead,
+  and native latency; the prototype does not yet help the demo.
 - [ ] Investigate further ancestor propagation reduction while preserving observers,
   revisions, reentrancy, and active-transaction behavior.
-- [ ] Exercise cache invalidation under content/font/style/visibility changes and
-  custom measurement dependencies; expand caching only when evidence supports it.
+- [x] Compare cached and uncached built-in controls across content, font, style,
+  visibility, editor input and frame changes, plus reentrant invalidation.
+- [ ] Exercise other custom measurement dependencies and native IME; expand
+  caching beyond explicit opt-in only when evidence supports it.
 
 ### 3. Evaluate the complete Dragology interaction
 

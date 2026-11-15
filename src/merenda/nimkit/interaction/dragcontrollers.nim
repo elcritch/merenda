@@ -3,7 +3,7 @@ import std/[math, times]
 import sigils/[core, selectors]
 import ../app/[animations, windows]
 import ../drawing/drawing
-import ../foundation/[events, selectors, types]
+import ../foundation/[events, selectors, types, viewprofiling]
 import ../responder/responders
 import ../view/views
 import ./[dragbehaviors, dragpreviews]
@@ -332,6 +332,7 @@ proc newDeclarativeDragView*[T](
   result.acceptsFirstResponder = true
   result.clipsToBounds = true
   result.build = proc(host: DragHost, env: DragEnvironment): DragPreview =
+    profileViewPhase(vppDragPreview)
     captureDragPreview(build(DeclarativeDragView[T](host).xModel, env), env)
   result.describe = proc(
       host: DragHost, id: string, env: DragEnvironment
@@ -339,7 +340,9 @@ proc newDeclarativeDragView*[T](
     let view = DeclarativeDragView[T](host)
     view.xModels = successors(view.xModel, id)
     for model in view.xModels:
-      result.add captureDragPreview(build(model, env), env)
+      block:
+        profileViewPhase(vppDragPreview)
+        result.add captureDragPreview(build(model, env), env)
   result.commit = proc(host: DragHost, index: int): bool =
     let view = DeclarativeDragView[T](host)
     let next = view.xModels[index]

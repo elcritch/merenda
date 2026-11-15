@@ -8,6 +8,12 @@ Button instances. StackViews and other views remain uncached. The policy is appl
 to the already constructed tree; the workload does not add new row instances.
 Caching remains off by default in NimKit.
 
+After this experiment, the demo opted its own built-in leaf controls into the
+cache as they are created, including inserted rows and detached preview rows.
+The comparison harness explicitly disables them in its uncached variant. These
+historical measurements predate that change; they do not measure native latency
+or the cost of detached previews.
+
 Two profiled and two unprofiled runs were collected sequentially, in the order
 plain/profile/plain/profile. Within each run the uncached fixture runs first.
 Every operation has two warmups and five measured samples. Each sample updates

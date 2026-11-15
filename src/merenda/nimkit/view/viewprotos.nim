@@ -62,10 +62,20 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.xProps
 
   method `properties=`(self: View, properties: set[ViewProperty]) =
+    when defined(merendaPersistentLayout):
+      let persistenceChanged =
+        (vpPersistentLayout in self.xProps) != (vpPersistentLayout in properties)
     if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
+      when defined(merendaProfile):
+        if self.xIntrinsicCacheValid:
+          self.xIntrinsicProfileInvalidation = "cacheOptionChanged"
       self.xIntrinsicCacheValid = false
       inc self.xIntrinsicRevision
     self.xProps = properties
+    when defined(merendaPersistentLayout):
+      if persistenceChanged:
+        self.xPersistentLayout = default(PersistentLayoutCache)
+        self.invalidateLayoutItemGeometry(lirExplicit)
 
   method frame(self: View): Rect =
     self.xFrame

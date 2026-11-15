@@ -11,6 +11,9 @@ import merenda/nimkit/view/views
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/responder/responders
 import merenda/nimkit/foundation/selectors
+when defined(merendaRowLayoutBoundaries) and defined(merendaProfile):
+  import merenda/nimkit/view/viewbase
+  import merenda/nimkit/foundation/viewprofiling
 
 type
   DirectController = ref object of Responder
@@ -670,6 +673,42 @@ suite "direct view composition":
       after.elements[after.find("a")].frame.origin.y
 
 suite "direct collection rows":
+  when defined(merendaRowLayoutBoundaries) and defined(merendaProfile):
+    test "fixed-size collection rows use separate local solves":
+      let controller = newArrayController(@[modelItem("a"), modelItem("b")])
+      let collection = newCollectionView(frame = rect(0, 0, 240, 100))
+      collection.collectionLayout = newCollectionViewLayout(
+        clkList,
+        itemSize = initSize(200, 30),
+        minimumLineSpacing = 0,
+        edgeInsets = insets(0),
+      )
+      let rows = newCollectionRows(
+        collection,
+        controller,
+        proc(row: DirectView, controller: ArrayController, id: string) =
+          discard controller
+          discard id
+          row.autoresizingMaskConstraints = true
+          row.viewBody:
+            TextField:
+              this.frame = rect(2, 3, 80, 20)
+              this.autoresizingMaskConstraints = true,
+      )
+      defer:
+        rows.close()
+      discard buildRenders(collection)
+      let row = collection.itemViewAtIndex(0)
+      require not row.isNil
+      require vipExperimentalRowLayoutBoundary in row.xPrivProps
+      let content = collection.contentView
+      content.invalidateIntrinsicContentSize()
+      content.needsLayout = true
+      resetViewProfile()
+      content.layoutSubtreeIfNeeded()
+      check content.xLayoutInputCache.partitioned
+      check currentViewProfile().solverPasses >= 3
+
   test "editing rows survive viewport eviction and model reorder, then retire on deletion":
     var items: seq[ModelItem]
     for i in 0 ..< 100:
@@ -810,3 +849,106 @@ suite "direct collection rows":
     check collection.selectedIdentifier == "25"
     rows.close()
     check firstRow.arrangedSubviews.len == 0
+
+  test "programmatic selection preserves editing and pointer selection transfers focus":
+    var items: seq[ModelItem]
+    for index in 0 ..< 50:
+      items.add modelItem($index, title = "row " & $index, objectValue = toObj($index))
+    let controller = newArrayController(items)
+    let owner = TextOwner(text: newSigil("alpha"))
+    initResponder(owner)
+    let collection = newCollectionView(frame = rect(0, 0, 240, 100))
+    collection.collectionLayout = newCollectionViewLayout(
+      clkList,
+      itemSize = initSize(200, 30),
+      minimumLineSpacing = 0,
+      edgeInsets = insets(0),
+    )
+    let rows = newCollectionRows(
+      collection,
+      controller,
+      proc(row: DirectView, controller: ArrayController, id: string) =
+        row.viewBody:
+          if id == "0":
+            TextField:
+              bindingScope.bindTextField(
+                "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
+              )
+          else:
+            Label:
+              this.stringValue = controller.itemWithIdentifier(id).title,
+    )
+    let window = newWindow("Selection while editing", frame = rect(0, 0, 240, 100))
+    window.setContentView(collection)
+    defer:
+      rows.close()
+      window.close()
+    discard window.buildRenders()
+    let row = DirectView(collection.itemViewAtIndex(0))
+    require not row.isNil
+    let field = TextField(row.arrangedSubviews[0])
+    require window.makeFirstResponder(field)
+    let editor = TextView(field.currentEditor)
+    editor.selectedRange = initTextRange(1, 2)
+    editor.setMarkedTextValue("xy", initTextRange(1, 0), initTextRange(-1, 0))
+    require editor.hasMarkedText
+    let
+      selection = editor.selectedRange
+      marked = editor.markedRange
+      text = editor.stringValue
+      modelText = owner.text{}
+      edits = owner.edits
+
+    proc checkEditor() =
+      check collection.itemViewAtIndex(0) == row
+      check field.currentEditor == editor
+      check window.firstResponder == editor
+      check editor.hasMarkedText
+      check editor.markedRange == marked
+      check editor.selectedRange == selection
+      check editor.stringValue == text
+      check owner.text{} == modelText
+      check owner.edits == edits
+      check collection.visibleItemViews.len <= collection.visibleItemIndexes.len + 1
+
+    collection.selectItemAtIndex(1)
+    rows.flushBindings()
+    check collection.selectedIdentifier == "1"
+    check controller.selectionController.selectedIdentifier == "1"
+    checkEditor()
+
+    controller.selectionController.setSelectedIdentifiers(["30"])
+    rows.flushBindings()
+    check collection.selectedIdentifier == "30"
+    check collection.scrollView.contentOffset.y > 0
+    check not collection.itemViewAtIndex(30).isNil
+    checkEditor()
+
+    collection.selectItemAtIndex(32)
+    rows.flushBindings()
+    check collection.selectedIdentifier == "32"
+    check controller.selectionController.selectedIdentifier == "32"
+    checkEditor()
+
+    collection.selectItemAtIndex(0)
+    rows.flushBindings()
+    check collection.selectedIdentifier == "0"
+    check controller.selectionController.selectedIdentifier == "0"
+    check collection.itemViewAtIndex(0) == row
+    checkEditor()
+
+    # Selecting a row with the pointer deliberately transfers focus out of the editor.
+    let itemRect = collection.collectionItemRect(1)
+    require not itemRect.isEmpty
+    let point = collection.pointToWindow(
+      initPoint(
+        itemRect.origin.x + itemRect.size.width / 2,
+        itemRect.origin.y + itemRect.size.height / 2,
+      )
+    )
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check collection.selectedIdentifier == "1"
+    check controller.selectionController.selectedIdentifier == "1"
+    check window.firstResponder == collection
+    check field.currentEditor.isNil

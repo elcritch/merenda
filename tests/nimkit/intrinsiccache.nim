@@ -155,3 +155,139 @@ suite "opt-in intrinsic measurement cache":
     view.applyLayoutFrame(rect(9, 4, 80, 40), lfoContainer)
     check view.sizeThatFits() == initSize(89, 44)
     check view.measurements == 3
+
+type
+  ControlFixture = object
+    root: StackView
+    label: Label
+    field: TextField
+    button: Button
+
+  ReentrantView = ref object of View
+    intrinsic: IntrinsicSize
+    measurements: int
+    changeDuringMeasure: bool
+
+protocol ReentrantLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: ReentrantView): IntrinsicSize =
+    inc view.measurements
+    result = view.intrinsic
+    if view.changeDuringMeasure:
+      view.changeDuringMeasure = false
+      view.intrinsic = initIntrinsicSize(80, 25)
+      view.invalidateIntrinsicContentSize()
+
+proc newReentrantView(cache: bool): ReentrantView =
+  result = ReentrantView(intrinsic: initIntrinsicSize(40, 20))
+  initViewFields(result, rect(0, 0, 40, 20))
+  discard result.withProtocol(ReentrantLayout)
+  result[vpCacheIntrinsicSize] = cache
+
+proc newControlFixture(cache: bool): ControlFixture =
+  result.root = newStackView(laHorizontal, frame = rect(0, 0, 480, 80))
+  result.root.distribution = svdNatural
+  result.root.spacing = 8
+  result.label = newLabel("Caption")
+  result.field = newTextField("Short")
+  result.button = newButton("Apply")
+  for view in [View(result.label), View(result.field), View(result.button)]:
+    view[vpCacheIntrinsicSize] = cache
+    result.root.addArrangedSubview(view)
+
+proc compareControlFixtures(left, right: ControlFixture) =
+  discard buildRenders(left.root)
+  discard buildRenders(right.root)
+  check not left.root.xLastLayoutSolveDiagnostic.failed
+  check not right.root.xLastLayoutSolveDiagnostic.failed
+  check left.root.frame == right.root.frame
+  for pair in [
+    (View(left.label), View(right.label)),
+    (View(left.field), View(right.field)),
+    (View(left.button), View(right.button)),
+  ]:
+    check pair[0].resolvedIntrinsicContentSize() ==
+      pair[1].resolvedIntrinsicContentSize()
+    check pair[0].sizeThatFits() == pair[1].sizeThatFits()
+    check pair[0].frame == pair[1].frame
+
+suite "intrinsic cache compared with uncached layout":
+  test "built-in leaf controls keep sizes and frames across content and style changes":
+    let baseline = newControlFixture(false)
+    let cached = newControlFixture(true)
+    compareControlFixtures(baseline, cached)
+    # Repeat the query before every mutation so the opted-in values are warm.
+    compareControlFixtures(baseline, cached)
+    let originalLabel = baseline.label.resolvedIntrinsicContentSize()
+
+    baseline.field.stringValue = "A substantially longer value"
+    cached.field.stringValue = "A substantially longer value"
+    baseline.label.stringValue = "A longer label"
+    cached.label.stringValue = "A longer label"
+    baseline.button.title = "Apply changes"
+    cached.button.title = "Apply changes"
+    compareControlFixtures(baseline, cached)
+    check baseline.label.resolvedIntrinsicContentSize().width > originalLabel.width
+
+    let originalField = baseline.field.resolvedIntrinsicContentSize()
+    var appearance = initAppearance()
+    appearance[srTextField, StyleFontName] =
+      styleKeyword(platformDefaultFontName(frMonospace))
+    appearance[srTextField, StyleFontSize] = 28.0
+    appearance[srButton, StyleFontSize] = 24.0
+    baseline.root.appearance = appearance
+    cached.root.appearance = appearance
+    compareControlFixtures(baseline, cached)
+    check baseline.field.resolvedIntrinsicContentSize().height > originalField.height
+
+    appearance[srTextField, StyleMinimumSize] = initSize(160, 45)
+    baseline.root.appearance = appearance
+    cached.root.appearance = appearance
+    baseline.label.labelStyle = lsHeading
+    cached.label.labelStyle = lsHeading
+    compareControlFixtures(baseline, cached)
+    check baseline.field.resolvedIntrinsicContentSize().width >= 160
+
+    baseline.button.hidden = true
+    cached.button.hidden = true
+    compareControlFixtures(baseline, cached)
+    baseline.button.hidden = false
+    cached.button.hidden = false
+    baseline.root.frame = rect(0, 0, 700, 110)
+    cached.root.frame = rect(0, 0, 700, 110)
+    compareControlFixtures(baseline, cached)
+
+  test "reentrant intrinsic changes match uncached reads and do not publish stale results":
+    let baseline = newReentrantView(false)
+    let cached = newReentrantView(true)
+    baseline.changeDuringMeasure = true
+    cached.changeDuringMeasure = true
+    let first = baseline.resolvedIntrinsicContentSize()
+    check first == initIntrinsicSize(40, 20)
+    check first == cached.resolvedIntrinsicContentSize()
+    let next = baseline.resolvedIntrinsicContentSize()
+    check next == initIntrinsicSize(80, 25)
+    check next == cached.resolvedIntrinsicContentSize()
+    check cached.resolvedIntrinsicContentSize() == initIntrinsicSize(80, 25)
+    check baseline.measurements == 2
+    check cached.measurements == 2
+
+  test "active field-editor input preserves cached and uncached geometry":
+    let baseline = newControlFixture(false)
+    let cached = newControlFixture(true)
+    let first = newWindow("Uncached intrinsic", frame = rect(0, 0, 480, 80))
+    let second = newWindow("Cached intrinsic", frame = rect(0, 0, 480, 80))
+    first.setContentView(baseline.root)
+    second.setContentView(cached.root)
+    defer:
+      first.close()
+      second.close()
+    compareControlFixtures(baseline, cached)
+    require first.makeFirstResponder(baseline.field)
+    require second.makeFirstResponder(cached.field)
+    require first.dispatchTextInput("A longer provisional value")
+    require second.dispatchTextInput("A longer provisional value")
+    check baseline.field.stringValue == cached.field.stringValue
+    compareControlFixtures(baseline, cached)
+    require first.makeFirstResponder(nil)
+    require second.makeFirstResponder(nil)
+    compareControlFixtures(baseline, cached)

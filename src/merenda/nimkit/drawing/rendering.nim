@@ -390,6 +390,7 @@ proc invalidateRenderCache*(root: View) =
   root.xPrivProps.excl vipHasCachedRenders
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
+  profileViewPhase(vppRenderBuild)
   let scene = root.updateRenderScene(appearance)
   if vipHasCachedRenders notin root.xPrivProps:
     root.xCachedRenders = scene.materialize()
@@ -424,6 +425,7 @@ proc captureRenderScene*(
 ): RenderScene =
   ## Captures an independent scene, optionally omitting subtrees without changing
   ## their layout or visibility. Use detached trees for speculative rendering.
+  profileViewPhase(vppRenderCapture)
   root.layoutSubtreeIfNeeded()
   result = newRenderScene()
   var frames: seq[RenderViewFrame]

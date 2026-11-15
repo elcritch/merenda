@@ -28,6 +28,7 @@ else:
   import nimkit/colorpicker
   import nimkit/comboboxes
   import nimkit/constraints
+  import nimkit/persistentlayout
   import nimkit/contentthemes
   import nimkit/controlfontfaces
   import nimkit/controls
@@ -118,6 +119,7 @@ else:
   import nimkit/urls
   import nimkit/viewcontrollers
   import nimkit/viewinspectors
+  import nimkit/viewprofiling
   import nimkit/views
   import nimkit/viewselection
   import nimkit/windowcontrollers
