@@ -123,11 +123,6 @@ parallel, count intrinsic-cache hits and invalidations on the real tree before
 expanding caching: the existing [warm-cache microbenchmark](../layout/README.md)
 does not establish correctness or savings for arbitrary widget dependencies.
 
-The later [row-boundary comparison](../row-boundary/README.md) found that the
-original demo does not qualify for the prototype. A controlled fixed-row tree had
-smaller graphs and lower solve costs, but exposed different budget and local-failure
-behavior. That experiment does not establish a speedup for this demo.
-
 The later [persistent-solver prototype](../persistent-layout/README.md) reduced
 resize insertion work for a fully autoresizing fixture. The original demo did not
 qualify, so its overall measured layout cost remains unresolved.

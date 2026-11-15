@@ -237,10 +237,6 @@ prove that a large editable application scales.
   arrangement, preview capture, and drawing phases. See the [pipeline profile](docs/benchmarks/layout-pipeline/README.md).
 - [x] Count intrinsic-cache decisions by widget category and compare explicit
   leaf-control caching with the uncached demo. See the [reuse experiment](docs/benchmarks/intrinsic-reuse/README.md).
-- [ ] Evaluate smaller independent constraint graphs. The opt-in fixed-row
-  prototype and its conservative fallbacks are described in [layout measurement](docs/layout-measurement.md).
-  The [paired comparison](docs/benchmarks/row-boundary/README.md) found different
-  budget and local-failure behavior; address that before expanding eligibility.
 - [x] Prototype a separate [persistent solver](docs/benchmarks/persistent-layout/README.md)
   and compare it with fresh solves for a stable fixed-size tree.
 - [x] Extend persistent reuse to intrinsic, container and authored constraints;
@@ -248,8 +244,6 @@ prove that a large editable application scales.
   [persistent-layout report](docs/benchmarks/persistent-layout/README.md).
 - [ ] Measure persistent-solver memory overhead and native latency, and support
   hierarchy reorders without a full rebuild.
-- [ ] Investigate further ancestor propagation reduction while preserving observers,
-  revisions, reentrancy, and active-transaction behavior.
 - [x] Compare cached and uncached built-in controls across content, font, style,
   visibility, editor input and frame changes, plus reentrant invalidation.
 - [ ] Exercise additional custom measurement dependencies and native IME;

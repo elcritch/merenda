@@ -42,9 +42,7 @@ budget. View, constraint, coefficient and projected-memory limits are checked fo
 each attempted graph; the projected-memory estimate is a solver heuristic, not
 an allocation measurement. Cache publication happens after frame commit and is
 not separately timed against the solve budget. Faster or slower work near a time
-limit can naturally change timeout outcomes. When both this experiment and
-`-d:merendaRowLayoutBoundaries` are compiled, persistence is disabled and the row
-boundary behavior is unchanged.
+limit can naturally change timeout outcomes.
 
 ## Measurement
 

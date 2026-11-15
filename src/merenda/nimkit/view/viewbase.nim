@@ -136,7 +136,6 @@ type
     vipNeedsUpdateConstraints
     vipNeedsLayout
     vipNeedsLocalConstraintLayout
-    vipExperimentalRowLayoutBoundary
     vipLayoutSubtreeInProgress
     vipAutoresizingMaskConstraints
     vipHasCachedRenders
@@ -200,7 +199,6 @@ type
     aggregateStructureDirty*: bool
     sourceGenerations*: array[LayoutInputSource, Natural]
     generation*: Natural
-    partitioned*: bool
 
   PersistentSolverView* = object
     when defined(merendaPersistentLayout):
@@ -243,7 +241,6 @@ type
     phase*: LayoutTransactionPhase
     followUpRequested*: bool
     lastInvalidation*: LayoutInvalidationDiagnostic
-    rowLayoutBoundaries*: seq[View]
 
   View* = ref object of Responder
     xTag*: int

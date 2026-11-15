@@ -351,13 +351,6 @@ proc layoutSubtreeIfNeeded*(view: View) =
   if not view.applyConstraintsForSubtree():
     return
 
-  when defined(merendaRowLayoutBoundaries):
-    # Match the full solve's order: resolve children before container layout can
-    # change their host's frame. Existing reconciliation handles later resizing.
-    for boundary in transaction.rowLayoutBoundaries:
-      if not boundary.applyConstraintsForSubtree():
-        return
-
   transaction.phase = ltpLayingOut
   view.xLayoutPhase = transaction.phase
   view.layoutSubtree(transaction)

@@ -140,35 +140,8 @@ proven.
 The [prototype comparison](benchmarks/persistent-layout/README.md) records its
 lifecycle, budget semantics, correctness coverage, and measured limitations.
 
-## Experimental row graph boundary
-
-Compile with `-d:merendaRowLayoutBoundaries` to try separate solves for eligible
-DirectView collection rows. The outer solve includes each row host; the layout
-transaction then fixes its solved rectangle and solves its descendants before
-container arrangement, matching the existing ordering. Fitting-size solves continue
-to use the full graph.
-
-This first experiment accepts only trees with no active authored constraints or
-CSS layout rules anywhere in the transaction. The path from the solve root to the
-row host and every row descendant must use autoresizing constraints without flexible
-width or height. This fixes the host's rectangle independently of descendant stays.
-Intrinsic-driven views on that path or in the row, flexible sizes, authored anchors
-(including baselines), and CSS all fall back to the existing full solve. These
-restrictions avoid unproven coordinate and intrinsic dependencies, and mean typical
-intrinsic-sized rows may not qualify.
-If an input changes during graph construction, the transaction retries with the full
-graph before applying frames.
-The experiment is off by default and does not demonstrate a speedup by itself;
-each eligible row adds a solver pass, so compare total time as well as graph size.
-In the four-view regression fixture, the largest graph drops from four views to
-three and the number of solves rises from one to two. This is a structural check,
-not a representative timing benchmark.
 Changing autoresizing translation also invalidates the intrinsic equation bucket,
 because translation determines whether those equations participate in a solve.
-The [paired comparison](benchmarks/row-boundary/README.md) measures both the
-original demo and a deliberately eligible row tree. It found no intrinsic-read
-reduction and found different solver-budget failure behavior; keep the boundary
-experimental until transaction-wide failure handling is resolved.
 
 Regression coverage lives in `tests/nimkit/intrinsiccache.nim`, `stackviews.nim`,
 `formviews.nim` and `constraints.nim`, all in the shared NimKit runner. Measurements
