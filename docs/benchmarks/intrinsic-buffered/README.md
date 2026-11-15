@@ -14,6 +14,26 @@ The original uncached policy left all views uncached; the current harness only
 switches the row controls, while other views use the new default. Its results
 therefore are not directly comparable to the table below.
 
+## Current default-on implementation
+
+After enabling the default and adding the subtree eligibility check, four
+unprofiled headless runs on the same machine used alternating policy order and
+two warmups plus seven measured samples per policy. The medians below combine
+28 samples per policy. The harness checks matching frames, view trees, item
+identifiers and field text for each paired sample. Only row controls change
+policy; CollectionView itself opts out in both cases. These numbers include
+the subtree check but do not characterize deep trees or native display latency.
+
+| Operation | Row cache off | Row cache on | Change |
+| --- | ---: | ---: | ---: |
+| Edit active field | 20.18 ms | 13.35 ms | −33.8% |
+| Scroll, retaining editor | 26.55 ms | 20.81 ms | −21.6% |
+| Insert | 20.93 ms | 13.92 ms | −33.5% |
+| Reorder | 20.09 ms | 13.19 ms | −34.3% |
+| Resize | 11.71 ms | 9.23 ms | −21.2% |
+
+## Earlier opt-in implementation
+
 On Apple M3 Pro, macOS 15.7.9, Nim 2.4.2, release/ARC/threads/useMalloc, four
 unprofiled headless runs alternated policy order: off/on, on/off, on/off, off/on.
 Each operation has two warmups and seven measured samples per policy; the table
