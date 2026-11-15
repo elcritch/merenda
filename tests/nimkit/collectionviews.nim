@@ -460,14 +460,27 @@ suite "nimkit collection views":
       columnCount = 3,
     )
     bindCollectionView(collection, controller)
-    for offset in [0, 1, 20, 21, 25, 29, 30, 63, 300, 900]:
-      collection.scrollView.contentOffset = initPoint(0, offset.float32)
-      let viewport =
-        rect(collection.scrollView.contentOffset, collection.scrollView.viewportSize)
-      var expected: seq[int]
-      for index in 0 ..< controller.len:
-        let item =
-          rect(5 + (index mod 3).float32 * 57, 5 + (index div 3).float32 * 30, 50, 21)
-        if not item.intersection(viewport).isEmpty:
-          expected.add index
-      check collection.visibleItemIndexes == expected
+    for height in [83, 120]:
+      collection.frame = rect(0, 0, 170, height.float32)
+      discard buildRenders(collection)
+      for offset in [0, 1, 20, 21, 25, 29, 30, 63, 300, 900]:
+        collection.scrollView.contentOffset = initPoint(0, offset.float32)
+        let viewport =
+          rect(collection.scrollView.contentOffset, collection.scrollView.viewportSize)
+        let buffer = rect(
+          viewport.origin.x,
+          viewport.origin.y - viewport.size.height / 2,
+          viewport.size.width,
+          viewport.size.height * 2,
+        )
+        var expected: seq[int]
+        var expectedBuffered: seq[int]
+        for index in 0 ..< controller.len:
+          let item =
+            rect(5 + (index mod 3).float32 * 57, 5 + (index div 3).float32 * 30, 50, 21)
+          if not item.intersection(viewport).isEmpty:
+            expected.add index
+          if not item.intersection(buffer).isEmpty:
+            expectedBuffered.add index
+        check collection.visibleItemIndexes == expected
+        check collection.materializationItemIndexes == expectedBuffered

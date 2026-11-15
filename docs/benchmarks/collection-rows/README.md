@@ -1,5 +1,7 @@
 # DirectView collection rows: diagnostic comparison
 
+These historical samples predate the half-viewport materialization buffer.
+
 One sequential diagnostic run on Apple M3 Pro, macOS 15.7.9, Nim 2.4.2,
 release/ARC/threads/useMalloc with `-d:merendaProfile`. These are single observations,
 not statistical estimates. Materialized cases run first and the initial case

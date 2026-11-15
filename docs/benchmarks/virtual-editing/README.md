@@ -1,5 +1,8 @@
 # Editable virtualized collection: preliminary comparison
 
+These historical samples predate the half-viewport materialization buffer; the
+current demo can mount more rows than the counts recorded here.
+
 The `direct_collection_demo` row builder mounts editable DirectView rows in a
 fixed 640 × 480 CollectionView backed by 5,000 items. Labels, text fields,
 and buttons opt into intrinsic caching as each row is built. The benchmark

@@ -166,6 +166,7 @@ proc collectionItemState*(
 proc collectionItemRect*(collectionView: CollectionView, index: int): Rect
 proc collectionItemIndexAtPoint*(collectionView: CollectionView, point: Point): int
 proc visibleItemIndexes*(collectionView: CollectionView): seq[int]
+proc materializationItemIndexes*(collectionView: CollectionView): seq[int]
 proc reloadData*(collectionView: CollectionView)
 proc clearCollectionItemSlots(collectionView: CollectionView)
 proc dequeueReusableItemView*(collectionView: CollectionView, identifier: string): View
@@ -658,10 +659,10 @@ proc resolvedIndexAtContentPoint(collectionView: CollectionView, point: Point): 
       return index
   -1
 
-proc resolvedVisibleIndexes(collectionView: CollectionView): seq[int] =
-  let
-    layout = collectionView.resolvedLayout()
-    visibleRect = collectionView.collectionVisibleContentRect()
+proc resolvedIndexesInRect(
+    collectionView: CollectionView, visibleRect: Rect
+): seq[int] =
+  let layout = collectionView.resolvedLayout()
   if not layout.isNil:
     let custom = layout.trySendLocal(
       visibleCollectionItemIndexes(),
@@ -1366,7 +1367,7 @@ proc configureCollectionItemSlot(
 
 proc syncVisibleItemViews(contentView: CollectionContentView) =
   let collectionView = contentView.collectionView()
-  let visible = collectionView.visibleItemIndexes()
+  let visible = collectionView.materializationItemIndexes()
   var visibleLookup = initTable[int, bool]()
   for index in visible:
     visibleLookup[index] = true
@@ -1514,7 +1515,24 @@ proc moveItem*(collectionView: CollectionView, fromIndex, toIndex: int) =
   collectionView.applyCollectionUpdates([initCollectionMoveUpdate(fromIndex, toIndex)])
 
 proc visibleItemIndexes*(collectionView: CollectionView): seq[int] =
-  collectionView.resolvedVisibleIndexes()
+  ## Indexes intersecting the actual viewport, excluding the materialization buffer.
+  collectionView.resolvedIndexesInRect(collectionView.collectionVisibleContentRect())
+
+proc materializationItemIndexes*(collectionView: CollectionView): seq[int] =
+  ## Indexes intersecting the viewport and half a viewport above and below it.
+  ## A delegate may retain additional rows, such as an offscreen active editor.
+  let visible = collectionView.collectionVisibleContentRect()
+  if visible.isEmpty:
+    return
+  let extra = visible.size.height * 0.5'f32
+  collectionView.resolvedIndexesInRect(
+    rect(
+      visible.origin.x,
+      visible.origin.y - extra,
+      visible.size.width,
+      visible.size.height + 2 * extra,
+    )
+  )
 
 proc visibleItemSummaries*(
     collectionView: CollectionView
@@ -1537,6 +1555,7 @@ proc itemViewAtIndex*(collectionView: CollectionView, index: int): View =
     collectionView.xItemSlots[slotIndex].view
 
 proc visibleItemViews*(collectionView: CollectionView): seq[View] =
+  ## Mounted views include buffered rows and any retained offscreen editor.
   for slot in collectionView.xItemSlots:
     if not slot.view.isNil:
       result.add slot.view
