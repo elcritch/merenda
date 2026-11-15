@@ -1,3 +1,5 @@
+param([switch]$SkipMissingSsh)
+
 $ErrorActionPreference = 'Stop'
 $Lab = 'C:\MerendaLab'
 Start-Transcript -Path "$Lab\setup.log" -Append
@@ -31,7 +33,14 @@ try {
   Set-Service TermService -StartupType Automatic
   Start-Service TermService
 
-  & "$Lab\EnableSsh.ps1" -PublicKey (Get-Content "$Lab\HostKey.pub" -Raw).Trim() -HostAddress $Config.gateway
+  if ($SkipMissingSsh -and !(Get-Service sshd -ErrorAction SilentlyContinue)) {
+    'OpenSSH Server is not installed. Install the Windows capability, then run EnableSsh.ps1.' |
+      Set-Content "$Lab\ssh-setup-incomplete.txt"
+    Write-Warning 'OpenSSH Server is not installed; RDP setup will continue.'
+  } else {
+    & "$Lab\EnableSsh.ps1" -PublicKey (Get-Content "$Lab\HostKey.pub" -Raw).Trim() -HostAddress $Config.gateway
+    Remove-Item "$Lab\ssh-setup-incomplete.txt" -ErrorAction SilentlyContinue
+  }
 
   New-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled `
     -Value 1 -PropertyType DWord -Force | Out-Null

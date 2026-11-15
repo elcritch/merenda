@@ -1,6 +1,8 @@
 import importlib.util
+import hashlib
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +19,10 @@ class SafetyTests(unittest.TestCase):
       'CfgFile': str(Path(self.config['base_folder']) / self.config['name'] /
                      (self.config['name'] + '.vbox')),
     }
+
+  def test_generated_password_has_ten_ascii_letters(self):
+    for _ in range(20):
+      self.assertRegex(lab.create_password(), r'^[A-Za-z]{10}$')
 
   def test_loaded_bhyve_blocks_virtualbox_even_without_running_guests(self):
     with patch.object(lab, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
@@ -54,6 +60,35 @@ class SafetyTests(unittest.TestCase):
       with self.assertRaisesRegex(RuntimeError, 'already exists'):
         lab.create(self.config)
       run.assert_not_called()
+
+  def test_download_checks_cached_iso_against_trusted_digest(self):
+    with tempfile.TemporaryDirectory() as temporary:
+      iso = Path(temporary) / 'windows.iso'
+      iso.write_bytes(b'Windows test image')
+      self.config['iso_path'] = str(iso)
+      self.config['iso_sha256'] = hashlib.sha256(iso.read_bytes()).hexdigest()
+      with patch.object(lab, 'run') as run:
+        lab.download(self.config)
+        run.assert_not_called()
+        iso.write_bytes(b'corrupted image')
+        with self.assertRaisesRegex(RuntimeError, 'SHA-256'):
+          lab.download(self.config)
+        run.assert_not_called()
+
+  def test_create_rejects_wrong_iso_before_creating_a_vm(self):
+    with tempfile.TemporaryDirectory() as temporary:
+      directory = Path(temporary)
+      iso = directory / 'windows.iso'
+      iso.write_bytes(b'incorrect image')
+      (directory / 'bootstrap.iso').touch()
+      self.config['base_folder'] = temporary
+      self.config['iso_path'] = str(iso)
+      self.config['iso_sha256'] = '0' * 64
+      with patch.object(lab, 'LOCAL', directory), patch.object(lab, 'info', return_value={}), \
+           patch.object(lab, 'run') as run:
+        with self.assertRaisesRegex(RuntimeError, 'SHA-256'):
+          lab.create(self.config)
+        run.assert_not_called()
 
 
 if __name__ == '__main__':

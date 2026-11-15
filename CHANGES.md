@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add Windows 11 Enterprise evaluation setups for bhyve and VirtualBox,
+  including virtual TPMs and remote console access.
+
 - Retain DirectView nodes while flushing bindings so reentrant clearing cannot
   free the active traversal. Guard nil responder conversions during table,
   document-notification, and menu updates.

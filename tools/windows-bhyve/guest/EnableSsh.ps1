@@ -4,7 +4,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (!(Get-Service sshd -ErrorAction SilentlyContinue)) {
-  throw 'OpenSSH Server is missing; Server 2025 includes it by default.'
+  throw 'OpenSSH Server is missing; install the Windows OpenSSH Server capability first.'
 }
 $SshDirectory = "$env:ProgramData\ssh"
 New-Item -ItemType Directory -Force $SshDirectory | Out-Null

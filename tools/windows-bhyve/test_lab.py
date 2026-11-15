@@ -58,6 +58,23 @@ class LabSafetyTests(unittest.TestCase):
       managed.return_value.write_text.assert_not_called()
       self.assertFalse(any("devctl" in call.args for call in command.call_args_list))
 
+  def test_gpu_functions_share_a_slot_away_from_automatic_devices(self):
+    self.config["gpu_devices"] = ["199/0/0", "199/0/1"]
+    with tempfile.TemporaryDirectory() as temporary:
+      config_file = Path(temporary) / "vm.conf"
+      config_file.write_text(lab.template(self.config))
+      with patch.object(lab, "managed", return_value=config_file), patch.object(lab, "stopped"), \
+           patch.object(lab, "run") as command:
+        command.side_effect = [
+          unittest.mock.Mock(stdout="AMD Ryzen"), unittest.mock.Mock(stdout="1"),
+          unittest.mock.Mock(stdout="ppt0@pci0:199:0:0"),
+          unittest.mock.Mock(stdout="ppt1@pci0:199:0:1"),
+        ]
+        lab.gpu(self.config, enable=True)
+      text = config_file.read_text()
+      self.assertIn('passthru0="199/0/0=20:0"', text)
+      self.assertIn('passthru1="199/0/1=20:1"', text)
+
   def test_reinstall_clears_old_setup_state_and_boot_order(self):
     with tempfile.TemporaryDirectory() as temporary:
       self.config["vm_dir"] = temporary
