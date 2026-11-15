@@ -709,6 +709,47 @@ suite "direct collection rows":
       check content.xLayoutInputCache.partitioned
       check currentViewProfile().solverPasses >= 3
 
+  test "rows are materialized half a viewport above and below the viewport":
+    var items: seq[ModelItem]
+    for i in 0 ..< 100:
+      items.add modelItem($i, title = "row " & $i, objectValue = toObj($i))
+    let controller = newArrayController(items)
+    let collection = newCollectionView(frame = rect(0, 0, 240, 90))
+    collection.collectionLayout = newCollectionViewLayout(
+      clkList,
+      itemSize = initSize(200, 30),
+      minimumLineSpacing = 0,
+      edgeInsets = insets(0),
+    )
+    let rows = newCollectionRows(
+      collection,
+      controller,
+      proc(row: DirectView, controller: ArrayController, id: string) =
+        row.viewBody:
+          Label:
+            this.stringValue = controller.itemWithIdentifier(id).title,
+    )
+    defer:
+      rows.close()
+    discard buildRenders(collection)
+    check collection.visibleItemIndexes == @[0, 1, 2]
+    check collection.materializationItemIndexes == @[0, 1, 2, 3, 4]
+    check collection.itemViewAtIndex(4) != nil
+    check collection.itemViewAtIndex(5).isNil
+    collection.scrollView.contentOffset = initPoint(0, 300)
+    discard buildRenders(collection)
+    check collection.visibleItemIndexes == @[10, 11, 12]
+    check collection.materializationItemIndexes == @[8, 9, 10, 11, 12, 13, 14]
+    check collection.itemViewAtIndex(7).isNil
+    check collection.itemViewAtIndex(8) != nil
+    check collection.itemViewAtIndex(14) != nil
+    check collection.itemViewAtIndex(15).isNil
+    let buffered = collection.itemViewAtIndex(14)
+    collection.scrollView.contentOffset = initPoint(0, 360)
+    discard buildRenders(collection)
+    check collection.itemViewAtIndex(14) == buffered
+    check collection.visibleItemViews.len == collection.materializationItemIndexes.len
+
   test "editing rows survive viewport eviction and model reorder, then retire on deletion":
     var items: seq[ModelItem]
     for i in 0 ..< 100:
@@ -749,7 +790,8 @@ suite "direct collection rows":
     discard window.buildRenders()
     check collection.itemViewAtIndex(0) == row
     check not collection.itemViewAtIndex(30).isNil
-    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len + 1
+    check collection.visibleItemViews.len <=
+      collection.materializationItemIndexes.len + 1
     check field.currentEditor == editor
     check editor.selectedRange == selection
     check editor.markedRange == marked
@@ -781,7 +823,7 @@ suite "direct collection rows":
     rows.flushBindings()
     check field.currentEditor.isNil
     check not row.containsView(field)
-    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len
+    check collection.visibleItemViews.len <= collection.materializationItemIndexes.len
 
   test "reused hosts retire old actions and synchronize selection":
     var items: seq[ModelItem]
@@ -843,7 +885,7 @@ suite "direct collection rows":
     discard oldButton.send(performClick(), ActionArgs(sender: oldButton))
     check owner.calls == 0
     check collection.itemViewAtIndex(0).isNil
-    check collection.visibleItemViews.len <= collection.visibleItemIndexes.len
+    check collection.visibleItemViews.len <= collection.materializationItemIndexes.len
     controller.selectionController.setSelectedIdentifiers(["25"])
     rows.flushBindings()
     check collection.selectedIdentifier == "25"
@@ -909,7 +951,8 @@ suite "direct collection rows":
       check editor.stringValue == text
       check owner.text{} == modelText
       check owner.edits == edits
-      check collection.visibleItemViews.len <= collection.visibleItemIndexes.len + 1
+      check collection.visibleItemViews.len <=
+        collection.materializationItemIndexes.len + 1
 
     collection.selectItemAtIndex(1)
     rows.flushBindings()

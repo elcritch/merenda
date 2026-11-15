@@ -338,11 +338,14 @@ The collection owns the adapter as its delegate, so call `rows.close()` before
 replacing the delegate or releasing the collection. Model updates are coalesced on
 the GUI thread; tests and synchronous callers can use `rows.flushBindings()`.
 
-An active field editor remains mounted when its row leaves the viewport; ordinary
-offscreen rows are recycled. Removing the edited identifier cancels its editor and
+CollectionView materializes rows intersecting the viewport plus half a viewport of
+vertical content above and below it. `visibleItemIndexes` still reports the actual
+viewport; `materializationItemIndexes` reports the buffered range. Mounted views
+can additionally include a retained editor. An active field editor remains mounted
+when its row leaves that range; other rows outside it are recycled. Removing the edited identifier cancels its editor and
 retires its bindings before an identifier can be reused. Selection is synchronized
-with the controller. The viewport can retain one editing row in addition to visible
-rows. Virtualization does not require either experimental layout cache flag.
+with the controller. At most one editing row is retained outside the buffered range.
+Virtualization does not require either experimental layout cache flag.
 
 On macOS, `tests/integrations/nativecomposition.nim` covers the Cocoa marked-text
 callbacks and caret/selection queries through a native window. To additionally

@@ -147,7 +147,8 @@ suite "editable virtual collection demo":
       check editor.stringValue == text
       check editor.selectedRange == selection
       check editor.markedRange == marked
-      check demo.view.visibleItemViews.len <= demo.view.visibleItemIndexes.len + 1
+      check demo.view.visibleItemViews.len <=
+        demo.view.materializationItemIndexes.len + 1
       controller.insertItem(
         modelItem("new", fields = [modelField("title", toObj("New"))]), 0
       )

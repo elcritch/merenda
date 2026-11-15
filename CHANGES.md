@@ -8,6 +8,8 @@
 - Add virtualized DirectView rows for `CollectionView` and `ArrayController`,
   retaining an offscreen active editor and retiring bindings on removal or reuse.
   Reentrant model and selection teardown defers unsafe signal disconnections.
+- Materialize collection rows up to half a viewport above and below the visible area;
+  visible-index queries continue to report the unbuffered viewport.
 - Forward macOS marked-text composition, selection, and candidate geometry between
   the native text input client and the active NimKit editor, including UTF-16 ranges.
   Default marked text inherits the active foreground color while underlined.
