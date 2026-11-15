@@ -1,5 +1,6 @@
 import std/unittest
 import merenda/nimkit
+import merenda/nimkit/app/backend
 import merenda/nimkit/view/viewgeometry
 
 type CountingView = ref object of View
@@ -14,6 +15,11 @@ protocol CountingLayout of ViewLayoutProtocol:
       view.invalidateDuringMeasure = false
       view.invalidateIntrinsicContentSize()
     view.intrinsic
+
+protocol AlternateCountingLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: CountingView): IntrinsicSize =
+    inc view.measurements
+    initIntrinsicSize(view.intrinsic.width * 2, view.intrinsic.height)
 
 proc newCountingView(value: IntrinsicSize): CountingView =
   result = CountingView(intrinsic: value)
@@ -35,6 +41,33 @@ proc newGeometryView(): GeometryView =
   result = GeometryView()
   initViewFields(result, rect(0, 0, 25, 15))
   discard result.withProtocol(GeometryLayout)
+
+type DependentView = ref object of View
+  source: CountingView
+  measurements: int
+
+protocol DependentLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: DependentView): IntrinsicSize =
+    inc view.measurements
+    view.source.resolvedIntrinsicContentSize()
+
+proc newDependentView(source: CountingView, cache: bool): DependentView =
+  result = DependentView(source: source)
+  initViewFields(result)
+  discard result.withProtocol(DependentLayout)
+  result{vpCacheIntrinsicSize} = cache
+
+type SizingCell = ref object of Cell
+  natural: IntrinsicSize
+
+protocol SizingCellMeasurement of CellMeasurementProtocol:
+  method cellSize(cell: SizingCell): IntrinsicSize =
+    cell.natural
+
+proc newSizingCell(size: IntrinsicSize): SizingCell =
+  result = SizingCell(natural: size)
+  initCellFields(result)
+  discard result.withProtocol(SizingCellMeasurement)
 
 suite "opt-in intrinsic measurement cache":
   test "custom views are uncached by default; opting in retains one measurement":
@@ -74,6 +107,47 @@ suite "opt-in intrinsic measurement cache":
     discard view.sizeThatFits()
     discard view.sizeThatFits()
     check view.measurements == 2
+
+  test "protocol replacement can be followed by explicit invalidation":
+    let view = newCountingView(initIntrinsicSize(40, 20))
+    view{vpCacheIntrinsicSize} = true
+    check view.resolvedIntrinsicContentSize() == initIntrinsicSize(40, 20)
+    discard view.withProtocol(AlternateCountingLayout)
+    view.invalidateIntrinsicContentSize()
+    check view.resolvedIntrinsicContentSize() == initIntrinsicSize(80, 20)
+    check view.resolvedIntrinsicContentSize() == initIntrinsicSize(80, 20)
+    check view.measurements == 2
+
+  test "external dependencies update after explicit dependent invalidation":
+    let source = newCountingView(initIntrinsicSize(40, 20))
+    let baseline = newDependentView(source, false)
+    let cached = newDependentView(source, true)
+    check baseline.resolvedIntrinsicContentSize() ==
+      cached.resolvedIntrinsicContentSize()
+    check cached.resolvedIntrinsicContentSize() == initIntrinsicSize(40, 20)
+    source.intrinsic = initIntrinsicSize(75, 30)
+    source.invalidateIntrinsicContentSize()
+    cached.invalidateIntrinsicContentSize()
+    check baseline.resolvedIntrinsicContentSize() ==
+      cached.resolvedIntrinsicContentSize()
+    check cached.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
+    check cached.measurements == 2
+
+  test "cell replacement and cell metrics invalidate an opted-in control":
+    let first = newSizingCell(initIntrinsicSize(40, 20))
+    let control = Control()
+    initControlFields(control, cell = first)
+    control{vpCacheIntrinsicSize} = true
+    check control.resolvedIntrinsicContentSize() == initIntrinsicSize(40, 20)
+    first.natural = initIntrinsicSize(60, 25)
+    first.invalidateControlMetrics()
+    check control.resolvedIntrinsicContentSize() == initIntrinsicSize(60, 25)
+    let replacement = newSizingCell(initIntrinsicSize(100, 30))
+    control.setCell(replacement)
+    check control.resolvedIntrinsicContentSize() == initIntrinsicSize(100, 30)
+    first.natural = initIntrinsicSize(200, 40)
+    first.invalidateControlMetrics()
+    check control.resolvedIntrinsicContentSize() == initIntrinsicSize(100, 30)
 
   test "cached container observes child content, visibility and geometry":
     let form = newFormView(frame = rect(0, 0, 200, 50))
@@ -211,6 +285,28 @@ proc compareControlFixtures(left, right: ControlFixture) =
     check pair[0].frame == pair[1].frame
 
 suite "intrinsic cache compared with uncached layout":
+  test "state-dependent theme metrics and button cell changes invalidate equally":
+    let baseline = newControlFixture(false)
+    let cached = newControlFixture(true)
+    var builder = initThemeBuilder()
+    builder[srButton, StyleFontSize] = 12.0
+    builder[srButton, {ssHovered}, StyleFontSize] = 36.0
+    let appearance = initAppearance(builder.finish())
+    baseline.root.appearance = appearance
+    cached.root.appearance = appearance
+    compareControlFixtures(baseline, cached)
+    let original = baseline.button.resolvedIntrinsicContentSize()
+    baseline.button.hovered = true
+    cached.button.hovered = true
+    compareControlFixtures(baseline, cached)
+    check baseline.button.resolvedIntrinsicContentSize().height > original.height
+    baseline.button.hovered = false
+    cached.button.hovered = false
+    baseline.button.reservedTitles = ["A much longer reserved button title"]
+    cached.button.reservedTitles = ["A much longer reserved button title"]
+    compareControlFixtures(baseline, cached)
+    check baseline.button.resolvedIntrinsicContentSize().width > original.width
+
   test "built-in leaf controls keep sizes and frames across content and style changes":
     let baseline = newControlFixture(false)
     let cached = newControlFixture(true)
@@ -286,6 +382,19 @@ suite "intrinsic cache compared with uncached layout":
     require second.makeFirstResponder(cached.field)
     require first.dispatchTextInput("A longer provisional value")
     require second.dispatchTextInput("A longer provisional value")
+    check baseline.field.stringValue == cached.field.stringValue
+    compareControlFixtures(baseline, cached)
+    let marked =
+      HostTextComposition(text: "かな", selectedStart: 1, replacementStart: -1)
+    require first.dispatchTextComposition(marked)
+    require second.dispatchTextComposition(marked)
+    check TextView(baseline.field.currentEditor).markedRange ==
+      TextView(cached.field.currentEditor).markedRange
+    check TextView(baseline.field.currentEditor).selectedRange ==
+      TextView(cached.field.currentEditor).selectedRange
+    compareControlFixtures(baseline, cached)
+    require first.dispatchTextInput("漢字")
+    require second.dispatchTextInput("漢字")
     check baseline.field.stringValue == cached.field.stringValue
     compareControlFixtures(baseline, cached)
     require first.makeFirstResponder(nil)

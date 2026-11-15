@@ -35,10 +35,27 @@ protocol implementation. If an intrinsic callback depends on other views or
 external state, the application must establish the corresponding invalidation
 connection. Opt-in is not a promise that arbitrary custom callbacks are pure.
 
+The audited built-in paths include:
+
+| Measurement | Inputs and invalidation |
+| --- | --- |
+| Label and TextField | Text, font and theme/style metrics affect their cell measurement; normal text and appearance changes invalidate it. Editable or selectable text fields use their cell's natural-width policy. |
+| Button | Title, reserved titles, type, icon and appearance metrics affect its cell measurement; the control and cell mutation paths invalidate the result. |
+| Custom cells and protocols | Replacing a cell invalidates its control; a cell whose metrics change must call `invalidateControlMetrics`. Replacing an intrinsic protocol or changing an external dependency requires the view to invalidate explicitly. |
+
+The paired cache-on/off regression tests exercise state-dependent theme metrics,
+cell replacement, reserved titles, external dependencies, protocol replacement,
+reentrant invalidation, editing and composition, including resulting frames. They
+do not establish correctness for arbitrary user-defined measurement dependencies.
+Automatic opt-in for all views remains inappropriate until those dependencies can
+be invalidated reliably.
+
 The entry is a plain value stored on the view. It creates no Sigil or separate
 identity object per measurement. It retains one result rather than a map of
 proposals. Geometry invalidation is conservative: frame changes can invalidate a
 cache even when a particular widget's intrinsic measurement would be unchanged.
+On the measured arm64 build the flag adds 32 bytes per `View`, including padding,
+whether or not that view opts in; the exact size depends on compiler and target.
 
 ## What is reused
 
@@ -92,6 +109,9 @@ The [DirectView leaf-control experiment](benchmarks/intrinsic-reuse/README.md)
 compares explicit caching of the demo's Label, TextField and Button instances
 against the same uncached tree. It includes paired geometry and invalidation
 checks. This does not make caching automatic for controls or their subclasses.
+The [buffered collection comparison](benchmarks/intrinsic-buffered/README.md)
+adds editing, scrolling, insertion, reorder, resize, native render submission,
+and storage measurements for the current virtualized demo.
 
 ## Ancestor invalidation
 

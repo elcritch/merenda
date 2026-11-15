@@ -44,50 +44,55 @@ when defined(macosx):
 
   suite "native virtualized row composition":
     test "Cocoa marked text survives viewport eviction and commits":
-      let demo = newDirectCollectionDemo(5000, false)
-      let window = newWindow("Native composition", frame = rect(0, 0, 640, 480))
-      defer:
-        demo.rows.close()
-        window.close()
-      window.setContentView(demo.view)
-      window.makeKeyAndOrderFront()
-      window.ensureNativeWindow()
-      require window.nativeReady
-      discard window.buildRenders()
-      let row = DirectView(demo.view.itemViewAtIndex(0))
-      require not row.isNil
-      let field = TextField(StackView(row.arrangedSubviews[0]).arrangedSubviews[1])
-      require window.makeFirstResponder(field)
-      let editor = TextView(field.currentEditor)
-      editor.selectAllText()
-      let native =
-        cast[NSWindow](WindowCocoa(window.nativeWindowOrNil()).nativeWindowHandle())
-      let view = native.contentView()
-      view.setNativeMarkedText("かな".toNSString, NSMakeRange(1, 0), NSRangeEmpty)
-      require editor.hasMarkedText
-      check view.nativeMarkedRange() == NSMakeRange(0, 2)
-      check view.nativeSelectedRange() == NSMakeRange(1, 0)
-      var actual: NSRange
-      let caret = view.nativeCaretRect(NSMakeRange(1, 0), addr actual)
-      check caret.size.height > 0
-      let marked = editor.markedRange
-      let selected = editor.selectedRange
-      demo.view.scrollView.contentOffset = initPoint(0, 1600)
-      discard window.buildRenders()
-      check field.currentEditor == editor
-      check editor.markedRange == marked
-      check editor.selectedRange == selected
-      view.setNativeMarkedText("漢字".toNSString, NSMakeRange(2, 0), NSRangeEmpty)
-      check editor.hasMarkedText
-      view.insertNativeText("漢字".toNSString, NSRangeEmpty)
-      check not editor.hasMarkedText
-      check editor.stringValue == "漢字"
-      editor.stringValue = "A😀B"
-      view.setNativeMarkedText("か".toNSString, NSMakeRange(1, 0), NSMakeRange(1, 2))
-      check editor.stringValue == "AかB"
-      view.setNativeMarkedText("".toNSString, NSMakeRange(0, 0), NSRangeEmpty)
-      check editor.stringValue == "AB"
-      check not editor.hasMarkedText
+      when defined(merendaIntrinsicCache):
+        const policies = [false, true]
+      else:
+        const policies = [false]
+      for cache in policies:
+        let demo = newDirectCollectionDemo(5000, cache)
+        let window = newWindow("Native composition", frame = rect(0, 0, 640, 480))
+        defer:
+          demo.rows.close()
+          window.close()
+        window.setContentView(demo.view)
+        window.makeKeyAndOrderFront()
+        window.ensureNativeWindow()
+        require window.nativeReady
+        discard window.buildRenders()
+        let row = DirectView(demo.view.itemViewAtIndex(0))
+        require not row.isNil
+        let field = TextField(StackView(row.arrangedSubviews[0]).arrangedSubviews[1])
+        require window.makeFirstResponder(field)
+        let editor = TextView(field.currentEditor)
+        editor.selectAllText()
+        let native =
+          cast[NSWindow](WindowCocoa(window.nativeWindowOrNil()).nativeWindowHandle())
+        let view = native.contentView()
+        view.setNativeMarkedText("かな".toNSString, NSMakeRange(1, 0), NSRangeEmpty)
+        require editor.hasMarkedText
+        check view.nativeMarkedRange() == NSMakeRange(0, 2)
+        check view.nativeSelectedRange() == NSMakeRange(1, 0)
+        var actual: NSRange
+        let caret = view.nativeCaretRect(NSMakeRange(1, 0), addr actual)
+        check caret.size.height > 0
+        let marked = editor.markedRange
+        let selected = editor.selectedRange
+        demo.view.scrollView.contentOffset = initPoint(0, 1600)
+        discard window.buildRenders()
+        check field.currentEditor == editor
+        check editor.markedRange == marked
+        check editor.selectedRange == selected
+        view.setNativeMarkedText("漢字".toNSString, NSMakeRange(2, 0), NSRangeEmpty)
+        check editor.hasMarkedText
+        view.insertNativeText("漢字".toNSString, NSRangeEmpty)
+        check not editor.hasMarkedText
+        check editor.stringValue == "漢字"
+        editor.stringValue = "A😀B"
+        view.setNativeMarkedText("か".toNSString, NSMakeRange(1, 0), NSMakeRange(1, 2))
+        check editor.stringValue == "AかB"
+        view.setNativeMarkedText("".toNSString, NSMakeRange(0, 0), NSRangeEmpty)
+        check editor.stringValue == "AB"
+        check not editor.hasMarkedText
 
     if getEnv("MERENDA_TEST_JAPANESE_IME") == "1":
       test "Japanese input method composes into the virtualized field":

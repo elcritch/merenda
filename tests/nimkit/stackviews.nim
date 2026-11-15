@@ -178,7 +178,7 @@ suite "nimkit stack views":
         child{vpCacheIntrinsicSize} = true
       check not child{vpCacheIntrinsicSize}
       static:
-        doAssert not compiles(child.xIntrinsicCache)
+        doAssert not compiles(child.xIntrinsicMeasurement)
 
   when defined(merendaIntrinsicCache):
     test "opted-in intrinsic measurement is reused until geometry invalidates it":

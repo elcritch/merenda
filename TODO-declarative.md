@@ -137,7 +137,8 @@ document save may finish independently.
   compiled with the flag, so
   inserted rows participate as well. Other views remain opt-in.
   See [cache contracts](docs/layout-measurement.md) and
-  [layout measurements](docs/benchmarks/layout/README.md).
+  [layout measurements](docs/benchmarks/layout/README.md). Paired buffered-row
+  workloads and storage costs are recorded in the [intrinsic cache comparison](docs/benchmarks/intrinsic-buffered/README.md).
 
 ## Current limitations
 
@@ -159,9 +160,10 @@ document save may finish independently.
 - The async-save example is not production atomic persistence, recovery, or a
   multi-writer conflict protocol.
 - The intrinsic cache requires a compile flag and, when compiled in, stores one
-  entry/revision per view even when disabled. Standard mutation paths invalidate conservatively; custom or
-  external inputs and protocol replacement need explicit invalidation. Proposal
-  and bounds fallback remain freshly resolved. It is not a constraint-solver cache.
+  entry/revision per view even when disabled. Built-in mutation and cell paths
+  have paired coverage; custom or external inputs and protocol replacement need
+  explicit invalidation. Proposal and bounds fallback remain freshly resolved.
+  It is not a constraint-solver cache or enabled by default.
 - The ancestor notification cascade remains quadratic with depth. Fusing two
   walks reduces repeated work without changing that asymptotic behavior.
 - Suspension must not occur during composition. It pauses refresh, not editing
@@ -171,7 +173,7 @@ document save may finish independently.
 
 These are historical measurements of different workloads, not one cumulative
 speedup or a current cross-framework benchmark. Reports preserve harness details,
-raw data, and exclusions.
+methodology and exclusions; raw benchmark logs are not tracked.
 
 | Workload | Result | Interpretation |
 | --- | --- | --- |

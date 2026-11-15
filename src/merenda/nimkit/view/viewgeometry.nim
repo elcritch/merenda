@@ -145,10 +145,10 @@ proc invalidateIntrinsicMeasurement(view: View, reason: LayoutInvalidationReason
   when defined(merendaIntrinsicCache):
     if vpCacheIntrinsicSize in view.xProps:
       when defined(merendaProfile):
-        if view.xIntrinsicCacheValid:
-          view.xIntrinsicProfileInvalidation = $reason
-      inc view.xIntrinsicRevision
-      view.xIntrinsicCacheValid = false
+        if view.xIntrinsicMeasurement.valid:
+          view.xIntrinsicMeasurement.profileInvalidation = $reason
+      inc view.xIntrinsicMeasurement.revision
+      view.xIntrinsicMeasurement.valid = false
   else:
     discard view
     discard reason
@@ -426,27 +426,30 @@ proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
             intrinsicProfileClassifier(view)
         if not cacheEnabled:
           recordIntrinsicProfile(widgetType, ipeCacheDisabled)
-        elif view.xIntrinsicCacheValid and
-            view.xIntrinsicCacheRevision != view.xIntrinsicRevision:
+        elif view.xIntrinsicMeasurement.valid and
+            view.xIntrinsicMeasurement.storedRevision !=
+            view.xIntrinsicMeasurement.revision:
           recordIntrinsicProfile(widgetType, ipeRevisionMismatch)
-        elif not view.xIntrinsicCacheValid:
-          if view.xIntrinsicProfileHadEntry:
+        elif not view.xIntrinsicMeasurement.valid:
+          if view.xIntrinsicMeasurement.profileHadEntry:
             recordIntrinsicProfile(
-              widgetType, ipeInvalidatedMiss, view.xIntrinsicProfileInvalidation
+              widgetType, ipeInvalidatedMiss,
+              view.xIntrinsicMeasurement.profileInvalidation,
             )
           else:
             recordIntrinsicProfile(widgetType, ipeColdMiss)
-      if cacheEnabled and view.xIntrinsicCacheValid and
-          view.xIntrinsicCacheRevision == view.xIntrinsicRevision:
+      if cacheEnabled and view.xIntrinsicMeasurement.valid and
+          view.xIntrinsicMeasurement.storedRevision ==
+          view.xIntrinsicMeasurement.revision:
         when defined(merendaProfile):
           recordIntrinsicProfile(widgetType, ipeCacheHit)
-        return view.xIntrinsicCache
+        return view.xIntrinsicMeasurement.value
       when defined(merendaProfile):
         var measurementFinished = false
         defer:
           if not measurementFinished:
             recordIntrinsicProfile(widgetType, ipeMeasurementFailed)
-      let revision = view.xIntrinsicRevision
+      let revision = view.xIntrinsicMeasurement.revision
       let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
       result =
         if measured.isSome:
@@ -455,13 +458,13 @@ proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
           view.intrinsicContentSize()
       # An observer or custom measurement may invalidate during resolution.
       if cacheEnabled and vpCacheIntrinsicSize in view.xProps and
-          view.xIntrinsicRevision == revision:
-        view.xIntrinsicCache = result
-        view.xIntrinsicCacheRevision = revision
-        view.xIntrinsicCacheValid = true
+          view.xIntrinsicMeasurement.revision == revision:
+        view.xIntrinsicMeasurement.value = result
+        view.xIntrinsicMeasurement.storedRevision = revision
+        view.xIntrinsicMeasurement.valid = true
         when defined(merendaProfile):
-          view.xIntrinsicProfileHadEntry = true
-          view.xIntrinsicProfileInvalidation.setLen(0)
+          view.xIntrinsicMeasurement.profileHadEntry = true
+          view.xIntrinsicMeasurement.profileInvalidation.setLen(0)
       elif cacheEnabled:
         when defined(merendaProfile):
           let reason =

@@ -214,6 +214,15 @@ type
       items*: seq[PersistentSolverView]
       constraints*: seq[Constraint]
 
+  IntrinsicMeasurementCache* = object
+    when defined(merendaIntrinsicCache):
+      revision*, storedRevision*: uint64
+      valid*: bool
+      value*: IntrinsicSize
+      when defined(merendaProfile):
+        profileHadEntry*: bool
+        profileInvalidation*: string
+
   LayoutInputSummary* = object
     source*: LayoutInputSource
     constraints*: Natural
@@ -278,13 +287,7 @@ type
     xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
     xLayoutInputRevision*: uint64
     when defined(merendaIntrinsicCache):
-      xIntrinsicRevision*: uint64
-      xIntrinsicCacheRevision*: uint64
-      xIntrinsicCacheValid*: bool
-      xIntrinsicCache*: IntrinsicSize
-      when defined(merendaProfile):
-        xIntrinsicProfileHadEntry*: bool
-        xIntrinsicProfileInvalidation*: string
+      xIntrinsicMeasurement*: IntrinsicMeasurementCache
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
@@ -390,10 +393,10 @@ proc markLocalNeedsDisplay*(
   when defined(merendaIntrinsicCache):
     if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
       when defined(merendaProfile):
-        if view.xIntrinsicCacheValid:
-          view.xIntrinsicProfileInvalidation = "layoutFrame"
-      inc view.xIntrinsicRevision
-      view.xIntrinsicCacheValid = false
+        if view.xIntrinsicMeasurement.valid:
+          view.xIntrinsicMeasurement.profileInvalidation = "layoutFrame"
+      inc view.xIntrinsicMeasurement.revision
+      view.xIntrinsicMeasurement.valid = false
   view.xDisplayRevision.advanceRevision()
   for revision in view.xRenderSlotRevisions.mvalues:
     revision.advanceRevision()
@@ -406,10 +409,11 @@ proc markLocalNeedsDisplay*(
       when defined(merendaIntrinsicCache):
         if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
           when defined(merendaProfile):
-            if ancestor.xIntrinsicCacheValid:
-              ancestor.xIntrinsicProfileInvalidation = "descendantLayoutFrame"
-          inc ancestor.xIntrinsicRevision
-          ancestor.xIntrinsicCacheValid = false
+            if ancestor.xIntrinsicMeasurement.valid:
+              ancestor.xIntrinsicMeasurement.profileInvalidation =
+                "descendantLayoutFrame"
+          inc ancestor.xIntrinsicMeasurement.revision
+          ancestor.xIntrinsicMeasurement.valid = false
       ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 

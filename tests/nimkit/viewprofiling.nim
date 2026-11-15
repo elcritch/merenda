@@ -115,7 +115,7 @@ when defined(merendaProfile):
         view.invalidateDuringMeasure = true
         discard view.resolvedIntrinsicContentSize()
         discard view.resolvedIntrinsicContentSize()
-        inc view.xIntrinsicRevision
+        inc view.xIntrinsicMeasurement.revision
         discard view.resolvedIntrinsicContentSize()
         check intrinsicCount(ipeCacheDisabled) == 1
         check intrinsicCount(ipeColdMiss) == 1

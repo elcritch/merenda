@@ -68,10 +68,10 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     when defined(merendaIntrinsicCache):
       if (vpCacheIntrinsicSize in self.xProps) != (vpCacheIntrinsicSize in properties):
         when defined(merendaProfile):
-          if self.xIntrinsicCacheValid:
-            self.xIntrinsicProfileInvalidation = "cacheOptionChanged"
-        self.xIntrinsicCacheValid = false
-        inc self.xIntrinsicRevision
+          if self.xIntrinsicMeasurement.valid:
+            self.xIntrinsicMeasurement.profileInvalidation = "cacheOptionChanged"
+        self.xIntrinsicMeasurement.valid = false
+        inc self.xIntrinsicMeasurement.revision
     else:
       if vpCacheIntrinsicSize in properties:
         raise newException(
