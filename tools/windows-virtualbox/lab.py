@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -42,23 +43,32 @@ def settings():
     config.update(custom)
   if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,39}', config['name']):
     fail('Invalid VM name')
-  for key in ('base_folder', 'source_disk', 'runtime_dir', 'xauthority'):
+  for key in ('base_folder', 'runtime_dir', 'xauthority'):
     if not Path(config[key]).is_absolute():
       fail(f'{key} must be absolute')
-  for key in ('cpus', 'memory_mb', 'ssh_port', 'rdp_port'):
+  for key in ('cpus', 'memory_mb', 'disk_size_mb', 'ssh_port', 'rdp_port', 'vnc_port'):
     if type(config[key]) is not int or config[key] < 1:
       fail(f'{key} must be a positive integer')
-  for key in ('ssh_port', 'rdp_port'):
+  for key in ('ssh_port', 'rdp_port', 'vnc_port'):
     if not 1024 <= config[key] <= 65535:
       fail(f'Invalid {key}')
-  if config['ssh_port'] == config['rdp_port']:
-    fail('SSH and RDP ports must differ')
+  if len({config['ssh_port'], config['rdp_port'], config['vnc_port']}) != 3:
+    fail('SSH, RDP and VNC ports must differ')
+  if not config['iso_url'].startswith('https://'):
+    fail('ISO URL must use HTTPS')
+  if not re.fullmatch(r'[0-9a-fA-F]{64}', config['iso_sha256']):
+    fail('ISO SHA-256 must be a 64-character hex digest')
   return config
 
 
 def private_dir():
   LOCAL.mkdir(mode=0o700, exist_ok=True)
   LOCAL.chmod(0o700)
+
+
+def create_password():
+  return ''.join(secrets.choice('bcdfghjklmnpqrstvwxyz') + secrets.choice('aeiou')
+                 for _ in range(5)).capitalize()
 
 
 def host():
@@ -106,6 +116,24 @@ def exclusive():
     fail('Start a fresh login to pick up vboxusers membership, or run through sudo -u "$USER"')
 
 
+def download(config):
+  iso = (HERE / config['iso_path']).resolve()
+  iso.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+  partial = iso.with_suffix(iso.suffix + '.partial')
+  source = iso if iso.exists() else partial
+  if source == partial:
+    run('curl', '--fail', '--location', '--retry', '3', '--proto', '=https',
+        '--proto-redir', '=https', '--continue-at', '-', '--output', partial,
+        config['iso_url'])
+  with source.open('rb') as stream:
+    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+  if digest.lower() != config['iso_sha256'].lower():
+    fail('Windows ISO SHA-256 does not match the configured Microsoft digest')
+  if source == partial:
+    partial.replace(iso)
+  print('Verified Windows installation ISO:', iso)
+
+
 def prepare(config):
   private_dir()
   version = run('VBoxManage', '--version', capture=True).stdout.strip().split('r')[0]
@@ -136,6 +164,11 @@ def prepare(config):
   for name in ('PrepareGuest.ps1', 'EnableSsh.ps1'):
     shutil.copyfile(common / name, media / 'guest' / name)
   key = (HERE / config['ssh_key']).resolve()
+  key.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+  if not key.exists():
+    run('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'merenda-windows-lab', '-f', key)
+  if not key.with_suffix('.pub').is_file():
+    fail('SSH public key is missing: ' + str(key.with_suffix('.pub')))
   shutil.copyfile(key.with_suffix('.pub'), media / 'guest' / 'HostKey.pub')
   (media / 'network.json').write_text(json.dumps({
     'ip': '10.0.2.15', 'prefix': 24, 'gateway': '10.0.2.2', 'dns': ['10.0.2.3'],
@@ -153,27 +186,76 @@ def create(config):
     fail('VM already exists')
   folder = Path(config['base_folder']) / config['name']
   disk = folder / 'windows.vdi'
-  if not disk.is_file() or disk.is_symlink():
-    fail('Convert the stopped bhyve baseline to windows.vdi first; see README.md')
+  if folder.exists():
+    fail('VM directory already exists; refusing to overwrite it')
+  iso = (HERE / config['iso_path']).resolve()
+  if not iso.is_file() or not (LOCAL / 'bootstrap.iso').is_file():
+    fail('Run download and prepare first')
+  with iso.open('rb') as stream:
+    if hashlib.file_digest(stream, 'sha256').hexdigest() != config['iso_sha256'].lower():
+      fail('Windows ISO SHA-256 does not match the configured Microsoft digest')
   additions = Path((LOCAL / 'additions-path').read_text())
-  run('VBoxManage', 'createvm', '--name', config['name'], '--ostype', 'Windows2025_64',
+  if not additions.is_file():
+    fail('Run prepare to obtain matching Guest Additions')
+  credentials = (HERE / config['credentials']).resolve()
+  if credentials.exists():
+    password = json.loads(credentials.read_text())['password']
+  else:
+    password = create_password()
+    credentials.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(credentials, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+      json.dump({'username': 'Administrator', 'password': password}, stream, indent=2)
+      stream.write('\n')
+  run('VBoxManage', 'createvm', '--name', config['name'], '--ostype', 'Windows11_64',
       '--basefolder', config['base_folder'], '--register')
+  folder.chmod(0o700)
   run('VBoxManage', 'setextradata', config['name'], OWNER_KEY, OWNER)
   run('VBoxManage', 'modifyvm', config['name'], '--memory', config['memory_mb'],
-      '--cpus', config['cpus'], '--firmware', 'efi64', '--ioapic', 'on',
-      '--graphicscontroller', 'vboxsvga', '--vram', '256', '--accelerate-3d', 'on',
-      '--boot1', 'disk', '--boot2', 'dvd', '--boot3', 'none', '--boot4', 'none',
+      '--cpus', config['cpus'], '--firmware', 'efi64', '--ioapic', 'on', '--tpm-type', '2.0',
+      '--graphicscontroller', 'vboxsvga', '--vram', '256', '--accelerate-3d', 'off',
+      '--boot1', 'dvd', '--boot2', 'disk', '--boot3', 'none', '--boot4', 'none',
       '--nic1', 'nat', '--nic-type1', '82540EM', '--cable-connected1', 'on',
       '--nat-pf1', f'ssh,tcp,127.0.0.1,{config["ssh_port"]},10.0.2.15,22',
       '--nat-pf1', f'rdp,tcp,127.0.0.1,{config["rdp_port"]},10.0.2.15,3389',
+      '--vrde', 'on', '--vrde-extpack', 'VNC', '--vrde-address', '127.0.0.1',
+      '--vrde-port', config['vnc_port'],
       '--audio-enabled', 'off', '--clipboard-mode', 'disabled', '--drag-and-drop', 'disabled')
+  run('VBoxManage', 'modifynvram', config['name'], 'inituefivarstore')
+  run('VBoxManage', 'modifynvram', config['name'], 'enrollmssignatures')
+  run('VBoxManage', 'modifynvram', config['name'], 'enrollorclpk')
+  run('VBoxManage', 'modifynvram', config['name'], 'secureboot', '--enable')
   run('VBoxManage', 'storagectl', config['name'], '--name', 'SATA', '--add', 'sata',
-      '--controller', 'IntelAhci', '--portcount', '4', '--bootable', 'on')
-  for port, kind, medium in ((0, 'hdd', disk), (1, 'dvddrive', LOCAL / 'bootstrap.iso'),
-                              (2, 'dvddrive', additions)):
+      '--controller', 'IntelAhci', '--portcount', '6', '--bootable', 'on')
+  run('VBoxManage', 'createmedium', 'disk', '--filename', disk, '--size', config['disk_size_mb'],
+      '--format', 'VDI', '--variant', 'Standard')
+  for port, kind, medium in ((0, 'hdd', disk), (3, 'dvddrive', LOCAL / 'bootstrap.iso'),
+                              (4, 'dvddrive', additions)):
     run('VBoxManage', 'storageattach', config['name'], '--storagectl', 'SATA',
         '--port', port, '--device', '0', '--type', kind, '--medium', medium)
-  print('Created ' + config['name'] + ' with VBoxSVGA, 256 MiB VRAM, and 3D enabled')
+  password_file = LOCAL / 'unattended-password'
+  password_file_created = False
+  try:
+    fd = os.open(password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    password_file_created = True
+    with os.fdopen(fd, 'w') as stream:
+      stream.write(password)
+    script = "Get-Volume|? FileSystemLabel -eq MERENDA_VBOX|% {& ($_.DriveLetter+':\\guest\\Bootstrap.ps1')}"
+    command = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "' + script + '"'
+    run('VBoxManage', 'unattended', 'install', config['name'], '--iso=' + str(iso),
+        '--user=Administrator', '--user-password-file=' + str(password_file),
+        '--admin-password-file=' + str(password_file), '--locale=en_US', '--country=US',
+        '--language=en-US', '--image-index=1', '--post-install-command=' + command,
+        capture=True)
+  finally:
+    if password_file_created:
+      password_file.unlink(missing_ok=True)
+  # Unattended setup replaces/ejects existing optical media while creating its
+  # installer ISO. Reattach the bootstrap and additions on separate ports.
+  for port, medium in ((4, LOCAL / 'bootstrap.iso'), (5, additions)):
+    run('VBoxManage', 'storageattach', config['name'], '--storagectl', 'SATA',
+        '--port', port, '--device', '0', '--type', 'dvddrive', '--medium', medium)
+  print('Created Windows 11 VM; run start --headless and inspect the VNC console')
 
 
 def stop(config):
@@ -188,9 +270,12 @@ def stop(config):
   fail('ACPI shutdown timed out; inspect the guest console')
 
 
-def start(config):
+def start(config, headless=False):
   stopped(config)
   exclusive()
+  if headless:
+    run('VBoxManage', 'startvm', config['name'], '--type', 'headless')
+    return
   env = os.environ | {'DISPLAY': config['display'], 'XAUTHORITY': config['xauthority'],
                       'XDG_RUNTIME_DIR': config['runtime_dir']}
   # VBoxManage delegates GUI launch to VBoxSVC, whose environment can be stale
@@ -212,19 +297,22 @@ def start(config):
 
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument('command', choices=('prepare', 'create', 'start', 'stop', 'status',
+  parser.add_argument('command', choices=('download', 'prepare', 'create', 'start', 'stop', 'status',
                       'baseline', 'reset', 'screenshot', 'secure', 'password', 'run', 'bootstrap', 'probe'))
   parser.add_argument('--discard', action='store_true')
+  parser.add_argument('--headless', action='store_true')
   args = parser.parse_args()
   config = settings()
   host()
   private_dir()
-  if args.command == 'prepare':
+  if args.command == 'download':
+    download(config)
+  elif args.command == 'prepare':
     prepare(config)
   elif args.command == 'create':
     create(config)
   elif args.command == 'start':
-    start(config)
+    start(config, headless=args.headless)
   elif args.command == 'stop':
     stop(config)
   elif args.command == 'status':
@@ -244,9 +332,11 @@ def main():
         fail('Reset discards guest changes; repeat with --discard')
       run('VBoxManage', 'snapshot', config['name'], 'restore', 'clean')
     else:
-      for port in (1, 2):
-        run('VBoxManage', 'storageattach', config['name'], '--storagectl', 'SATA',
-            '--port', port, '--device', '0', '--type', 'dvddrive', '--medium', 'emptydrive')
+      values = managed(config)
+      for port in range(1, 6):
+        if values.get(f'SATA-{port}-0', 'none') not in ('none', 'emptydrive'):
+          run('VBoxManage', 'storageattach', config['name'], '--storagectl', 'SATA',
+              '--port', port, '--device', '0', '--type', 'dvddrive', '--medium', 'emptydrive')
       run('VBoxManage', 'snapshot', config['name'], 'take', 'clean',
           '--description', 'Stopped Windows evaluation with Guest Additions; GPU support requires separate verification')
   else:

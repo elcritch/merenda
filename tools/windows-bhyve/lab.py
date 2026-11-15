@@ -167,7 +167,7 @@ def download(config):
     digest = hashlib.file_digest(stream, "sha256").hexdigest()
   if config["iso_sha256"] and digest.lower() != config["iso_sha256"].lower():
     fail("ISO SHA-256 mismatch; remove the cached ISO and check the download")
-  (LOCAL / "windows-server-2025.iso.sha256").write_text(f"{digest}  {ISO.name}\n")
+  (LOCAL / (ISO.name + ".sha256")).write_text(f"{digest}  {ISO.name}\n")
   print(f"ISO ready; SHA-256: {digest}")
   if not config["iso_sha256"]:
     print("Digest recorded locally. Set iso_sha256 to pin a trusted copy on future downloads.")
@@ -255,7 +255,7 @@ def answer_xml(config, password):
   return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def prepare(config):
+def prepare(config, skip_missing_ssh=False):
   private_dir()
   key = LOCAL / "id_ed25519"
   if not key.exists():
@@ -274,6 +274,13 @@ def prepare(config):
   (media / "Autounattend.xml").write_bytes(answer_xml(config, password))
   (media / "Autounattend.xml").chmod(0o600)
   shutil.copytree(HERE / "guest", media / "guest", dirs_exist_ok=True)
+  if skip_missing_ssh:
+    bootstrap = media / "guest" / "Bootstrap.ps1"
+    text = bootstrap.read_text()
+    original = '& "$Lab\\PrepareGuest.ps1"'
+    if original not in text:
+      fail("Cannot find the guest preparation command in Bootstrap.ps1")
+    bootstrap.write_text(text.replace(original, original + " -SkipMissingSsh"))
   shutil.copyfile(key.with_suffix(".pub"), media / "guest" / "HostKey.pub")
   (media / "network.json").write_text(json.dumps({
     "ip": config["guest_ip"], "prefix": config["prefix_length"],
@@ -283,7 +290,7 @@ def prepare(config):
   run("makefs", "-t", "cd9660", "-o", "isolevel=2", "-o", "rockridge", "-o", "label=MERENDA_SETUP", partial, media)
   partial.chmod(0o600)
   partial.replace(ANSWER)
-  print(f"Answer ISO ready. Administrator credentials are in {secret}")
+  print(f"Answer ISO ready. Guest credentials are in {secret}")
 
 
 def template(config):
@@ -435,7 +442,8 @@ def gpu(config, enable):
     slots = {}
     for index, bsf in enumerate(config["gpu_devices"]):
       b, s, f = bsf.split("/")
-      slot = slots.setdefault((b, s), 8 + len(slots))
+      # Leave low slots available for vm-bhyve's automatically placed devices.
+      slot = slots.setdefault((b, s), 20 + len(slots))
       lines.append(f'passthru{index}="{bsf}={slot}:{f}"')
       if index == 0 and config["gpu_rom"]:
         lines.append(f'passthru{index}_options="rom={config["gpu_rom"]}"')
@@ -488,7 +496,7 @@ def main():
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
       if port_open(config["guest_ip"], 3389):
-        print("Windows RDP is reachable. Sign in as Administrator; run VerifyGpu.ps1 to check acceleration.")
+        print("Windows RDP is reachable. See the credentials file for the sign-in account.")
         return
       if not (vm_path(config) / "run.lock").exists():
         fail("VM exited before RDP became ready; inspect vm-bhyve.log and bhyve.log")

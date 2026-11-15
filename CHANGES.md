@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add Windows 11 Enterprise evaluation setups for bhyve and VirtualBox,
+  including virtual TPMs and remote console access.
+
 - Add virtualized DirectView rows for `CollectionView` and `ArrayController`,
   retaining an offscreen active editor and retiring bindings on removal or reuse.
   Reentrant model and selection teardown defers unsafe signal disconnections.

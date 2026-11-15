@@ -32,11 +32,10 @@ The 780M is an integrated GPU and its VBIOS, reset behavior, memory mappings,
 and driver compatibility need hardware validation. Do not assume the steps
 below guarantee it will work. Server's 180-day evaluation is convenient, but
 consumer Radeon drivers may support Windows 10/11 rather than Server. Check the
-GPU vendor's actual supported OS list. If the driver excludes Server, use
-[Windows 11 Enterprise's 90-day evaluation](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise)
-with a separately prepared Windows 11 installation and TPM/firmware setup;
-the included answer file is specifically for Server, and does not implement
-Windows 11 requirement bypasses.
+GPU vendor's actual supported OS list. A separate Windows 11 Enterprise
+evaluation guest with a software TPM is described in [WINDOWS11.md](WINDOWS11.md).
+AMD lists Windows 11 for the 8745HS and its Radeon 780M, but that does not
+establish that this integrated GPU works in a bhyve guest.
 
 ## Reserve a dedicated GPU
 

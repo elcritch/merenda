@@ -4,7 +4,7 @@ New-Item -ItemType Directory -Force $Lab | Out-Null
 Copy-Item "$PSScriptRoot\*" $Lab -Recurse -Force
 Copy-Item "$PSScriptRoot\..\network.json" $Lab -Force
 Get-ChildItem $Lab -File -Recurse | ForEach-Object { $_.IsReadOnly = $false }
-& "$Lab\PrepareGuest.ps1"
+& "$Lab\PrepareGuest.ps1" -SkipMissingSsh
 Start-Transcript -Path "$Lab\virtualbox-setup.log" -Append
 try {
   $Installer = Get-Volume | Where-Object DriveLetter | ForEach-Object {
