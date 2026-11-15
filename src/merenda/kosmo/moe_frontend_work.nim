@@ -166,7 +166,7 @@ proc takeEngineOutput(editor: KosmoEditor) =
     if window.tabBufferId == buffer.id:
       keepFocus = keepFocus and window != previousWindow
       engine.windowManager.activateWindow(index)
-      discard engine.windowManager.closeWindow(engine.showStatusLine)
+      discard engine.windowManager.closeWindow(engine.windowStatus)
   let previousIndex = engine.windowManager.windows.find(previousWindow)
   if previousIndex >= 0:
     engine.windowManager.activateWindow(previousIndex)
