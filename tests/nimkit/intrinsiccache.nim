@@ -42,7 +42,7 @@ suite "opt-in intrinsic measurement cache":
     discard view.sizeThatFits()
     discard view.sizeThatFits()
     check view.measurements == 2
-    view[vpCacheIntrinsicSize] = true
+    view{vpCacheIntrinsicSize} = true
     check view.sizeThatFits() == initSize(40, 20)
     discard view.sizeThatFits()
     check view.measurements == 3
@@ -50,15 +50,15 @@ suite "opt-in intrinsic measurement cache":
     view.invalidateIntrinsicContentSize()
     check view.sizeThatFits() == initSize(80, 20)
     check view.measurements == 4
-    view[vpCacheIntrinsicSize] = false
+    view{vpCacheIntrinsicSize} = false
     view.intrinsic = initIntrinsicSize(90, 20)
-    view[vpCacheIntrinsicSize] = true
+    view{vpCacheIntrinsicSize} = true
     check view.sizeThatFits() == initSize(90, 20)
     check view.measurements == 5
 
   test "fallback and fitting proposal remain fresh when intrinsic result is cached":
     let view = newCountingView(NoIntrinsicContentSize)
-    view[vpCacheIntrinsicSize] = true
+    view{vpCacheIntrinsicSize} = true
     check view.sizeThatFits() == initSize(25, 15)
     check view.sizeThatFits(initSize(8, 6)) == initSize(8, 6)
     check view.sizeThatFits() == initSize(25, 15)
@@ -68,7 +68,7 @@ suite "opt-in intrinsic measurement cache":
 
   test "invalidation during measurement does not publish a stale cache entry":
     let view = newCountingView(initIntrinsicSize(40, 20))
-    view[vpCacheIntrinsicSize] = true
+    view{vpCacheIntrinsicSize} = true
     view.invalidateDuringMeasure = true
     discard view.sizeThatFits()
     discard view.sizeThatFits()
@@ -79,7 +79,7 @@ suite "opt-in intrinsic measurement cache":
     let form = newFormView(frame = rect(0, 0, 200, 50))
     let child = newCountingView(initIntrinsicSize(40, 20))
     form.addRow(nil, child)
-    form[vpCacheIntrinsicSize] = true
+    form{vpCacheIntrinsicSize} = true
     check form.resolvedIntrinsicContentSize().width == 40
     child.intrinsic = initIntrinsicSize(70, 20)
     child.invalidateIntrinsicContentSize()
@@ -99,7 +99,7 @@ suite "opt-in intrinsic measurement cache":
     let field = newTextField("Short")
     field.editable = false
     field.selectable = false
-    field[vpCacheIntrinsicSize] = true
+    field{vpCacheIntrinsicSize} = true
     let before = field.sizeThatFits()
     field.text = "A much longer text field"
     check field.sizeThatFits().width > before.width
@@ -126,7 +126,7 @@ suite "opt-in intrinsic measurement cache":
     field.editable = false
     field.selectable = false
     first.addSubview(field)
-    field[vpCacheIntrinsicSize] = true
+    field{vpCacheIntrinsicSize} = true
     let initial = field.sizeThatFits()
     second.addSubview(field)
     let moved = field.sizeThatFits()
@@ -142,7 +142,7 @@ suite "opt-in intrinsic measurement cache":
 
   test "solver and container frame changes invalidate custom geometry measurements":
     let view = newGeometryView()
-    view[vpCacheIntrinsicSize] = true
+    view{vpCacheIntrinsicSize} = true
     check view.sizeThatFits() == initSize(25, 15)
     discard view.sizeThatFits()
     check view.measurements == 1
@@ -181,7 +181,7 @@ proc newReentrantView(cache: bool): ReentrantView =
   result = ReentrantView(intrinsic: initIntrinsicSize(40, 20))
   initViewFields(result, rect(0, 0, 40, 20))
   discard result.withProtocol(ReentrantLayout)
-  result[vpCacheIntrinsicSize] = cache
+  result{vpCacheIntrinsicSize} = cache
 
 proc newControlFixture(cache: bool): ControlFixture =
   result.root = newStackView(laHorizontal, frame = rect(0, 0, 480, 80))
@@ -191,7 +191,7 @@ proc newControlFixture(cache: bool): ControlFixture =
   result.field = newTextField("Short")
   result.button = newButton("Apply")
   for view in [View(result.label), View(result.field), View(result.button)]:
-    view[vpCacheIntrinsicSize] = cache
+    view{vpCacheIntrinsicSize} = cache
     result.root.addArrangedSubview(view)
 
 proc compareControlFixtures(left, right: ControlFixture) =

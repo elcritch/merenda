@@ -7,19 +7,19 @@ when defined(merendaIntrinsicCache):
     test "existing and inserted controls opt in and invalidate on edit":
       let controller = newTaskController()
       let field = TextField(controller.findDemoView("title-1"))
-      check field[vpCacheIntrinsicSize]
-      check controller.findDemoView("remove-1")[vpCacheIntrinsicSize]
+      check field{vpCacheIntrinsicSize}
+      check controller.findDemoView("remove-1"){vpCacheIntrinsicSize}
       discard field.resolvedIntrinsicContentSize()
       controller.editTitle(1, "A considerably longer task title for measurement")
       discard drainMainThreadWork()
       let after = field.resolvedIntrinsicContentSize()
       check field.stringValue == "A considerably longer task title for measurement"
-      field[vpCacheIntrinsicSize] = false
+      field{vpCacheIntrinsicSize} = false
       check after == field.resolvedIntrinsicContentSize()
       controller.insertTask()
       discard drainMainThreadWork()
       let inserted = TextField(controller.findDemoView("title-4"))
       require not inserted.isNil
-      check inserted[vpCacheIntrinsicSize]
-      check controller.findDemoView("remove-4")[vpCacheIntrinsicSize]
+      check inserted{vpCacheIntrinsicSize}
+      check controller.findDemoView("remove-4"){vpCacheIntrinsicSize}
       controller.setView(nil)

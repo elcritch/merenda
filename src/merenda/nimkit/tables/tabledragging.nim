@@ -34,7 +34,7 @@ proc updateTableDropTarget(tableView: TableView, target: DraggingDropTarget) =
 proc `allowsRowReordering=`*(tableView: TableView, value: bool) =
   if (tvoRowReordering in tableView.xOptions) == value:
     return
-  tableView.xOptions[tvoRowReordering] = value
+  tableView.xOptions{tvoRowReordering} = value
   if not value:
     tableView.xDragging.rowStart.row = -1
     tableView.updateTableDropTarget(initDraggingDropTarget())

@@ -56,7 +56,7 @@ proc body(session: DirectViewSession, tasks: seq[Task], receiver: BenchReceiver)
           HStack:
             this.distribution = svdNatural
             this.identifier = "row-" & $task.id
-            this[vpDraggable] = true
+            this{vpDraggable} = true
             this.edgeInsets = insets(4)
             Label:
               this.stringValue = "#" & $task.id

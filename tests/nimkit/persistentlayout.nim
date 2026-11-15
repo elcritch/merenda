@@ -13,7 +13,7 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
 
   proc fixture(): PersistentFixture =
     result.root = newView(frame = rect(0, 0, 200, 100))
-    result.root[vpPersistentLayout] = true
+    result.root{vpPersistentLayout} = true
     result.child = newView(frame = rect(10, 5, 40, 20))
     result.peer = newView(frame = rect(60, 10, 30, 20))
     result.child.autoresizingMask = {cxWidthSizable}
@@ -32,13 +32,13 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
   suite "experimental persistent layout":
     test "only opted-in roots retain solvers and disabling releases the cache":
       let item = fixture()
-      item.root[vpPersistentLayout] = false
+      item.root{vpPersistentLayout} = false
       check item.root.layout().persistentBuilds == 0
       check not item.root.xPersistentLayout.valid
-      item.root[vpPersistentLayout] = true
+      item.root{vpPersistentLayout} = true
       check item.root.layout().persistentBuilds == 1
       require item.root.xPersistentLayout.valid
-      item.root[vpPersistentLayout] = false
+      item.root{vpPersistentLayout} = false
       check not item.root.xPersistentLayout.valid
       item.root.frame = rect(0, 0, 230, 100)
       let profile = item.root.layout()
@@ -136,7 +136,7 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
     test "content, appearance and visibility changes match fresh fixed controls":
       proc controls(): tuple[root: View, label: Label] =
         result.root = newView(frame = rect(0, 0, 200, 100))
-        result.root[vpPersistentLayout] = true
+        result.root{vpPersistentLayout} = true
         result.label = newLabel("Original")
         result.label.frame = rect(10, 5, 80, 25)
         result.label.autoresizingMaskConstraints = true
@@ -277,7 +277,7 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
       var rootRef, childRef: BackRef[View]
       block:
         let root = newView(frame = rect(0, 0, 200, 100))
-        root[vpPersistentLayout] = true
+        root{vpPersistentLayout} = true
         rootRef.target = root
         block:
           let child = newView(frame = rect(10, 5, 40, 20))
@@ -301,7 +301,7 @@ when defined(merendaPersistentLayout) and not defined(merendaProfile) and
     test "a stable resize retains and updates the same solver":
       let root = newView(frame = rect(0, 0, 100, 80))
       let child = newView(frame = rect(0, 0, 20, 20))
-      root[vpPersistentLayout] = true
+      root{vpPersistentLayout} = true
       child.autoresizingMask = {cxWidthSizable}
       root.addSubview(child)
       root.layoutSubtreeIfNeeded()
@@ -311,7 +311,7 @@ when defined(merendaPersistentLayout) and not defined(merendaProfile) and
       root.layoutSubtreeIfNeeded()
       check root.xPersistentLayout.items[0].left.sameVariable(saved)
       check child.frame.size.width == 60
-      root[vpPersistentLayout] = false
+      root{vpPersistentLayout} = false
       check not root.xPersistentLayout.valid
 
 when defined(merendaPersistentLayout) and defined(merendaRowLayoutBoundaries):
@@ -322,7 +322,7 @@ when defined(merendaPersistentLayout) and defined(merendaRowLayoutBoundaries):
   suite "separate layout experiments":
     test "row-boundary builds do not retain a persistent solver":
       let root = newView(frame = rect(0, 0, 100, 80))
-      root[vpPersistentLayout] = true
+      root{vpPersistentLayout} = true
       root.addSubview(newView(frame = rect(0, 0, 20, 20)))
       root.layoutSubtreeIfNeeded()
       check not root.xPersistentLayout.valid

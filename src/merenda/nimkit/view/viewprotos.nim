@@ -455,13 +455,13 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
 
     if inside: self else: nil
 
-proc `[]`*(view: View, property: ViewProperty): bool =
+proc `{}`*(view: View, property: ViewProperty): bool =
   ## Read an individual view property through the protocol getter.
   property in view.properties
 
-proc `[]=`*(view: View, property: ViewProperty, enabled: bool) =
+proc `{}=`*(view: View, property: ViewProperty, enabled: bool) =
   ## Change one property through the protocol setter, preserving the others.
-  if view[property] == enabled:
+  if view{property} == enabled:
     return
   let properties = view.properties
   view.properties =

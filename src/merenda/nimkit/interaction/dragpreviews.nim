@@ -55,7 +55,7 @@ proc captureDragPreview*(root: View, environment: DragEnvironment): DragPreview 
   var nodes: seq[View]
   var ids = initHashSet[string]()
   proc visit(view: View, insideElement: bool) =
-    let marked = view[vpDraggable]
+    let marked = view{vpDraggable}
     if marked:
       let id = view.identifier
       if id.len == 0:

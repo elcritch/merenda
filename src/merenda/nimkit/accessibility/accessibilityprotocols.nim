@@ -246,17 +246,17 @@ protocol AccessibilityProtocol:
 
 protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
   method accessibilityElement(view: View): bool =
-    view[vpAccessibilityElement] or view.xHasAccessibilityRole or
+    view{vpAccessibilityElement} or view.xHasAccessibilityRole or
       view.xAccessibilityLabel.len > 0 or view.xAccessibilityValue.len > 0
 
   method setAccessibilityElement(view: View, value: bool) =
-    view[vpAccessibilityElement] = value
+    view{vpAccessibilityElement} = value
 
   method accessibilityIgnored(view: View): bool =
-    view[vpAccessibilityIgnored] or view.hasHiddenAncestor()
+    view{vpAccessibilityIgnored} or view.hasHiddenAncestor()
 
   method setAccessibilityIgnored(view: View, value: bool) =
-    view[vpAccessibilityIgnored] = value
+    view{vpAccessibilityIgnored} = value
 
   method accessibilityRole(view: View): AccessibilityRole =
     if view.xHasAccessibilityRole: view.xAccessibilityRole else: arGroup
@@ -264,14 +264,14 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
   method setAccessibilityRole(view: View, role: AccessibilityRole) =
     view.xAccessibilityRole = role
     view.xHasAccessibilityRole = true
-    view[vpAccessibilityElement] = role != arGroup
+    view{vpAccessibilityElement} = role != arGroup
 
   method accessibilityLabel(view: View): string =
     if view.xAccessibilityLabel.len > 0: view.xAccessibilityLabel else: view.xIdentifier
 
   method setAccessibilityLabel(view: View, label: string) =
     view.xAccessibilityLabel = label
-    view[vpAccessibilityElement] = true
+    view{vpAccessibilityElement} = true
 
   method accessibilityValue(view: View): string =
     view.xAccessibilityValue
@@ -280,7 +280,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     if view.xAccessibilityValue == value:
       return
     view.xAccessibilityValue = value
-    view[vpAccessibilityElement] = true
+    view{vpAccessibilityElement} = true
     emit view.accessibilityNotificationPosted(anValueChanged)
 
   method accessibilityHelp(view: View): string =

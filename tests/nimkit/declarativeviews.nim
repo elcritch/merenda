@@ -194,7 +194,7 @@ suite "NimKit declarative views":
     let detached = buildDetachedView(spec)
     check StackView(detached).arrangedSubviews.len == 3
     check TextField(detached.viewWithIdentifier("edit-b")).stringValue == "Beta"
-    check detached.viewWithIdentifier("row-a")[vpDraggable]
+    check detached.viewWithIdentifier("row-a"){vpDraggable}
     check detached.window.isNil
     check detached.superview.isNil
 

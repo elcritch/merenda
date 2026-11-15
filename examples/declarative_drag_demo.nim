@@ -19,7 +19,7 @@ proc buildBoard(model: Board, env: DragEnvironment): View =
     for item in items:
       let card = newStackView(laVertical)
       card.identifier = item
-      card[vpDraggable] = true
+      card{vpDraggable} = true
       card.spacing = 8
       card.edgeInsets = insets(14, 14, 14, 14)
       card.backgroundColor =

@@ -104,7 +104,7 @@ when defined(merendaProfile):
         initViewFields(view, rect(0, 0, 25, 15))
         discard view.withProtocol(ProfileCountingLayout)
         discard view.resolvedIntrinsicContentSize()
-        view[vpCacheIntrinsicSize] = true
+        view{vpCacheIntrinsicSize} = true
         discard view.resolvedIntrinsicContentSize()
         discard view.resolvedIntrinsicContentSize()
         view.invalidateIntrinsicContentSize()

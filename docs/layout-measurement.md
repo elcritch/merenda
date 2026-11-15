@@ -5,7 +5,7 @@ then opt individual views into one bounded intrinsic-size cache entry:
 
 ```nim
 let field = newTextField("Amount")
-field[vpCacheIntrinsicSize] = true
+field{vpCacheIntrinsicSize} = true
 discard field.sizeThatFits()
 discard field.sizeThatFits() # reuses the intrinsic result if inputs are unchanged
 field.stringValue = "A different amount" # normal setters invalidate measurements
@@ -107,7 +107,7 @@ feedback logic.
 ## Experimental persistent solver
 
 Compile with `-d:merendaPersistentLayout` and set
-`root[vpPersistentLayout] = true` to opt a stable live root into a conservative
+`root{vpPersistentLayout} = true` to opt a stable live root into a conservative
 solver cache. Fitting remains fresh. Every view must use autoresizing constraints,
 and the tree must have no active authored constraints or CSS layout rules.
 Unverified changes fall back to a fresh solve.

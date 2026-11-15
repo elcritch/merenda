@@ -79,7 +79,7 @@ type FixedFixture = object
 
 proc fixedFixture(): FixedFixture =
   result.root = newView(frame = rect(0, 0, 1240, 540))
-  result.root[vpPersistentLayout] = true
+  result.root{vpPersistentLayout} = true
   result.counter = newLabel("Counter: 0")
   result.counter.frame = rect(0, 0, 150, 20)
   result.counter.autoresizingMaskConstraints = true
@@ -166,7 +166,7 @@ proc demoFixture(preview: bool): TaskController =
   else:
     result = newTaskModelController()
     result.setView(result.buildChrome())
-  result.view[vpPersistentLayout] = true
+  result.view{vpPersistentLayout} = true
   var tasks: TaskRows
   for id in 1 .. 100:
     tasks.add TaskItem(id: id, title: "Task " & $id)

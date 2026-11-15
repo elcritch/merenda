@@ -34,7 +34,7 @@ Mark each draggable subtree explicitly in the builder:
 ```nim
 let card = newStackView(laVertical)
 card.identifier = itemId
-card[vpDraggable] = true
+card{vpDraggable} = true
 ```
 
 The whole card, including its child views, moves together. An identifier alone

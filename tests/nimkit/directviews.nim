@@ -637,7 +637,7 @@ suite "direct view composition":
             keyed(id):
               HStack:
                 this.identifier = id
-                this[vpDraggable] = true
+                this{vpDraggable} = true
                 TextField:
                   this.identifier = "field-" & id
                   bindingScope.bindValue(

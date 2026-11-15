@@ -227,7 +227,7 @@ const
   tsmMultiple* = TableSelectionMode.lsmMultiple
   tsmExtended* = TableSelectionMode.lsmExtended
 
-proc `[]=`*(
+proc `{}=`*(
     options: var set[TableViewOption], option: TableViewOption, enabled: bool
 ) {.inline.} =
   ## Enables or disables one table option without changing the others.
