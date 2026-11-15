@@ -2093,6 +2093,8 @@ protocol DocumentTabsAccessibility of AccessibilityProtocol:
 
 proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   initViewFields(tabs, frame)
+  # Tab items may be mutated independently of their owning tabs.
+  tabs{vpCacheIntrinsicSize} = false
   tabs.xSelectedIndex = -1
   tabs.xPressedIndex = -1
   tabs.xPressedPart = dthNone

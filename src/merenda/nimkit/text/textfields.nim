@@ -279,6 +279,7 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
     cell.editWithFrame(frame, controlView, editor)
     if not editor.isNil:
       editor.selectedRange = initTextRange(start, length)
+      TextView(editor).scrollInsertionPointToVisible()
 
   method endEditing(cell: TextFieldCell, editor: FieldEditor, controlView: View) =
     if not editor.isNil and editor.superview() == controlView:
@@ -500,7 +501,8 @@ proc layoutFieldEditor(textField: TextField) =
     return
   let frame = textField.fieldEditorFrame()
   editor.frame = frame
-  editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
+  editor.bounds = rect(editor.bounds.origin.x, 0.0, frame.size.width, frame.size.height)
+  TextView(editor).scrollInsertionPointToVisible()
 
 proc setCursor(textField: TextField, index: int, extending = false) =
   let previousSelection = textField.selectedRange()

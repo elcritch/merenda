@@ -117,6 +117,15 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  test "mutable menu items change menu bar intrinsic size without a reload":
+    let menu = newMenu("Bar")
+    let item = newMenuItem("Short")
+    discard menu.addItem(item)
+    let bar = newMenuBar(menu)
+    let before = bar.resolvedIntrinsicContentSize()
+    item.title = "A considerably longer menu title for intrinsic measurement"
+    check bar.resolvedIntrinsicContentSize().width > before.width
+
   test "cloning nested menu models preserves retained callback targets":
     let action = actionSelector("test.nestedModelCallback")
     var calls = 0

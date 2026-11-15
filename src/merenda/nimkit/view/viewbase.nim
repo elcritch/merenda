@@ -125,7 +125,7 @@ type
     vpDraggable ## Marks a subtree for declarative dragging.
     vpAccessibilityElement ## Explicitly exposes the view as an accessibility element.
     vpAccessibilityIgnored ## Excludes the view from accessibility traversal.
-    vpCacheIntrinsicSize ## Requires -d:merendaIntrinsicCache and valid invalidation.
+    vpCacheIntrinsicSize ## Enabled by default; requires valid measurement invalidation.
     vpPersistentLayout ## Retain a verified solver with -d:merendaPersistentLayout.
 
   ViewInternalProperty* = enum
@@ -214,6 +214,15 @@ type
       items*: seq[PersistentSolverView]
       constraints*: seq[Constraint]
 
+  IntrinsicMeasurementCache* = object
+    revision*, storedRevision*: uint64
+    uncachedSubtree*: uint32
+    valid*: bool
+    value*: IntrinsicSize
+    when defined(merendaProfile):
+      profileHadEntry*: bool
+      profileInvalidation*: string
+
   LayoutInputSummary* = object
     source*: LayoutInputSource
     constraints*: Natural
@@ -277,14 +286,7 @@ type
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
     xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
     xLayoutInputRevision*: uint64
-    when defined(merendaIntrinsicCache):
-      xIntrinsicRevision*: uint64
-      xIntrinsicCacheRevision*: uint64
-      xIntrinsicCacheValid*: bool
-      xIntrinsicCache*: IntrinsicSize
-      when defined(merendaProfile):
-        xIntrinsicProfileHadEntry*: bool
-        xIntrinsicProfileInvalidation*: string
+    xIntrinsicMeasurement*: IntrinsicMeasurementCache
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
@@ -387,13 +389,12 @@ proc markLocalNeedsDisplay*(
 ) =
   if view.isNil:
     return
-  when defined(merendaIntrinsicCache):
-    if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
-      when defined(merendaProfile):
-        if view.xIntrinsicCacheValid:
-          view.xIntrinsicProfileInvalidation = "layoutFrame"
-      inc view.xIntrinsicRevision
-      view.xIntrinsicCacheValid = false
+  if invalidateIntrinsic and vpCacheIntrinsicSize in view.xProps:
+    when defined(merendaProfile):
+      if view.xIntrinsicMeasurement.valid:
+        view.xIntrinsicMeasurement.profileInvalidation = "layoutFrame"
+    inc view.xIntrinsicMeasurement.revision
+    view.xIntrinsicMeasurement.valid = false
   view.xDisplayRevision.advanceRevision()
   for revision in view.xRenderSlotRevisions.mvalues:
     revision.advanceRevision()
@@ -403,13 +404,12 @@ proc markLocalNeedsDisplay*(
   if propagateAncestors:
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
-      when defined(merendaIntrinsicCache):
-        if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
-          when defined(merendaProfile):
-            if ancestor.xIntrinsicCacheValid:
-              ancestor.xIntrinsicProfileInvalidation = "descendantLayoutFrame"
-          inc ancestor.xIntrinsicRevision
-          ancestor.xIntrinsicCacheValid = false
+      if invalidateIntrinsic and vpCacheIntrinsicSize in ancestor.xProps:
+        when defined(merendaProfile):
+          if ancestor.xIntrinsicMeasurement.valid:
+            ancestor.xIntrinsicMeasurement.profileInvalidation = "descendantLayoutFrame"
+        inc ancestor.xIntrinsicMeasurement.revision
+        ancestor.xIntrinsicMeasurement.valid = false
       ancestor.xPrivProps.incl vipNeedsDisplay
       ancestor = ancestor.superviewBacklink()
 

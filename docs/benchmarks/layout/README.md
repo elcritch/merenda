@@ -55,7 +55,7 @@ measurement followed by one direct arrangement, repeated ten times per sample.
 It warms the fixture first so child frames are stable. It compares the same build
 with caching disabled and explicitly enabled on each child; this is a warm-cache
 microbenchmark, not a constraint solver, render, or complete layout transaction.
-Use the build command above with `cache.nim`, `-d:merendaIntrinsicCache`, and a
+Use the build command above with `cache.nim` and a
 distinct output path.
 
 | Rows | Disabled µs/pair | Enabled µs/pair | Intrinsic reads per 10 pairs, disabled / enabled |

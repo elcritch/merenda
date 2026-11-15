@@ -68,8 +68,7 @@ else:
   import nimkit/iconlabels
   import nimkit/images
   import nimkit/itemcollections
-  when defined(merendaIntrinsicCache):
-    import nimkit/intrinsiccache
+  import nimkit/intrinsiccache
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix

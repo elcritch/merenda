@@ -485,6 +485,7 @@ proc containsView*(view, candidate: View): bool =
 
 proc initViewFields*(view: View, frame: Rect = AutoRect) =
   initResponder(view)
+  view.xProps.incl vpCacheIntrinsicSize
   view.xRenderViewId = nextRenderViewId()
   view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(rect(0.0, 0.0, 0.0, 0.0))

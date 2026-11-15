@@ -360,9 +360,40 @@ protocol TextViewCheckingProtocol:
     textView: TextView, range: TextRange
   ): seq[TextCheckingResult] {.optional.}
 
+proc textDrawRect(textView: TextView): Rect =
+  ## Text is laid out in content coordinates, independent of any bounds offset.
+  rect(initPoint(0.0'f32, 0.0'f32), textView.bounds.size).inset(
+    textView.xTextContainer.insets
+  )
+
+proc scrollInsertionPointToVisible*(textView: TextView) =
+  ## Shift a field editor's bounds origin so its single-line insertion point
+  ## stays within the visible width.
+  if textView.isNil or tvFieldEditor notin textView.xFlags or
+      textView.xLayoutManager.isNil:
+    return
+  let bounds = textView.bounds
+  if bounds.size.width <= 0.0'f32:
+    return
+  textView.updateTextContainer()
+  let
+    manager = textView.xLayoutManager
+    trailingInset = textView.xTextContainer.insets.right
+    caret = manager.caretRect(textView.xInsertionPoint)
+    contentMaxX = manager.caretRect(textView.xTextStorage.len).maxX + trailingInset
+    maxOffset = max(contentMaxX - bounds.size.width, 0.0'f32)
+  var offset = bounds.origin.x
+  if caret.minX < offset:
+    offset = caret.minX - textView.xTextContainer.insets.left
+  elif caret.maxX + trailingInset > offset + bounds.size.width:
+    offset = caret.maxX + trailingInset - bounds.size.width
+  offset = clamp(offset, 0.0'f32, maxOffset)
+  textView.setBoundsOriginFromLayout(initPoint(offset, bounds.origin.y))
+
 proc dispatchSelectionChanged(textView: TextView, before: seq[TextRange]) =
   if textView.isNil:
     return
+  textView.scrollInsertionPointToVisible()
   let after = textView.selectedRanges()
   if after == before:
     return
@@ -2883,7 +2914,7 @@ proc drawLineBackgrounds(textView: TextView, context: DrawContext, visible: Rect
   let
     snapshot = textView.xLayoutManager.layoutSnapshot()
     storage = textView.displayTextStorage()
-    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    textRect = textView.textDrawRect()
   var index = snapshot.lineFragments.firstFragmentEndingAfter(visible.minY)
   while index < snapshot.lineFragments.len and
       snapshot.lineFragments[index].fragmentRect.minY <= visible.maxY:
@@ -2951,7 +2982,7 @@ proc drawTextViewUnderlayInViewport*(
 proc drawTextViewText*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
   let
-    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    textRect = textView.textDrawRect()
     displayStorage = textView.displayTextStorage()
   let owner =
     if displayStorage == textView.xTextStorage:
@@ -3016,7 +3047,7 @@ proc drawTextViewTextInViewport*(
     return
 
   let
-    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    textRect = textView.textDrawRect()
     manager = textView.xLayoutManager
     owner = manager.glyphArrangementResource()
   if owner.isNil:

@@ -513,6 +513,99 @@ suite "nimkit text fields":
     checkClose(activeCaretX, passiveCaret.origin.x)
     checkClose(activeCaretY, passiveCaret.origin.y)
 
+  test "field editor scrolls long text to keep the caret visible":
+    let
+      window = newWindow("Text scrolling", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 80, 30))
+
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+    discard window.buildRenders()
+
+    let editor = window.fieldEditor()
+    check editor.clipsToBounds()
+    check editor.bounds().origin.x == 0.0'f32
+
+    for ch in "viewProtocolSearchTextLongerThanField":
+      editor.insertText($ch)
+    discard window.buildRenders()
+
+    let
+      bounds = editor.bounds()
+      caret = editor.layoutManager().caretRect(editor.textStorage().len)
+    check bounds.origin.x > 0.0'f32
+    check caret.minX >= bounds.minX
+    check caret.maxX <= bounds.maxX + TextFieldGeometryEpsilon
+
+    editor.moveToBeginningOfLineText()
+    check editor.bounds().origin.x == 0.0'f32
+
+  test "scrolled field editor keeps accepting keyboard edits":
+    let
+      window = newWindow("Text scrolling edits", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 80, 30))
+    defer:
+      window.close()
+    root.addSubview(field)
+    window.setContentView(root)
+    require window.makeFirstResponder(field)
+    let text = "viewProtocolSearchTextLongerThanField"
+    for ch in text:
+      require window.dispatchTextInput($ch)
+      discard window.buildRenders()
+    check field.stringValue == text
+    discard
+      window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
+    discard window.buildRenders()
+    check field.stringValue == text[0 ..^ 2]
+    discard
+      window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    discard
+      window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    discard window.buildRenders()
+    require window.dispatchTextInput("X")
+    discard window.buildRenders()
+    check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
+    let editor = window.fieldEditor()
+    check editor.selectedRange == initTextRange(text.len - 2, 0)
+    require window.dispatchTextInput("Y")
+    discard window.buildRenders()
+    check field.stringValue == text[0 ..^ 4] & "XY" & text[^3 ..^ 2]
+
+  test "scrolled field editor edits survive native text input state queries":
+    let
+      window = newWindow("Text scrolling native", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 80, 30))
+    defer:
+      window.close()
+    root.addSubview(field)
+    window.setContentView(root)
+    require window.makeFirstResponder(field)
+    proc native(text: string) =
+      discard window.textInputState()
+      require window.dispatchTextInput(text)
+      discard window.textInputState()
+      discard window.buildRenders()
+
+    proc nativeKey(key: Key) =
+      discard window.textInputState()
+      discard window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord))
+      discard window.textInputState()
+      discard window.buildRenders()
+
+    let text = "viewProtocolSearchTextLongerThanField"
+    for ch in text:
+      native($ch)
+    nativeKey(keyBackspace)
+    nativeKey(keyArrowLeft)
+    nativeKey(keyArrowLeft)
+    native("X")
+    check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
+
   test "field editor text rect and accessibility geometry do not shift on focus":
     let
       window = newWindow("Text geometry", frame = rect(0, 0, 260, 140))

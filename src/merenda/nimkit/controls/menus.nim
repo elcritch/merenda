@@ -2144,6 +2144,8 @@ protocol MenuBarLayout of ViewLayoutProtocol:
 
 proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRect) =
   initViewFields(menuBar, frame)
+  # Menu items can change independently of the menu bar.
+  menuBar{vpCacheIntrinsicSize} = false
   menuBar.background = color(0.0, 0.0, 0.0, 0.0)
   discard menuBar.withProto()
   discard menuBar.withProtocol(MenuBarDrawing)

@@ -171,36 +171,26 @@ suite "nimkit stack views":
     check first.frame() == rect(0, 0, 20, 10)
     check second.frame() == rect(0, 10, 30, 15)
 
-  when not defined(merendaIntrinsicCache):
-    test "intrinsic caching cannot be enabled without the compile flag":
-      let child = newFixedIntrinsicView(20, 10)
-      expect ValueError:
-        child{vpCacheIntrinsicSize} = true
-      check not child{vpCacheIntrinsicSize}
-      static:
-        doAssert not compiles(child.xIntrinsicCache)
-
-  when defined(merendaIntrinsicCache):
-    test "opted-in intrinsic measurement is reused until geometry invalidates it":
-      let
-        stack = newStackView(laVertical, frame = rect(0, 0, 100, 60))
-        child = newFixedIntrinsicView(20, 10)
-      stack.distribution = svdNatural
-      stack.spacing = 0
-      stack.alignment = svaLeading
-      stack.addArrangedSubview(child)
-      child{vpCacheIntrinsicSize} = true
-      child.measurements = 0
-      check stack.intrinsicContentSize() == initIntrinsicSize(20, 10)
-      check child.measurements == 1
-      discard stack.sendLocalIfHandled(layoutSubviews())
-      check child.measurements == 1
-      check child.frame() == rect(0, 0, 20, 10)
-      child.naturalSize = initSize(30, 15)
-      child.invalidateIntrinsicContentSize()
-      discard stack.sendLocalIfHandled(layoutSubviews())
-      check child.measurements == 2
-      check child.frame() == rect(0, 0, 30, 15)
+  test "opted-in intrinsic measurement is reused until geometry invalidates it":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 100, 60))
+      child = newFixedIntrinsicView(20, 10)
+    stack.distribution = svdNatural
+    stack.spacing = 0
+    stack.alignment = svaLeading
+    stack.addArrangedSubview(child)
+    child{vpCacheIntrinsicSize} = true
+    child.measurements = 0
+    check stack.intrinsicContentSize() == initIntrinsicSize(20, 10)
+    check child.measurements == 1
+    discard stack.sendLocalIfHandled(layoutSubviews())
+    check child.measurements == 1
+    check child.frame() == rect(0, 0, 20, 10)
+    child.naturalSize = initSize(30, 15)
+    child.invalidateIntrinsicContentSize()
+    discard stack.sendLocalIfHandled(layoutSubviews())
+    check child.measurements == 2
+    check child.frame() == rect(0, 0, 30, 15)
 
   test "cross-axis alignment can fill center and trail":
     let

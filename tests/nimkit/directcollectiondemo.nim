@@ -4,6 +4,7 @@ import merenda/nimkit
 import merenda/nimkit/app/backend
 import merenda/nimkit/directviews
 import ../../examples/direct_collection_demo
+import ../intrinsic_collection_fixture
 
 type ClosingObserver = ref object of Responder
   rows: CollectionRows
@@ -34,7 +35,7 @@ proc closeRows(observer: ClosingObserver, sender: DynamicAgent) {.slot.} =
 
 suite "editable virtual collection demo":
   test "native composition ranges preserve Unicode and committed text":
-    let demo = newDirectCollectionDemo(30, false)
+    let demo = newDirectCollectionDemo(30)
     let window = newWindow("Composition", frame = rect(0, 0, 640, 480))
     window.setContentView(demo.view)
     discard window.buildRenders()
@@ -89,7 +90,7 @@ suite "editable virtual collection demo":
 
   test "teardown is safe during model and selection signals":
     for selection in [false, true]:
-      let demo = newDirectCollectionDemo(30, false)
+      let demo = newDirectCollectionDemo(30)
       let controller = ArrayController(demo.view.dataSource())
       let window = newWindow("Teardown", frame = rect(0, 0, 640, 480))
       window.setContentView(demo.view)
@@ -119,7 +120,7 @@ suite "editable virtual collection demo":
 
   test "editing survives selection, scrolling, insertion and reorder until deletion":
     for cache in [false, true]:
-      let demo = newDirectCollectionDemo(5000, cache)
+      let demo = newIntrinsicCollectionFixture(5000, cache)
       let controller = ArrayController(demo.view.dataSource())
       let window = newWindow("Virtual collection", frame = rect(0, 0, 640, 480))
       window.setContentView(demo.view)
@@ -128,8 +129,7 @@ suite "editable virtual collection demo":
       require not row.isNil
       let stack = StackView(row.arrangedSubviews[0])
       let field = TextField(stack.arrangedSubviews[1])
-      when defined(merendaIntrinsicCache):
-        check field{vpCacheIntrinsicSize} == cache
+      check field{vpCacheIntrinsicSize} == cache
       require window.makeFirstResponder(field)
       let editor = TextView(field.currentEditor)
       editor.selectedRange = initTextRange(1, 2)

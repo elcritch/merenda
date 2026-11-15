@@ -27,5 +27,5 @@ active editor through selection, scrolling, insertion, reorder and deletion in
 both cache configurations. Raw sample files are not tracked. Reproduce with:
 
 ```sh
-nim ic -r -d:release -d:merendaIntrinsicCache -d:merendaProfile tests/benchmark_virtual_editing.nim
+nim ic -r -d:release -d:merendaProfile tests/benchmark_virtual_editing.nim
 ```

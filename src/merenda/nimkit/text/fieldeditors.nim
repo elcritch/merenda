@@ -380,6 +380,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
   editor.propagatesIntrinsicContentSizeChanges = false
   editor.background = color(0.0, 0.0, 0.0, 0.0)
+  editor.clipsToBounds = true
   editor.editable = true
   editor.selectable = true
   editor.richText = true

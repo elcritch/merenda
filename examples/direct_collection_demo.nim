@@ -8,34 +8,26 @@ proc rowTitle(controller: ArrayController, id: string): string =
 proc editRowTitle(controller: ArrayController, id, value: string) =
   controller.setValue(id, "title", toObj(value))
 
-proc buildCollectionRow(
-    row: DirectView, controller: ArrayController, id: string, cache: bool
-) =
+proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: string) =
   row.viewBody:
     HStack:
       this.spacing = 8
       Label:
-        when defined(merendaIntrinsicCache):
-          this{vpCacheIntrinsicSize} = cache
         this.stringValue = "#" & id
       TextField:
-        when defined(merendaIntrinsicCache):
-          this{vpCacheIntrinsicSize} = cache
         arrangedSizing(svspFillAvailableWidth)
         bindingScope.bindTextField(
           "title", controller, arrayControllerDidChange, id, rowTitle, this,
           editRowTitle,
         )
       Button("Remove", acceptsFirstResponder = false):
-        when defined(merendaIntrinsicCache):
-          this{vpCacheIntrinsicSize} = cache
         onAction(controller, id) do(
           receiver: ArrayController, key: string, sender: DynamicAgent
         ):
           discard receiver.removeItem(key)
 
 proc newDirectCollectionDemo*(
-    count = 5000, cache = true
+    count = 5000, rowBuilder: CollectionRowBuilder = nil
 ): tuple[view: CollectionView, rows: CollectionRows] =
   var items: seq[ModelItem]
   for i in 0 ..< count:
@@ -48,12 +40,10 @@ proc newDirectCollectionDemo*(
     minimumLineSpacing = 2,
     edgeInsets = insets(4),
   )
-  let rows = newCollectionRows(
-    collection,
-    controller,
-    proc(row: DirectView, controller: ArrayController, id: string) =
-      buildCollectionRow(row, controller, id, cache),
-  )
+  var builder = rowBuilder
+  if builder.isNil:
+    builder = buildCollectionRow
+  let rows = newCollectionRows(collection, controller, builder)
   (collection, rows)
 
 when isMainModule:

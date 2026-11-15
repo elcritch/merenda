@@ -1,14 +1,12 @@
 ## Compare intrinsic reuse in the editable virtualized collection demo.
-when not defined(merendaIntrinsicCache):
-  {.error: "build with -d:merendaIntrinsicCache for the cache comparison".}
 import std/[monotimes, times]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/viewprofiling
-import ../examples/direct_collection_demo
+import ./intrinsic_collection_fixture
 
 for cache in [false, true]:
-  let demo = newDirectCollectionDemo(5000, cache)
+  let demo = newIntrinsicCollectionFixture(5000, cache)
   let controller = ArrayController(demo.view.dataSource())
   discard buildRenders(demo.view)
   for operation in ["edit", "scroll", "insert", "reorder", "resize"]:
