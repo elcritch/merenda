@@ -1,4 +1,5 @@
 import std/unittest
+import sigils/core
 import merenda/nimkit
 import merenda/nimkit/app/backend
 import merenda/nimkit/view/viewgeometry
@@ -68,6 +69,28 @@ proc newSizingCell(size: IntrinsicSize): SizingCell =
   result = SizingCell(natural: size)
   initCellFields(result)
   discard result.withProtocol(SizingCellMeasurement)
+
+type CachePolicyObserver = ref object of Responder
+  child: View
+  armed: bool
+
+proc toggleDuringRemoval(
+    observer: CachePolicyObserver, reason: LayoutInvalidationReason
+) {.slot.} =
+  if observer.armed and reason == lirSuperview:
+    observer.armed = false
+    observer.child{vpCacheIntrinsicSize} = true
+
+proc actualUncachedCount(view: View): uint32 =
+  if not view{vpCacheIntrinsicSize}:
+    inc result
+  for child in view.subviews:
+    result += child.actualUncachedCount()
+
+proc checkUncachedCount(view: View) =
+  check view.xIntrinsicMeasurement.uncachedSubtree == view.actualUncachedCount()
+  for child in view.subviews:
+    child.checkUncachedCount()
 
 suite "intrinsic measurement cache":
   test "views cache by default and can opt out":
@@ -146,6 +169,64 @@ suite "intrinsic measurement cache":
     child{vpCacheIntrinsicSize} = true
     check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
     check parent.resolvedIntrinsicContentSize() == initIntrinsicSize(75, 30)
+
+  test "uncached subtree counts follow policy and hierarchy changes":
+    let first = newView()
+    let second = newView()
+    let branch = newView()
+    let one = newView()
+    let two = newView()
+    one{vpCacheIntrinsicSize} = false
+    two{vpCacheIntrinsicSize} = false
+    branch.addSubview(one)
+    branch.insertSubview(two, 0)
+    first.addSubview(branch)
+    first.checkUncachedCount()
+    check branch.xIntrinsicMeasurement.uncachedSubtree == 2
+    check first.xIntrinsicMeasurement.uncachedSubtree == 2
+    first.insertSubview(branch, 0)
+    first.checkUncachedCount()
+    second.addSubview(branch)
+    first.checkUncachedCount()
+    second.checkUncachedCount()
+    check first.xIntrinsicMeasurement.uncachedSubtree == 0
+    check second.xIntrinsicMeasurement.uncachedSubtree == 2
+    one{vpCacheIntrinsicSize} = true
+    check branch.xIntrinsicMeasurement.uncachedSubtree == 1
+    check second.xIntrinsicMeasurement.uncachedSubtree == 1
+    branch.removeFromSuperview()
+    second.checkUncachedCount()
+    branch.checkUncachedCount()
+    check second.xIntrinsicMeasurement.uncachedSubtree == 0
+    check branch.xIntrinsicMeasurement.uncachedSubtree == 1
+    two{vpCacheIntrinsicSize} = true
+    check branch.xIntrinsicMeasurement.uncachedSubtree == 0
+    two{vpCacheIntrinsicSize} = false
+    first.addSubview(branch)
+    check first.replaceSubview(branch, nil)
+    first.checkUncachedCount()
+    branch.checkUncachedCount()
+    let window = newWindow("Cache hierarchy", frame = rect(0, 0, 80, 40))
+    window.setContentView(branch)
+    branch.checkUncachedCount()
+    window.setContentView(first)
+    branch.checkUncachedCount()
+    first.checkUncachedCount()
+    window.close()
+
+  test "policy changes during removal do not bubble to the old parent":
+    let parent = newView()
+    let child = newView()
+    child{vpCacheIntrinsicSize} = false
+    parent.addSubview(child)
+    let observer = CachePolicyObserver(child: child, armed: true)
+    initResponder(observer)
+    child.connect(layoutInputChanged, observer, toggleDuringRemoval)
+    child.removeFromSuperview()
+    child.disconnect(layoutInputChanged, observer, toggleDuringRemoval)
+    check not observer.armed
+    parent.checkUncachedCount()
+    child.checkUncachedCount()
 
   test "cell replacement and cell metrics invalidate an opted-in control":
     let first = newSizingCell(initIntrinsicSize(40, 20))

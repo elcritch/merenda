@@ -36,8 +36,9 @@ dependencies cannot be tracked reliably.
 CollectionView, DocumentTabs and MenuBar opt out by default because their layout,
 tab items or menu items can be mutated independently. A view whose subtree
 contains an opted-out view also recomputes its intrinsic size so that an ancestor
-cannot retain an outdated result. Checking eligibility walks that subtree, which
-adds work even to a cache hit; measure it for large or deep view hierarchies.
+cannot retain an outdated result. Policy and hierarchy changes update an
+uncached-subtree count up the parent chain, so eligibility checks do not scan
+descendants on every cache hit.
 
 The audited built-in paths include:
 

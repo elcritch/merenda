@@ -11,6 +11,20 @@ import sigils/core
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect)
 
+proc updateUncachedIntrinsicCount(view: View, count: uint32, added: bool) =
+  if count == 0:
+    return
+  var current = view
+  while not current.isNil:
+    if added:
+      current.xIntrinsicMeasurement.uncachedSubtree += count
+    else:
+      current.xIntrinsicMeasurement.uncachedSubtree -= count
+    let parent = current.superviewBacklink()
+    if not parent.isNil and parent.xSubviews.find(current) < 0:
+      break
+    current = parent
+
 proc isContainerLayoutFrame(view: View): bool =
   let transaction = activeLayoutTransaction
   if transaction.isNil or transaction.phase != ltpLayingOut or
@@ -75,14 +89,17 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       inc self.xIntrinsicMeasurement.revision
     self.xProps = properties
     if cacheChanged:
-      var ancestor = self.superviewBacklink()
-      while not ancestor.isNil:
+      self.updateUncachedIntrinsicCount(1, vpCacheIntrinsicSize notin properties)
+      var current = self
+      var ancestor = current.superviewBacklink()
+      while not ancestor.isNil and ancestor.xSubviews.find(current) >= 0:
         when defined(merendaProfile):
           if ancestor.xIntrinsicMeasurement.valid:
             ancestor.xIntrinsicMeasurement.profileInvalidation = "cacheOptionChanged"
         ancestor.xIntrinsicMeasurement.valid = false
         inc ancestor.xIntrinsicMeasurement.revision
-        ancestor = ancestor.superviewBacklink()
+        current = ancestor
+        ancestor = current.superviewBacklink()
     when defined(merendaPersistentLayout):
       if persistenceChanged:
         self.xPersistentLayout = default(PersistentLayoutCache)
@@ -390,6 +407,9 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
+      parent.updateUncachedIntrinsicCount(
+        self.xIntrinsicMeasurement.uncachedSubtree, false
+      )
       emit self.layoutInputChanged(lirSuperview)
       emit parent.layoutInputChanged(lirHierarchy)
       parent.propagateNeedsDisplayInRect(self.rectToView(self.bounds, parent))
@@ -418,6 +438,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     child.xSuperview.target = self
     child.refreshAutoresizingReference()
     self.xSubviews.add child
+    self.updateUncachedIntrinsicCount(child.xIntrinsicMeasurement.uncachedSubtree, true)
     child.setNextResponder(self)
     child.setWindowOwner(window)
     child.setInheritedAppearance(self.effectiveAppearance())
@@ -644,6 +665,7 @@ proc attachSubviewAt(view, child: View, index: Natural) =
   child.xSuperview.target = view
   child.refreshAutoresizingReference()
   view.xSubviews.insert(child, min(index, view.xSubviews.len))
+  view.updateUncachedIntrinsicCount(child.xIntrinsicMeasurement.uncachedSubtree, true)
   child.setNextResponder(view)
   child.setWindowOwner(window)
   child.setInheritedAppearance(view.effectiveAppearance())

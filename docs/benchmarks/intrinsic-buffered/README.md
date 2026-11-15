@@ -16,13 +16,15 @@ therefore are not directly comparable to the table below.
 
 ## Current default-on implementation
 
-After enabling the default and adding the subtree eligibility check, four
+After enabling the default and adding a subtree eligibility check, four
 unprofiled headless runs on the same machine used alternating policy order and
 two warmups plus seven measured samples per policy. The medians below combine
 28 samples per policy. The harness checks matching frames, view trees, item
 identifiers and field text for each paired sample. Only row controls change
 policy; CollectionView itself opts out in both cases. These numbers include
-the subtree check but do not characterize deep trees or native display latency.
+the original recursive subtree check but do not characterize deep trees or native
+display latency. The check has since been replaced with propagated counts; these
+measurements predate that change.
 
 | Operation | Row cache off | Row cache on | Change |
 | --- | ---: | ---: | ---: |
@@ -31,6 +33,25 @@ the subtree check but do not characterize deep trees or native display latency.
 | Insert | 20.93 ms | 13.92 ms | −33.5% |
 | Reorder | 20.09 ms | 13.19 ms | −34.3% |
 | Resize | 11.71 ms | 9.23 ms | −21.2% |
+
+## Eligibility check on deep trees
+
+The original default-on implementation walked the whole subtree on each cache
+hit. A follow-up replaced that walk with an uncached-subtree count maintained
+when policy or hierarchy changes. In one unprofiled release run on the same
+machine, resolving the already-cached root 1,000 times took:
+
+| Views in a linear tree | Recursive check | Propagated count |
+| ---: | ---: | ---: |
+| 10 | 42 µs | 15 µs |
+| 100 | 913 µs | 14 µs |
+| 500 | 6,390 µs | 11 µs |
+
+This synthetic tree uses plain views with trivial intrinsic measurement; it
+isolates repeated cache-hit overhead, excludes the cost of updating counts when
+the hierarchy or policy changes, and is a single sample. The current harness
+is `tests/benchmark_intrinsic_depth.nim`; the recursive-check comparison was
+measured from the earlier implementation.
 
 ## Earlier opt-in implementation
 

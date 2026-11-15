@@ -407,13 +407,8 @@ proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
 proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
-proc intrinsicCacheEligible(view: View): bool =
-  if vpCacheIntrinsicSize notin view.xProps:
-    return false
-  for child in view.xSubviews:
-    if not child.intrinsicCacheEligible():
-      return false
-  true
+proc intrinsicCacheEligible(view: View): bool {.inline.} =
+  view.xIntrinsicMeasurement.uncachedSubtree == 0
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
   profileViewPhase(vppIntrinsicMeasurement)

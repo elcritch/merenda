@@ -216,6 +216,7 @@ type
 
   IntrinsicMeasurementCache* = object
     revision*, storedRevision*: uint64
+    uncachedSubtree*: uint32
     valid*: bool
     value*: IntrinsicSize
     when defined(merendaProfile):
