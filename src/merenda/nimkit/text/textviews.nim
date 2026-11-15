@@ -184,6 +184,7 @@ type
     xInsertionPointVisible: bool
     xInsertionPointBlinkPeriod: float32
     xMarkedTextAttributes: TextAttributes
+    xHasMarkedTextAttributes: bool
     xFindIndicators: seq[TextFindIndicator]
     xCheckingResults: seq[TextCheckingResult]
     xCompletionPanel: TextCompletionPanel
@@ -764,9 +765,10 @@ proc markedTextAttributes*(textView: TextView): TextAttributes =
   textView.xMarkedTextAttributes
 
 proc `markedTextAttributes=`*(textView: TextView, attributes: TextAttributes) =
-  if textView.xMarkedTextAttributes == attributes:
+  if textView.xHasMarkedTextAttributes and textView.xMarkedTextAttributes == attributes:
     return
   textView.xMarkedTextAttributes = attributes
+  textView.xHasMarkedTextAttributes = true
   textView.needsDisplay = true
 
 proc selectionAffinity*(textView: TextView): TextAffinity =
@@ -2205,11 +2207,29 @@ proc displayTextStorage(textView: TextView): TextStorage =
       defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language),
     )
   if hasMarkedOverlay:
-    result.setAttributes(textView.xMarkedRange, textView.xMarkedTextAttributes)
+    if textView.xHasMarkedTextAttributes:
+      result.setAttributes(textView.xMarkedRange, textView.xMarkedTextAttributes)
+    else:
+      var index = int(textView.xMarkedRange.location)
+      let finish = min(result.len, textView.xMarkedRange.maxIndex)
+      while index < finish:
+        let run = result.attributeRunAt(index)
+        let stop = min(finish, run.range.maxIndex)
+        var attributes = run.attributes
+        attributes.underline = true
+        attributes.underlineStyle = tldsSingle
+        result.setAttributes(initTextRange(index, stop - index), attributes)
+        index = stop
   if hasSelectedOverlay:
     for range in textView.selectedRanges():
       if range.length > 0:
         result.setAttributes(range, textView.xSelectedTextAttributes)
+
+when defined(merendaTests):
+  proc displayedTextAttributesForTesting*(
+      textView: TextView, index: int
+  ): TextAttributes =
+    textView.displayTextStorage().attributesAt(index)
 
 proc syncLayout(textView: TextView) =
   if textView.xLayoutManager.isNil:

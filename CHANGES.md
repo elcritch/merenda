@@ -7,6 +7,7 @@
   Reentrant model and selection teardown defers unsafe signal disconnections.
 - Forward macOS marked-text composition, selection, and candidate geometry between
   the native text input client and the active NimKit editor, including UTF-16 ranges.
+  Default marked text inherits the active foreground color while underlined.
 - Retain DirectView nodes while flushing bindings so reentrant clearing cannot
   free the active traversal. Guard nil responder conversions during table,
   document-notification, and menu updates.
