@@ -127,7 +127,12 @@ proc postSelectionNotification(controller: SelectionController) =
   )
 
 proc notifySelectionControllerDidChange(controller: SelectionController) =
-  emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  let source = Agent(controller)
+  beginSourceDispatch(source)
+  try:
+    emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  finally:
+    endSourceDispatch(source)
   controller.postSelectionNotification()
 
 proc notifyObjectControllerDidChange(
@@ -157,7 +162,7 @@ proc notifyArrayControllerDidChange(
     keys: openArray[string] = [],
     index = -1,
 ) =
-  let source = cast[pointer](controller)
+  let source = Agent(controller)
   beginSourceDispatch(source)
   try:
     emit controller.arrayControllerDidChange(DynamicAgent(controller))

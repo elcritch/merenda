@@ -330,7 +330,26 @@ The model-to-view adapter translates changes at two granularities:
 - **Membership/order:** obtain the new visible ID ordering and reconcile row
   identities, preserving selection, the editing entity, and the viewport anchor.
 
-This adapter is missing glue, not something `bindTableView` already completes.
+`CollectionRows` connects an `ArrayController` to a `CollectionView` and builds
+DirectView rows for a bounded viewport. See the [editable collection example](../examples/direct_collection_demo.nim)
+and [adapter](../src/merenda/nimkit/directviews/collectionrows.nim). Its builder
+receives the stable model identifier; use that identifier for bindings and actions.
+The collection owns the adapter as its delegate, so call `rows.close()` before
+replacing the delegate or releasing the collection. Model updates are coalesced on
+the GUI thread; tests and synchronous callers can use `rows.flushBindings()`.
+
+An active field editor remains mounted when its row leaves the viewport; ordinary
+offscreen rows are recycled. Removing the edited identifier cancels its editor and
+retires its bindings before an identifier can be reused. Selection is synchronized
+with the controller. The viewport can retain one editing row in addition to visible
+rows. Virtualization does not require either experimental layout cache flag.
+
+On macOS, `tests/integrations/nativecomposition.nim` covers the Cocoa marked-text
+callbacks and caret/selection queries through a native window. To additionally
+exercise the Japanese input method, use an unlocked desktop session, select the
+Japanese Romaji input source, and run that test with
+`MERENDA_TEST_JAPANESE_IME=1`. Restore your usual input source afterwards.
+
 ArrayController's insert/remove/move notifications currently share `mmkItemsChanged`,
 and source indexes are not necessarily sorted/filtered presentation indexes. Begin
 with keyed order comparison; introduce precise deltas only with a clear contract.
@@ -338,10 +357,9 @@ A typed domain controller can implement the same data-source hooks without copyi
 all application state into a second `ModelItem` store.
 [Model controllers](../src/merenda/nimkit/app/modelcontrollers.nim).
 
-The implemented MVC changes retain CollectionView items by identity and let TableView
-delegates opt into retained hosted cells with `configureCellView`. Tests cover
-editor identity across insert/move. Virtualized recycling and offscreen drafts
-still need a separate evaluation; keyed retention alone does not settle them.
+CollectionView retains items by identity; TableView delegates can opt into retained
+hosted cells with `configureCellView`. Tests cover editor identity across insert/move.
+Applications still need a model policy for drafts that must outlive an editor.
 [Collection updates](../src/merenda/nimkit/containers/collectionviews.nim),
 [table updates](../src/merenda/nimkit/tables/tablerows.nim).
 

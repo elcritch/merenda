@@ -5,6 +5,7 @@ import ../accessibility/accessibilityprotocols
 import ../app/[modelcontrollers, windows]
 import ../containers/collectionviews
 import ../foundation/selectors
+import ../foundation/sourcedispatch
 when defined(merendaRowLayoutBoundaries):
   import ../view/viewbase
 import ../text/fieldeditors
@@ -137,9 +138,10 @@ protocol DirectCollectionRowsDelegate of CollectionViewDelegate:
   ) =
     discard index
     discard identifier
-    rows.controller.selectionController.setSelectedIdentifiers(
-      collectionView.selectedIdentifiers()
-    )
+    if not rows.closed and not rows.controller.isNil:
+      rows.controller.selectionController.setSelectedIdentifiers(
+        collectionView.selectedIdentifiers()
+      )
 
 proc newCollectionRows*(
     collection: CollectionView, controller: ArrayController, build: CollectionRowBuilder
@@ -196,14 +198,22 @@ proc flushBindings*(rows: CollectionRows) =
 proc close*(rows: CollectionRows) =
   ## Retire mounted rows and disconnect the model observation.
   if not rows.isNil and not rows.closed:
-    rows.controller.disconnect(arrayControllerDidChange, rows, retireMissingRows)
+    rows.closed = true
+    let controller = rows.controller
+    if sourceDispatchActive(Agent(controller)):
+      discard deferSourceWork(
+        Agent(controller),
+        proc() =
+          controller.disconnect(arrayControllerDidChange, rows, retireMissingRows),
+      )
+    else:
+      controller.disconnect(arrayControllerDidChange, rows, retireMissingRows)
     rows.scope.dispose()
     let collection = rows.collection{}
     if not collection.isNil and collection.delegate() == DynamicAgent(rows):
       collection.delegate = DynamicAgent(nil)
-      if collection.dataSource() == DynamicAgent(rows.controller):
+      if collection.dataSource() == DynamicAgent(controller):
         collection.dataSource = DynamicAgent(nil)
-    rows.closed = true
     rows.collection.clear()
     rows.build = nil
     rows.controller = nil

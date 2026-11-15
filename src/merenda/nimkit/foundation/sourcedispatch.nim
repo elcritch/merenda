@@ -1,24 +1,26 @@
 ## Defer binding disconnections while a source's synchronous signal is in flight.
 ## All operations occur on the owning GUI thread.
+import sigils/core
+
 type DeferredSourceWork = object
-  source: pointer
+  source: Agent
   work: proc() {.closure.}
 
-var activeSources {.threadvar.}: seq[pointer]
+var activeSources {.threadvar.}: seq[Agent]
 var deferredSourceWork {.threadvar.}: seq[DeferredSourceWork]
 
-proc beginSourceDispatch*(source: pointer) =
+proc beginSourceDispatch*(source: Agent) =
   activeSources.add source
 
-proc sourceDispatchActive*(source: pointer): bool =
+proc sourceDispatchActive*(source: Agent): bool =
   source in activeSources
 
-proc deferSourceWork*(source: pointer, work: sink proc() {.closure.}): bool =
+proc deferSourceWork*(source: Agent, work: sink proc() {.closure.}): bool =
   if source in activeSources:
     deferredSourceWork.add DeferredSourceWork(source: source, work: work)
     result = true
 
-proc endSourceDispatch*(source: pointer) =
+proc endSourceDispatch*(source: Agent) =
   doAssert activeSources.len > 0 and activeSources[^1] == source
   activeSources.setLen(activeSources.len - 1)
   if source notin activeSources:

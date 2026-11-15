@@ -1,11 +1,11 @@
 import std/unittest
+import sigils/core
 import merenda/nimkit/foundation/sourcedispatch
 
 suite "source dispatch cleanup":
   test "disconnects wait for the outermost dispatch of their own source":
-    var first, second: int
-    let a = cast[pointer](addr first)
-    let b = cast[pointer](addr second)
+    let a = Agent()
+    let b = Agent()
     var events: seq[string]
     beginSourceDispatch(a)
     beginSourceDispatch(b)
