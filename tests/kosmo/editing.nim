@@ -339,6 +339,37 @@ suite "Kosmo":
     check editor.handleKey("Esc")
     check editor.mode() == KosmoEditorMode.Normal
 
+  test "shifted arrows select text in the focused editor":
+    let root = createTempDir("kosmo-keyboard-selection-", "")
+    defer:
+      removeDir(root)
+    let path = root / "selection.txt"
+    writeFile(path, "abc\ndef\n")
+    let frontend = newKosmoApplication(
+      newApplication("Kosmo Keyboard Selection Test"),
+      root,
+      monitorsGitStatus = false,
+      configPath = root / "config.json",
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let view = frontend.editorView
+    require frontend.openPath(path)
+    require frontend.window.makeFirstResponder(view)
+    discard view.editor.revealLocation(0, 0)
+    for key in [keyArrowRight, keyArrowDown]:
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+    check view.editor.selectedText() == "abc\nde"
+    for key in [keyArrowUp, keyArrowLeft]:
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+    check view.editor.selectedText() == "a"
+
   test "native shifted text enters Moe command mode without invalid key notation":
     let frontend = newKosmoApplication(newApplication("Kosmo Command Input Test"))
     defer:

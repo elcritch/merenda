@@ -39,7 +39,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#fix/git-process-fd-ownership"
+  requires "gh:elcritch/moe#e36662e809f28516b9ad98ab2c6f73817cd09466"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
