@@ -15,6 +15,7 @@
 
 ## Build, Test, and Development
 - Install deps (atlas workspace): `atlas install -tuk` (ensure `atlas` is installed and configured for your environment). *Never* use Nimble - it's horrible. *Always* use Atlas and it's `deps/` folder and `nim.cfg` file to see paths. Don't use atlas lock files.
+- Ask the user before modifying dependency source code to fix an issue, including when the dependency is maintained in a fork.
 - Prefer `nim ic` for local development builds and testing to reuse incremental compilation results. Use `-r` to run the compiled program, and use `--backend:ic` with `atlas-run build` or `atlas-run tests --nimcache:deps/.nimcache/`. Leave CI's compiler backend unchanged.
 - Prefer `nim test` for the non-integration suites and `nim integration` for the full suite, including integration tests. Both tasks use `nim ic -r`.
 - For focused test selections, use `atlas-run tests --nimcache:deps/.nimcache/ --backend:ic [test-selections]`. Selectors match as `foo` -> `tests/tfoo*.nim`, `foo.nim` -> `tests/tfoo.nim`, and `examples/foo*.nim` -> `examples/foo*.nim`. Use `--nimcache:deps/.nimcache/` by default. Do not adjust the `--jobs` count.
