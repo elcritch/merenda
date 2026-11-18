@@ -148,6 +148,17 @@ suite "GitHub CLI document integration":
     when defined(macosx) or defined(linux):
       check processResourceUsage().fileDescriptors == beforeResources.fileDescriptors
 
+  test "rate limits stop subsequent requests in a refresh":
+    let root = createTempDir("kosmo-github-rate-limit-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "github-test-mode", "rate-limit")
+    let snapshot = readGitHubSnapshot(root, executable = getAppFilename())
+    check snapshot.errors[ghikIssue] == "API rate limit exceeded"
+    check snapshot.errors[ghikPullRequest] == "API rate limit exceeded"
+    check readFile(root / "issue-request-count") == "1"
+    check not fileExists(root / "pr-request-count")
+
   test "REST pagination skips pull requests in issue pages and collects check runs":
     let root = createTempDir("kosmo-github-pages-", "")
     defer:
@@ -165,6 +176,21 @@ suite "GitHub CLI document integration":
     check snapshot.items[1].jobs[100].state == ghjsPassed
     check parseInt(readFile(root / "issue-request-count")) == 2
     check parseInt(readFile(root / "checks-request-count")) == 3
+
+  test "review activity includes later pages and latest reviewer decisions":
+    let root = createTempDir("kosmo-github-review-pages-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "github-test-mode", "reviews-pages")
+    let snapshot = readGitHubSnapshot(
+      root,
+      kinds = {ghikPullRequest},
+      executable = getAppFilename(),
+      openPullRequests = @[9],
+    )
+    require snapshot.items.len == 1
+    check snapshot.items[0].reviewActivity == "99 approved · 1 requested changes"
+    check readFile(root / "reviews-request-count") == "2"
 
   test "REST check failures preserve other commit statuses":
     let root = createTempDir("kosmo-github-check-error-", "")
@@ -442,13 +468,14 @@ suite "GitHub CLI document integration":
     let pr = panel.headingDisclosure("#9 pr open")
     require pr.accessibilityPerformAction(AccessibilityActionExpand)
     require panel.waitForGitHub()
+    check parseInt(readFile(root / "pr-request-count")) == reads
     writeFile(root / "github-job-state", "FAILURE")
     panel.autoRefreshSwitch.on = true
     for index in 0 ..< 8:
       panel.scheduleRepositoryRefresh()
     check not panel.pollRepositoryRefresh()
     require panel.waitForGitHub()
-    check parseInt(readFile(root / "pr-request-count")) == reads + 2
+    check parseInt(readFile(root / "pr-request-count")) == reads + 1
     require panel.snapshot.items.len == 2
     check panel.snapshot.items[1].jobs[0].state == ghjsFailed
     panel.scheduleRepositoryRefresh()
@@ -457,7 +484,7 @@ suite "GitHub CLI document integration":
     )
     check not panel.pollRepositoryRefresh()
     require panel.waitForGitHub()
-    check parseInt(readFile(root / "pr-request-count")) == reads + 2
+    check parseInt(readFile(root / "pr-request-count")) == reads + 1
 
   when defined(posix):
     test "menu opens one reusable project tab and closing releases its worker":

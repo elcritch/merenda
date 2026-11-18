@@ -1574,8 +1574,7 @@ proc setIcon*(host: HostWindow, icon: ImageResource) =
 proc setVisible*(host: HostWindow, visible: bool) =
   if not host.isReady:
     return
-  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused() and
-      getEnv("SIWIN_NO_ACTIVATE") != "1":
+  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused():
     # Raising an already mapped window needs the unmap+remap below to make the
     # window manager focus it. Remapping applies the window manager's placement
     # again, so re-assert the window's actual position afterwards.
@@ -1587,9 +1586,6 @@ proc setVisible*(host: HostWindow, visible: bool) =
   host.xNativeWindow.visible = visible
 
 when defined(merenda.devControl):
-  proc backgroundLaunchRequested*(): bool =
-    getEnv("MERENDA_BACKGROUND") == "1"
-
   proc captureFrame(
       renderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend],
       id, renderId: uint64,
@@ -2061,9 +2057,6 @@ proc createHostWindow*(
     xTransparent: transparent,
     xResources: newRenderResourceManager(),
   )
-  when defined(merenda.devControl):
-    if backgroundLaunchRequested():
-      putEnv("SIWIN_NO_ACTIVATE", "1")
   when defined(merenda.softwareRenderer):
     result.xNativeWindow = siwinshim.sharedSiwinGlobals().newSoftwareRenderingWindow(
         size = size, title = title, resizable = true, transparent = transparent

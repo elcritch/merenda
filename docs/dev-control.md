@@ -7,7 +7,7 @@ and capture queues. The environment cannot enable an uninstrumented build.
 ```sh
 nim ic -d:merenda.devControl examples/controls_showcase.nim
 nim ic -o:deps/merenda-dev tools/merenda_dev.nim
-MERENDA_DEV_CONTROL=1 MERENDA_BACKGROUND=1 ./examples/controls_showcase &
+MERENDA_DEV_CONTROL=1 ./examples/controls_showcase &
 app_pid=$!
 ./deps/merenda-dev --pid "$app_pid" windows
 ./deps/merenda-dev --pid "$app_pid" screenshot --window w1 --output /tmp/showcase.png
@@ -20,13 +20,9 @@ kill "$app_pid"
 wait "$app_pid"
 ```
 
-`MERENDA_BACKGROUND=1` shows windows without explicit application activation or
-key-window ordering on macOS and uses nonactivating presentation on Windows. It
-also applies to later windows and popup hosts. Windows remain eligible for normal
-user interaction. This is a visible application, and `&` handles shell detachment.
-Linux/BSD window managers retain control of activation; this version does not
-promise focus preservation there. The control transport currently supports macOS,
-Linux and BSD Unix sockets; Windows transport is deferred.
+The application opens visible windows. The shell's `&` lets you run the client
+commands while the application is running. The control transport uses Unix
+sockets on macOS, Linux, and BSD.
 
 The server starts when the application event loop is prepared and stops when
 `Application.run` exits normally. `runForFrames` also pumps control requests; users

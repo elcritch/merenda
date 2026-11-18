@@ -280,12 +280,9 @@ proc parseRestStatuses(source: string): seq[GitHubJob] =
     }
     result.add parseGitHubJob(normalized)
 
-proc parseRestReviewActivity(source: string): string =
-  let response = parseJson(source)
+proc parseRestReviewActivity(response: JsonNode): string =
   if response.kind != JArray:
     raise newException(ValueError, "Invalid GitHub reviews")
-  if response.len >= 100:
-    return
   var latest = initTable[string, string]()
   for review in response:
     if review.kind != JObject:
@@ -331,6 +328,8 @@ proc readGitHubSnapshot*(
     timeoutMilliseconds: Positive = 30_000,
     maxOutputBytes: Natural = 8 * 1024 * 1024,
     openPullRequests: seq[int] = @[],
+    previousSnapshot: GitHubSnapshot = GitHubSnapshot(),
+    detailsOnly = false,
 ): GitHubSnapshot =
   ## Read bounded lists using the project's remotes and the user's existing gh login.
   ## Each list may fail independently; successful results remain available.
@@ -339,13 +338,18 @@ proc readGitHubSnapshot*(
   ## Explicit executable paths run directly.
   result =
     GitHubSnapshot(rootPath: rootPath, state: state, kinds: kinds, itemLimit: itemLimit)
+  if detailsOnly:
+    result = previousSnapshot
   let environment = newStringTable(modeCaseSensitive)
   for key, value in envPairs():
     environment[key] = value
   environment.del("GH_REPO")
   environment["GH_PROMPT_DISABLED"] = "1"
   environment["GH_PAGER"] = "cat"
+  var rateLimitResponse: BackgroundCommandResult
   proc request(endpoint: string): BackgroundCommandResult =
+    if rateLimitResponse.exitCode != 0:
+      return rateLimitResponse
     var commandExecutable = executable
     var arguments = @["api", endpoint]
     when defined(posix):
@@ -378,8 +382,10 @@ proc readGitHubSnapshot*(
       environment = environment,
       diagnosticName = "GitHub CLI",
     )
+    if result.exitCode != 0 and "rate limit" in result.output.toLowerAscii():
+      rateLimitResponse = result
 
-  for kind in kinds:
+  for kind in (if detailsOnly: {} else: kinds):
     if not cancelled.isNil and cancelled():
       return
     let path = if kind == ghikIssue: "issues" else: "pulls"
@@ -423,6 +429,10 @@ proc readGitHubSnapshot*(
     if not cancelled.isNil and cancelled():
       return
     item.jobsPending = false
+    item.jobs.setLen(0)
+    item.jobsError = ""
+    item.jobsTruncated = false
+    item.reviewActivity = ""
     if item.headSha.len notin [40, 64] or not item.headSha.allCharsInSet(HexDigits):
       item.jobsError = "The pull request head commit is unavailable."
       continue
@@ -474,13 +484,29 @@ proc readGitHubSnapshot*(
       job.workflow = workflowNames[runId]
     if not cancelled.isNil and cancelled():
       return
-    let reviews =
-      request("repos/{owner}/{repo}/pulls/" & $item.number & "/reviews?per_page=100")
-    if reviews.exitCode == 0:
+    var reviews = newJArray()
+    for page in 1 .. 10:
+      if not cancelled.isNil and cancelled():
+        return
+      let response = request(
+        "repos/{owner}/{repo}/pulls/" & $item.number & "/reviews?per_page=100&page=" &
+          $page
+      )
+      if response.exitCode != 0:
+        break
       try:
-        item.reviewActivity = parseRestReviewActivity(reviews.output)
+        let records = parseJson(response.output)
+        if records.kind != JArray:
+          break
+        for record in records:
+          reviews.add record
+        if records.len < 100:
+          item.reviewActivity = parseRestReviewActivity(reviews)
+          break
+        if page == 10:
+          item.reviewActivity = "More reviews are available on GitHub"
       except CatchableError:
-        discard
+        break
 
 proc markdownText(value: string): string =
   for ch in value:

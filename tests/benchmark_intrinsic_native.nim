@@ -1,5 +1,5 @@
 ## Measure synthetic input through a live native renderer, not display scanout.
-## Run with MERENDA_BACKGROUND=1 and -d:release.
+## Build with -d:release.
 import std/[monotimes, os, strutils, times]
 import merenda/nimkit
 import merenda/nimkit/directviews

@@ -17,7 +17,7 @@ export github
 
 const
   KosmoGitHubTabIdentifier* = "kosmo.github"
-  GitHubDefaultRefreshIntervalMilliseconds* = 30_000
+  GitHubDefaultRefreshIntervalMilliseconds* = 180_000
   GitHubRefreshDebounceInterval = initDuration(milliseconds = 300)
 
 type
@@ -77,6 +77,8 @@ proc readRepository(
   kinds: set[GitHubItemKind],
   openPullRequests: seq[int],
   generation: uint64,
+  previousSnapshot: GitHubSnapshot,
+  detailsOnly: bool,
   control: SharedPtr[GitHubRequestControl],
 ) {.signal.}
 
@@ -91,6 +93,8 @@ proc readRepository(
     kinds: set[GitHubItemKind],
     openPullRequests: seq[int],
     generation: uint64,
+    previousSnapshot: GitHubSnapshot,
+    detailsOnly: bool,
     control: SharedPtr[GitHubRequestControl],
 ) {.slot.} =
   let cancelled = proc(): bool {.gcsafe.} =
@@ -102,6 +106,8 @@ proc readRepository(
     executable = executable,
     cancelled = cancelled,
     openPullRequests = openPullRequests,
+    previousSnapshot = previousSnapshot,
+    detailsOnly = detailsOnly,
   )
   if not cancelled():
     emit worker.repositoryFinished(snapshot, generation)
@@ -151,7 +157,7 @@ proc repositoryFinished(
     panel.nextRefresh = getMonoTime() + panel.refreshInterval
     panel.applySnapshot(snapshot)
 
-proc refresh*(panel: KosmoGitHubPanel) =
+proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
   ## Cancel obsolete requests and load the current repository off the UI thread.
   if panel.isNil or panel.closed or not panel.repositoryBacked:
     return
@@ -169,11 +175,19 @@ proc refresh*(panel: KosmoGitHubPanel) =
     panel.executable,
     panel.state,
     panel.kinds,
-    (if panel.pullRequestSectionCollapsed: @[]
-    else: panel.openPullRequests),
+    (
+      if details.len > 0: details
+      elif panel.pullRequestSectionCollapsed: @[]
+      else: panel.openPullRequests
+    ),
     panel.generation,
+    panel.snapshot,
+    details.len > 0,
     panel.control,
   )
+
+proc refresh*(panel: KosmoGitHubPanel) =
+  panel.startRefresh()
 
 proc pollRepositoryRefresh*(panel: KosmoGitHubPanel): bool {.discardable.} =
   ## Refresh periodically or after a quiet workspace notification, without overlap.
@@ -253,7 +267,10 @@ proc githubHeadingToggled(
       panel.openPullRequests.delete(index)
   elif index < 0:
     panel.openPullRequests.add number
-    panel.refresh()
+    if panel.loading:
+      panel.refresh()
+    else:
+      panel.startRefresh(@[number])
 
 proc close*(panel: KosmoGitHubPanel) {.slot.} =
   ## Cancel, terminate, and reap this document's pending gh command.

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Remove `MERENDA_BACKGROUND` and its development-control status fields.
+
+- Poll GitHub every three minutes when auto-refresh is enabled to reduce API
+  usage across open projects.
+
 - Add Windows 11 Enterprise evaluation setups for bhyve and VirtualBox,
   including virtual TPMs and remote console access.
 

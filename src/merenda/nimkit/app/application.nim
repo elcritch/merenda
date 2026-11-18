@@ -290,10 +290,6 @@ proc installApplicationForwarding(app: Application) =
   )
 
 proc newApplication*(applicationName = ""): Application =
-  when defined(merenda.devControl):
-    # Configure presentation before menus, workspaces or native globals initialize.
-    if nimkitBackend.backgroundLaunchRequested():
-      putEnv("SIWIN_NO_ACTIVATE", "1")
   result = Application(
     xApplicationName: resolvedApplicationName(applicationName),
     xWorkspace: nimkitBackend.newNativeWorkspace(),
