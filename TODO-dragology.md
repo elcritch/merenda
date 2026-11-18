@@ -306,8 +306,8 @@ evaluation and specialized container adapters are likely necessary there.
   pump the owning event loop nonblockingly between short sleeps.
 - [ ] Add the new example to the compile-only example bundle.
 - [ ] Inspect live drag and settlement frames using [dev control](docs/dev-control.md)
-  with `-d:merenda.devControl` and `MERENDA_BACKGROUND=1` where supported. Compare
-  candidate, mid-drag, committed, and cancelled states.
+  with `-d:merenda.devControl`. Compare candidate, mid-drag, committed, and
+  cancelled states.
 - [ ] Format touched Nim code with `nph` and run the applicable checks below.
 
 ```sh

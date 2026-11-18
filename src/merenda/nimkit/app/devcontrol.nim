@@ -132,8 +132,6 @@ proc dispatch(controller: DevController, request: DevRequest, complete: DevCompl
             "windows", "screenshot", "pointer", "key", "text", "theme-load",
             "theme-reload",
           ],
-          "background": backgroundLaunchRequested(),
-          "nonactivatingPresentation": defined(macosx) or defined(windows),
         },
       )
     )

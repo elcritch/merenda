@@ -58,6 +58,9 @@ if paramCount() == 2 and paramStr(1) == "api" and fileExists("github-test-mode")
   elif mode == "partial" and command == "issue":
     stderr.write("Issues are disabled for this repository")
     quit(1)
+  elif mode == "rate-limit":
+    stderr.write("API rate limit exceeded")
+    quit(1)
   elif mode == "auth":
     stderr.write("Run gh auth login to authenticate")
     quit(4)
@@ -93,6 +96,14 @@ if paramCount() == 2 and paramStr(1) == "api" and fileExists("github-test-mode")
         "name": "test " & $index, "status": "completed", "conclusion": "success"
       }
     stdout.write($(%*{"check_runs": checks}))
+  elif mode == "reviews-pages" and isReviews:
+    var reviews = newJArray()
+    if "&page=1" in endpoint:
+      for index in 0 ..< 100:
+        reviews.add %*{"user": {"login": "reviewer" & $index}, "state": "APPROVED"}
+    elif "&page=2" in endpoint:
+      reviews.add %*{"user": {"login": "reviewer0"}, "state": "CHANGES_REQUESTED"}
+    stdout.write($reviews)
   elif isReviews:
     stdout.write("[{\"user\":{\"login\":\"alice\"},\"state\":\"APPROVED\"}]")
   elif isRun:

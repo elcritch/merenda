@@ -12,7 +12,6 @@ when defined(merenda.devControl) and defined(posix):
       delEnv("MERENDA_DEV_SOCKET")
     else:
       putEnv("MERENDA_DEV_SOCKET", paramStr(2))
-    putEnv("MERENDA_BACKGROUND", "1")
     let app = newApplication("Development Control Probe")
     app.renderExecutionMode =
       if paramStr(3) == "main": remMainThread else: remDedicatedThread

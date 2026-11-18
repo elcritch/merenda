@@ -339,6 +339,66 @@ suite "Kosmo":
     check editor.handleKey("Esc")
     check editor.mode() == KosmoEditorMode.Normal
 
+  test "shifted arrows select text in the focused editor":
+    let root = createTempDir("kosmo-keyboard-selection-", "")
+    defer:
+      removeDir(root)
+    let path = root / "selection.txt"
+    writeFile(path, "abc\ndef\n")
+    let frontend = newKosmoApplication(
+      newApplication("Kosmo Keyboard Selection Test"),
+      root,
+      monitorsGitStatus = false,
+      configPath = root / "config.json",
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let view = frontend.editorView
+    require frontend.openPath(path)
+    require frontend.window.makeFirstResponder(view)
+    discard view.editor.revealLocation(0, 0)
+    for key in [keyArrowRight, keyArrowDown]:
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+    check view.editor.selectedText() == "abc\nde"
+    for key in [keyArrowUp, keyArrowLeft]:
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+    check view.editor.selectedText() == "a"
+
+  test "shifted arrows commit the Insert session before selecting":
+    let editor = newKosmoEditor(text = "abc")
+    defer:
+      editor.close()
+    require editor.revealLocation(0, 0)
+    for key in ["i", "x", "S-Right"]:
+      require editor.handleKey(key)
+    check editor.mode() == KosmoEditorMode.Visual
+    check editor.selectedText() == "ab"
+    require editor.handleKey("Esc")
+    require editor.handleKey("u")
+    check editor.bufferText(editor.tabs()[0].id).get == "abc"
+
+  test "shifted arrows respect Moe command and key sequence mappings":
+    let editor = newKosmoEditor(text = "abc\ndef")
+    defer:
+      editor.close()
+    require editor.revealLocation(0, 0)
+    require editor.handleTextInput(":nnoremap S-Right move-down")
+    require editor.handleKey("Enter")
+    require editor.handleTextInput(":nnoremap S-Down l")
+    require editor.handleKey("Enter")
+    require editor.handleKey("S-Right")
+    check editor.mode() == KosmoEditorMode.Normal
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 0)
+    require editor.handleKey("S-Down")
+    check editor.mode() == KosmoEditorMode.Normal
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 1)
+
   test "native shifted text enters Moe command mode without invalid key notation":
     let frontend = newKosmoApplication(newApplication("Kosmo Command Input Test"))
     defer:

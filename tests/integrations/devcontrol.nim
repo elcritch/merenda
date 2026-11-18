@@ -9,17 +9,6 @@ when defined(merenda.devControl) and defined(posix):
   import pixie
   import merenda/nimkit/devcontrol/[protocol, transport]
   import ./fixtures/devcontrol
-  when defined(macosx):
-    import darwin/app_kit/[nsworkspace, nsrunningapplication]
-    import darwin/objc/runtime
-    proc processIdentifier(
-      app: NSRunningApplication
-    ): cint {.objc: "processIdentifier".}
-
-    proc frontmostApplication(
-      workspace: NSWorkspace
-    ): NSRunningApplication {.objc: "frontmostApplication".}
-
   proc socketExists(path: string): bool =
     access(path.cstring, F_OK) == 0
 
@@ -41,9 +30,6 @@ when defined(merenda.devControl) and defined(posix):
         let directory = createTempDir("mdc-", "", "/tmp")
         setFilePermissions(directory, {fpUserRead, fpUserWrite, fpUserExec})
         let explicitPath = directory / "control.sock"
-        when defined(macosx):
-          let foreground =
-            NSWorkspace.sharedWorkspace().frontmostApplication().processIdentifier()
         let child = startProcess(
           getAppFilename(),
           args = [
@@ -83,12 +69,8 @@ when defined(merenda.devControl) and defined(posix):
               discard
           sleep(5)
         require window.len > 0
-        when defined(macosx):
-          check NSWorkspace.sharedWorkspace().frontmostApplication().processIdentifier() ==
-            foreground
         let info = request(path, dcInfo)
         check info["result"]["pid"].getInt() == child.processID()
-        check info["result"]["background"].getBool()
         let before = capture(path, window)
         require before.width >= 320
         require before.height >= 240
@@ -155,9 +137,6 @@ when defined(merenda.devControl) and defined(posix):
         check retainedTheme[290 * scale, 35 * scale].r < 10
         let unknown = request(path, dcScreenshot, "missing")
         check unknown["error"]["code"].getStr() == "window_not_found"
-        when defined(macosx):
-          check NSWorkspace.sharedWorkspace().frontmostApplication().processIdentifier() ==
-            foreground
 
         discard sendDevRequest(
           path,
@@ -200,9 +179,6 @@ when defined(merenda.devControl) and defined(posix):
             break
           sleep(5)
         check popupReady
-        when defined(macosx):
-          check NSWorkspace.sharedWorkspace().frontmostApplication().processIdentifier() ==
-            foreground
         # Dismiss the popup before delivering the fixture's stop action.
         discard sendDevRequest(
           path,

@@ -15,11 +15,12 @@
 
 ## Build, Test, and Development
 - Install deps (atlas workspace): `atlas install -tuk` (ensure `atlas` is installed and configured for your environment). *Never* use Nimble - it's horrible. *Always* use Atlas and it's `deps/` folder and `nim.cfg` file to see paths. Don't use atlas lock files.
+- Ask the user before modifying dependency source code to fix an issue, including when the dependency is maintained in a fork.
 - Prefer `nim ic` for local development builds and testing to reuse incremental compilation results. Use `-r` to run the compiled program, and use `--backend:ic` with `atlas-run build` or `atlas-run tests --nimcache:deps/.nimcache/`. Leave CI's compiler backend unchanged.
 - Prefer `nim test` for the non-integration suites and `nim integration` for the full suite, including integration tests. Both tasks use `nim ic -r`.
 - For focused test selections, use `atlas-run tests --nimcache:deps/.nimcache/ --backend:ic [test-selections]`. Selectors match as `foo` -> `tests/tfoo*.nim`, `foo.nim` -> `tests/tfoo.nim`, and `examples/foo*.nim` -> `examples/foo*.nim`. Use `--nimcache:deps/.nimcache/` by default. Do not adjust the `--jobs` count.
 - Compile the example bundle with `atlas-run tests --nimcache:deps/.nimcache/ --backend:ic --compile-only examples/all_compile.nim`; do not run `examples/all_compile.nim` as a test.
-- Development control (`-d:merenda.devControl`) provides live renderer screenshots, window inspection, input automation, and CSS reloads. Use `MERENDA_BACKGROUND=1` to start apps in the background without taking focus on macOS and Windows. Read [docs/dev-control.md](docs/dev-control.md) before capturing live screenshots from a running app.
+- Development control (`-d:merenda.devControl`) provides live renderer screenshots, window inspection, input automation, and CSS reloads. Read [docs/dev-control.md](docs/dev-control.md) before capturing live screenshots from a running app.
 - Execute a single test locally using `nim ic`:
   - `nim ic -r tests/ttransfer.nim`
   - `nim ic -r -d:debug tests/ttransfer.nim`

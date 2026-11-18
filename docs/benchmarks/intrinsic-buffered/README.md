@@ -134,10 +134,10 @@ nim ic -d:release -o:deps/intrinsic-memory-on tests/benchmark_intrinsic_memory.n
 ./deps/intrinsic-buffered
 ./deps/intrinsic-buffered-profile
 ./deps/intrinsic-buffered-profile reverse
-MERENDA_BACKGROUND=1 ./deps/intrinsic-native
-MERENDA_BACKGROUND=1 ./deps/intrinsic-native reverse
-MERENDA_BACKGROUND=1 ./deps/intrinsic-native reverse
-MERENDA_BACKGROUND=1 ./deps/intrinsic-native
+./deps/intrinsic-native
+./deps/intrinsic-native reverse
+./deps/intrinsic-native reverse
+./deps/intrinsic-native
 /usr/bin/time -l ./deps/intrinsic-memory-on
 ```
 
