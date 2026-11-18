@@ -1,7 +1,6 @@
 ## Persistent solver experiments are opt-in; the default build keeps fresh solves.
-when defined(merendaPersistentLayout) and defined(merendaProfile) and
-    not defined(merendaRowLayoutBoundaries):
-  import std/unittest
+when defined(merendaPersistentLayout) and defined(merendaProfile):
+  import std/[strutils, unittest]
   import merenda/nimkit
   import merenda/nimkit/view/viewbase
   from pkg/kiwiberry import sameVariable
@@ -110,7 +109,7 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
       let profile = item.root.layout()
       check profile.persistentBuilds == 1
 
-    test "changed autoresizing inputs and removed children rebuild safely":
+    test "changed autoresizing inputs update in place and removed children rebuild":
       let fresh = fixture()
       let cached = fixture()
       discard fresh.root.layout()
@@ -119,9 +118,10 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
       cached.child.autoresizingMask = {}
       fresh.root.xPersistentLayout = default(PersistentLayoutCache)
       discard fresh.root.layout()
+      # Changed equations keep their positions and are replaced in the solver.
       let changed = cached.root.layout()
-      check changed.persistentFallbacks == 1
-      check changed.persistentBuilds == 1
+      check changed.persistentFallbacks == 0
+      check changed.persistentReuses == 1
       check cached.sameFrames(fresh)
       fresh.peer.removeFromSuperview()
       cached.peer.removeFromSuperview()
@@ -290,8 +290,94 @@ when defined(merendaPersistentLayout) and defined(merendaProfile) and
         check not rootRef.isNil
       check rootRef.isNil
 
-when defined(merendaPersistentLayout) and not defined(merendaProfile) and
-    not defined(merendaRowLayoutBoundaries):
+    test "intrinsic-sized trees with authored priorities reuse and match fresh solves":
+      type IntrinsicTree = object
+        root: StackView
+        labels: seq[Label]
+        fields: seq[TextField]
+        widths: seq[LayoutConstraint]
+        views: seq[View]
+
+      proc collect(view: View, views: var seq[View]) =
+        views.add view
+        for child in view.subviews:
+          child.collect(views)
+
+      proc build(persistent: bool): IntrinsicTree =
+        result.root = newStackView(laVertical)
+        result.root.frame = rect(0, 0, 420, 360)
+        result.root{vpPersistentLayout} = persistent
+        for i in 0 ..< 6:
+          let row = newStackView(laHorizontal)
+          let label = newLabel("Label " & $i)
+          let field = newTextField("value " & $i)
+          let button = newButton("Go")
+          row.addArrangedSubview(label)
+          row.addArrangedSubview(field)
+          row.addArrangedSubview(button)
+          # Competing non-required widths exercise priority resolution.
+          let width =
+            field[atWidth].equalTo(120 + float32(i * 10), priority = LayoutPriorityLow)
+          activate(width)
+          activate(
+            field[atWidth].greaterThanOrEqualTo(60, priority = LayoutPriorityHigh)
+          )
+          result.root.addArrangedSubview(row)
+          result.labels.add label
+          result.fields.add field
+          result.widths.add width
+        result.root.collect(result.views)
+
+      proc relayout(tree: IntrinsicTree): ViewProfile =
+        layout(View(tree.root))
+
+      var fresh = build(false)
+      var cached = build(true)
+      discard fresh.relayout()
+      discard cached.relayout()
+      var reuses = 0
+      var state = 0x2545F491'u32
+      proc next(state: var uint32, bound: int): int =
+        state = state xor (state shl 13)
+        state = state xor (state shr 17)
+        state = state xor (state shl 5)
+        int(state mod uint32(bound))
+
+      for step in 0 ..< 120:
+        let index = state.next(6)
+        case state.next(5)
+        of 0:
+          let text = "edited " & $step & " " & "x".repeat(state.next(12))
+          fresh.fields[index].stringValue = text
+          cached.fields[index].stringValue = text
+        of 1:
+          let width = 300 + float32(state.next(240))
+          let height = 300 + float32(state.next(120))
+          fresh.root.frame = rect(0, 0, width, height)
+          cached.root.frame = rect(0, 0, width, height)
+        of 2:
+          let value = 40 + float32(state.next(200))
+          fresh.widths[index].constant = value
+          cached.widths[index].constant = value
+        of 3:
+          let priority =
+            if state.next(2) == 0: LayoutPriorityLow else: LayoutPriority(500)
+          fresh.widths[index].priority = priority
+          cached.widths[index].priority = priority
+        else:
+          let text = "L" & "y".repeat(state.next(16))
+          fresh.labels[index].stringValue = text
+          cached.labels[index].stringValue = text
+        discard fresh.relayout()
+        let profile = cached.relayout()
+        reuses += profile.persistentReuses
+        for i in 0 ..< fresh.views.len:
+          if fresh.views[i].frame != cached.views[i].frame:
+            checkpoint "step " & $step & " view " & $i
+          check fresh.views[i].frame == cached.views[i].frame
+      check reuses > 0
+
+when defined(merendaPersistentLayout) and not defined(merendaProfile):
   import std/unittest
   import merenda/nimkit
   import merenda/nimkit/view/viewbase
@@ -312,17 +398,4 @@ when defined(merendaPersistentLayout) and not defined(merendaProfile) and
       check root.xPersistentLayout.items[0].left.sameVariable(saved)
       check child.frame.size.width == 60
       root{vpPersistentLayout} = false
-      check not root.xPersistentLayout.valid
-
-when defined(merendaPersistentLayout) and defined(merendaRowLayoutBoundaries):
-  import std/unittest
-  import merenda/nimkit
-  import merenda/nimkit/view/viewbase
-
-  suite "separate layout experiments":
-    test "row-boundary builds do not retain a persistent solver":
-      let root = newView(frame = rect(0, 0, 100, 80))
-      root{vpPersistentLayout} = true
-      root.addSubview(newView(frame = rect(0, 0, 20, 20)))
-      root.layoutSubtreeIfNeeded()
       check not root.xPersistentLayout.valid

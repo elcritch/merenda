@@ -11,9 +11,6 @@ import merenda/nimkit/view/views
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/responder/responders
 import merenda/nimkit/foundation/selectors
-when defined(merendaRowLayoutBoundaries) and defined(merendaProfile):
-  import merenda/nimkit/view/viewbase
-  import merenda/nimkit/foundation/viewprofiling
 
 type
   DirectController = ref object of Responder
@@ -673,42 +670,6 @@ suite "direct view composition":
       after.elements[after.find("a")].frame.origin.y
 
 suite "direct collection rows":
-  when defined(merendaRowLayoutBoundaries) and defined(merendaProfile):
-    test "fixed-size collection rows use separate local solves":
-      let controller = newArrayController(@[modelItem("a"), modelItem("b")])
-      let collection = newCollectionView(frame = rect(0, 0, 240, 100))
-      collection.collectionLayout = newCollectionViewLayout(
-        clkList,
-        itemSize = initSize(200, 30),
-        minimumLineSpacing = 0,
-        edgeInsets = insets(0),
-      )
-      let rows = newCollectionRows(
-        collection,
-        controller,
-        proc(row: DirectView, controller: ArrayController, id: string) =
-          discard controller
-          discard id
-          row.autoresizingMaskConstraints = true
-          row.viewBody:
-            TextField:
-              this.frame = rect(2, 3, 80, 20)
-              this.autoresizingMaskConstraints = true,
-      )
-      defer:
-        rows.close()
-      discard buildRenders(collection)
-      let row = collection.itemViewAtIndex(0)
-      require not row.isNil
-      require vipExperimentalRowLayoutBoundary in row.xPrivProps
-      let content = collection.contentView
-      content.invalidateIntrinsicContentSize()
-      content.needsLayout = true
-      resetViewProfile()
-      content.layoutSubtreeIfNeeded()
-      check content.xLayoutInputCache.partitioned
-      check currentViewProfile().solverPasses >= 3
-
   test "rows are materialized half a viewport above and below the viewport":
     var items: seq[ModelItem]
     for i in 0 ..< 100:

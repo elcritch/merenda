@@ -83,8 +83,6 @@ type
     cssSubjects: HashSet[pointer]
     cssDiagnostics: seq[CssLayoutDiagnostic]
     didResolveCss: bool
-    rowBoundaries: seq[View]
-    rowBoundaryIndexes: HashSet[pointer]
     when defined(merendaPersistentLayout):
       recordOnly: bool
       captureConstraints: bool
@@ -1147,8 +1145,6 @@ proc initLayoutSolveState(limits: LayoutSolveLimits): LayoutSolveState =
     limits: limits,
     startedAt: getMonoTime(),
   )
-  when defined(merendaRowLayoutBoundaries):
-    result.rowBoundaryIndexes = initHashSet[pointer]()
 
 proc solverViewName(index: int, suffix: string): string =
   "v" & $index & "." & suffix
@@ -1187,69 +1183,23 @@ proc addConstraintItem(state: var LayoutSolveState, item: View) =
 proc hasConstraintItem(state: LayoutSolveState, item: View): bool =
   not item.isNil and cast[pointer](item) in state.constraintItemIndexes
 
-proc supportsRowBoundaries(item: View): bool =
-  ## Reject the entire graph if any constraint or style could couple solvers.
-  if item.effectiveAppearance().theme.hasLayoutRules:
-    return false
-  for constraint in item.xConstraints:
-    if not constraint.isNil and constraint.xActive:
-      return false
-  for child in item.xSubviews:
-    if not child.supportsRowBoundaries():
-      return false
-  true
-
 when defined(merendaPersistentLayout):
   proc supportsPersistentTree(state: LayoutSolveState, item: View): bool =
-    # In this prototype every rectangle must be determined by required
-    # autoresizing equations. Arbitrary intrinsic and authored constraints can
-    # admit multiple optima or change with untracked outside geometry.
+    # CSS admission can reject inputs and retry with a different graph, so a
+    # retained tableau cannot be matched to it. Intrinsic, container and
+    # authored inputs are regenerated and compared on every reuse.
     state.checkSolveBudget()
-    if vipAutoresizingMaskConstraints notin item.xPrivProps or
-        item.effectiveAppearance().theme.hasLayoutRules:
+    if item.effectiveAppearance().theme.hasLayoutRules:
       return false
-    for constraint in item.xConstraints:
-      state.checkSolveBudget()
-      if not constraint.isNil and constraint.xActive:
-        return false
     for child in item.xSubviews:
       if not state.supportsPersistentTree(child):
         return false
     true
 
-proc hasFixedAutoresizingSize(item: View): bool =
-  vipAutoresizingMaskConstraints in item.xPrivProps and
-    cxWidthSizable notin item.xAutoresizingMask and
-    cxHeightSizable notin item.xAutoresizingMask
-
-proc fixedRowInternals(item: View): bool =
-  for child in item.xSubviews:
-    # Intrinsic measurements may read arbitrary outside geometry. Flexible sizes
-    # can also propagate nonnegative-size constraints back to the host.
-    if not child.hasFixedAutoresizingSize():
-      return false
-    if not child.fixedRowInternals():
-      return false
-  true
-
-proc collectRowBoundaries(item: View, boundaries: var seq[View], fixedPath = true) =
-  for child in item.xSubviews:
-    # Every view on the path from the fixed solve root must have a determined
-    # rectangle. Otherwise descendant stays could influence an ancestor.
-    let childPath = fixedPath and child.hasFixedAutoresizingSize()
-    if childPath and vipExperimentalRowLayoutBoundary in child.xPrivProps and
-        child.xSubviews.len > 0 and child.fixedRowInternals():
-      boundaries.add child
-    elif childPath:
-      child.collectRowBoundaries(boundaries, childPath)
-
 proc collectSolverViews(state: var LayoutSolveState, item: View) =
   if item.isNil:
     return
   discard state.ensureSolverView(item)
-  when defined(merendaRowLayoutBoundaries):
-    if cast[pointer](item) in state.rowBoundaryIndexes:
-      return
   for child in item.xSubviews:
     state.collectSolverViews(child)
 
@@ -1520,9 +1470,6 @@ proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
 proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
   if item.isNil:
     return
-  when defined(merendaRowLayoutBoundaries):
-    if not state.hasSolverView(item):
-      return
   state.checkSolveBudget()
 
   if vipAutoresizingMaskConstraints notin item.xPrivProps or
@@ -1617,9 +1564,6 @@ proc addAutoresizingAxisConstraints(
 proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
     return
-  when defined(merendaRowLayoutBoundaries):
-    if not state.hasSolverView(owner):
-      return
 
   for child in owner.xSubviews:
     state.checkSolveBudget()
@@ -1959,11 +1903,6 @@ proc refreshGeneratedLayoutInputs(
     return
 
   var sources = root.generatedSourcesToRebuild()
-  when defined(merendaRowLayoutBoundaries):
-    # Membership can change without changing the number of boundaries. Rebuild
-    # every generated source until neither the old nor new graph is partitioned.
-    if root.xLayoutInputCache.partitioned or state.rowBoundaries.len > 0:
-      sources = GeneratedLayoutSources
   if rebuildStyledInputs:
     sources.incl lisAutoresizingMask
     sources.incl lisIntrinsic
@@ -1982,7 +1921,6 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
     root.xLayoutInputCache.structureDirty = false
     root.xLayoutInputCache.aggregateStructureDirty = false
     inc root.xLayoutInputCache.generation
-    root.xLayoutInputCache.partitioned = state.rowBoundaries.len > 0
 
   for solverView in state.items:
     if not solverView.item.isNil and solverView.item != root:
@@ -2017,10 +1955,7 @@ proc needsConstraintSolve(view: View): bool =
     cache.dirtySources != {} or cache.aggregateDirtySources != {}
 
 proc buildAndSolveConstraints(
-    state: var LayoutSolveState,
-    view: View,
-    mode: LayoutSolveMode,
-    allowRowBoundaries = true,
+    state: var LayoutSolveState, view: View, mode: LayoutSolveMode
 ) =
   profileViewPhase(vppSolve)
   defer:
@@ -2035,27 +1970,17 @@ proc buildAndSolveConstraints(
     constraintCount: Natural
     coefficientCount: Natural
     hadCss = previousCss or view.effectiveAppearance().theme.hasLayoutRules
-    rowBoundaries: seq[View]
-  when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
+  when defined(merendaPersistentLayout):
     let capturePersistent =
       mode == lsmLayout and vpPersistentLayout in view.xProps and
       not activeLayoutTransaction.isNil and activeLayoutTransaction[].root == view and
       activeLayoutTransaction[].phase == ltpSolvingConstraints and not previousCss and
       state.supportsPersistentTree(view)
-  when defined(merendaRowLayoutBoundaries):
-    if allowRowBoundaries and mode == lsmLayout and not activeLayoutTransaction.isNil and
-        activeLayoutTransaction[].root == view and
-        activeLayoutTransaction[].phase == ltpSolvingConstraints and
-        view.supportsRowBoundaries():
-      view.collectRowBoundaries(rowBoundaries)
   while true:
     view.xLayoutInputCache = previousCache
     state = initLayoutSolveState(view.xLayoutSolveLimits)
-    when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
+    when defined(merendaPersistentLayout):
       state.captureConstraints = capturePersistent
-    state.rowBoundaries = rowBoundaries
-    for boundary in rowBoundaries:
-      state.rowBoundaryIndexes.incl cast[pointer](boundary)
     state.startedAt = startedAt
     state.workConstraintCount = constraintCount
     state.workCoefficientCount = coefficientCount
@@ -2096,16 +2021,7 @@ proc buildAndSolveConstraints(
     state.solver.updateVariables()
   state.checkSolveBudget()
 
-when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
-  proc sameEditableConstraint(a, b: Constraint): bool =
-    ## Root pins and geometry stays may change only their constant.
-    if a.isNil or b.isNil or a.relation != b.relation or a.strength != b.strength or
-        a.expression.len != 1 or b.expression.len != 1:
-      return false
-    let left = a.expression.terms[0]
-    let right = b.expression.terms[0]
-    left.variable.sameVariable(right.variable) and left.coefficient == right.coefficient
-
+when defined(merendaPersistentLayout):
   proc collectPersistentViews(
       state: var LayoutSolveState,
       items: seq[PersistentSolverView],
@@ -2185,23 +2101,6 @@ when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries
       if view.xLayoutInputRevision != previousRevision or
           state.capturedConstraints.len != cache.constraints.len:
         return false
-      if view.xLayoutInputCache.generated[lisAutoresizingMask].len !=
-          4 * (state.items.len - 1) or
-          view.xLayoutInputCache.generated[lisIntrinsic].len != 0 or
-          view.xLayoutInputCache.generated[lisContainer].len != 0:
-        return false
-
-      let staysStart = state.capturedConstraints.len - 4 * (state.items.len - 1)
-      if staysStart < 4:
-        return false
-      for i in 0 ..< state.capturedConstraints.len:
-        state.checkSolveBudget()
-        if not state.capturedConstraints[i].sameShape(cache.constraints[i]):
-          if (i >= 4 and i < staysStart) or
-              not state.capturedConstraints[i].sameEditableConstraint(
-                cache.constraints[i]
-              ):
-            return false
 
       state.recordOnly = false
       state.solver = move cache.solver
@@ -2244,45 +2143,31 @@ proc applyConstraintsForSubtree*(view: View): bool =
   if not view.needsConstraintSolve():
     return true
 
-  when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
+  when defined(merendaPersistentLayout):
     let attemptStarted = getMonoTime()
     if view.tryPersistentLayout(attemptStarted):
       return true
 
   let previousCache = view.xLayoutInputCache
-  when defined(merendaRowLayoutBoundaries) or defined(merendaPersistentLayout):
+  when defined(merendaPersistentLayout):
     let inputRevision = view.xLayoutInputRevision
   var state = initLayoutSolveState(view.xLayoutSolveLimits)
-  when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
+  when defined(merendaPersistentLayout):
     state.startedAt = attemptStarted
   try:
     state.buildAndSolveConstraints(view, lsmLayout)
-    when defined(merendaRowLayoutBoundaries):
-      if state.rowBoundaries.len > 0 and view.xLayoutInputRevision != inputRevision:
-        # A measurement callback may have introduced a cross-boundary input.
-        # Do not commit the partition selected before that callback ran.
-        view.xLayoutInputCache.structureDirty = true
-        state = initLayoutSolveState(view.xLayoutSolveLimits)
-        state.buildAndSolveConstraints(view, lsmLayout, allowRowBoundaries = false)
     let frames = state.solvedFrames()
     state.checkSolveBudget()
     applySolvedFrames(frames)
     state.refreshAutoresizingStates()
     state.refreshLayoutInputCaches(view)
-    when defined(merendaPersistentLayout) and not defined(merendaRowLayoutBoundaries):
+    when defined(merendaPersistentLayout):
       if state.captureConstraints and not state.captureFailed and
           view.xLayoutInputRevision == inputRevision and
-          state.capturedConstraints.len == 10 * state.items.len - 4 and
-          view.xLayoutInputCache.generated[lisAutoresizingMask].len ==
-          4 * (state.items.len - 1) and
-          view.xLayoutInputCache.generated[lisIntrinsic].len == 0 and
-          view.xLayoutInputCache.generated[lisContainer].len == 0:
+          state.capturedConstraints.len == state.constraintCount:
         view.savePersistentLayout(state)
       else:
         view.xPersistentLayout = default(PersistentLayoutCache)
-    when defined(merendaRowLayoutBoundaries):
-      if not activeLayoutTransaction.isNil and activeLayoutTransaction[].root == view:
-        activeLayoutTransaction[].rowLayoutBoundaries = state.rowBoundaries
     view.clearSolveFailure(lsmLayout)
     view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
     view.xCssLayoutDiagnostics[lsmLayout] = state.cssDiagnostics

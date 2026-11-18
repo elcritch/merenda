@@ -54,7 +54,7 @@ from moepkg/command_handlers/visual_commands import visualDelete, operandArea
 from moepkg/registers import storeYanked
 from moepkg/color import EditorColorPairIndex
 from moepkg/render_utils import
-  steadyBottomAreaHeight, searchHighlightStyle, screenXToCharIndex,
+  bottomAreaHeight, overlayInput, searchHighlightStyle, screenXToCharIndex,
   displayWidthSubstrWithTabs
 from moepkg/search_utils import shouldIgnoreCase
 from moepkg/unicode_utils import byteToCharPos
@@ -1656,7 +1656,8 @@ proc revealLocation*(
   window.cursor.column = cursor.x
   window.preferredColumn = cursor.x
   if centered:
-    let visibleHeight = max(window.viewport.height - steadyBottomAreaHeight(), 1)
+    let bottomRows = editor.editor.state.bottomAreaHeight(window.viewport.width)
+    let visibleHeight = max(window.viewport.height - bottomRows, 1)
     window.viewport.resetViewportTop(max(cursor.y - visibleHeight div 2, 0))
   else:
     window.viewport.detachedFromCursor = false
@@ -1951,11 +1952,9 @@ proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   if editor.isNil or editor.editor.isNil or
       not moeTypes.isCommandOverlay(editor.editor.state):
     return
-  KosmoCommandLine(
-    visible: true,
-    text: editor.editor.state.input.commandText,
-    cursor: editor.editor.state.input.commandCursor + 1,
-  )
+  # The prompt line excludes its `:`; Moe's overlay input adds it back.
+  let (text, cursor) = editor.editor.state.overlayInput()
+  KosmoCommandLine(visible: true, text: text, cursor: cursor)
 
 proc completionPopupVisible*(editor: KosmoEditor): bool =
   ## Return whether Moe currently has an active insert-completion popup.
@@ -2005,7 +2004,7 @@ proc popupMenu*(editor: KosmoEditor): Option[KosmoPopupMenu] =
       selectedIndex: commandMenu.menu.selectedIndex,
       firstIndex: commandMenu.menu.scrollOffset,
       maxVisibleItems: commandMenu.menu.maxVisible,
-      anchorColumn: moeEditor.state.input.commandCursor + 1,
+      anchorColumn: moeEditor.state.overlayInput().cursorChar,
     )
     for entry in commandMenu.menu.entries:
       menu.items.add KosmoPopupMenuItem(title: entry.command, detail: entry.description)
@@ -2096,9 +2095,27 @@ proc dismissPopupMenu*(editor: KosmoEditor) =
     moeCommandCompletion.cancelCompletion(commandMenu)
   editor.editor.handlerManager.insertHandler.completionManager.cancelCompletion()
 
+proc helpMarkdown(lines: openArray[moeHelpViewer.HelpLine]): string =
+  ## Moe's help is a list of viewer rows; headings already carry `#` markers.
+  ## Key entries become list items so their padded columns read as Markdown.
+  for line in lines:
+    case line.kind
+    of moeHelpViewer.hlkEntry:
+      let
+        keys = line.text[line.keyFirst ..< line.keyEnd]
+        rest = line.text[line.keyEnd .. ^1].strip(trailing = false)
+        description =
+          if rest.startsWith("- "):
+            rest[2 .. ^1]
+          else:
+            rest
+      result.add "- `" & keys & "` — " & description & "\n"
+    else:
+      result.add line.text & "\n"
+
 proc helpText*(editor: KosmoEditor): string =
-  ## Return Moe's canonical Markdown help source for a host-owned Help view.
-  moeHelpViewer.HelpSentences
+  ## Return Moe's help as Markdown for a host-owned Help view.
+  helpMarkdown(moeHelpViewer.HelpLines)
 
 proc takeHostCommandRequest*(editor: KosmoEditor): Option[KosmoHostCommand] =
   ## Consume a request whose presentation is owned by Kosmo.
@@ -3034,8 +3051,9 @@ proc hoverTargetAt*(
   let tabOffset = if engine.showTabLine: 1 else: 0
   let textRow = row - tabOffset
   let textColumn = column - engine.gutterWidth(window)
-  if textRow < 0 or textRow >= viewport.height - steadyBottomAreaHeight() - tabOffset or
-      textColumn < 0 or textColumn >= engine.textAreaWidth(window):
+  let bottomRows = engine.state.bottomAreaHeight(viewport.width)
+  if textRow < 0 or textRow >= viewport.height - bottomRows - tabOffset or textColumn < 0 or
+      textColumn >= engine.textAreaWidth(window):
     return
   let tabStop =
     if buffer.editorConfig.isSome and buffer.editorConfig.get.tabStop.isSome:
