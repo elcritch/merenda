@@ -30,6 +30,7 @@ import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/command_completion as moeCommandCompletion
 import moepkg/command_handlers/config_ops as moeConfigOps
 import moepkg/command_handlers/handler_result as moeHandlerResult
+from moepkg/command_handlers/mode_dispatchers import handleVisualMode
 import moepkg/command_handlers/result_processor as moeResults
 import moepkg/command_handlers/recovery_ops as moeRecoveryOps
 import moepkg/editor_reload as moeReload
@@ -61,6 +62,7 @@ from moepkg/unicode_utils import byteToCharPos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+from moepkg/pending_input import cancelAll
 import moepkg/visual_selection as moeVisualSelection
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes

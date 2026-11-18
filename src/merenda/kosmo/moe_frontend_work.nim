@@ -1,4 +1,4 @@
-## Frontend-owned clipboard, background work, output, and recovery lifecycles.
+## Frontend-owned input, clipboard, background work, output, and recovery.
 ## Included by the Moe facade to keep its engine and callbacks private.
 
 var kosmoMoeHosts {.threadvar.}: Table[pointer, WeakRef[KosmoEditor]]
@@ -14,6 +14,41 @@ moeHooks.hookOutputPresenter = proc(engine: Editor, output: seq[string]) =
       )
   elif not terminalHookOutputPresenter.isNil:
     terminalHookOutputPresenter(engine, output)
+
+proc hasShiftedArrowCommandMapping(engine: Editor, key: moeKeys.KeyCombo): bool =
+  var modes = {engine.state.mode}
+  if engine.state.mode.isVisualAllMode:
+    modes.incl moeModes.EditorMode.Visual
+  for mode in modes:
+    for mapping in engine.keyRouter.registry.runtimeMappings.getOrDefault(mode):
+      if mapping.kind == moeKeys.rmkCommand and mapping.triggerKeys.len > 0 and
+          mapping.triggerKeys[0] == key:
+        return true
+
+let moeFrontLayerHook = moeResults.frontLayerHook
+moeResults.frontLayerHook = proc(
+    engine: Editor, key: moeKeys.KeyCombo
+): Option[moeResults.ReplayOutcome] =
+  if not moeFrontLayerHook.isNil:
+    result = moeFrontLayerHook(engine, key)
+  if result.isSome or not key.isSpecial or key.modifiers != {moeKeys.kmShift} or
+      key.special notin {moeKeys.skLeft, moeKeys.skRight, moeKeys.skUp, moeKeys.skDown} or
+      cast[pointer](engine) notin kosmoMoeHosts or not engine.state.mode.isFileEditMode or
+      engine.readsKeyUnmapped(key):
+    return
+
+  # The router has processed key sequences. The mode handler owns command mappings.
+  if engine.hasShiftedArrowCommandMapping(key):
+    return
+  if not engine.state.mode.isVisualAllMode:
+    engine.finalizeInsertSessionForBufferSwitch(engine.activeBuffer)
+    engine.state.pendingInput.cancelAll(engine.keyRouter.registry)
+    engine.state.enterVisual(moeTypes.vskChar, engine.cursor, engine.cursor)
+  let arrow = moeKeys.toSpecialKeyCombo(key.special)
+  let moved = engine.handlerManager.handleVisualMode(engine, arrow)
+  let outcome = engine.processReplayedResult(moved, engine.activeBuffer)
+  engine.enforceModePolicy()
+  result = some(outcome)
 
 proc installFrontendHooks(editor: KosmoEditor) =
   kosmoMoeHosts[cast[pointer](editor.editor)] = editor.unsafeWeakRef()

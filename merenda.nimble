@@ -39,7 +39,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#96913b454549b5ab4b67ea94bd9c7118a73c2ada"
+  requires "gh:elcritch/moe#6adad4c3834c5484e92c462c485be70fd4adee33"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
