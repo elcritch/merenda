@@ -496,8 +496,8 @@ proc `[]=`*(theme: var ThemeBuilder, name: string, value: EdgeInsets) =
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: openArray[BoxShadow]) =
   theme[name] = styleShadows(value)
 
-func matches*(selector: StyleSelector, context: StyleContext): bool =
-  if selector.role != context.role:
+func matches(selector: StyleSelector, context: StyleContext, role: StyleRole): bool =
+  if selector.role != role:
     return false
   if not (selector.states <= context.states):
     return false
@@ -507,6 +507,9 @@ func matches*(selector: StyleSelector, context: StyleContext): bool =
     if class notin context.classes:
       return false
   true
+
+func matches*(selector: StyleSelector, context: StyleContext): bool =
+  selector.matches(context, context.role)
 
 func selectorSpecificity(selector: StyleSelector): array[3, int] =
   [ord(selector.id.len > 0), selector.classes.len + card(selector.states), 1]
@@ -993,11 +996,9 @@ proc ruleValue(
     let name = if keyIndex == 0: key else: StyleFill.keyName
     if name in snapshot.xRulesByProperty:
       for role in [inheritedRole, context.role]:
-        var matchContext = context
-        matchContext.role = role
         for index in snapshot.xRulesByProperty[name][role]:
-          let rule = snapshot.xRules[index]
-          if rule.selector.matches(matchContext):
+          let rule {.cursor.} = snapshot.xRules[index]
+          if rule.selector.matches(context, role):
             let rank = rule.ruleRank(ord(role == context.role))
             if rank.rankAtLeast(bestRank):
               result = snapshot.xResolvedRules[index].values[name]
@@ -1335,14 +1336,12 @@ proc layoutStyleSelection*(
   let inheritedRole = context.role.inheritedStyleRole
   if name in snapshot.xRulesByProperty:
     for role in [inheritedRole, context.role]:
-      var matchContext = context
-      matchContext.role = role
       for index in snapshot.xRulesByProperty[name][role]:
         if not checkWork.isNil:
           checkWork()
-        let rule = snapshot.xRules[index]
+        let rule {.cursor.} = snapshot.xRules[index]
         let patch = snapshot.xResolvedRules[index]
-        if rule.selector.matches(matchContext) and
+        if rule.selector.matches(context, role) and
             patch.values[name].kind == svConstraints:
           let rank = rule.ruleRank(ord(role == context.role))
           if rank.rankAtLeast(bestRank):
@@ -2007,8 +2006,10 @@ proc resolveTextFieldStyle*(
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
   )
 
+const DefaultTextFieldTextColor* = color(0.08, 0.09, 0.11, 1.0)
+
 proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
-  theme.resolveTextFieldStyle(context, color(0.08, 0.09, 0.11, 1.0))
+  theme.resolveTextFieldStyle(context, DefaultTextFieldTextColor)
 
 proc resolveMonoTextStyle*(theme: Theme, context: StyleContext): MonoTextStyle =
   MonoTextStyle(

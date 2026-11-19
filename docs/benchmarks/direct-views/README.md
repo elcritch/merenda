@@ -110,3 +110,42 @@ The ID projection avoids structural body evaluation on title edits (also covered
 by a behavioral test). It does not avoid checking the projected IDs or evaluating
 all row title bindings on a collection-wide notification. Per-item notifications
 and indexed model lookup remain worthwhile comparisons for larger lists.
+
+## DirectView setup, 2026-11-19
+
+The setup-only case times `newDirectView(frame)` through the return of its first
+`viewBody`. It builds the keyed rows, installs the bindings and actions, and
+attaches the widgets. Each sample uses a fresh host. Model creation, the widget
+count check, and teardown run outside the timer. First layout and drawing are
+excluded. Two warmups per row count let process-wide font and theme data settle.
+
+| Keyed rows | Before | After | Setup time saved |
+| ---: | ---: | ---: | ---: |
+| 10 | 3.00 ms | 2.14 ms | 29% |
+| 100 | 29.47 ms | 21.16 ms | 28% |
+| 300 | 90.34 ms | 65.74 ms | 27% |
+
+On Apple M3 Pro, macOS 15.7.9, Nim 2.4.3, release/ARC, these are the medians
+of 30 individual builds per cell. Both binaries used the same benchmark, with
+the baseline built against library revision `90deea7e`. Run order was baseline,
+changed, changed, baseline, with 15 samples per size per run.
+
+A macOS CPU sample of the 100-row baseline showed label and text-field constructors
+measuring their initial frames. That path resolved the entire text-field style
+twice, including once to obtain only its text color. The color getter now looks
+up that single property. CSS matching also borrows each candidate rule from the
+immutable theme snapshot and passes the role separately to avoid copying the
+style context.
+
+In separate CPU samples of the 100-row workload, `ruleValue` appeared in 742 of
+2,364 first-body samples before the change (31%) and 156 of 2,113 after (7%).
+The largest remaining cost in the second profile was installing widget protocol
+methods through Sigils' `replaceMethods` (924 samples, 44%). These are inclusive
+stack counts within the first body, with nested calls to the same function counted
+once.
+
+```sh
+source deps/nim-bif-symlink-dedup/activate.sh
+nim ic -d:release -o:deps/benchmark_direct_views tests/benchmark_direct_views.nim
+./deps/benchmark_direct_views --setup-only --rows:10,100,300 --samples:15 --csv:/tmp/direct-setup.csv
+```
