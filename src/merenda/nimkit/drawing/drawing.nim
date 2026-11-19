@@ -589,13 +589,19 @@ proc fontStyleForAttributes(attributes: TextAttributes, style: TextStyle): FontS
   font.underline = attributes.hasUnderline
   font.strikethrough = attributes.hasStrikethrough
   # Spacing and alignment stay with the layout manager; FigDraw applies the
-  # indents that shape each wrapped line's measure.
+  # indents that shape each wrapped line's measure. Character wrapping breaks
+  # words with no shaping-safe point instead of letting them overflow.
   fs(
     font,
     fill(attributes.foregroundColor.rgba),
     ParagraphStyle(
       firstLineIndent: attributes.paragraphStyle.firstLineHeadIndent,
       headIndent: attributes.paragraphStyle.headIndent,
+      overflowWrap:
+        if attributes.paragraphStyle.lineBreakMode == tlbmCharWrapping:
+          owAnywhere
+        else:
+          owNormal,
     ),
   )
 

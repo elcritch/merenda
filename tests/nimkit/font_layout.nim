@@ -11,7 +11,7 @@ import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
 import merenda/nimkit/foundation/assetcache
 import merenda/nimkit/themes
-import merenda/nimkit/text/texttypes
+import merenda/nimkit/text/[textstorage, texttypes]
 
 type EnvSnapshot = object
   name: string
@@ -461,6 +461,24 @@ suite "nimkit font layout":
         check style.fontSize == 18.0'f32
         check textNaturalSize("wide", style).height >= 18.0'f32
     )
+
+  test "character wrapping keeps unbroken words inside the box":
+    var attributes = defaultTextAttributes()
+    attributes.paragraphStyle.lineBreakMode = tlbmCharWrapping
+    let
+      width = 120.0'f32
+      layout = textLayout(
+        rect(0, 0, width, 400), newTextStorage("x".repeat(80), attributes), wrap = true
+      )
+    check layout.lines.len > 1
+    for line in layout.lines:
+      var right = 0.0'f32
+      for index in line:
+        right = max(
+          right,
+          layout.arrangedGlyphs[index].rect.x + layout.arrangedGlyphs[index].rect.w,
+        )
+      check right <= width + 0.5
 
   test "centered label layout reports content bounds as local dimensions":
     let

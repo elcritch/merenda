@@ -3,7 +3,9 @@
 ## Unreleased
 
 - Pass `firstLineHeadIndent` and `headIndent` paragraph attributes to FigDraw
-  paragraph layout, so wrapped lines keep their indents. Requires FigDraw 0.48.0.
+  paragraph layout, so wrapped lines keep their indents, and let character
+  wrapping break words that have no shaping-safe break point instead of
+  overflowing. Requires FigDraw 0.48.0.
 - Indent Markdown block quotes and draw their rule-colored bars beside the text,
   so wrapped quote lines stay aligned. Quotes no longer insert `│ ` prefixes into
   the text, and `MarkdownStyle.quotePrefix` is removed.
