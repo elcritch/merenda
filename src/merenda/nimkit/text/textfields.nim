@@ -138,9 +138,9 @@ protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
     if textField.xTextColor.a > 0.0:
       return textField.xTextColor
 
-    textField
-      .effectiveAppearance()
-      .resolveTextFieldStyle(textField.textFieldStyleContext()).text.color
+    textField.effectiveAppearance().resolveColor(
+      textField.textFieldStyleContext(), StyleTextColor, DefaultTextFieldTextColor
+    )
 
   method `textColor=`(textField: TextField, color: Color) =
     if textField.xTextColor == color:

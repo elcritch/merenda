@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reduce DirectView setup time by 27–29% in the keyed-row benchmark by trimming
+  text-field style lookups and avoiding copies during CSS rule matching.
+
 - Start or extend a Visual selection in the Kosmo editor with Shift+Arrow.
 
 - Remove `MERENDA_BACKGROUND` and its development-control status fields.

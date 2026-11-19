@@ -19,6 +19,22 @@ proc glyphHeight(view: View, text: string): float32 =
         result = max(result, node.textLayout.glyphRect(index).h)
 
 suite "NimKit CSS themes":
+  test "text field color follows its selector and explicit override":
+    let field = newTextField()
+    let base = initThemeBuilder().finish()
+    field.appearance = initAppearance(base)
+    check field.textColor ==
+      base.resolveTextFieldStyle(controlStyle(srTextField)).text.color
+
+    field.appearance =
+      initAppearance(cleanTheme("text-field.note { color: #123456; }", base))
+    field.styleClasses = @["note"]
+    check field.textColor == parseHtmlColor("#123456")
+    field.textColor = parseHtmlColor("red")
+    check field.textColor == parseHtmlColor("red")
+    field.textColor = color(0, 0, 0, 0)
+    check field.textColor == parseHtmlColor("#123456")
+
   test "Peachy hover and accent states keep the warm palette":
     let peachy = initPeachyTheme()
     let aqua = initAquaTheme()

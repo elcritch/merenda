@@ -3,7 +3,7 @@
 import std/[algorithm, math, monotimes, os, strformat, strutils, times]
 import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/directviews
+import merenda/nimkit/directviews except bindingScope
 from merenda/nimkit/view/viewconstraints import solveBlocked
 
 type
@@ -20,6 +20,7 @@ type
 
 var
   checksum: int
+  setupOnly: bool
   sampleCount = 5
   csv: File
 
@@ -37,7 +38,9 @@ proc readCounter(receiver: BenchReceiver, context: int): int =
 proc writeCounter(label: Label, value: int) =
   label.stringValue = "Count: " & $value
 
-proc body(session: DirectViewSession, tasks: seq[Task], receiver: BenchReceiver) =
+proc body(
+    session: DirectView | DirectViewSession, tasks: seq[Task], receiver: BenchReceiver
+) =
   session.viewBody:
     VStack:
       this.distribution = svdNatural
@@ -144,6 +147,22 @@ proc run(count: int) =
   let receiver = BenchReceiver(counter: newSigil(0))
   initResponder(receiver)
   let frame = rect(0, 0, 600, count.float32 * 54 + 50)
+  if setupOnly:
+    var samples: seq[float64]
+    for i in 0 ..< sampleCount + 2:
+      let start = getMonoTime()
+      let direct = newDirectView(frame)
+      direct.body(tasks, receiver)
+      let us = elapsedUs(start)
+      doAssert direct.arrangedSubviews[0].countViews() == 4 * count + 2
+      direct.clear()
+      if i >= 2:
+        samples.add us
+        if not csv.isNil:
+          csv.writeLine(&"{count},setup,{i - 1},1,{us:.6f},ok")
+    samples.sort()
+    echo &"rows={count} setup median_us={samples[samples.len div 2]:.3f}"
+    return
   let host = newStackView(frame = frame)
   let session = newDirectViewSession(host)
   session.body(tasks, receiver)
@@ -237,7 +256,9 @@ proc run(count: int) =
 proc main() =
   var counts = @[10, 100, 300]
   for argument in commandLineParams():
-    if argument.startsWith("--csv:"):
+    if argument == "--setup-only":
+      setupOnly = true
+    elif argument.startsWith("--csv:"):
       csv = open(argument[6 .. ^1], fmWrite)
     elif argument.startsWith("--rows:"):
       counts.setLen(0)
