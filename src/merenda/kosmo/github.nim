@@ -532,6 +532,65 @@ proc markdownUrl(value: string): string =
       .replace("|", "%7C")
       .replace("\\", "%5C")
 
+proc markdownCode(value: string): string =
+  ## A code span whose fence is longer than any backtick run in `value`.
+  var longest, run: int
+  for ch in value:
+    if ch == '`':
+      inc run
+      longest = max(longest, run)
+    else:
+      run = 0
+  let
+    fence = "`".repeat(longest + 1)
+    text = value.multiReplace(("\r", " "), ("\n", " "))
+    padding = if text.startsWith('`') or text.endsWith('`'): " " else: ""
+  fence & padding & text & padding & fence
+
+func displayState(state: string): string =
+  state.toLowerAscii().capitalizeAscii()
+
+func displayDate(timestamp: string): string =
+  ## ISO 8601 timestamps show their calendar date; other values are unchanged.
+  if timestamp.len >= 10 and timestamp[4] == '-' and timestamp[7] == '-' and
+      timestamp[0 .. 3].allCharsInSet(Digits):
+    timestamp[0 .. 9]
+  else:
+    timestamp
+
+const GitHubBodyHeadingOffset = 3 ## Description headings follow the item title, an H3.
+
+proc demotedHeadings(body: string): string =
+  ## Shift ATX headings below the item title, leaving fenced code unchanged.
+  var fence = ""
+  var first = true
+  for line in body.splitLines():
+    if not first:
+      result.add '\n'
+    first = false
+    let
+      indent = line.len - line.strip(trailing = false).len
+      content = line.strip(trailing = false)
+    if indent <= 3 and (content.startsWith("```") or content.startsWith("~~~")):
+      var marker = 0
+      while marker < content.len and content[marker] == content[0]:
+        inc marker
+      if fence.len == 0:
+        fence = content[0 ..< marker]
+      elif content[0] == fence[0] and marker >= fence.len and
+          content[marker .. ^1].strip().len == 0:
+        fence = ""
+    elif fence.len == 0 and indent <= 3 and content.startsWith('#'):
+      var level = 0
+      while level < content.len and content[level] == '#':
+        inc level
+      if level <= 6 and (level == content.len or content[level] in {' ', '\t'}):
+        result.add line[0 ..< indent]
+        result.add '#'.repeat(min(level + GitHubBodyHeadingOffset, 6))
+        result.add content[level .. ^1]
+        continue
+    result.add line
+
 func matchesState(item: GitHubItem, state: GitHubState): bool =
   case state
   of ghsOpen:
@@ -581,8 +640,7 @@ proc gitHubHeadingIdentifiers*(snapshot: GitHubSnapshot): seq[string] =
 proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
   ## Render metadata as text and each item's body as an isolated Markdown quote.
   result = "# GitHub · " & snapshot.rootPath.lastPathPart().markdownText() & "\n\n"
-  result.add "Project: " & snapshot.rootPath.markdownText() & "\n\n"
-  result.add "State: " & snapshot.state.cliState().capitalizeAscii() & "\n\n"
+  result.add snapshot.rootPath.markdownText() & "\n\n"
   for kind in snapshot.kinds:
     var count = 0
     for item in snapshot.items:
@@ -604,28 +662,31 @@ proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
         let label = ("#" & $item.number & " " & item.title).markdownText()
         let url = item.url.markdownUrl()
         result.add "### " & label & "\n\n"
+        var details = @["**" & item.state.displayState().markdownText() & "**"]
+        if item.draft:
+          details.add "Draft"
+        if item.author.len > 0:
+          details.add "@" & item.author.markdownText()
+        if item.updatedAt.len > 0:
+          details.add "updated " & item.updatedAt.displayDate().markdownText()
         if url.len > 0:
           let linkLabel =
             (if kind == ghikIssue: "Open issue #" else: "Open PR #") & $item.number &
             " on GitHub"
-          result.add "[" & linkLabel & "](<" & url & ">)\n\n"
-        result.add item.state.markdownText()
-        if item.draft:
-          result.add " · Draft"
-        if item.author.len > 0:
-          result.add " · @" & item.author.markdownText()
-        if item.updatedAt.len > 0:
-          result.add " · Updated " & item.updatedAt.markdownText()
-        result.add "\n\n"
+          details.add "[" & linkLabel & "](<" & url & ">)"
+        result.add details.join(" · ") & "\n\n"
         if item.labels.len > 0:
-          result.add "Labels: " & item.labels.join(", ").markdownText() & "\n\n"
+          var labels: seq[string]
+          for name in item.labels:
+            labels.add name.markdownCode()
+          result.add "Labels: " & labels.join(" ") & "\n\n"
         if item.headBranch.len > 0:
-          result.add item.headBranch.markdownText() & " → " &
-            item.baseBranch.markdownText() & "\n\n"
-        if item.kind == ghikPullRequest and item.number > 0 and item.baseBranch.len > 0 and
-            item.headBranch.len > 0:
-          result.add "[Open diff in Kosmo](" & GitHubDiffLinkPrefix & $item.number &
-            ")\n\n"
+          result.add item.headBranch.markdownCode() & " → " &
+            item.baseBranch.markdownCode()
+          if item.kind == ghikPullRequest and item.number > 0 and item.baseBranch.len > 0:
+            result.add " · [Open diff in Kosmo](" & GitHubDiffLinkPrefix & $item.number &
+              ")"
+          result.add "\n\n"
         if item.reviewDecision.len > 0:
           result.add "Review: " & item.reviewDecision.markdownText() & "\n\n"
         elif item.reviewActivity.len > 0:
@@ -646,7 +707,7 @@ proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
             if item.jobsTruncated:
               result.add "Additional checks may be available on GitHub.\n\n"
         if item.body.strip().len > 0:
-          for line in item.body.splitLines():
+          for line in item.body.demotedHeadings().splitLines():
             result.add "> " & line & "\n"
           result.add "\n"
         else:

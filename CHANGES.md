@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Pass `firstLineHeadIndent` and `headIndent` paragraph attributes to FigDraw
+  paragraph layout, so wrapped lines keep their indents. Requires FigDraw 0.48.0.
+- Indent Markdown block quotes and draw their rule-colored bars beside the text,
+  so wrapped quote lines stay aligned. Quotes no longer insert `│ ` prefixes into
+  the text, and `MarkdownStyle.quotePrefix` is removed.
+
+- Polish the Kosmo GitHub view: use a compact heading scale, nest description
+  headings below item titles, and show state, author, date, and the GitHub link
+  on one line, with labels and branches as code spans.
+
 - Start or extend a Visual selection in the Kosmo editor with Shift+Arrow.
 
 - Remove `MERENDA_BACKGROUND` and its development-control status fields.

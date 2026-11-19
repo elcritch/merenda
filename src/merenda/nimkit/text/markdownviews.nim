@@ -70,6 +70,8 @@ const
   MarkdownTableViewportFraction = 0.9'f32
   MarkdownHeadingDisclosureIndent = 24.0'f32
   MarkdownHeadingDisclosureSize = 16.0'f32
+  MarkdownQuoteIndent = 16.0'f32 ## Margin added to each nested quote level.
+  MarkdownQuoteBarWidth = 3.0'f32
 
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
@@ -122,7 +124,6 @@ type
     headingFontSizes*: array[6, float32] ## Sizes for heading levels one through six.
     documentInsets*: EdgeInsets ## Scrollable text padding.
     listIndent*: int ## Spaces added for each nested list level.
-    quotePrefix*: string ## Marker prepended to quote blocks.
     imagePrefix*: string ## Marker prepended to linked image alt text.
     thematicBreak*: string ## Native text used for horizontal rules.
 
@@ -136,6 +137,11 @@ type
     rect: Rect
     firstLineRect: Rect
     resolved: bool
+
+  MarkdownQuotePresentation = object
+    range: TextRange
+    contentIndent: float32 ## Paragraph indent of the quoted text.
+    rangeLayout: MarkdownRangeLayout
 
   MarkdownCodeSlice = object
     sourceRange: TextRange
@@ -216,6 +222,8 @@ type
     markdownTables: seq[MarkdownTableScrollPresentation]
     markdownHeadings: seq[MarkdownHeadingControlPresentation]
     markdownHeadingButtons: Table[string, MarkdownHeadingDisclosureButton]
+    markdownQuotes: seq[MarkdownQuotePresentation]
+    quoteBarColor: Color
     markdownEmbeddedViewport: Rect
     hasMarkdownEmbeddedViewport: bool
     markdownViewportLayoutPending: bool
@@ -229,6 +237,7 @@ type
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
     navigationItems: seq[MarkdownNavigationItem]
+    quotes: seq[MarkdownQuotePresentation]
     hasTables: bool
 
   MarkdownBuilder = object
@@ -248,9 +257,9 @@ type
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
     navigationItems: seq[MarkdownNavigationItem]
+    quotes: seq[MarkdownQuotePresentation]
     sectionIdentifier: string
     headingIdentifier: string
-    headingDisclosureIndent: float32
     hasTables: bool
 
   MarkdownTableAlignment = enum
@@ -632,7 +641,6 @@ proc initMarkdownStyle*(): MarkdownStyle =
     headingFontSizes: [30.0'f32, 25.0'f32, 21.0'f32, 18.0'f32, 16.0'f32, 14.0'f32],
     documentInsets: insets(24.0, 28.0, 24.0, 28.0),
     listIndent: 2,
-    quotePrefix: "│ ",
     imagePrefix: "▧ ",
     thematicBreak:
       "────────────────────────────────────────",
@@ -1009,6 +1017,11 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
     shifted.range =
       initTextRange(offset + int(item.range.location), int(item.range.length))
     builder.navigationItems.add shifted
+  for quote in rendered.quotes:
+    var shifted = quote
+    shifted.range =
+      initTextRange(offset + int(quote.range.location), int(quote.range.length))
+    builder.quotes.add shifted
 
 proc renderInline(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
@@ -1658,7 +1671,6 @@ proc renderContainerChild(
     tableColumnLimit: builder.tableColumnLimit,
     headingIdentifier: headingIdentifier,
     sectionIdentifier: builder.sectionIdentifier,
-    headingDisclosureIndent: builder.headingDisclosureIndent,
   )
   rendered.renderBlock(child, attributes)
   if rendered.text.len > 0:
@@ -1679,68 +1691,16 @@ proc renderContainer(
   for child in token.children:
     builder.renderContainerChild(child, attributes, wroteBlock)
 
-type QuoteOffsetSegment = object
-  sourceStart: int
-  destinationStart: int
-
-func quoteSegmentIndex(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
-  var high = segments.len
-  while result + 1 < high:
-    let middle = (result + high) div 2
-    if segments[middle].sourceStart <= sourceIndex:
-      result = middle
-    else:
-      high = middle
-
-proc quoteDestination(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
-  let index = segments.quoteSegmentIndex(sourceIndex)
-  segments[index].destinationStart + sourceIndex - segments[index].sourceStart
-
-proc quoteCodeSlices(
-    slices: openArray[MarkdownCodeSlice], segments: openArray[QuoteOffsetSegment]
-): seq[MarkdownCodeSlice] =
-  # Split only where a quote inserts a prefix into a source-to-document range.
-  if slices.len == 0:
-    return
-  var segmentIndex = segments.quoteSegmentIndex(slices[0].documentStart)
-  for slice in slices:
-    var first = slice.documentStart
-    let stop = first + int(slice.sourceRange.length)
-    while first < stop:
-      while segmentIndex + 1 < segments.len and
-          segments[segmentIndex + 1].sourceStart <= first:
-        inc segmentIndex
-      let
-        segment = segments[segmentIndex]
-        last =
-          if segmentIndex + 1 < segments.len:
-            min(stop, segments[segmentIndex + 1].sourceStart)
-          else:
-            stop
-        mapped = MarkdownCodeSlice(
-          sourceRange: initTextRange(
-            int(slice.sourceRange.location) + first - slice.documentStart, last - first
-          ),
-          documentStart: segment.destinationStart + first - segment.sourceStart,
-        )
-      if result.len > 0 and
-          result[^1].sourceRange.maxIndex == int(mapped.sourceRange.location) and
-          result[^1].documentStart + int(result[^1].sourceRange.length) ==
-          mapped.documentStart:
-        result[^1].sourceRange.length += mapped.sourceRange.length
-      else:
-        result.add mapped
-      first = last
-
 proc renderBlockquote(
     builder: var MarkdownBuilder,
     quote: markdownParser.Token,
     attributes: TextAttributes,
 ) =
+  ## Quotes indent every wrapped line; the view draws the bar in that margin.
   var quoteAttributes = attributes
   quoteAttributes.foregroundColor = builder.style.quoteColor
-  var prefixAttributes = quoteAttributes
-  prefixAttributes.foregroundColor = builder.style.ruleColor
+  quoteAttributes.paragraphStyle.firstLineHeadIndent += MarkdownQuoteIndent
+  quoteAttributes.paragraphStyle.headIndent += MarkdownQuoteIndent
 
   var quoted = MarkdownBuilder(
     style: builder.style,
@@ -1753,69 +1713,14 @@ proc renderBlockquote(
     sectionIdentifier: builder.sectionIdentifier,
   )
   quoted.renderContainer(quote, quoteAttributes)
-  if quoted.text.len == 0:
-    builder.add(builder.style.quotePrefix, prefixAttributes)
+  if quoted.runeLength == 0:
     return
-
-  let source = quoted.text
-  var
-    boundaryCursor: TextByteCursor
-    mappingCursor: TextByteCursor
-    segments: seq[QuoteOffsetSegment]
-  builder.add(builder.style.quotePrefix, prefixAttributes)
-  segments.add QuoteOffsetSegment(sourceStart: 0, destinationStart: builder.runeLength)
-  for run in quoted.runs:
-    let
-      startByte = source.byteOffsetAtRune(boundaryCursor, int(run.range.location))
-      stopByte = source.byteOffsetAtRune(boundaryCursor, run.range.maxIndex)
-    var position = startByte
-    while position < stopByte:
-      let newline = source.find('\n', position)
-      if newline < 0 or newline >= stopByte:
-        builder.add(source[position ..< stopByte], run.attributes)
-        position = stopByte
-      else:
-        builder.add(source[position .. newline], run.attributes)
-        position = newline + 1
-        if position < source.len:
-          builder.add(builder.style.quotePrefix, prefixAttributes)
-          segments.add QuoteOffsetSegment(
-            sourceStart: source.runeIndexAtByte(mappingCursor, position),
-            destinationStart: builder.runeLength,
-          )
-
-  for presentation in quoted.codeBlocks.mitems:
-    var mapped = move presentation
-    let
-      start = segments.quoteDestination(int(mapped.range.location))
-      stop = segments.quoteDestination(mapped.range.maxIndex)
-    mapped.range = initTextRange(start, stop - start)
-    mapped.slices = mapped.slices.quoteCodeSlices(segments)
-    mapped.sourceSlices = mapped.sourceSlices.quoteCodeSlices(segments)
-    builder.codeBlocks.add mapped
-  for presentation in quoted.images:
-    var mapped = presentation
-    let
-      start = segments.quoteDestination(int(presentation.range.location))
-      stop = segments.quoteDestination(presentation.range.maxIndex)
-    mapped.range = initTextRange(start, stop - start)
-    builder.images.add mapped
-  for presentation in quoted.tables:
-    var mapped = presentation
-    let
-      start = segments.quoteDestination(int(presentation.range.location))
-      stop = segments.quoteDestination(presentation.range.maxIndex)
-    mapped.range = initTextRange(start, stop - start)
-    mapped.sourceSlices = mapped.sourceSlices.quoteCodeSlices(segments)
-    builder.tables.add mapped
-  for item in quoted.navigationItems:
-    var mapped = item
-    let
-      start = segments.quoteDestination(int(item.range.location))
-      stop = segments.quoteDestination(item.range.maxIndex)
-    mapped.range = initTextRange(start, stop - start)
-    builder.navigationItems.add mapped
-  builder.hasTables = builder.hasTables or quoted.hasTables
+  let start = builder.runeLength
+  builder.add(move quoted)
+  builder.quotes.add MarkdownQuotePresentation(
+    range: initTextRange(start, builder.runeLength - start),
+    contentIndent: quoteAttributes.paragraphStyle.headIndent,
+  )
 
 proc addHighlightedCode(
     builder: var MarkdownBuilder,
@@ -1889,10 +1794,6 @@ proc renderBlock(
     headingAttributes.fontFace = builder.style.strongFontFace
     let level = min(max(heading.level, 1), 6)
     headingAttributes.fontSize = max(builder.style.headingFontSizes[level - 1], 1.0'f32)
-    if builder.headingIdentifier.len > 0:
-      headingAttributes.paragraphStyle.firstLineHeadIndent +=
-        builder.headingDisclosureIndent
-      headingAttributes.paragraphStyle.headIndent += builder.headingDisclosureIndent
     let
       headingStart = builder.runeLength
       titleStart = builder.text.len
@@ -2036,6 +1937,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     tables: builder.tables,
     headings: builder.headings,
     navigationItems: builder.navigationItems,
+    quotes: builder.quotes,
     hasTables: builder.hasTables,
   )
   let parent = result.storage.textSnapshot()
@@ -2182,6 +2084,32 @@ proc resolveMarkdownRangeLayout(
         presentation.firstLineRect = fragmentRect
       else:
         presentation.rect = presentation.rect.union(fragmentRect)
+
+proc quoteBarRect(
+    presentation: var MarkdownQuotePresentation, snapshot: TextLayoutSnapshot
+): Rect =
+  ## Bars span the quote's full lines in the margin its indent reserves.
+  let layoutHash = int(snapshot.layoutHash)
+  if not presentation.rangeLayout.resolved or
+      presentation.rangeLayout.layoutHash != layoutHash:
+    var lines: Rect
+    for fragment in snapshot.lineFragments:
+      if fragment.textRange.textRangesIntersect(presentation.range):
+        lines =
+          if lines.isEmpty:
+            fragment.fragmentRect
+          else:
+            lines.union(fragment.fragmentRect)
+    presentation.rangeLayout =
+      MarkdownRangeLayout(layoutHash: layoutHash, resolved: true, rect: lines)
+  let lines = presentation.rangeLayout.rect
+  if not lines.isEmpty:
+    result = rect(
+      lines.minX + presentation.contentIndent - MarkdownQuoteIndent,
+      lines.minY,
+      MarkdownQuoteBarWidth,
+      lines.size.height,
+    )
 
 proc configureMarkdownEmbeddedTextView(
     storage: TextStorage, backgroundColor: Color, accessibilityLabel: string
@@ -2625,6 +2553,15 @@ protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
             max(style.outlineWidth, 0.0'f32),
             max(style.cornerRadius, 0.0'f32),
           )
+      if textView.quoteBarColor.a > 0.0'f32:
+        for presentation in textView.markdownQuotes.mitems:
+          let barRect = presentation.quoteBarRect(snapshot)
+          if not barRect.isEmpty and not barRect.intersection(bufferedVisible).isEmpty:
+            discard context.addRenderRectangle(
+              context.renderRectFor(barRect),
+              fill(textView.quoteBarColor),
+              cornerRadius = MarkdownQuoteBarWidth / 2.0'f32,
+            )
       for presentation in textView.markdownImages:
         if presentation.range.textRangeIntersectsRect(snapshot, bufferedVisible):
           let imageRect = textView.imageRect(presentation)
@@ -2670,6 +2607,8 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   let textView = MarkdownTextView(view.textView())
   textView.codeBlockStyle = view.xMarkdownStyle.codeBlockStyle
   textView.markdownImages = document.images
+  textView.markdownQuotes = move document.quotes
+  textView.quoteBarColor = view.xMarkdownStyle.ruleColor
   view.xHasMarkdownTables = document.hasTables
   view.minimumWrappedDocumentWidth = 0.0'f32
   if document.storage.len >= MarkdownBackgroundLayoutMinimumLength and
@@ -3076,7 +3015,6 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
       codeIndex: codeIndex,
       cachedCodeSpans: cachedCodeSpans,
       tableColumnLimit: tableColumnLimit,
-      headingDisclosureIndent: MarkdownHeadingDisclosureIndent,
     ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
     headingIdentifiers: view.xMarkdownRootHeadingIdentifiers,

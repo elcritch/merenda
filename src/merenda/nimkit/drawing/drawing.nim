@@ -588,7 +588,16 @@ proc fontStyleForAttributes(attributes: TextAttributes, style: TextStyle): FontS
   ).font
   font.underline = attributes.hasUnderline
   font.strikethrough = attributes.hasStrikethrough
-  fs(font, fill(attributes.foregroundColor.rgba))
+  # Spacing and alignment stay with the layout manager; FigDraw applies the
+  # indents that shape each wrapped line's measure.
+  fs(
+    font,
+    fill(attributes.foregroundColor.rgba),
+    ParagraphStyle(
+      firstLineIndent: attributes.paragraphStyle.firstLineHeadIndent,
+      headIndent: attributes.paragraphStyle.headIndent,
+    ),
+  )
 
 proc applyTextColors*(
     layout: var GlyphArrangement, storage: TextStorage, sourceOffset = 0
