@@ -13,6 +13,8 @@
 - Polish the Kosmo GitHub view: use a compact heading scale, nest description
   headings below item titles, and show state, author, date, and the GitHub link
   on one line, with labels and branches as code spans.
+- Reduce DirectView setup time by 27–29% in the keyed-row benchmark by trimming
+  text-field style lookups and avoiding copies during CSS rule matching.
 
 - Start or extend a Visual selection in the Kosmo editor with Shift+Arrow.
 
