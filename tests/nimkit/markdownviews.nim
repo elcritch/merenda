@@ -996,7 +996,7 @@ sibling body
     check view.textStorage().attributesFor("☑").foregroundColor == style.mutedColor
     check view.textStorage().attributesFor("pending").link == "https://example.com"
 
-  test "block quotes prefix every line and thematic breaks use the configured rule":
+  test "block quotes indent wrapped lines and thematic breaks use the configured rule":
     let
       style = initMarkdownStyle()
       storage = markdownTextStorage(
@@ -1011,20 +1011,66 @@ sibling body
       )
       rendered = storage.stringValue()
 
-    check rendered.startsWith("│ first line second line\n│ \n│ second paragraph")
+    check rendered.startsWith("first line second line\n\nsecond paragraph")
+    check "│" notin rendered
     check rendered.endsWith(style.thematicBreak)
-    check storage.attributesFor("first line").foregroundColor == style.quoteColor
-    check storage.attributesFor("│").foregroundColor == style.ruleColor
+    for text in ["first line", "second paragraph"]:
+      let paragraph = storage.attributesFor(text)
+      check paragraph.foregroundColor == style.quoteColor
+      check paragraph.paragraphStyle.firstLineHeadIndent > 0
+      check paragraph.paragraphStyle.headIndent ==
+        paragraph.paragraphStyle.firstLineHeadIndent
+    check storage.attributesFor(style.thematicBreak).paragraphStyle.headIndent == 0
 
-  test "nested Unicode block quotes retain each prefix and text style":
+  test "nested Unicode block quotes indent each level":
     let
       style = initMarkdownStyle()
-      storage = markdownTextStorage("> outer é\n> > inner 😀\n> tail")
+      storage = markdownTextStorage("> outer é\n>\n> > inner 😀\n\nafter")
       rendered = storage.stringValue()
-    check rendered.contains("│ outer é")
-    check rendered.contains("│ │ inner 😀")
-    check rendered.contains("tail")
+      outer = storage.attributesFor("outer é").paragraphStyle.headIndent
+      inner = storage.attributesFor("inner 😀").paragraphStyle.headIndent
+    check rendered.contains("outer é")
+    check rendered.contains("inner 😀")
+    check outer > 0
+    check abs(inner - outer * 2) < 0.01'f32
+    check storage.attributesFor("after").paragraphStyle.headIndent == 0
     check storage.attributesFor("inner 😀").foregroundColor == style.quoteColor
+
+  test "block quotes draw one rule-colored bar per level beside wrapped text":
+    var style = initMarkdownStyle()
+    style.ruleColor = color(0.9, 0.1, 0.6, 1)
+    let view = newMarkdownView(
+      "> " & "wrapped quote text ".repeat(40) & "\n>\n> > nested\n\nafter",
+      frame = rect(0, 0, 360, 600),
+      style = style,
+    )
+    require view.waitForMarkdownParsing()
+    view.layoutSubtreeIfNeeded()
+    let renders = buildRenders(view)
+    require DefaultDrawLevel in renders
+    var bars: seq[Rect]
+    for index, node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == style.ruleColor.rgba:
+        bars.add renders[DefaultDrawLevel].translatedRenderRect(index)
+    require bars.len == 2
+    bars.sort(
+      proc(left, right: Rect): int =
+        cmp(left.minX, right.minX)
+    )
+    let
+      textView = view.textView()
+      text = textView.textStorage().stringValue()
+      wrappedLines = textView.selectionRects(
+        initTextRange(0, text[0 ..< text.find("nested")].runeLen)
+      )
+    check wrappedLines.len > 2
+    check bars[0].minX < bars[1].minX
+    check bars[0].size.height > bars[1].size.height
+    for line in wrappedLines:
+      let lineRect = textView.rectToView(line, view)
+      if lineRect.size.width > 0:
+        check lineRect.minX > bars[0].maxX
 
   test "highlighted code converts only multibyte token endpoints":
     let highlighter: SyntaxHighlighter = proc(
@@ -1255,9 +1301,11 @@ fencedToken value
       style.syntaxTokenColors[stcKeyword]
     check storage.attributesFor("é 😀 comment").foregroundColor ==
       style.syntaxTokenColors[stcComment]
-    check storage.attributesFor("│ │").foregroundColor == style.ruleColor
-    let quotedKeyword =
-      storage.stringValue().runeIndexOf("│ │ let tail") + "│ │ ".runeLen
+    let
+      rendered = storage.stringValue()
+      quotedKeyword = rendered[0 ..< rendered.rfind("let tail")].runeLen
+    check storage.attributesAt(quotedKeyword).paragraphStyle.headIndent >
+      storage.attributesFor("let tail").paragraphStyle.headIndent
     check storage.attributesAt(quotedKeyword).foregroundColor ==
       style.syntaxTokenColors[stcKeyword]
 

@@ -301,8 +301,16 @@ proc waitForGitHub*(panel: KosmoGitHubPanel, timeoutMilliseconds = 60_000): bool
       return true
     sleep(1)
 
+func gitHubReaderStyle*(style: nimkit.MarkdownStyle): nimkit.MarkdownStyle =
+  ## A compact heading scale relative to body text. Item titles (H3) read as
+  ## list rows, and demoted description headings (H4-H6) stay near body size.
+  const scale = [1.5'f32, 1.25'f32, 1.15'f32, 1.08'f32, 1.0'f32, 0.93'f32]
+  result = style
+  for index, factor in scale:
+    result.headingFontSizes[index] = style.bodyFontSize * factor
+
 proc `markdownStyle=`*(panel: KosmoGitHubPanel, style: nimkit.MarkdownStyle) =
-  panel.markdownView.markdownStyle = style
+  panel.markdownView.markdownStyle = style.gitHubReaderStyle()
 
 proc `keyEquivalentHandler=`*(
     panel: KosmoGitHubPanel, handler: GitHubKeyEquivalentHandler

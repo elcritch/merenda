@@ -247,13 +247,50 @@ suite "Kosmo GitHub Markdown viewer":
     check "Fix \\*\\*wrapping\\*\\* \\[λ\\]" in markdown
     check "> ```\n> unterminated fence\n\n## Pull Requests" in markdown
     check "https://github.com/owner/project/issues/7" in markdown
-    check "### \\#7 Fix \\*\\*wrapping\\*\\* \\[λ\\]\n\n[Open issue #7 on GitHub]" in
+    check (
+      "### \\#7 Fix \\*\\*wrapping\\*\\* \\[λ\\]\n\n" &
+      "**Open** · @alice · updated 2026\\-10\\-06 · [Open issue #7 on GitHub]"
+    ) in markdown
+    check "### \\#8 Improve rendering\n\n**Open** · Draft · [Open PR #8 on GitHub]" in
       markdown
-    check "### \\#8 Improve rendering\n\n[Open PR #8 on GitHub]" in markdown
-    check "Draft" in markdown
-    check "feature/viewer → main" in markdown
+    check "Labels: `bug`\n" in markdown
+    check "`feature/viewer` → `main` · [Open diff in Kosmo](kosmo-pr-diff:8)" in
+      markdown
+    check "Project:" notin markdown
+    check "State:" notin markdown
     snapshot.items[0].url = "javascript:alert(1)"
     check "javascript:" notin snapshot.gitHubMarkdown()
+
+  test "description headings sit below item titles and code is unchanged":
+    var snapshot = sampleSnapshot()
+    snapshot.items[0].body =
+      "# Top\n## Summary\n   ### Indented\n#### Deep\n#hashtag\n" &
+      "````md\n## Inside fence\n```\n## Still inside\n````\n## After"
+    snapshot.items[0].labels = @["needs `triage`", "bug"]
+    let markdown = snapshot.gitHubMarkdown()
+    check "> #### Top\n> ##### Summary\n>    ###### Indented\n> ###### Deep\n" in
+      markdown
+    check "> #hashtag\n" in markdown
+    check "> ## Inside fence\n> ```\n> ## Still inside\n> ````\n> ##### After" in
+      markdown
+    check "Labels: `` needs `triage` `` `bug`" in markdown
+
+  test "GitHub headings use a compact scale relative to body text":
+    var style = initMarkdownStyle()
+    style.bodyFontSize = 16
+    let compact = style.gitHubReaderStyle()
+    check compact.bodyFontSize == 16
+    check compact.headingFontSizes[0] == 24
+    check compact.headingFontSizes[1] == 20
+    check compact.headingFontSizes[2] > compact.headingFontSizes[3]
+    check compact.headingFontSizes[4] == 16
+    for level in 1 .. 5:
+      check compact.headingFontSizes[level - 1] > compact.headingFontSizes[level]
+    let panel = newKosmoGitHubPanel(sampleSnapshot(), style)
+    defer:
+      panel.close()
+    require panel.waitForGitHub()
+    check panel.markdownView.markdownStyle.headingFontSizes == compact.headingFontSizes
 
   test "section identities use kind and number independently of titles and order":
     var snapshot = sampleSnapshot()
@@ -302,7 +339,7 @@ suite "Kosmo GitHub Markdown viewer":
     let markdown = snapshot.gitHubMarkdown()
     check "Pull Requests (1)" in markdown
     check "Improve rendering" in markdown
-    check "MERGED" in markdown
+    check "**Merged**" in markdown
     check "Fix" notin markdown
 
   test "GitHub forwards reading scroll and Markdown section navigation after host shortcuts":
