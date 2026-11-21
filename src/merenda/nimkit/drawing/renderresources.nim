@@ -32,6 +32,9 @@ type
   RenderResourceMetrics* = object
     replayCount*: uint64
     generationRecoveryCount*: uint64
+    residencyRecoveryCount*: uint64
+      ## Replays triggered because a live image was missing from this
+      ## renderer's atlas although no atlas generation change was seen.
     pressureRebuildCount*: uint64
     atlasShrinkRebuildCount*: uint64
     automaticPreloadEvictionCount*: uint64
@@ -196,6 +199,24 @@ proc restoreManifestImages[BackendState](
   discard renderer
   discard resources
 
+proc missingLiveImage[BackendState](
+    renderer: FigRenderer[BackendState], resources: RenderResourceManifest
+): bool =
+  if resources.isNil:
+    return
+  for id in resources.images.keys:
+    if not renderer.containsImage(id):
+      return true
+
+proc missingLiveImage[BackendState](
+    renderer: FigRenderer[BackendState], resources: RenderResourceSnapshot
+): bool =
+  if not resources.present:
+    return
+  for id in resources.images:
+    if not renderer.containsImage(id):
+      return true
+
 proc replayWorkingSet[BackendState](
     manager: RenderResourceManager, renderer: FigRenderer[BackendState], resources: auto
 ) =
@@ -231,6 +252,12 @@ proc prepareWithResources[BackendState, Resources](
   renderer.processImageMessages()
   if generationChanged or renderer.atlasGeneration() != generationBefore:
     inc manager.metricsValue.generationRecoveryCount
+    manager.replayWorkingSet(renderer, resources)
+  elif renderer.missingLiveImage(resources):
+    # Atlas residency is per renderer, but uploads are skipped for images any
+    # window already published. An image evicted from this renderer while it
+    # was outside the live manifest must be restored when it returns.
+    inc manager.metricsValue.residencyRecoveryCount
     manager.replayWorkingSet(renderer, resources)
 
   var usage = renderer.atlasUsage()
