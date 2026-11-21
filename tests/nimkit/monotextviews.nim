@@ -208,6 +208,29 @@ suite "nimkit mono text views":
         builder.addCell("X", initMonoTextCellStyle())
     check view.stringValue() == "PQR\nSTU\nDEF\nGHI"
 
+  test "shifted grid rows keep their glyph style and follow their new position":
+    let
+      view = newMonoTextViewer("A\nB\nC", frame = rect(0, 0, 240, 120))
+      initialColor = color(0.8, 0.2, 0.4)
+      editedColor = color(0.2, 0.4, 0.8)
+    view.setCell(1, 0, styledMonoTextCell("B", initialColor))
+
+    proc renderedB(): Fig =
+      for node in view.buildRenders()[DefaultDrawLevel].nodes:
+        if node.kind == nkText and node.renderedText() == "B":
+          return node
+      raise newException(AssertionDefect, "expected the grid to render B")
+
+    let before = renderedB()
+    view.scrollGridRows(1) do(row: int, builder: var MonoTextRowBuilder):
+      builder.addCell(initMonoTextCell("D"))
+    let shifted = renderedB()
+    check shifted.screenBox.y < before.screenBox.y
+    check shifted.textLayout.spanColors == @[fill(initialColor.rgba)]
+
+    view.setCell(0, 0, styledMonoTextCell("B", editedColor))
+    check renderedB().textLayout.spanColors == @[fill(editedColor.rgba)]
+
   test "grid offset translates cell geometry without changing the view frame":
     let view = newMonoTextViewer("first\nsecond", frame = rect(0, 0, 240, 120))
     view.padding = 0.0'f32

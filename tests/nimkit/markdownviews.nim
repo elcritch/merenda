@@ -1589,6 +1589,37 @@ echo "fenced"
         inc selectionRectCount
     check selectionRectCount < totalLines div 3
 
+  test "scrolling retains line colors and applies display-only edits":
+    let
+      view = newMarkdownView(
+        "First line\n\n" & "Another paragraph.\n\n".repeat(80),
+        frame = rect(0, 0, 360, 180),
+      )
+      scroll = view.scrollView()
+    require view.waitForMarkdownParsing()
+    discard view.buildRenderScene()
+    require view.waitForMarkdownLayout()
+
+    proc firstLineFill(): Fill =
+      for node in view.buildRenders()[DefaultDrawLevel].nodes:
+        if node.kind == nkText:
+          return node.textLayout.spanColors[0]
+      raise newException(AssertionDefect, "expected the first text line to render")
+
+    let initialFill = firstLineFill()
+    scroll.contentOffset = initPoint(0, 12)
+    check firstLineFill() == initialFill
+
+    let storage = view.textStorage()
+    var attributes = storage.attributesAt(0)
+    attributes.foregroundColor = color(0.8, 0.2, 0.4, 1.0)
+    storage.setAttributes(initTextRange(0, "First line".len), attributes)
+    let updatedFill = fill(attributes.foregroundColor.rgba)
+    check updatedFill != initialFill
+    check firstLineFill() == updatedFill
+    scroll.contentOffset = initPoint(0, 24)
+    check firstLineFill() == updatedFill
+
   test "fitting code blocks do not allocate embedded text views":
     let view =
       newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))

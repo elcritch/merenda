@@ -1604,7 +1604,7 @@ proc syncSelectedEditorContent(
   group.pane.syncMarkdownControls(false)
   keckOther
 
-proc renderGrid(view: KosmoEditorView) =
+proc renderGrid(view: KosmoEditorView, rowOffset: int) =
   let metrics = view.monoTextMetrics()
   if metrics.cellWidth <= 0.0'f32 or metrics.lineHeight <= 0.0'f32:
     return
@@ -1630,7 +1630,7 @@ proc renderGrid(view: KosmoEditorView) =
     for column in 0 ..< columns:
       let cell = view.renderBuffer.cell(column, row)
       builder.addCell(cell.symbol, cell.toMonoTextCellStyle())
-  view.replaceGrid(rows, columns, provider)
+  view.replaceGrid(rows, columns, provider, rowOffset)
   view.gridOffset =
     nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()
@@ -1646,8 +1646,7 @@ proc handleHostCommands(view: KosmoEditorView): bool =
     discard view.handleHostCommand(request.get)
     request = view.editor.takeHostCommandRequest()
 
-proc refresh*(view: KosmoEditorView) =
-  ## Render the current editor state into the synchronous cell-grid view.
+proc refresh(view: KosmoEditorView, rowOffset: int) =
   if view.shouldDeferInactiveRefresh():
     view.inactiveRefreshDeferred = true
     return
@@ -1695,7 +1694,11 @@ proc refresh*(view: KosmoEditorView) =
       view.dockGroup[].pane.setContentView(view)
   of keckSyntax:
     discard
-  view.renderGrid()
+  view.renderGrid(rowOffset)
+
+proc refresh*(view: KosmoEditorView) =
+  ## Render the current editor state into the synchronous cell-grid view.
+  view.refresh(0)
 
 proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
   for tab in view.editor.tabs():
@@ -1831,7 +1834,7 @@ proc scrollBy*(
   )
   if result.appliedRows != rows:
     view.scrollOffsetRows = 0.0'f32
-  view.refresh()
+  view.refresh(result.appliedRows)
 
 proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
 proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView)

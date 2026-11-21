@@ -1032,6 +1032,12 @@ proc activateRenderSlot(context: DrawContext, index: int) =
   context.xParent = context.xRenders.layers[context.xLayer].rootIds[0]
   context.xViewParent = (-1).FigIdx
 
+proc cachedRenderSlotRevision*(context: DrawContext, slot: RenderSlotId): uint64 =
+  ## Returns the previous slot revision, or zero when there is no reusable capture.
+  ## Geometry invalidation is checked separately by `beginRenderSlot`.
+  if context.xCapturesSlots and not context.xForceAllSlots:
+    result = context.xCachedSlotRevisions.getOrDefault(slot)
+
 proc beginRenderSlot*(
     context: DrawContext,
     slot: RenderSlotId,

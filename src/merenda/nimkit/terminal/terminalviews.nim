@@ -736,11 +736,9 @@ proc synchronizeTerminalGrid(view: TerminalView, snapshot: TerminalViewportSnaps
     let provider: MonoTextRowProvider = proc(
         row: int, builder: var MonoTextRowBuilder
     ) =
+      let absoluteRow = firstReplacementRow + row
       view.appendTerminalRow(
-        snapshot.lines[firstReplacementRow + row - start],
-        columns,
-        firstReplacementRow + row,
-        builder,
+        view.xSession.lineAtAbsolute(absoluteRow), columns, absoluteRow, builder
       )
     view.scrollGridRows(rowOffset, provider)
   elif not dimensionsMatch or not unchangedGeneration or rowOffset != 0:
@@ -748,7 +746,10 @@ proc synchronizeTerminalGrid(view: TerminalView, snapshot: TerminalViewportSnaps
     let provider: MonoTextRowProvider = proc(
         row: int, builder: var MonoTextRowBuilder
     ) =
-      view.appendTerminalRow(snapshot.lines[row], columns, start + row, builder)
+      let absoluteRow = start + row
+      view.appendTerminalRow(
+        view.xSession.lineAtAbsolute(absoluteRow), columns, absoluteRow, builder
+      )
     view.replaceGrid(
       rows, columns, provider, rowOffset = if dimensionsMatch: rowOffset else: 0
     )
@@ -775,8 +776,10 @@ proc syncTerminalScreen(view: TerminalView) =
     recordTerminalTrace("grid-end", cast[uint64](view))
   let
     snapshot = view.xSession.viewportSnapshot(
-      view.xScrollPosition, view.xLastScrollbackLinesAdded,
+      view.xScrollPosition,
+      view.xLastScrollbackLinesAdded,
       view.xLastScrollbackResetCount,
+      includeLines = false,
     )
     info = snapshot.info
     nextScrollbackCount = info.scrollbackCount

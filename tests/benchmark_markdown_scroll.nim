@@ -1,14 +1,16 @@
-## Profiles CPU-side README scrolling through the dedicated-renderer handoff.
+## Profiles CPU-side Markdown scrolling through the dedicated-renderer handoff.
 ##
-## Run the base revision without a define, and the fragment-native revision with:
+## Build the retained-renderer benchmark with:
 ##
-##   atlas-run tests tests/benchmark_markdown_scroll.nim -- -d:release
-##   atlas-run tests tests/benchmark_markdown_scroll.nim -- \
-##     -d:release -d:fragmentNativeProfile
+##   nim ic --nimcache:deps/.nimcache/ -d:fragmentNativeProfile \
+##     -d:ProfileFrames=1200 -o:deps/benchmark_markdown_scroll tests/benchmark_markdown_scroll.nim
+##   ./deps/benchmark_markdown_scroll
 ##
+## Omit `fragmentNativeProfile` for the legacy monolithic comparison.
 ## This diagnostic excludes GPU execution. It measures scroll invalidation, view
 ## rendering/reconciliation, bounded-channel transfer, renderer-side scene
 ## application, direct fragment-edge traversal, and acknowledgement.
+## Pass a local Markdown path as the executable's first argument to profile it.
 
 import std/[algorithm, monotimes, os, strformat, times]
 
@@ -16,6 +18,7 @@ import figdraw
 
 import merenda/nimkit
 import merenda/nimkit/app/backend as nimkitBackend
+import merenda/nimkit/foundation/mainthreadwork
 when defined(fragmentNativeProfile):
   import merenda/nimkit/drawing/renderscenes as retainedScenes
 
@@ -54,13 +57,18 @@ proc traversalNodeCount(renders: Renders): Natural =
       result += renders.countTraversalNodes(root)
 
 let
-  source = readFile(RepositoryReadme)
+  documentPath =
+    if paramCount() > 0:
+      paramStr(1)
+    else:
+      RepositoryReadme
+  source = readFile(documentPath)
   viewer = newMarkdownView(
     source, frame = rect(0, 0, 760, 540), imageLoader = unavailableMarkdownImage
   )
-doAssert viewer.waitForMarkdownParsing(), "README parsing should complete"
+doAssert viewer.waitForMarkdownParsing(), "Markdown parsing should complete"
 discard viewer.buildRenders()
-doAssert viewer.waitForMarkdownLayout(), "README layout should complete"
+doAssert viewer.waitForMarkdownLayout(), "Markdown layout should complete"
 discard viewer.buildRenders()
 
 let
@@ -75,6 +83,7 @@ var
   checksum: uint64
   capturedViews: uint64
   traversedNodes: uint64
+  scrollMilliseconds: seq[float]
   prepareMilliseconds: seq[float]
   transferMilliseconds: seq[float]
   applyMilliseconds: seq[float]
@@ -85,8 +94,13 @@ when defined(fragmentNativeProfile):
   var documentCaptureBaseline: uint64
 
 proc renderScrollFrame(frame: int) =
+  let scrollStarted = getMonoTime()
   scrollView.contentOffset = initPoint(0.0, scrollPosition(frame, maximumY))
+  drainMainThreadWork()
   let prepareStarted = getMonoTime()
+  scrollMilliseconds.add(
+    (prepareStarted - scrollStarted).inNanoseconds.float / 1_000_000.0
+  )
   when defined(fragmentNativeProfile):
     let scene = viewer.buildRenderScene()
     prepareMilliseconds.add(
@@ -148,6 +162,7 @@ when defined(fragmentNativeProfile):
 checksum = 0
 capturedViews = 0
 traversedNodes = 0
+scrollMilliseconds.setLen(0)
 prepareMilliseconds.setLen(0)
 transferMilliseconds.setLen(0)
 applyMilliseconds.setLen(0)
@@ -171,14 +186,15 @@ let
   totalWall = (getMonoTime() - totalWallStarted).inNanoseconds.float / 1_000_000_000.0
   mode = when defined(fragmentNativeProfile): "fragment-native" else: "monolithic"
 
-echo "README Markdown scroll profile (", mode, ")"
+echo documentPath.extractFilename, " Markdown scroll profile (", mode, ")"
 echo &"document: {source.len} bytes, maximum scroll: {maximumY:.1f} px"
 echo &"frames: {ProfileFrames}, checksum: {checksum}"
 echo &"wall: median {wallMilliseconds.percentile(0.50):.3f} ms/frame, " &
   &"p95 {wallMilliseconds.percentile(0.95):.3f} ms/frame"
 echo &"CPU:  median {cpuMilliseconds.percentile(0.50):.3f} ms/frame, " &
   &"p95 {cpuMilliseconds.percentile(0.95):.3f} ms/frame"
-echo &"stages (median wall): prepare {prepareMilliseconds.percentile(0.50):.3f} ms, " &
+echo &"stages (median wall): scroll {scrollMilliseconds.percentile(0.50):.3f} ms, " &
+  &"prepare {prepareMilliseconds.percentile(0.50):.3f} ms, " &
   &"transfer {transferMilliseconds.percentile(0.50):.3f} ms, " &
   &"apply/ack {applyMilliseconds.percentile(0.50):.3f} ms, " &
   &"traversal {traversalMilliseconds.percentile(0.50):.3f} ms"

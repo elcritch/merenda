@@ -31,7 +31,9 @@ proc viewportSnapshot*(
     session: TerminalViewSession,
     scrollPosition: float32,
     previousLinesAdded, previousResetCount: uint64,
+    includeLines: bool,
 ): TerminalViewportSnapshot =
+  ## Resolve the viewport. Callers reusing retained rows can fetch lines as needed.
   result.info = session.screenInfo()
   result.workerToken = session.workerIdentity()
   result.readSerial = session.readSequence()
@@ -44,5 +46,13 @@ proc viewportSnapshot*(
       clamp(result.scrollPosition, 0.0'f32, info.scrollbackCount.float32)
   result.start =
     max(info.totalLineCount - info.rows - int(ceil(result.scrollPosition)), 0)
-  for row in 0 ..< info.rows:
-    result.lines.add session.lineAtAbsolute(result.start + row)
+  if includeLines:
+    for row in 0 ..< info.rows:
+      result.lines.add session.lineAtAbsolute(result.start + row)
+
+proc viewportSnapshot*(
+    session: TerminalViewSession,
+    scrollPosition: float32,
+    previousLinesAdded, previousResetCount: uint64,
+): TerminalViewportSnapshot =
+  session.viewportSnapshot(scrollPosition, previousLinesAdded, previousResetCount, true)
