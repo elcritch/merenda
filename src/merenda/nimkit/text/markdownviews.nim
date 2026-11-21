@@ -68,6 +68,8 @@ const
   MarkdownTableSeparatorWidth = 3
   MarkdownTableFontScale = 0.9'f32
   MarkdownTableViewportFraction = 0.9'f32
+  MarkdownTableStripeAlpha = 0.12'f32
+    ## Opacity of the rule color shading every other table body row.
   MarkdownHeadingDisclosureIndent = 24.0'f32
   MarkdownHeadingDisclosureSize = 16.0'f32
   MarkdownQuoteIndent = 16.0'f32 ## Margin added to each nested quote level.
@@ -126,6 +128,9 @@ type
     listIndent*: int ## Spaces added for each nested list level.
     imagePrefix*: string ## Marker prepended to linked image alt text.
     thematicBreak*: string ## Native text used for horizontal rules.
+    justifiesParagraphs*: bool
+      ## Justify paragraph text with optimal (Knuth-Plass) line breaking.
+      ## Headings, lists, tables, and code keep their natural alignment.
 
   MarkdownImagePresentation = object
     range: TextRange
@@ -1193,7 +1198,10 @@ proc renderParagraph(
     skipPrefixBytes = 0,
 ) =
   let start = builder.runeLength
-  builder.renderInlineChildren(token, attributes, skipPrefixBytes)
+  var paragraphAttributes = attributes
+  if builder.style.justifiesParagraphs:
+    paragraphAttributes.paragraphStyle.alignment = taJustified
+  builder.renderInlineChildren(token, paragraphAttributes, skipPrefixBytes)
   if builder.runeLength > start:
     builder.navigationItems.add MarkdownNavigationItem(
       range: initTextRange(start, builder.runeLength - start),
@@ -1238,6 +1246,24 @@ func taskListMarker(item: markdownParser.Li): tuple[symbol: string, prefixBytes:
   while result.prefixBytes < source.len and source[result.prefixBytes] in Whitespace:
     inc result.prefixBytes
 
+var listPrefixWidths {.threadvar.}: Table[Hash, float32]
+
+proc listPrefixWidth(prefix: string, attributes: TextAttributes): float32 =
+  ## Advance of a list item's indentation and marker, where its text begins.
+  var measured = attributes
+  measured.paragraphStyle = initTextParagraphStyle(lineBreakMode = tlbmClipping)
+  let key =
+    hash((prefix, measured.fontName, measured.fontFace.file.path, measured.fontSize))
+  if key in listPrefixWidths:
+    return listPrefixWidths[key]
+  let layout = textLayoutForMeasurement(
+    rect(0.0'f32, 0.0'f32, 10_000.0'f32, max(measured.fontSize * 4.0'f32, 100.0'f32)),
+    newTextStorage(prefix, measured),
+  )
+  for glyph in layout.arrangedGlyphs:
+    result += glyph.advance[0]
+  listPrefixWidths[key] = result
+
 proc renderListItem(
     builder: var MarkdownBuilder,
     item: markdownParser.Li,
@@ -1256,9 +1282,14 @@ proc renderListItem(
         marker & " " & task.symbol
     indentation = " ".repeat(max(depth * builder.style.listIndent, 0))
     continuation = indentation & " ".repeat(itemMarker.runeLen + 1)
-  var markerAttributes = attributes
+    prefix = indentation & itemMarker & " "
+  # Wrapped lines hang under the item text instead of returning to the margin.
+  var itemAttributes = attributes
+  itemAttributes.paragraphStyle.headIndent =
+    attributes.paragraphStyle.firstLineHeadIndent + prefix.listPrefixWidth(attributes)
+  var markerAttributes = itemAttributes
   markerAttributes.foregroundColor = builder.style.mutedColor
-  builder.add(indentation & itemMarker & " ", markerAttributes)
+  builder.add(prefix, markerAttributes)
 
   var first = true
   for child in item.children:
@@ -1271,13 +1302,14 @@ proc renderListItem(
     else:
       if child of markdownParser.CodeBlock or builder.endsWithCodeBlock():
         builder.addBlockBreak(attributes)
-        builder.add(continuation, attributes)
+        builder.add(continuation, itemAttributes)
       elif not first:
-        builder.add("\n" & continuation, attributes)
+        builder.add("\n", attributes)
+        builder.add(continuation, itemAttributes)
       if first and task.prefixBytes > 0:
-        builder.renderParagraph(child, attributes, task.prefixBytes)
+        builder.renderParagraph(child, itemAttributes, task.prefixBytes)
       else:
-        builder.renderBlock(child, attributes)
+        builder.renderBlock(child, itemAttributes)
     first = false
 
 proc renderList(
@@ -1474,6 +1506,12 @@ func fittedTableWidths(
     if not distributed:
       break
 
+func withRowBackground(attributes: TextAttributes, background: Color): TextAttributes =
+  ## Shade a striped table row unless the text already has its own background.
+  result = attributes
+  if background.a > 0.0'f32 and result.backgroundColor.a == 0.0'f32:
+    result.backgroundColor = background
+
 proc addTableCellLine(
     builder: var MarkdownBuilder,
     cell: MarkdownTableCell,
@@ -1481,7 +1519,9 @@ proc addTableCellLine(
     width: int,
     alignment: MarkdownTableAlignment,
     paddingAttributes: TextAttributes,
+    rowBackground: Color,
 ) =
+  let paddingAttributes = paddingAttributes.withRowBackground(rowBackground)
   let padding = max(width - line.width, 0)
   var leftPadding, rightPadding: int
   case alignment
@@ -1496,11 +1536,13 @@ proc addTableCellLine(
     builder.add(" ".repeat(leftPadding), paddingAttributes)
   for word in line.words:
     if word.space >= 0:
-      builder.add(" ", cell.tableAttributes(word.space))
+      builder.add(
+        " ", cell.tableAttributes(word.space).withRowBackground(rowBackground)
+      )
     for index in word.start ..< word.stop:
       let
         start = builder.runeLength
-        attributes = cell.tableAttributes(index)
+        attributes = cell.tableAttributes(index).withRowBackground(rowBackground)
       builder.add($cell.content[index], attributes)
       if attributes.hasAttachment:
         for image in cell.images:
@@ -1582,12 +1624,25 @@ proc renderTable(
     tableStart = builder.runeLength
     tableStartByte = builder.text.len
     tableStartRun = max(builder.runs.len - 1, 0)
-  var separatorAttributes = tableAttributes
+  var
+    separatorAttributes = tableAttributes
+    stripeColor = builder.style.ruleColor
+    bodyRowIndex = 0
   separatorAttributes.foregroundColor = builder.style.ruleColor
+  stripeColor.a = MarkdownTableStripeAlpha
 
   for rowIndex, row in rows:
     if rowIndex > 0:
       builder.add("\n", tableAttributes)
+    # Shade every other body row so wrapped multi-line rows stay distinct.
+    let rowBackground =
+      if not row.header and bodyRowIndex mod 2 == 1:
+        stripeColor
+      else:
+        Color()
+    if not row.header:
+      inc bodyRowIndex
+    let rowSeparatorAttributes = separatorAttributes.withRowBackground(rowBackground)
     var
       wrappedCells = newSeq[seq[MarkdownTableLine]](columnCount)
       rowHeight = 1
@@ -1603,7 +1658,7 @@ proc renderTable(
         builder.add("\n", tableAttributes)
       for columnIndex in 0 ..< columnCount:
         if columnIndex > 0:
-          builder.add(" │ ", separatorAttributes)
+          builder.add(" │ ", rowSeparatorAttributes)
         let
           cellExists = columnIndex < row.cells.len
           lineExists = lineIndex < wrappedCells[columnIndex].len
@@ -1624,9 +1679,13 @@ proc renderTable(
             widths[columnIndex],
             alignment,
             paddingAttributes,
+            rowBackground,
           )
         else:
-          builder.add(" ".repeat(widths[columnIndex]), paddingAttributes)
+          builder.add(
+            " ".repeat(widths[columnIndex]),
+            paddingAttributes.withRowBackground(rowBackground),
+          )
 
     if row.header:
       builder.add("\n", tableAttributes)
@@ -2666,7 +2725,12 @@ proc markdownTableCharacterWidth(view: MarkdownView): float32 =
     fontFace: view.xMarkdownStyle.codeFontFace,
     fontSize: max(view.xMarkdownStyle.bodyFontSize * MarkdownTableFontScale, 1.0'f32),
   )
-  max(textNaturalSize("M", codeStyle).width, 1.0'f32)
+  # Natural sizes include fixed overhead beyond the glyph advances, so measure
+  # the per-character step between two runs instead of a single character.
+  let
+    short = textNaturalSize("M".repeat(10), codeStyle).width
+    long = textNaturalSize("M".repeat(20), codeStyle).width
+  max((long - short) / 10.0'f32, 1.0'f32)
 
 proc markdownTableColumnLimit(view: MarkdownView): int =
   if view.isNil:

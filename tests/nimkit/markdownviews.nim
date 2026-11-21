@@ -1022,6 +1022,58 @@ sibling body
         paragraph.paragraphStyle.firstLineHeadIndent
     check storage.attributesFor(style.thematicBreak).paragraphStyle.headIndent == 0
 
+  test "justified Markdown style justifies only paragraph text":
+    var style = initMarkdownStyle()
+    style.justifiesParagraphs = true
+    let
+      source =
+        "# Title words\n\nBody paragraph text.\n\n> Quoted text.\n\n- Listed item\n\n```\ncode line\n```\n"
+      justified = markdownTextStorage(source, style)
+      natural = markdownTextStorage(source)
+    for text in ["Body paragraph", "Quoted text"]:
+      check justified.attributesFor(text).paragraphStyle.alignment == taJustified
+      check natural.attributesFor(text).paragraphStyle.alignment == taLeft
+    for text in ["Title words", "code line"]:
+      check justified.attributesFor(text).paragraphStyle.alignment == taLeft
+    let listed = justified.stringValue().runeIndexOf("Listed item")
+    require listed > 0
+    # The marker leads the list item's paragraph, so it keeps natural alignment.
+    check justified.attributesAt(listed - 2).paragraphStyle.alignment == taLeft
+
+  test "list item wrapped lines hang under the item text":
+    let storage = markdownTextStorage(
+      "- bullet text\n  - nested text\n\n1. ordered text\n\n- [ ] task text\n\nafter"
+    )
+    for text in ["bullet text", "nested text", "ordered text", "task text"]:
+      let paragraph = storage.attributesFor(text).paragraphStyle
+      check paragraph.headIndent > paragraph.firstLineHeadIndent
+    let
+      bullet = storage.attributesFor("bullet text").paragraphStyle.headIndent
+      nested = storage.attributesFor("nested text").paragraphStyle.headIndent
+      marker = storage.attributesAt(0).paragraphStyle.headIndent
+    check nested > bullet
+    # The marker leads the paragraph, so its style must carry the hanging indent.
+    check marker == bullet
+    check storage.attributesFor("after").paragraphStyle.headIndent == 0
+
+  test "wrapped list items align continuation lines with their text":
+    let
+      storage = markdownTextStorage(
+        "- " & "wrapping list item words ".repeat(12).strip() & "\n"
+      )
+      layout = textLayout(rect(0, 0, 220, 2000), storage, wrap = true)
+    require layout.lines.len > 2
+    proc firstInkX(line: Slice[int]): float32 =
+      result = high(float32)
+      for index in line:
+        let glyph = layout.arrangedGlyphs[index]
+        if not glyph.isWhitespace and glyph.rune != "•".runeAt(0):
+          return glyph.pos[0]
+
+    let textStart = firstInkX(layout.lines[0])
+    for line in layout.lines[1 .. ^1]:
+      check abs(firstInkX(line) - textStart) <= 1.0
+
   test "nested Unicode block quotes indent each level":
     let
       style = initMarkdownStyle()
@@ -2063,6 +2115,46 @@ Press <kbd>Enter</kbd>.
     check tableScrollViews[0].contentOffset().x > 0.0'f32
     check tableScrollViews[1].contentOffset().x == 0.0'f32
     check view.scrollView().maximumContentOffset().x == 0.0'f32
+
+  test "GFM tables use most of the viewport before wrapping cells":
+    let fontPath = RepositoryRoot / "deps/figdraw/data/HackNerdFont-Regular.ttf"
+    require fileExists(fontPath)
+    let monospace = initSystemTypeface(fontPath)
+    var style = initMarkdownStyle()
+    style.codeFontFace = monospace
+    style.strongCodeFontFace = monospace
+    let
+      source = """
+| Operation, 100 rows | P0 (ms) | P7 (ms) |
+| --- | ---: | ---: |
+| Full rebuilt no-op / full direct recomposition | 1.066 | 0.507 |
+| Title update (full P0 vs one-row P7 binding) | 1.064 | 0.0086 |
+"""
+      view = newMarkdownView(source, frame = rect(0, 0, 800, 400), style = style)
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownRendering()
+    let lines = view.textStorage().stringValue().splitLines()
+    # One line per row plus the header rule: no cell needed to wrap.
+    require lines.len == 4
+    check lines[2].contains("Full rebuilt no-op / full direct recomposition")
+
+  test "GFM table body rows alternate a subtle stripe":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        "| Name | Value |\n| - | - |\n| first | 1 |\n| second | 2 |\n| third | 3 |"
+      )
+    check storage.attributesFor("Name").backgroundColor.a == 0
+    check storage.attributesFor("first").backgroundColor.a == 0
+    check storage.attributesFor("third").backgroundColor.a == 0
+    let stripe = storage.attributesFor("second").backgroundColor
+    check stripe.a > 0 and stripe.a < 0.5
+    check stripe.r == style.ruleColor.r
+    let secondRow = storage.stringValue().splitLines()[3]
+    check secondRow.contains("second")
+    let rowStart = storage.stringValue().runeIndexOf(secondRow)
+    for offset in 0 ..< secondRow.runeLen:
+      check storage.attributesAt(rowStart + offset).backgroundColor == stripe
 
   test "GFM tables reflow once the Markdown viewport settles":
     let

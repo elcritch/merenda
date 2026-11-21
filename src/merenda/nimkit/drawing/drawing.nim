@@ -332,7 +332,7 @@ proc translationNode(rect: nimkitTypes.Rect, translation: nimkitTypes.Point): Fi
 
 proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
   case alignment
-  of taLeft: Left
+  of taLeft, taJustified: Left
   of taCenter: Center
   of taRight: Right
 
@@ -589,21 +589,22 @@ proc fontStyleForAttributes(attributes: TextAttributes, style: TextStyle): FontS
   font.underline = attributes.hasUnderline
   font.strikethrough = attributes.hasStrikethrough
   # Spacing and alignment stay with the layout manager; FigDraw applies the
-  # indents that shape each wrapped line's measure. Character wrapping breaks
-  # words with no shaping-safe point instead of letting them overflow.
-  fs(
-    font,
-    fill(attributes.foregroundColor.rgba),
-    ParagraphStyle(
-      firstLineIndent: attributes.paragraphStyle.firstLineHeadIndent,
-      headIndent: attributes.paragraphStyle.headIndent,
-      overflowWrap:
-        if attributes.paragraphStyle.lineBreakMode == tlbmCharWrapping:
-          owAnywhere
-        else:
-          owNormal,
-    ),
+  # indents that shape each wrapped line's measure and justifies paragraphs
+  # with optimal line breaking. Character wrapping breaks words with no
+  # shaping-safe point instead of letting them overflow.
+  var paragraph = ParagraphStyle(
+    firstLineIndent: attributes.paragraphStyle.firstLineHeadIndent,
+    headIndent: attributes.paragraphStyle.headIndent,
+    overflowWrap:
+      if attributes.paragraphStyle.lineBreakMode == tlbmCharWrapping:
+        owAnywhere
+      else:
+        owNormal,
   )
+  if attributes.paragraphStyle.alignment == taJustified:
+    paragraph.align = paJustify
+    paragraph.lineBreaking = plbOptimal
+  fs(font, fill(attributes.foregroundColor.rgba), paragraph)
 
 proc applyTextColors*(
     layout: var GlyphArrangement, storage: TextStorage, sourceOffset = 0

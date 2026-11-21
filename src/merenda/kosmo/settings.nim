@@ -23,6 +23,9 @@ const
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoTextMateGrammarsSettingsTabIdentifier* = "kosmo.settings.textMateGrammars"
+  KosmoMarkdownSettingsTabIdentifier* = "kosmo.settings.markdown"
+  KosmoJustifyMarkdownIdentifier* = "kosmo.settings.markdown.justify"
+  KosmoJustifyMarkdownAction* = "kosmo.justifyMarkdownChanged"
   KosmoPreferEditorPanesIdentifier* = "kosmo.settings.terminal.preferEditorPanes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoTerminalLinksIdentifier* = "kosmo.settings.terminal.links"
@@ -131,6 +134,7 @@ type
     xOptionAsMetaHandler: KosmoOptionAsMetaHandler
     xTerminalLinksButton: nimkit.Button
     xTerminalLinksHandler: KosmoTerminalLinksHandler
+    xJustifyMarkdownButton: nimkit.Button
     xTerminalInputPolicyChoice: nimkit.ComboBox
     xTerminalInputPolicyHandler: KosmoTerminalInputPolicyHandler
     xTabs: nimkit.TabView
@@ -794,6 +798,15 @@ proc `optionAsMeta=`*(settings: KosmoSettingsWindow, enabled: bool) =
   if not settings.isNil:
     settings.xOptionAsMetaButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
 
+proc justifyMarkdown*(settings: KosmoSettingsWindow): bool =
+  ## Return whether the Markdown justification checkbox is selected.
+  not settings.isNil and settings.xJustifyMarkdownButton.state == nimkit.bsOn
+
+proc `justifyMarkdown=`*(settings: KosmoSettingsWindow, enabled: bool) =
+  ## Update the Markdown justification checkbox without invoking its action.
+  if not settings.isNil:
+    settings.xJustifyMarkdownButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
+
 proc terminalLinksEnabled*(settings: KosmoSettingsWindow): bool =
   ## Return whether modifier-hover and modifier-click terminal links are enabled.
   not settings.isNil and settings.xTerminalLinksButton.state == nimkit.bsOn
@@ -930,6 +943,8 @@ proc newKosmoSettingsWindow*(
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
     terminalLinksEnabled = true,
     terminalLinksHandler: KosmoTerminalLinksHandler = nil,
+    justifyMarkdown = false,
+    justifyMarkdownTarget: nimkit.ActionAdapter = nil,
     terminalInputPolicy = KosmoTerminalInputPolicy.Hybrid,
     terminalInputPolicyHandler: KosmoTerminalInputPolicyHandler = nil,
     shortcutProfile = defaultKosmoShortcutProfile(),
@@ -993,6 +1008,8 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     textMateGrammarsPage = newSettingsPage()
+    markdownPage = newSettingsPage()
+    justifyMarkdownButton = nimkit.newCheckBox("Justify paragraphs")
     grammarInstallerPage = newSettingsPage()
     grammarInstallerButtons = nimkit.newStackView(nimkit.laHorizontal)
     installMoreGrammars = nimkit.newButton("Install more…")
@@ -1040,6 +1057,7 @@ proc newKosmoSettingsWindow*(
   result.xPreferEditorPanesButton = preferEditorPanesButton
   result.xOptionAsMetaButton = optionButton
   result.xTerminalLinksButton = terminalLinksButton
+  result.xJustifyMarkdownButton = justifyMarkdownButton
   result.xTerminalInputPolicyChoice = terminalInputPolicyChoice
   result.xFirstResponder = optionButton
   result.xTabs = tabs
@@ -1192,6 +1210,21 @@ proc newKosmoSettingsWindow*(
     ),
   )
   terminalPage.stack.addFlexibleSpacer()
+
+  justifyMarkdownButton.identifier = KosmoJustifyMarkdownIdentifier
+  justifyMarkdownButton.accessibilityLabel = "Justify Markdown paragraphs"
+  settings.justifyMarkdown = justifyMarkdown
+  justifyMarkdownButton.target = justifyMarkdownTarget
+  justifyMarkdownButton.action = nimkit.actionSelector(KosmoJustifyMarkdownAction)
+  markdownPage.stack.addArrangedSubview(
+    nimkit.newHeadingLabel("Markdown"),
+    justifyMarkdownButton,
+    nimkit.newLabel(
+      "Uses Knuth-Plass line breaking to even out word spacing in paragraphs."
+    ),
+    nimkit.newLabel("Headings, lists, tables, and code stay left aligned."),
+  )
+  markdownPage.stack.addFlexibleSpacer()
 
   shortcutProfileChoice.identifier = KosmoShortcutProfileIdentifier
   shortcutProfileChoice.accessibilityLabel = "Shortcut profile"
@@ -1548,6 +1581,11 @@ proc newKosmoSettingsWindow*(
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
       "Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier
+    )
+  )
+  discard tabs.addTabViewItem(
+    nimkit.newTabViewItem(
+      "Markdown", markdownPage.view, KosmoMarkdownSettingsTabIdentifier
     )
   )
   discard tabs.addTabViewItem(

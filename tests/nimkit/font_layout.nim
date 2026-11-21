@@ -480,6 +480,38 @@ suite "nimkit font layout":
         )
       check right <= width + 0.5
 
+  test "justified paragraphs fill the measure except their last line":
+    const Prose =
+      "Typesetting justified text spreads the spaces between words so that " &
+      "every full line of a paragraph reaches the right margin while the " &
+      "final line keeps its natural spacing at the leading edge."
+    proc inkRights(alignment: TextAlignment, width: float32): seq[float32] =
+      var attributes = defaultTextAttributes()
+      attributes.paragraphStyle.alignment = alignment
+      let layout = textLayout(
+        rect(0, 0, width, 800), newTextStorage(Prose, attributes), wrap = true
+      )
+      for line in layout.lines:
+        var right = 0.0'f32
+        for index in line:
+          let glyph = layout.arrangedGlyphs[index]
+          if not glyph.isWhitespace:
+            right = max(right, glyph.rect.x + glyph.rect.w)
+        result.add right
+
+    let
+      width = 180.0'f32
+      justified = inkRights(taJustified, width)
+      ragged = inkRights(taLeft, width)
+    require justified.len > 2
+    for right in justified[0 ..< ^1]:
+      check abs(right - width) <= 1.0
+    check justified[^1] < width - 1.0
+    var raggedShortfall = 0.0'f32
+    for right in ragged[0 ..< ^1]:
+      raggedShortfall = max(raggedShortfall, width - right)
+    check raggedShortfall > 1.0
+
   test "centered label layout reports content bounds as local dimensions":
     let
       textRect = rect(12.0, 0.0, 640.0, 28.0)

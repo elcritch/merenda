@@ -187,6 +187,14 @@ proc configuredReaderTheme(
       if not controller.frontend.isNil:
         result = controller.frontend[].xRichTextThemes[target]
 
+proc configuredJustifyMarkdown(controls: KosmoMarkdownControls): bool =
+  if not controls.isNil and not controls.editorView.isNil:
+    let view = controls.editorView[]
+    if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
+      let controller = view.tabsDelegate.dockController[]
+      if not controller.frontend.isNil:
+        result = controller.frontend[].xJustifyMarkdown
+
 func readerColorMode(background: nimkit.Color): KosmoMarkdownColorMode =
   let luminance =
     0.2126'f32 * background.r + 0.7152'f32 * background.g + 0.0722'f32 * background.b
@@ -256,6 +264,7 @@ proc markdownPresentationStyle*(
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
     scale = fontSize / KosmoMarkdownDefaultFontSize
   result.bodyFontSize = fontSize
+  result.justifiesParagraphs = controls.configuredJustifyMarkdown()
   if not controls.isNil:
     let
       appearance = controls.effectiveAppearance()

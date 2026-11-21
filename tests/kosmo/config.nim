@@ -551,6 +551,33 @@ suite "Kosmo configuration":
       check restored.terminalOptionAsMeta == enabled
       reloaded.close()
 
+  test "Markdown justification persists across windows and application instances":
+    let
+      root = createTempDir("kosmo-justify-markdown-setting-", "")
+      path = root / "config.json"
+      app = newApplication("Justify Markdown setting")
+      manager = newKosmoWindowManager(app, configPath = path)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    check not frontend.justifyMarkdown
+    check not second.editorPane.markdownControls.markdownPresentationStyle().justifiesParagraphs
+    for enabled in [true, false]:
+      frontend.justifyMarkdown = enabled
+      check second.justifyMarkdown == enabled
+      for target in [KosmoThemeTarget.Markdown, KosmoThemeTarget.GitHub]:
+        check second.editorPane.markdownControls.markdownPresentationStyle(target).justifiesParagraphs ==
+          enabled
+      check loadKosmoConfig(path).justifyMarkdown == enabled
+      let reloaded = newKosmoWindowManager(
+        newApplication("Reload Justify Markdown"), configPath = path
+      )
+      let restored = newKosmoApplication(reloaded, monitorsGitStatus = false)
+      check restored.justifyMarkdown == enabled
+      reloaded.close()
+
   test "ignores malformed JSON configuration":
     let
       root = createTempDir("merenda-kosmo-invalid-config-", "")

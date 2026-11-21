@@ -6,6 +6,24 @@
   Sigils worker pool by default. Enable the Atlas `chronos` feature to use
   Chronos for downloads and timers. Standalone projects can enable threaded
   terminal views with the `terminal` feature. Kosmo includes them.
+- Add `TextAlignment.taJustified`. Paragraphs with this alignment stretch
+  inter-word spaces to fill the measure and use FigDraw's optimal
+  (Knuth-Plass) line breaking.
+- Add `MarkdownStyle.justifiesParagraphs` to justify Markdown paragraph and
+  quote text, and a Kosmo Markdown settings tab that toggles it for Markdown
+  and GitHub readers and persists it as `justifyMarkdown`.
+- Fix Markdown tables wrapping at about half the available width: the
+  column limit measured one character with fixed layout overhead, nearly
+  doubling the character width. Tables now fill most of the viewport before
+  wrapping cells.
+- Shade every other Markdown table body row so wrapped multi-line rows are
+  easy to tell apart.
+- Hang wrapped Markdown list item lines under the item text instead of the
+  left margin, for bullet, ordered, task, and nested lists.
+- Fix toolbar icons, such as the Kosmo Git diff refresh button, that could
+  vanish in one window after its image atlas was rebuilt while the icon was off
+  screen. Render preparation now restores live images missing from a renderer's
+  atlas, not only after an atlas generation change.
 - Require FigDraw 0.48.3 or newer.
 - Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
   and other viewport-rendered text.

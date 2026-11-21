@@ -343,8 +343,9 @@ suite "Kosmo GitHub Markdown viewer":
     check "Fix" notin markdown
 
   test "GitHub forwards reading scroll and Markdown section navigation after host shortcuts":
+    const paragraph = "A long issue paragraph."
     var snapshot = sampleSnapshot()
-    snapshot.items[0].body = "A long issue paragraph.\n\n".repeat(50)
+    snapshot.items[0].body = (paragraph & "\n\n").repeat(50)
     let
       panel = newKosmoGitHubPanel(snapshot)
       window = newWindow("GitHub keyboard navigation", frame = rect(0, 0, 600, 280))
@@ -353,7 +354,11 @@ suite "Kosmo GitHub Markdown viewer":
       window.close()
     window.setContentView(panel)
     require panel.waitForGitHub()
-    panel.markdownView.expandMarkdownHeadings()
+    let issueHeading = panel.headingStartingWith("#7 ")
+    require not issueHeading.isNil
+    require issueHeading.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
+    require paragraph in panel.markdownView.textStorage().stringValue()
     panel.layoutSubtreeIfNeeded()
     let scroll = panel.markdownView.scrollView()
     require scroll.maximumContentOffset().y > 64
@@ -383,14 +388,19 @@ suite "Kosmo GitHub Markdown viewer":
     require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
     let heading = panel.markdownView.textView().selectedText()
     require heading.len > 0
-    let expandedLength = panel.markdownView.textStorage().len
+    let disclosure = panel.headingStartingWith(heading)
+    require not disclosure.isNil
+    require disclosure.accessibilityValue() == "expanded"
     require window.dispatchKeyDown(KeyEvent(key: keyEnter))
     require panel.waitForGitHub()
-    check panel.markdownView.textStorage().len < expandedLength
+    check disclosure.accessibilityValue() == "collapsed"
+    check paragraph notin panel.markdownView.textStorage().stringValue()
     check panel.markdownView.textView().selectedText() == heading
     require window.dispatchKeyDown(KeyEvent(key: keyEnter))
     require panel.waitForGitHub()
-    check panel.markdownView.textStorage().len == expandedLength
+    check disclosure.accessibilityValue() == "expanded"
+    check panel.markdownView.textView().selectedText() == heading
+    check panel.markdownView.textStorage().stringValue().count(paragraph) == 50
 
   test "offline document supports filters, native find, and tab close":
     let frontend =

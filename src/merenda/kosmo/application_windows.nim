@@ -296,6 +296,40 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
         target.applyTerminalOptionAsMeta(enabled)
     discard manager.config.saveKosmoConfig(manager.configPath)
 
+func justifyMarkdown*(frontend: KosmoApplication): bool =
+  ## Return whether Markdown readers justify paragraphs with optimal breaking.
+  not frontend.isNil and frontend.xJustifyMarkdown
+
+proc applyJustifyMarkdown(frontend: KosmoApplication, enabled: bool) =
+  frontend.xJustifyMarkdown = enabled
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.justifyMarkdown = enabled
+  if frontend.dockController.isNil:
+    return
+  for group in frontend.dockController.groups:
+    let
+      pane = group.pane
+      reader = pane.contentView
+      target = reader.readerTarget()
+    if target.isSome:
+      reader.applyReaderStyle(
+        pane.markdownControls.markdownPresentationStyle(target.get)
+      )
+
+proc `justifyMarkdown=`*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply and persist Markdown justification across current and future windows.
+  if frontend.isNil:
+    return
+  if frontend.xWindowManager.isNil:
+    frontend.applyJustifyMarkdown(enabled)
+  else:
+    let manager = frontend.xWindowManager{}
+    manager.config.justifyMarkdown = enabled
+    for target in manager.frontends:
+      if not target.xClosed:
+        target.applyJustifyMarkdown(enabled)
+    discard manager.config.saveKosmoConfig(manager.configPath)
+
 func terminalLinksEnabled*(frontend: KosmoApplication): bool =
   ## Return whether modifier-hover and modifier-click terminal links are enabled.
   not frontend.isNil and frontend.xTerminalLinksEnabled
@@ -615,6 +649,12 @@ protocol KosmoNimdexSettingsTargetMethods of KosmoNimdexSettingsDelegate:
           manager.configPath.len > 0:
         return "Connecting; could not save the setting."
 
+proc changeJustifyMarkdown(
+    lifecycle: KosmoWindowLifecycle, sender: nimkit.DynamicAgent
+) {.nimcall.} =
+  if not lifecycle.frontend.isNil and sender of nimkit.Button:
+    lifecycle.frontend[].justifyMarkdown = nimkit.Button(sender).state == nimkit.bsOn
+
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present Kosmo's application settings without Merenda's global settings pages.
   if frontend.isNil or frontend.application.isNil:
@@ -663,6 +703,12 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           weakFrontend[].terminalLinksEnabled = enabled
       ,
+      justifyMarkdown = frontend.xJustifyMarkdown,
+      justifyMarkdownTarget = nimkit.newActionTarget(
+        nimkit.actionSelector(KosmoJustifyMarkdownAction),
+        frontend.xWindowLifecycle,
+        changeJustifyMarkdown,
+      ),
       terminalInputPolicy = frontend.xTerminalInputPolicy,
       terminalInputPolicyHandler = proc(policy: KosmoTerminalInputPolicy) =
         if not weakFrontend.isNil:
@@ -708,6 +754,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled
     frontend.xSettingsWindow.terminalInputPolicy = frontend.xTerminalInputPolicy
+    frontend.xSettingsWindow.justifyMarkdown = frontend.xJustifyMarkdown
     frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings,
@@ -1599,6 +1646,7 @@ proc newKosmoApplication*(
     xPreferEditorPanes: manager.config.preferEditorPanes,
     xTerminalOptionAsMeta: manager.config.terminalOptionAsMeta,
     xTerminalLinksEnabled: true,
+    xJustifyMarkdown: manager.config.justifyMarkdown,
     xTerminalInputPolicy: parseTerminalInputPolicy(manager.config.terminalInput),
     xHasFileBrowser: hasFileBrowser,
     xCliWindowId: randomIdentifier(),

@@ -298,6 +298,52 @@ suite "Kosmo Markdown activation":
     check not left.markdownDocumentOwner().isNil
     check left.markdownDocumentOwner() == right.markdownDocumentOwner()
 
+  test "justification updates a visible preview while another pane is in Insert mode":
+    let
+      root = createTempDir("kosmo-justify-split-preview-", "")
+      markdownPath = root / "reader.md"
+      codePath = root / "editor.nim"
+      manager = newKosmoWindowManager(
+        newApplication("Justify split preview"), configPath = root / "config.json"
+      )
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    writeFile(markdownPath, "A paragraph.\n")
+    writeFile(codePath, "let example = 1\n")
+    frontend.setForceInputMode(false)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 600)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(markdownPath)
+    let preview = frontend.editorPane.markdownView
+    require preview.waitForMarkdownParsing()
+    require frontend.window.makeFirstResponder(preview)
+    discard frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+    require frontend.editorGroups().len == 2
+    require frontend.openPath(codePath)
+
+    let editor = frontend.editorView.editor
+    discard editor.handleKey("Esc")
+    require editor.handleKey("i")
+    require editor.mode() == KosmoEditorMode.Insert
+    var reader: MarkdownView
+    for group in frontend.editorGroups():
+      if group.pane.contentView == View(group.pane.markdownView):
+        require reader.isNil
+        reader = group.pane.markdownView
+    require not reader.isNil
+    require reader.waitForMarkdownParsing()
+    check reader.textStorage().attributesAt(0).paragraphStyle.alignment == taLeft
+    frontend.justifyMarkdown = true
+    require reader.waitForMarkdownRendering()
+    check reader.textStorage().attributesAt(0).paragraphStyle.alignment == taJustified
+    check editor.mode() == KosmoEditorMode.Insert
+    frontend.justifyMarkdown = false
+    require reader.waitForMarkdownRendering()
+    check reader.textStorage().attributesAt(0).paragraphStyle.alignment == taLeft
+
   test "closing a pending preview cannot restore stale content on reopen":
     let
       root = createTempDir("kosmo-markdown-pending-close-", "")
