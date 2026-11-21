@@ -1040,6 +1040,40 @@ sibling body
     # The marker leads the list item's paragraph, so it keeps natural alignment.
     check justified.attributesAt(listed - 2).paragraphStyle.alignment == taLeft
 
+  test "list item wrapped lines hang under the item text":
+    let storage = markdownTextStorage(
+      "- bullet text\n  - nested text\n\n1. ordered text\n\n- [ ] task text\n\nafter"
+    )
+    for text in ["bullet text", "nested text", "ordered text", "task text"]:
+      let paragraph = storage.attributesFor(text).paragraphStyle
+      check paragraph.headIndent > paragraph.firstLineHeadIndent
+    let
+      bullet = storage.attributesFor("bullet text").paragraphStyle.headIndent
+      nested = storage.attributesFor("nested text").paragraphStyle.headIndent
+      marker = storage.attributesAt(0).paragraphStyle.headIndent
+    check nested > bullet
+    # The marker leads the paragraph, so its style must carry the hanging indent.
+    check marker == bullet
+    check storage.attributesFor("after").paragraphStyle.headIndent == 0
+
+  test "wrapped list items align continuation lines with their text":
+    let
+      storage = markdownTextStorage(
+        "- " & "wrapping list item words ".repeat(12).strip() & "\n"
+      )
+      layout = textLayout(rect(0, 0, 220, 2000), storage, wrap = true)
+    require layout.lines.len > 2
+    proc firstInkX(line: Slice[int]): float32 =
+      result = high(float32)
+      for index in line:
+        let glyph = layout.arrangedGlyphs[index]
+        if not glyph.isWhitespace and glyph.rune != "•".runeAt(0):
+          return glyph.pos[0]
+
+    let textStart = firstInkX(layout.lines[0])
+    for line in layout.lines[1 .. ^1]:
+      check abs(firstInkX(line) - textStart) <= 1.0
+
   test "nested Unicode block quotes indent each level":
     let
       style = initMarkdownStyle()

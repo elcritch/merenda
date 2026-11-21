@@ -1244,6 +1244,24 @@ func taskListMarker(item: markdownParser.Li): tuple[symbol: string, prefixBytes:
   while result.prefixBytes < source.len and source[result.prefixBytes] in Whitespace:
     inc result.prefixBytes
 
+var listPrefixWidths {.threadvar.}: Table[Hash, float32]
+
+proc listPrefixWidth(prefix: string, attributes: TextAttributes): float32 =
+  ## Advance of a list item's indentation and marker, where its text begins.
+  var measured = attributes
+  measured.paragraphStyle = initTextParagraphStyle(lineBreakMode = tlbmClipping)
+  let key =
+    hash((prefix, measured.fontName, measured.fontFace.file.path, measured.fontSize))
+  if key in listPrefixWidths:
+    return listPrefixWidths[key]
+  let layout = textLayoutForMeasurement(
+    rect(0.0'f32, 0.0'f32, 10_000.0'f32, max(measured.fontSize * 4.0'f32, 100.0'f32)),
+    newTextStorage(prefix, measured),
+  )
+  for glyph in layout.arrangedGlyphs:
+    result += glyph.advance[0]
+  listPrefixWidths[key] = result
+
 proc renderListItem(
     builder: var MarkdownBuilder,
     item: markdownParser.Li,
@@ -1262,9 +1280,14 @@ proc renderListItem(
         marker & " " & task.symbol
     indentation = " ".repeat(max(depth * builder.style.listIndent, 0))
     continuation = indentation & " ".repeat(itemMarker.runeLen + 1)
-  var markerAttributes = attributes
+    prefix = indentation & itemMarker & " "
+  # Wrapped lines hang under the item text instead of returning to the margin.
+  var itemAttributes = attributes
+  itemAttributes.paragraphStyle.headIndent =
+    attributes.paragraphStyle.firstLineHeadIndent + prefix.listPrefixWidth(attributes)
+  var markerAttributes = itemAttributes
   markerAttributes.foregroundColor = builder.style.mutedColor
-  builder.add(indentation & itemMarker & " ", markerAttributes)
+  builder.add(prefix, markerAttributes)
 
   var first = true
   for child in item.children:
@@ -1277,13 +1300,14 @@ proc renderListItem(
     else:
       if child of markdownParser.CodeBlock or builder.endsWithCodeBlock():
         builder.addBlockBreak(attributes)
-        builder.add(continuation, attributes)
+        builder.add(continuation, itemAttributes)
       elif not first:
-        builder.add("\n" & continuation, attributes)
+        builder.add("\n", attributes)
+        builder.add(continuation, itemAttributes)
       if first and task.prefixBytes > 0:
-        builder.renderParagraph(child, attributes, task.prefixBytes)
+        builder.renderParagraph(child, itemAttributes, task.prefixBytes)
       else:
-        builder.renderBlock(child, attributes)
+        builder.renderBlock(child, itemAttributes)
     first = false
 
 proc renderList(

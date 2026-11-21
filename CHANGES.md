@@ -12,6 +12,8 @@
 - Add `MarkdownStyle.justifiesParagraphs` to justify Markdown paragraph and
   quote text, and a Kosmo Markdown settings tab that toggles it for Markdown
   and GitHub readers and persists it as `justifyMarkdown`.
+- Hang wrapped Markdown list item lines under the item text instead of the
+  left margin, for bullet, ordered, task, and nested lists.
 - Fix toolbar icons, such as the Kosmo Git diff refresh button, that could
   vanish in one window after its image atlas was rebuilt while the icon was off
   screen. Render preparation now restores live images missing from a renderer's
