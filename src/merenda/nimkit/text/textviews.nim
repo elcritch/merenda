@@ -3,6 +3,7 @@ import std/[hashes, math, options, strutils, unicode]
 from figdraw import
   GlyphArrangement, glyphArrangementView, lineGlyphRanges, shareGlyphArrangement, len,
   `[]`, sourceRuneRange
+from pkg/vmath import x, y
 import threading/smartptrs
 
 import sigils/core
@@ -2849,8 +2850,10 @@ proc glyphLineRevision(
       value = value !& hash(glyph.fontId)
       value = value !& hash(uint32(glyph.glyphId))
       value = value !& hash(glyph.isWhitespace)
-      value = value !& hash(repr(glyph.pos))
-      value = value !& hash(repr(glyph.imageOffset))
+      value = value !& hash(glyph.pos.x)
+      value = value !& hash(glyph.pos.y)
+      value = value !& hash(glyph.imageOffset.x)
+      value = value !& hash(glyph.imageOffset.y)
       value = value !& hash(glyph.rect.x)
       value = value !& hash(glyph.rect.y)
       value = value !& hash(glyph.rect.w)
@@ -2858,7 +2861,9 @@ proc glyphLineRevision(
   else:
     for glyphIndex in glyphRange:
       value = value !& hash(layout.runes[glyphIndex])
-      value = value !& hash(repr(layout.positions[glyphIndex]))
+      let position = layout.positions[glyphIndex]
+      value = value !& hash(position.x)
+      value = value !& hash(position.y)
       value = value !& hash(layout.selectionRects[glyphIndex].x)
       value = value !& hash(layout.selectionRects[glyphIndex].y)
       value = value !& hash(layout.selectionRects[glyphIndex].w)
@@ -3036,12 +3041,7 @@ proc drawTextViewTextInViewport*(
   ## Draws only visual lines near the clipped viewport while retaining full layout.
   ## The viewport slot causes scrolling to reconcile entering and leaving line slots.
   textView.updateTextContainer()
-  let
-    viewportRevision = textView.renderSlotRevision(TextViewportRenderSlot)
-    displayStorage = textView.displayTextStorage()
-  discard context.beginRenderSlot(TextViewportRenderSlot, viewportRevision)
-  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
-
+  let displayStorage = textView.displayTextStorage()
   if displayStorage != textView.xTextStorage:
     textView.drawTextViewText(context)
     return
@@ -3055,8 +3055,15 @@ proc drawTextViewTextInViewport*(
   let
     layout = owner[]
     fragments = manager.layoutSnapshot().lineFragments
+    viewportRevision = textView.renderSlotRevision(TextViewportRenderSlot)
+    # Layout and display edits invalidate this revision. Scrolling only changes
+    # which lines to visit, so overlapping slots already have their content hashes.
+    reuseLineRevisions =
+      context.cachedRenderSlotRevision(TextViewportRenderSlot) == viewportRevision
     glyphCount =
       if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
+  discard context.beginRenderSlot(TextViewportRenderSlot, viewportRevision)
+  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
   var index = fragments.firstFragmentEndingAfter(visible.minY)
   while index < fragments.len and fragments[index].fragmentRect.minY <= visible.maxY:
     let fragment = fragments[index]
@@ -3068,7 +3075,16 @@ proc drawTextViewTextInViewport*(
         let
           glyphRange = start .. stop - 1
           slot = textLineRenderSlotId(fragment.lineIndex.toInt)
-          revision = layout.glyphLineRevision(glyphRange, displayStorage)
+          cachedRevision =
+            if reuseLineRevisions:
+              context.cachedRenderSlotRevision(slot)
+            else:
+              0
+          revision =
+            if cachedRevision == 0:
+              layout.glyphLineRevision(glyphRange, displayStorage)
+            else:
+              cachedRevision
         if context.beginRenderSlot(slot, revision):
           discard context.addText(
             textRect, owner.glyphLineArrangement(glyphRange, displayStorage, revision)

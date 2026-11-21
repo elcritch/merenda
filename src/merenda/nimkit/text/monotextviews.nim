@@ -1,8 +1,8 @@
-import std/[hashes, math, unicode]
+import std/[hashes, math, tables, unicode]
 
 from figdraw import
-  FigFont, GlyphTopLeft, Vec2, fill, font, fs, glyphCount, glyphFont, glyphRect,
-  placeGlyphs, rect, typeset, vec2
+  FigFont, GlyphArrangement, GlyphTopLeft, Vec2, figUiScale, fill, font, fs, glyphCount,
+  glyphFont, glyphRect, hash, placeGlyphs, rect, selectedTextBackend, typeset, vec2
 
 import ../accessibility/accessibilityprotocols
 from ../app/windows import Window, makeFirstResponder
@@ -111,9 +111,23 @@ type
     runeLength: int
     revision: uint64
 
+  MonoTextRowRun = object
+    firstColumn, stopColumn: int
+    style: MonoTextCellStyle
+
+  MonoTextRowDrawing = object
+    firstColumn, stopColumn: int
+    lastDraw: uint64
+    runs: seq[MonoTextRowRun]
+    glyphs: seq[tuple[layout: GlyphArrangement, bold: bool]]
+    resources: RenderResourceManifest
+
   MonoTextView* = ref object of View
     xLines: seq[MonoTextLine]
     xNextRowRevision: uint64
+    xRowDrawings: Table[uint64, MonoTextRowDrawing]
+    xRowDrawingStyle: Hash
+    xRowDrawingGeneration: uint64
     xMaxColumns: int
     xEditable: bool
     xForwardedRawEvents: MonoTextRawEventKinds
@@ -1546,17 +1560,15 @@ proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
   )
 
 proc drawRunDecoration(
-    view: MonoTextView,
     context: DrawContext,
-    row, startColumn, endColumn: int,
+    run: MonoTextRowRun,
+    row: int,
     metrics: MonoTextMetrics,
     textInsets: EdgeInsets,
     defaultTextColor: nimkitTypes.Color,
 ) =
-  if endColumn <= startColumn:
-    return
   let
-    firstCell = view.xLines[row].styleAt(startColumn)
+    firstCell = run.style
     baseForegroundColor = firstCell.foreground(defaultTextColor)
     foregroundColor =
       if mttFaint in firstCell.traits:
@@ -1569,9 +1581,9 @@ proc drawRunDecoration(
       else:
         baseForegroundColor
     runRect = rect(
-      textInsets.left + startColumn.float32 * metrics.cellWidth,
+      textInsets.left + run.firstColumn.float32 * metrics.cellWidth,
       textInsets.top + row.float32 * metrics.lineHeight,
-      (endColumn - startColumn).float32 * metrics.cellWidth,
+      (run.stopColumn - run.firstColumn).float32 * metrics.cellWidth,
       metrics.lineHeight,
     )
 
@@ -1615,37 +1627,30 @@ type MonoTextGlyphBatch = object
   bold, italic: bool
   glyphs: seq[(Rune, Vec2)]
 
-proc drawMonoTextRow(
-    view: MonoTextView,
-    context: DrawContext,
-    font: FigFont,
-    row, firstColumn, lastColumn: int,
-    metrics: MonoTextMetrics,
-    textInsets: EdgeInsets,
+proc buildMonoTextRow(
+    line: MonoTextLine,
+    font, italicFont: FigFont,
+    firstColumn, lastColumn: int,
+    cellWidth: float32,
     textColor: nimkitTypes.Color,
-) =
+): MonoTextRowDrawing =
   # A row commonly alternates the same few colors (terminal animations in
   # particular). Batch those glyphs even when their cells are not adjacent.
   # Blank/hidden cells still paint backgrounds and decorations, but need no glyph.
+  result.firstColumn = firstColumn
+  result.stopColumn = lastColumn
   var batches: seq[MonoTextGlyphBatch]
   var column = firstColumn
   while column < lastColumn:
     let
       startColumn = column
-      style = view.xLines[row].styleAt(column)
+      style = line.styleAt(column)
     inc column
-    while column < lastColumn and
-        style.sameRunStyle(view.xLines[row].styleAt(column), textColor):
+    while column < lastColumn and style.sameRunStyle(line.styleAt(column), textColor):
       inc column
-    if style.hasBackgroundColor:
-      discard context.addRectangle(
-        rect(
-          textInsets.left + startColumn.float32 * metrics.cellWidth,
-          textInsets.top + row.float32 * metrics.lineHeight,
-          (column - startColumn).float32 * metrics.cellWidth,
-          metrics.lineHeight,
-        ),
-        fill(style.backgroundColor.rgba),
+    if style.hasBackgroundColor or style.decorations != {}:
+      result.runs.add MonoTextRowRun(
+        firstColumn: startColumn, stopColumn: column, style: style
       )
     if mttHidden notin style.traits:
       var foregroundColor = style.foreground(textColor)
@@ -1661,7 +1666,7 @@ proc drawMonoTextRow(
           batchIndex = index
           break
       for glyphColumn in startColumn ..< column:
-        let rune = view.xLines[row].firstRune(glyphColumn)
+        let rune = line.firstRune(glyphColumn)
         if rune != Rune(' '):
           if batchIndex < 0:
             batchIndex = batches.len
@@ -1669,41 +1674,50 @@ proc drawMonoTextRow(
               color: foregroundColor, bold: bold, italic: italic
             )
           batches[batchIndex].glyphs.add (
-            rune, vec2((glyphColumn - firstColumn).float32 * metrics.cellWidth, 0.0'f32)
+            rune, vec2((glyphColumn - firstColumn).float32 * cellWidth, 0.0'f32)
           )
   for batch in batches:
-    let
-      runFont =
-        if batch.italic:
-          view.monoFont(italic = true)
-        else:
-          font
-      layout =
-        placeGlyphs(fs(runFont, fill(batch.color.rgba)), batch.glyphs, GlyphTopLeft)
-    var rowRect = rect(
-      textInsets.left + firstColumn.float32 * metrics.cellWidth,
-      textInsets.top + row.float32 * metrics.lineHeight,
-      (lastColumn - firstColumn).float32 * metrics.cellWidth,
-      metrics.lineHeight,
-    )
-    discard context.addText(rowRect, layout)
-    if batch.bold:
-      rowRect.x += min(metrics.cellWidth * 0.06'f32, 0.75'f32)
-      discard context.addText(rowRect, layout)
-  column = firstColumn
-  while column < lastColumn:
-    let startColumn = column
-    inc column
-    while column < lastColumn and
-        view.xLines[row].styleAt(startColumn).sameRunStyle(
-          view.xLines[row].styleAt(column), textColor
-        )
-    :
-      inc column
-    if view.xLines[row].styleAt(startColumn).decorations != {}:
-      view.drawRunDecoration(
-        context, row, startColumn, column, metrics, textInsets, textColor
+    let runFont = if batch.italic: italicFont else: font
+    var layout =
+      placeGlyphs(fs(runFont, fill(batch.color.rgba)), batch.glyphs, GlyphTopLeft)
+    result.resources.addFonts(layout)
+    result.glyphs.add (move layout, batch.bold)
+
+proc drawMonoTextRow(
+    context: DrawContext,
+    drawing: MonoTextRowDrawing,
+    row: int,
+    metrics: MonoTextMetrics,
+    textInsets: EdgeInsets,
+    textColor: nimkitTypes.Color,
+) =
+  let y = textInsets.top + row.float32 * metrics.lineHeight
+  for run in drawing.runs:
+    if run.style.hasBackgroundColor:
+      discard context.addRectangle(
+        rect(
+          textInsets.left + run.firstColumn.float32 * metrics.cellWidth,
+          y,
+          (run.stopColumn - run.firstColumn).float32 * metrics.cellWidth,
+          metrics.lineHeight,
+        ),
+        fill(run.style.backgroundColor.rgba),
       )
+  let rowRect = rect(
+    textInsets.left + drawing.firstColumn.float32 * metrics.cellWidth,
+    y,
+    (drawing.stopColumn - drawing.firstColumn).float32 * metrics.cellWidth,
+    metrics.lineHeight,
+  )
+  for batch in drawing.glyphs:
+    discard context.addText(rowRect, batch.layout)
+    if batch.bold:
+      var boldRect = rowRect
+      boldRect.x += min(metrics.cellWidth * 0.06'f32, 0.75'f32)
+      discard context.addText(boldRect, batch.layout)
+  for run in drawing.runs:
+    if run.style.decorations != {}:
+      context.drawRunDecoration(run, row, metrics, textInsets, textColor)
 
 proc drawMonoTextSurface(
     view: MonoTextView, context: DrawContext, style: MonoTextStyle
@@ -1763,11 +1777,26 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
     textColor = view.resolvedTextColor(style)
     metrics = view.monoTextMetrics()
     font = view.monoFont()
-  var appearanceHash = hash(repr(font))
-  appearanceHash = appearanceHash !& hash(metrics.cellWidth)
-  appearanceHash = appearanceHash !& hash(metrics.lineHeight)
-  appearanceHash = appearanceHash !& hash(repr(textInsets))
-  appearanceHash = appearanceHash !& hash(repr(textColor))
+    italicFont = view.monoFont(italic = true)
+    glyphStyle = hash(
+      (
+        font,
+        italicFont,
+        metrics.cellWidth,
+        figUiScale(),
+        selectedTextBackend(),
+        textColor.r,
+        textColor.g,
+        textColor.b,
+        textColor.a,
+      )
+    )
+    appearanceHash =
+      hash((glyphStyle, metrics.lineHeight, textInsets.left, textInsets.top))
+  if view.xRowDrawingStyle != glyphStyle:
+    view.xRowDrawingStyle = glyphStyle
+    view.xRowDrawings.clear()
+  inc view.xRowDrawingGeneration
 
   let surfaceRevision = view.renderSlotRevision(MonoTextSurfaceRenderSlot)
   if context.beginRenderSlot(MonoTextSurfaceRenderSlot, surfaceRevision):
@@ -1799,15 +1828,35 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
       slot = monoTextRowRenderSlotId(row)
       firstColumn = min(colStart, view.xLines[row].len)
       lastColumn = min(colStop, view.xLines[row].len)
+      lineRevision = view.xLines[row].revision
     if context.beginRenderSlot(
       slot,
-      monoTextRowRevision(
-        row, firstColumn, lastColumn, view.xLines[row].revision, appearanceHash
-      ),
+      monoTextRowRevision(row, firstColumn, lastColumn, lineRevision, appearanceHash),
     ):
-      view.drawMonoTextRow(
-        context, font, row, firstColumn, lastColumn, metrics, textInsets, textColor
-      )
+      let drawing = addr view.xRowDrawings.mgetOrPut(lineRevision, MonoTextRowDrawing())
+      if drawing[].lastDraw == 0 or drawing[].firstColumn != firstColumn or
+          drawing[].stopColumn != lastColumn:
+        drawing[] = buildMonoTextRow(
+          view.xLines[row],
+          font,
+          italicFont,
+          firstColumn,
+          lastColumn,
+          metrics.cellWidth,
+          textColor,
+        )
+      context.drawMonoTextRow(drawing[], row, metrics, textInsets, textColor)
+    view.xRowDrawings.withValue(lineRevision, drawing):
+      drawing[].lastDraw = view.xRowDrawingGeneration
+
+  # Row revisions follow their contents through grid shifts. Keep only the
+  # drawn viewport's layouts so scrolling a long grid doesn't grow the cache.
+  var expired: seq[uint64]
+  for revision, drawing in view.xRowDrawings.pairs:
+    if drawing.lastDraw != view.xRowDrawingGeneration:
+      expired.add revision
+  for revision in expired:
+    view.xRowDrawings.del(revision)
 
 proc drawMonoTextCursor(view: MonoTextView, context: DrawContext) =
   let revision = view.renderSlotRevision(MonoTextCursorRenderSlot)

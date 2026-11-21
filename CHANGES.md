@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+- Require FigDraw 0.48.3 or newer.
+- Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
+  and other viewport-rendered text.
+- Reuse glyph layouts when scrolling in the Moe editor and Terminal, and
+  decode only the newly exposed scrollback rows during a Terminal scroll.
 - Pass `firstLineHeadIndent` and `headIndent` paragraph attributes to FigDraw
   paragraph layout, so wrapped lines keep their indents, and let character
   wrapping break words that have no shaping-safe break point instead of
-  overflowing. Requires FigDraw 0.48.0.
+  overflowing.
 - Indent Markdown block quotes and draw their rule-colored bars beside the text,
   so wrapped quote lines stay aligned. Quotes no longer insert `│ ` prefixes into
   the text, and `MarkdownStyle.quotePrefix` is removed.
