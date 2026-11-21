@@ -8,6 +8,10 @@
 - Add `MarkdownStyle.justifiesParagraphs` to justify Markdown paragraph and
   quote text, and a Kosmo Markdown settings tab that toggles it for Markdown
   and GitHub readers and persists it as `justifyMarkdown`.
+- Fix toolbar icons, such as the Kosmo Git diff refresh button, that could
+  vanish in one window after its image atlas was rebuilt while the icon was off
+  screen. Render preparation now restores live images missing from a renderer's
+  atlas, not only after an atlas generation change.
 - Require FigDraw 0.48.3 or newer.
 - Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
   and other viewport-rendered text.

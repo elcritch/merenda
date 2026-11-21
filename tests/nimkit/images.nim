@@ -372,6 +372,66 @@ suite "nimkit image resources":
     check retainedImage.imageId().Hash in recovery.context.entries
     check unrelatedImage.imageId().Hash notin recovery.context.entries
 
+  test "images evicted while outside a manifest return when it is live again":
+    # One window's atlas recovery can evict an image another window still
+    # retains, so it is never republished; residency checks must restore it.
+    clearImageCache()
+    let
+      retainedImage = newImageResource(testImage(3, 2))
+      returningImage = newImageResource(testImage(4, 3))
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    var
+      liveManifest = initRenderResourceManifest()
+      returningManifest = initRenderResourceManifest()
+    liveManifest.addImage(retainedImage)
+    returningManifest.addImage(returningImage)
+
+    manager.prepare(recovery.renderer, returningManifest)
+    check returningImage.imageId().Hash in recovery.context.entries
+    recovery.renderer.rebuildImageAtlas()
+    manager.prepare(recovery.renderer, liveManifest)
+    check returningImage.imageId().Hash notin recovery.context.entries
+
+    let replaysBefore = manager.metrics.replayCount
+    manager.prepare(recovery.renderer, returningManifest)
+    check returningImage.imageId().Hash in recovery.context.entries
+    check manager.metrics.residencyRecoveryCount == 1
+    check manager.metrics.replayCount > replaysBefore
+
+    let steadyReplays = manager.metrics.replayCount
+    manager.prepare(recovery.renderer, returningManifest)
+    manager.prepare(recovery.renderer, returningManifest)
+    check manager.metrics.replayCount == steadyReplays
+    check manager.metrics.residencyRecoveryCount == 1
+
+  test "renderer-thread recovery restores images returning to a snapshot":
+    clearImageCache()
+    let
+      retainedImage = newImageResource(testImage(3, 2))
+      returningImage = newImageResource(testImage(4, 3))
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    var
+      liveManifest = initRenderResourceManifest()
+      returningManifest = initRenderResourceManifest()
+    liveManifest.addImage(retainedImage)
+    returningManifest.addImage(returningImage)
+
+    manager.prepare(recovery.renderer, returningManifest.snapshot())
+    check returningImage.imageId().Hash in recovery.context.entries
+    recovery.renderer.rebuildImageAtlas()
+    manager.prepare(recovery.renderer, liveManifest.snapshot())
+    check returningImage.imageId().Hash notin recovery.context.entries
+
+    manager.prepare(recovery.renderer, returningManifest.snapshot())
+    check returningImage.imageId().Hash in recovery.context.entries
+    check manager.metrics.residencyRecoveryCount == 1
+
   test "renderer-thread atlas recovery filters by transferred resource IDs":
     clearImageCache()
     let
