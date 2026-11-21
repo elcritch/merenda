@@ -126,6 +126,9 @@ type
     listIndent*: int ## Spaces added for each nested list level.
     imagePrefix*: string ## Marker prepended to linked image alt text.
     thematicBreak*: string ## Native text used for horizontal rules.
+    justifiesParagraphs*: bool
+      ## Justify paragraph text with optimal (Knuth-Plass) line breaking.
+      ## Headings, lists, tables, and code keep their natural alignment.
 
   MarkdownImagePresentation = object
     range: TextRange
@@ -1193,7 +1196,10 @@ proc renderParagraph(
     skipPrefixBytes = 0,
 ) =
   let start = builder.runeLength
-  builder.renderInlineChildren(token, attributes, skipPrefixBytes)
+  var paragraphAttributes = attributes
+  if builder.style.justifiesParagraphs:
+    paragraphAttributes.paragraphStyle.alignment = taJustified
+  builder.renderInlineChildren(token, paragraphAttributes, skipPrefixBytes)
   if builder.runeLength > start:
     builder.navigationItems.add MarkdownNavigationItem(
       range: initTextRange(start, builder.runeLength - start),

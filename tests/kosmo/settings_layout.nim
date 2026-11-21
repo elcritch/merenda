@@ -95,6 +95,7 @@ suite "Kosmo settings layout":
       (KosmoTerminalSettingsTabIdentifier, @["Terminal"]),
       (KosmoShortcutsSettingsTabIdentifier, @["Active Shortcuts"]),
       (KosmoMoeThemesSettingsTabIdentifier, @["Themes"]),
+      (KosmoMarkdownSettingsTabIdentifier, @["Markdown", "Justify paragraphs"]),
       (
         KosmoTextMateGrammarsSettingsTabIdentifier,
         @["Installed grammars", "Install more…"],

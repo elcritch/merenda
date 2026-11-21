@@ -94,6 +94,10 @@ type
     taLeft
     taCenter
     taRight
+    taJustified
+      ## Stretch inter-word spaces so wrapped lines fill the measure, choosing
+      ## breaks for the whole paragraph (Knuth-Plass). Applies as a paragraph
+      ## style alignment; view-level layout places justified text at the left.
 
   ButtonState* = enum
     bsOff

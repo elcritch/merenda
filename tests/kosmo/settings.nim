@@ -58,7 +58,7 @@ suite "Kosmo settings":
     for identifier in [
       KosmoNimdexSettingsTabIdentifier, KosmoTerminalSettingsTabIdentifier,
       KosmoShortcutsSettingsTabIdentifier, KosmoMoeThemesSettingsTabIdentifier,
-      KosmoTextMateGrammarsSettingsTabIdentifier,
+      KosmoTextMateGrammarsSettingsTabIdentifier, KosmoMarkdownSettingsTabIdentifier,
     ]:
       require settingsTabs.selectPage(identifier)
       settingsPanel.contentView().layoutSubtreeIfNeeded()
@@ -779,6 +779,25 @@ suite "Kosmo settings":
     check textMateGrammarsTable.tableCellText(
       textMateGrammarsTable.rowCount - 1, originColumn
     ) == "Added"
+
+  test "Markdown settings toggle paragraph justification":
+    require settingsTabs.selectPage(KosmoMarkdownSettingsTabIdentifier)
+    let justifyView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoJustifyMarkdownIdentifier)
+    require not justifyView.isNil
+    require justifyView of Button
+    let
+      justifyButton = Button(justifyView)
+      controls = frontend.editorPane.markdownControls
+    check not frontend.justifyMarkdown
+    check justifyButton.state == bsOff
+    check justifyButton.tryToPerform(performClick(), DynamicAgent(justifyButton))
+    check justifyButton.state == bsOn
+    check frontend.justifyMarkdown
+    check controls.markdownPresentationStyle().justifiesParagraphs
+    check justifyButton.tryToPerform(performClick(), DynamicAgent(justifyButton))
+    check not frontend.justifyMarkdown
+    check not controls.markdownPresentationStyle().justifiesParagraphs
 
   test "terminal settings immediately affect an open terminal":
     require settingsTabs.selectPage(KosmoTerminalSettingsTabIdentifier)

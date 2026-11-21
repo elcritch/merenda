@@ -29,6 +29,8 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
     ## Whether Option/Alt sends the terminal Meta modifier.
   fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation
     ## Horizontal spacing in points for each file-tree level; zero removes indentation.
+  justifyMarkdown*: bool
+    ## Justify Markdown paragraphs with optimal (Knuth-Plass) line breaking.
 
 func defaultKosmoConfigPath*(): string =
   ## Return the standalone editor's JSON configuration file path.
