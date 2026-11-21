@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add `TextAlignment.taJustified`. Paragraphs with this alignment stretch
+  inter-word spaces to fill the measure and use FigDraw's optimal
+  (Knuth-Plass) line breaking.
+- Add `MarkdownStyle.justifiesParagraphs` to justify Markdown paragraph and
+  quote text, and a Kosmo Markdown settings tab that toggles it for Markdown
+  and GitHub readers and persists it as `justifyMarkdown`.
 - Require FigDraw 0.48.3 or newer.
 - Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
   and other viewport-rendered text.

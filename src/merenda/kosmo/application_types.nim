@@ -270,6 +270,7 @@ type
     xPreferEditorPanes: bool
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool
+    xJustifyMarkdown: bool
     xTerminalInputPolicy: KosmoTerminalInputPolicy
     xTerminalPalette: nimkit.TerminalPalette
     xTerminalTheme: string

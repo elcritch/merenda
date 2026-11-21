@@ -1022,6 +1022,24 @@ sibling body
         paragraph.paragraphStyle.firstLineHeadIndent
     check storage.attributesFor(style.thematicBreak).paragraphStyle.headIndent == 0
 
+  test "justified Markdown style justifies only paragraph text":
+    var style = initMarkdownStyle()
+    style.justifiesParagraphs = true
+    let
+      source =
+        "# Title words\n\nBody paragraph text.\n\n> Quoted text.\n\n- Listed item\n\n```\ncode line\n```\n"
+      justified = markdownTextStorage(source, style)
+      natural = markdownTextStorage(source)
+    for text in ["Body paragraph", "Quoted text"]:
+      check justified.attributesFor(text).paragraphStyle.alignment == taJustified
+      check natural.attributesFor(text).paragraphStyle.alignment == taLeft
+    for text in ["Title words", "code line"]:
+      check justified.attributesFor(text).paragraphStyle.alignment == taLeft
+    let listed = justified.stringValue().runeIndexOf("Listed item")
+    require listed > 0
+    # The marker leads the list item's paragraph, so it keeps natural alignment.
+    check justified.attributesAt(listed - 2).paragraphStyle.alignment == taLeft
+
   test "nested Unicode block quotes indent each level":
     let
       style = initMarkdownStyle()
