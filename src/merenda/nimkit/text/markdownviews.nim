@@ -4,7 +4,7 @@
 ## moves back to the view's owning thread for incremental attributed-text
 ## construction between application frames. HTML image tags share the native
 ## Markdown image path; other raw HTML stays inert. Local images resolve
-## explicitly, remote images load through a Chronos worker, and unavailable
+## explicitly, remote images load through a background worker, and unavailable
 ## images use linked alt text.
 
 import

@@ -3,21 +3,23 @@
 
 import std/exitprocs
 import sigils/threads
-import sigils/threadChronos
-import terminex/workerthreads
+import ./timerthreads
+
+when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+  import terminex/workerthreads
 
 var
   backgroundPool {.threadvar.}: SigilThreadPoolPtr
-  backgroundTimers {.threadvar.}: SigilChronosThreadPtr
+  backgroundTimers {.threadvar.}: NimkitTimerThreadPtr
   exitRegistered {.threadvar.}: bool
 
-proc stopDispatcher(dispatcher: var SigilChronosThreadPtr) =
+proc stopDispatcher(dispatcher: var NimkitTimerThreadPtr) =
   if not dispatcher.isNil:
     try:
       dispatcher.stop(immediate = true)
     finally:
       try:
-        dispatcher.join()
+        dispatcher.joinTimerThread()
       finally:
         dispatcher = nil
 
@@ -25,7 +27,8 @@ proc shutdownNimkitBackgroundWorkers*() {.noconv.} =
   ## Stop and join every shared dispatcher even when one shutdown raises.
   ## Call on the owning UI thread. Repeated calls are harmless.
   try:
-    shutdownTerminalWorkers()
+    when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+      shutdownTerminalWorkers()
   finally:
     try:
       stopDispatcher(backgroundTimers)
@@ -61,11 +64,11 @@ proc nimkitWorkerPool*(): SigilThreadPoolPtr =
     exitRegistered = true
   backgroundPool
 
-proc nimkitTimerThread*(): SigilChronosThreadPtr =
+proc nimkitTimerThread*(): NimkitTimerThreadPtr =
   ## Borrow the application-lifetime timer thread; clients cancel their own timers.
   discard nimkitWorkerPool()
   if backgroundTimers.isNil:
-    backgroundTimers = newSigilChronosThread()
+    backgroundTimers = newNimkitTimerThread()
     backgroundTimers.start()
   backgroundTimers
 

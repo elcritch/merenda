@@ -52,6 +52,10 @@ Build your app with threads enabled and ARC or ORC, for example
 `nim ic -r --threads:on --mm:arc main.nim`. The examples in this repository
 already have those settings.
 
+The default Markdown downloader supports HTTPS when you build with `-d:ssl`
+and OpenSSL is available at runtime. Run `atlas install --feature:chronos` to
+select the Chronos backend in this checkout.
+
 ## A few small apps
 
 ### Hello, Merenda
@@ -448,8 +452,8 @@ kosmo README.md
 To build and run Kosmo from your Merenda checkout:
 
 ```sh
-atlas install -tuk --features:kosmo
-nim ic -o:kosmo src/merenda/kosmo/kosmo.nim
+atlas install -tuk --features:kosmo,chronos
+nim c -o:kosmo src/merenda/kosmo/kosmo.nim
 ./kosmo .
 ```
 
@@ -478,6 +482,8 @@ The [examples directory](examples/) has complete apps you can run and change:
   [layout guide](docs/layout.md).
 - Work with text: [Markdown reader](examples/markdown_viewer_demo.nim),
   [text editor](examples/texteditor_demo.nim), and [terminal](examples/terminal_demo.nim).
+  Run `atlas install -tk --feature:terminal` before building the terminal example.
+  This feature pulls in Chronos for Terminex.
 - Add motion and drawing: [animations](examples/animation_demo.nim) and
   [canvas](examples/canvas_demo.nim).
 - Build larger apps: [documents and windows](examples/document_workspace_demo.nim),

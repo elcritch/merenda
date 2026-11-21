@@ -1,11 +1,8 @@
 import std/[algorithm, locks, math, monotimes, options, times]
 
-import sigils/reactive
-import sigils/threadChronos
-import sigils/threadProxies
+import sigils/[reactive, threadProxies, threads]
 
-import ../foundation/selectors
-import ../foundation/types
+import ../foundation/[selectors, timerthreads, types]
 
 export reactive
 
@@ -76,7 +73,7 @@ type
 
   AnimationSchedulerClock* = ref object of Agent
     xFrameInterval: Duration
-    xThread: SigilChronosThreadPtr
+    xThread: NimkitTimerThreadPtr
     xTimer: SigilTimer
     xTicker: AgentProxy[AnimationClockTicker]
     xPendingDeltas: seq[Duration]
@@ -143,7 +140,7 @@ var
   animationTransactionStack {.threadvar.}: seq[AnimationTransaction]
   animationTransactionApplyDepth {.threadvar.}: int
   sharedAnimationThreadLock: Lock
-  sharedAnimationThread: SigilChronosThreadPtr
+  sharedAnimationThread: NimkitTimerThreadPtr
   sharedAnimationThreadUseCount: int
 
 sharedAnimationThreadLock.initLock()
@@ -1467,22 +1464,20 @@ proc ensureLocalAnimationDispatchThread() =
   if not hasLocalSigilThread():
     discard getCurrentSigilThread()
 
-proc acquireSharedAnimationThread(): SigilChronosThreadPtr =
+proc acquireSharedAnimationThread(): NimkitTimerThreadPtr =
   withLock sharedAnimationThreadLock:
     if sharedAnimationThread.isNil:
-      sharedAnimationThread = newSigilChronosThread()
+      sharedAnimationThread = newNimkitTimerThread()
       sharedAnimationThread.start()
     inc sharedAnimationThreadUseCount
     result = sharedAnimationThread
 
-proc releaseSharedAnimationThread(thread: SigilChronosThreadPtr) =
+proc releaseSharedAnimationThread(thread: NimkitTimerThreadPtr) =
   withLock sharedAnimationThreadLock:
     if not thread.isNil and thread == sharedAnimationThread:
       if sharedAnimationThreadUseCount > 0:
         dec sharedAnimationThreadUseCount
-      # Keep the idle dispatcher for later clocks. Sigils' Chronos thread
-      # closes its wake signal on join, but not the underlying selector, so
-      # recreating the worker for each clock would leak one OS descriptor.
+      # Keep the idle dispatcher for later clocks.
 
 proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
   ensureLocalAnimationDispatchThread()

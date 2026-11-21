@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Make Chronos opt-in for NimKit. Markdown image downloads use the shared
+  Sigils worker pool by default. Enable the Atlas `chronos` feature to use
+  Chronos for downloads and timers. Standalone projects can enable threaded
+  terminal views with the `terminal` feature. Kosmo includes them.
 - Require FigDraw 0.48.3 or newer.
 - Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
   and other viewport-rendered text.
