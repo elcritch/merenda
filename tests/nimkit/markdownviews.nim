@@ -2117,6 +2117,12 @@ Press <kbd>Enter</kbd>.
     check view.scrollView().maximumContentOffset().x == 0.0'f32
 
   test "GFM tables use most of the viewport before wrapping cells":
+    let fontPath = RepositoryRoot / "deps/figdraw/data/HackNerdFont-Regular.ttf"
+    require fileExists(fontPath)
+    let monospace = initSystemTypeface(fontPath)
+    var style = initMarkdownStyle()
+    style.codeFontFace = monospace
+    style.strongCodeFontFace = monospace
     let
       source = """
 | Operation, 100 rows | P0 (ms) | P7 (ms) |
@@ -2124,12 +2130,12 @@ Press <kbd>Enter</kbd>.
 | Full rebuilt no-op / full direct recomposition | 1.066 | 0.507 |
 | Title update (full P0 vs one-row P7 binding) | 1.064 | 0.0086 |
 """
-      view = newMarkdownView(source, frame = rect(0, 0, 800, 400))
+      view = newMarkdownView(source, frame = rect(0, 0, 800, 400), style = style)
     require view.waitForMarkdownParsing()
     require view.waitForMarkdownRendering()
     let lines = view.textStorage().stringValue().splitLines()
     # One line per row plus the header rule: no cell needed to wrap.
-    check lines.len == 4
+    require lines.len == 4
     check lines[2].contains("Full rebuilt no-op / full direct recomposition")
 
   test "GFM table body rows alternate a subtle stripe":
