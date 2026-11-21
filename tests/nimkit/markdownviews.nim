@@ -2116,6 +2116,40 @@ Press <kbd>Enter</kbd>.
     check tableScrollViews[1].contentOffset().x == 0.0'f32
     check view.scrollView().maximumContentOffset().x == 0.0'f32
 
+  test "GFM tables use most of the viewport before wrapping cells":
+    let
+      source = """
+| Operation, 100 rows | P0 (ms) | P7 (ms) |
+| --- | ---: | ---: |
+| Full rebuilt no-op / full direct recomposition | 1.066 | 0.507 |
+| Title update (full P0 vs one-row P7 binding) | 1.064 | 0.0086 |
+"""
+      view = newMarkdownView(source, frame = rect(0, 0, 800, 400))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownRendering()
+    let lines = view.textStorage().stringValue().splitLines()
+    # One line per row plus the header rule: no cell needed to wrap.
+    check lines.len == 4
+    check lines[2].contains("Full rebuilt no-op / full direct recomposition")
+
+  test "GFM table body rows alternate a subtle stripe":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        "| Name | Value |\n| - | - |\n| first | 1 |\n| second | 2 |\n| third | 3 |"
+      )
+    check storage.attributesFor("Name").backgroundColor.a == 0
+    check storage.attributesFor("first").backgroundColor.a == 0
+    check storage.attributesFor("third").backgroundColor.a == 0
+    let stripe = storage.attributesFor("second").backgroundColor
+    check stripe.a > 0 and stripe.a < 0.5
+    check stripe.r == style.ruleColor.r
+    let secondRow = storage.stringValue().splitLines()[3]
+    check secondRow.contains("second")
+    let rowStart = storage.stringValue().runeIndexOf(secondRow)
+    for offset in 0 ..< secondRow.runeLen:
+      check storage.attributesAt(rowStart + offset).backgroundColor == stripe
+
   test "GFM tables reflow once the Markdown viewport settles":
     let
       source = """

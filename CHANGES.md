@@ -12,6 +12,12 @@
 - Add `MarkdownStyle.justifiesParagraphs` to justify Markdown paragraph and
   quote text, and a Kosmo Markdown settings tab that toggles it for Markdown
   and GitHub readers and persists it as `justifyMarkdown`.
+- Fix Markdown tables wrapping at about half the available width: the
+  column limit measured one character with fixed layout overhead, nearly
+  doubling the character width. Tables now fill most of the viewport before
+  wrapping cells.
+- Shade every other Markdown table body row so wrapped multi-line rows are
+  easy to tell apart.
 - Hang wrapped Markdown list item lines under the item text instead of the
   left margin, for bullet, ordered, task, and nested lists.
 - Fix toolbar icons, such as the Kosmo Git diff refresh button, that could
