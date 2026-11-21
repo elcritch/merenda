@@ -4,8 +4,8 @@
 import std/[algorithm, exitprocs, locks, monotimes, os, strutils, tables, times]
 import chronicles
 import dmon
-import sigils/[core, threadChronos, threadProxies, threads]
-import ../nimkit/foundation/backgroundworkers
+import sigils/[core, threadProxies, threads]
+import ../nimkit/foundation/[backgroundworkers, timerthreads]
 import ./workspacechanges
 
 const DefaultWorkspaceReconciliationInterval* = initDuration(minutes = 2)

@@ -44,7 +44,7 @@ WORKDIR /workspace
 
 COPY merenda.nimble ./
 
-RUN atlas -t --update --features:kosmo install
+RUN atlas -t --update --features:kosmo,chronos install
 
 COPY . ./
 

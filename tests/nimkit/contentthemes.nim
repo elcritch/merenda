@@ -3,7 +3,7 @@ import merenda/nimkit
 import merenda/nimkit/contentthemes
 
 suite "NimKit content themes":
-  test "one palette applies to Markdown, the editor, and terminal without engine types":
+  test "one palette applies to views without engine types":
     var palette = initContentPalette()
     palette.background = ContentThemeColor(red: 20, green: 30, blue: 40)
     palette.foreground = ContentThemeColor(red: 230, green: 240, blue: 250)
@@ -11,23 +11,24 @@ suite "NimKit content themes":
     let theme = initContentTheme("Custom", palette)
     let reader = newMarkdownView()
     let editor = newSynEditView()
-    let terminal = newTerminalView()
-    defer:
-      terminal.close()
     var style = reader.markdownStyle()
     style.bodyFontSize = 21
     reader.markdownStyle = style
     reader.contentTheme = theme
     editor.contentTheme = theme
-    terminal.contentTheme = theme
     check reader.markdownStyle().bodyFontSize == 21
     check reader.markdownStyle().backgroundColor == palette.background.toColor()
     check editor.theme().background == palette.background.toColor()
-    check terminal.palette.background == palette.background.toColor()
     check editor.theme().foreground[stcKeyword] == palette.keyword.toColor()
     check reader.markdownStyle().syntaxTokenColors[stcKeyword] ==
       palette.keyword.toColor()
-    check terminal.palette.colors[5] == palette.keyword.toColor()
+    when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+      let terminal = newTerminalView()
+      defer:
+        terminal.close()
+      terminal.contentTheme = theme
+      check terminal.palette.background == palette.background.toColor()
+      check terminal.palette.colors[5] == palette.keyword.toColor()
 
   test "loads TOML palettes and rejects invalid recognized colors":
     let root = createTempDir("nimkit-contentthemes-", "")

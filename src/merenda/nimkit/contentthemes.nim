@@ -6,7 +6,10 @@
 
 import ./contentthemepalettes
 import ./text/[markdownviews, syneditviews, syntaxhighlighting]
-import ./terminal/terminalviews
+import ./terminal/terminalpalettes
+
+when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+  import ./terminal/terminalviews
 
 export contentthemepalettes
 
@@ -85,5 +88,6 @@ proc `contentTheme=`*(view: MarkdownView, theme: ContentTheme) =
 proc `contentTheme=`*(view: SynEditView, theme: ContentTheme) =
   view.theme = theme.toSynEditTheme()
 
-proc `contentTheme=`*(view: TerminalView, theme: ContentTheme) =
-  view.palette = theme.toTerminalPalette()
+when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+  proc `contentTheme=`*(view: TerminalView, theme: ContentTheme) =
+    view.palette = theme.toTerminalPalette()

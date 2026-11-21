@@ -63,7 +63,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "install-local.sh: resolving Kosmo dependencies with Atlas"
-atlas install -tuk --features:kosmo
+atlas install -tuk --features:kosmo,chronos
 
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources" "$iconset_path"
 cp packaging/macos/Info.plist "$app_path/Contents/Info.plist"

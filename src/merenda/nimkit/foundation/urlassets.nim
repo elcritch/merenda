@@ -1,21 +1,30 @@
 ## Asynchronous URL-backed assets cached in the platform application cache.
 
-import std/[appdirs, monotimes, os, paths, strutils, tables, times]
-from std/uri import Uri, parseUri
-
-import chronos
-import chronos/apps/http/httpclient
-import chronos/streams/asyncstream
+import std/[appdirs, monotimes, os, paths, strutils, tables, tempfiles, times]
 import crunchy/[common, sha256]
 import sigils/[core, threads]
 
 import ./urls
 
+when defined(features.merenda.chronos):
+  from std/uri import Uri, parseUri
+
+  import chronos
+  import chronos/apps/http/httpclient
+  import chronos/streams/asyncstream
+  import sigils/threadChronos
+else:
+  import std/atomics
+  from std/uri import parseUri
+
+  import ./backgroundworkers
+  from ./urlassethttp import
+    UrlAssetCancellation, UrlAssetHttpResponse, checkCancelled, fetchUrlAsset
+
 const
   DefaultUrlAssetMaximumBytes* = 64 * 1024 * 1024 ## Default per-asset size limit.
   DefaultUrlAssetConcurrentLoads* = 4
   DefaultUrlAssetPendingLoads* = 256
-  UrlAssetReadBufferBytes = 32 * 1024
   UrlAssetCacheDirectoryName = "url-assets"
 
 type
@@ -49,27 +58,41 @@ type
     maximumAssetBytes: int
 
   UrlAssetWorker = ref object of AgentActor
-    session: HttpSessionRef
-    tasks: Table[uint64, Future[void]]
-    pending: seq[UrlAssetRequest]
-    maximumConcurrentLoads: int
-    maximumPendingLoads: int
-    closing: bool
-    closeStarted: bool
+    when defined(features.merenda.chronos):
+      session: HttpSessionRef
+      tasks: Table[uint64, Future[void]]
+      pending: seq[UrlAssetRequest]
+      maximumConcurrentLoads: int
+      maximumPendingLoads: int
+      closing: bool
+      closeStarted: bool
 
   UrlAssetLoader* = ref object of Agent ## Reusable URL downloader and disk cache.
-    xThread: SigilChronosThreadPtr
-    xWorker: AgentProxy[UrlAssetWorker]
+    when defined(features.merenda.chronos):
+      xThread: SigilChronosThreadPtr
+      xWorker: AgentProxy[UrlAssetWorker]
+      xWorkerClosed: bool
+    else:
+      xPool: SigilThreadPoolPtr
+      xMaximumConcurrentLoads: int
+      # Keep each proxy alive until its result is delivered to the owning thread.
+      xRunning: Table[
+        uint64,
+        tuple[worker: AgentProxy[UrlAssetWorker], cancellation: UrlAssetCancellation],
+      ]
+      xPending: seq[UrlAssetRequest]
     xCacheDirectory: string
     xMaximumAssetBytes: int
     xMaximumPendingLoads: int
     xActive: Table[uint64, UrlAssetHandle]
     xActiveUrls: Table[string, UrlAssetHandle]
     xNextIdentifier: uint64
-    xWorkerClosed: bool
     xClosed: bool
 
-  UrlAssetHttpResponse = object
+when defined(features.merenda.chronos):
+  const UrlAssetReadBufferBytes = 32 * 1024
+
+  type UrlAssetHttpResponse = object
     status: int
     byteLength: int64
     limitExceeded: bool
@@ -108,73 +131,73 @@ proc cachedUrlAssetMediaType(url, path: string): string =
   if result.len == 0:
     result = initUrl(url).mediaType()
 
-proc fetchUrlAsset(
-    session: HttpSessionRef, url: Uri, path: string, maximumAssetBytes: int
-): Future[UrlAssetHttpResponse] {.async.} =
-  let address = getHttpAddress(url).valueOr:
-    raiseHttpAddressError($error)
-  var
-    request = HttpClientRequestRef.new(session, address)
-    response: HttpClientResponseRef
-    redirect: HttpClientRequestRef
-    reader: HttpBodyReader
-  try:
-    while true:
-      response = await request.send()
-      if response.status in 300 .. 399:
-        if "location" notin response.headers:
-          raiseHttpRedirectError("Location header missing")
-        let location = response.headers.getString("location")
-        if location.len == 0:
-          raiseHttpRedirectError("Location header with an empty value")
-        let redirected = request.redirect(parseUri(location))
-        if redirected.isErr():
-          raiseHttpRedirectError(redirected.error())
-        redirect = redirected.get()
-        # Redirect bodies are irrelevant; close without downloading them.
-        await response.closeWait()
-        response = nil
-        await request.closeWait()
-        request = redirect
-        redirect = nil
-      else:
-        result.status = response.status
-        result.mediaType =
-          response.headers.getString(ContentTypeHeader).normalizedMediaType()
-        if response.status notin 200 .. 299:
-          return
-        reader = response.getBodyReader()
-        var file = open(path, fmWrite)
-        defer:
-          file.close()
-        var buffer: array[UrlAssetReadBufferBytes, byte]
-        while true:
-          let remaining = maximumAssetBytes - result.byteLength.int
-          # Probe one byte at the boundary, including chunked/unknown-size bodies.
-          let count =
-            await reader.readOnce(addr buffer[0], max(1, min(buffer.len, remaining)))
-          if count == 0:
-            break
-          if count > remaining:
-            result.limitExceeded = true
+when defined(features.merenda.chronos):
+  proc fetchUrlAsset(
+      session: HttpSessionRef, url: Uri, path: string, maximumAssetBytes: int
+  ): Future[UrlAssetHttpResponse] {.async.} =
+    let address = getHttpAddress(url).valueOr:
+      raiseHttpAddressError($error)
+    var
+      request = HttpClientRequestRef.new(session, address)
+      response: HttpClientResponseRef
+      redirect: HttpClientRequestRef
+      reader: HttpBodyReader
+    try:
+      while true:
+        response = await request.send()
+        if response.status in 300 .. 399:
+          if "location" notin response.headers:
+            raiseHttpRedirectError("Location header missing")
+          let location = response.headers.getString("location")
+          if location.len == 0:
+            raiseHttpRedirectError("Location header with an empty value")
+          let redirected = request.redirect(parseUri(location))
+          if redirected.isErr():
+            raiseHttpRedirectError(redirected.error())
+          redirect = redirected.get()
+          # Redirect bodies are irrelevant; close without downloading them.
+          await response.closeWait()
+          response = nil
+          await request.closeWait()
+          request = redirect
+          redirect = nil
+        else:
+          result.status = response.status
+          result.mediaType = response.headers.getString(ContentTypeHeader)
+          if response.status notin 200 .. 299:
             return
-          if file.writeBuffer(addr buffer[0], count) != count:
-            raise newException(IOError, "Unable to write URL asset")
-          result.byteLength += count
-        await reader.closeWait()
-        reader = nil
-        await response.finish()
-        return
-  finally:
-    # Cancellation must finish releasing readers, sockets and redirected requests.
-    if not reader.isNil:
-      await noCancel(reader.closeWait())
-    if not response.isNil:
-      await noCancel(response.closeWait())
-    if not request.isNil:
-      await noCancel(request.closeWait())
-    if not redirect.isNil:
-      await noCancel(redirect.closeWait())
+          reader = response.getBodyReader()
+          var file = open(path, fmWrite)
+          defer:
+            file.close()
+          var buffer: array[UrlAssetReadBufferBytes, byte]
+          while true:
+            let remaining = maximumAssetBytes - result.byteLength.int
+            # Probe one byte at the boundary, including chunked/unknown-size bodies.
+            let count =
+              await reader.readOnce(addr buffer[0], max(1, min(buffer.len, remaining)))
+            if count == 0:
+              break
+            if count > remaining:
+              result.limitExceeded = true
+              return
+            if file.writeBuffer(addr buffer[0], count) != count:
+              raise newException(IOError, "Unable to write URL asset")
+            result.byteLength += count
+          await reader.closeWait()
+          reader = nil
+          await response.finish()
+          return
+    finally:
+      # Cancellation must finish releasing readers, sockets and redirected requests.
+      if not reader.isNil:
+        await noCancel(reader.closeWait())
+      if not response.isNil:
+        await noCancel(response.closeWait())
+      if not request.isNil:
+        await noCancel(request.closeWait())
+      if not redirect.isNil:
+        await noCancel(redirect.closeWait())
 
 proc urlAssetCacheDirectory*(applicationIdentifier: string): string =
   ## Return the platform cache directory used for one application's URL assets.
@@ -309,31 +332,56 @@ proc clearCachedAssets*(loader: UrlAssetLoader): int {.discardable.} =
     if not active and removeCachedAssetFiles(path):
       inc result
 
-proc executeUrlAssetLoad(
-  worker: AgentProxy[UrlAssetWorker],
-  identifier: uint64,
-  url: string,
-  path: string,
-  maximumAssetBytes: int,
-) {.signal.}
+proc storeUrlAsset(
+    loadResult: var UrlAssetResult,
+    response: UrlAssetHttpResponse,
+    path, temporaryPath: string,
+    maximumAssetBytes: int,
+) =
+  let url = loadResult.url
+  loadResult.statusCode = response.status
+  loadResult.mediaType = response.mediaType.normalizedMediaType()
+  if loadResult.mediaType.len == 0:
+    loadResult.mediaType = initUrl(url).mediaType()
+  if response.status notin 200 .. 299:
+    loadResult.errorMessage = "HTTP request returned status " & $response.status
+  elif response.limitExceeded:
+    loadResult.errorMessage =
+      "URL asset exceeds the " & $maximumAssetBytes & " byte limit"
+  else:
+    if fileExists(path):
+      removeFile(temporaryPath)
+      loadResult.cacheHit = true
+      loadResult.byteLength = getFileSize(path)
+    else:
+      moveFile(temporaryPath, path)
+      loadResult.byteLength = response.byteLength
+    if loadResult.mediaType.len > 0:
+      try:
+        writeFile(path.urlAssetMetadataPath(), loadResult.mediaType)
+      except OSError:
+        discard
+    loadResult.path = path
+    loadResult.state = ualsReady
 
-proc cancelUrlAssetLoad(
-  worker: AgentProxy[UrlAssetWorker], identifier: uint64
-) {.signal.}
+proc createPartialAsset(path: string): string =
+  let directory = path.parentDir()
+  createDir(directory)
+  let (file, temporaryPath) =
+    createTempFile(path.extractFilename() & ".part-", "", directory)
+  file.close()
+  temporaryPath
 
-proc closeUrlAssetWorker(worker: AgentProxy[UrlAssetWorker]) {.signal.}
+proc removePartialAsset(path: string) =
+  if fileExists(path):
+    try:
+      removeFile(path)
+    except OSError:
+      discard
 
 proc urlAssetLoadFinished(
   worker: UrlAssetWorker, identifier: uint64, loadResult: UrlAssetResult
 ) {.signal.}
-
-proc urlAssetWorkerDidClose(worker: UrlAssetWorker) {.signal.}
-
-proc notifyWorkerClosed(worker: UrlAssetWorker) {.raises: [].} =
-  try:
-    emit worker.urlAssetWorkerDidClose()
-  except Exception:
-    discard
 
 proc notifyLoadFinished(
     worker: UrlAssetWorker, identifier: uint64, loadResult: UrlAssetResult
@@ -343,174 +391,207 @@ proc notifyLoadFinished(
   except Exception:
     discard
 
-proc finishClosing(worker: UrlAssetWorker): Future[void] {.async: (raises: []).} =
-  if worker.closeStarted:
-    return
-  worker.closeStarted = true
-  if not worker.session.isNil:
-    await worker.session.closeWait()
-    worker.session = nil
-  worker.notifyWorkerClosed()
-
-proc startQueuedLoads(worker: UrlAssetWorker) {.raises: [], gcsafe.}
-
-proc loadUrlAsset(
-    worker: UrlAssetWorker,
+when defined(features.merenda.chronos):
+  proc executeUrlAssetLoad(
+    worker: AgentProxy[UrlAssetWorker],
     identifier: uint64,
     url: string,
     path: string,
     maximumAssetBytes: int,
-): Future[void] {.async: (raises: []).} =
-  var loadResult =
-    UrlAssetResult(url: url, state: ualsFailed, workerThreadId: getThreadId())
-  let temporaryPath = path & ".part-" & $identifier
-  try:
-    # Let the launching slot record this task before it can finish or be cancelled.
-    await sleepAsync(ZeroDuration)
-    if worker.session.isNil:
-      worker.session = HttpSessionRef.new()
-    createDir(path.parentDir())
-    let response = await worker.session.fetchUrlAsset(
-      parseUri(url), temporaryPath, maximumAssetBytes
-    )
-    loadResult.statusCode = response.status
-    loadResult.mediaType = response.mediaType
-    if loadResult.mediaType.len == 0:
-      loadResult.mediaType = initUrl(url).mediaType()
-    if response.status notin 200 .. 299:
-      loadResult.errorMessage = "HTTP request returned status " & $response.status
-    elif response.limitExceeded:
-      loadResult.errorMessage =
-        "URL asset exceeds the " & $maximumAssetBytes & " byte limit"
-    else:
-      if fileExists(path):
-        removeFile(temporaryPath)
-        loadResult.cacheHit = true
-        loadResult.byteLength = getFileSize(path)
-      else:
-        moveFile(temporaryPath, path)
-        loadResult.byteLength = response.byteLength
-      if loadResult.mediaType.len > 0:
-        try:
-          writeFile(path.urlAssetMetadataPath(), loadResult.mediaType)
-        except OSError:
-          discard
-      loadResult.path = path
-      loadResult.state = ualsReady
-  except CancelledError:
-    loadResult.state = ualsCancelled
-    loadResult.errorMessage = "URL asset load was cancelled"
-  except Defect:
-    raise
-  except Exception:
-    # std/os.moveFile exposes Exception in its effect contract. Programming
-    # defects still propagate through the preceding branch.
-    loadResult.errorMessage = getCurrentExceptionMsg()
-  finally:
-    if fileExists(temporaryPath):
-      try:
-        removeFile(temporaryPath)
-      except OSError:
-        discard
+  ) {.signal.}
 
-  worker.tasks.del(identifier)
-  worker.notifyLoadFinished(identifier, loadResult)
-  if worker.closing:
-    if worker.tasks.len == 0:
-      await worker.finishClosing()
-  else:
+  proc cancelUrlAssetLoad(
+    worker: AgentProxy[UrlAssetWorker], identifier: uint64
+  ) {.signal.}
+
+  proc closeUrlAssetWorker(worker: AgentProxy[UrlAssetWorker]) {.signal.}
+
+  proc urlAssetWorkerDidClose(worker: UrlAssetWorker) {.signal.}
+
+  proc notifyWorkerClosed(worker: UrlAssetWorker) {.raises: [].} =
+    try:
+      emit worker.urlAssetWorkerDidClose()
+    except Exception:
+      discard
+
+  proc finishClosing(worker: UrlAssetWorker): Future[void] {.async: (raises: []).} =
+    if worker.closeStarted:
+      return
+    worker.closeStarted = true
+    if not worker.session.isNil:
+      await worker.session.closeWait()
+      worker.session = nil
+    worker.notifyWorkerClosed()
+
+  proc startQueuedLoads(worker: UrlAssetWorker) {.raises: [], gcsafe.}
+
+  proc loadUrlAsset(
+      worker: UrlAssetWorker,
+      identifier: uint64,
+      url: string,
+      path: string,
+      maximumAssetBytes: int,
+  ): Future[void] {.async: (raises: []).} =
+    var loadResult =
+      UrlAssetResult(url: url, state: ualsFailed, workerThreadId: getThreadId())
+    var temporaryPath: string
+    try:
+      # Let the launching slot record this task before it can finish or be cancelled.
+      await sleepAsync(ZeroDuration)
+      if worker.session.isNil:
+        worker.session = HttpSessionRef.new()
+      temporaryPath = createPartialAsset(path)
+      let response = await worker.session.fetchUrlAsset(
+        parseUri(url), temporaryPath, maximumAssetBytes
+      )
+      loadResult.storeUrlAsset(response, path, temporaryPath, maximumAssetBytes)
+    except CancelledError:
+      loadResult.state = ualsCancelled
+      loadResult.errorMessage = "URL asset load was cancelled"
+    except Defect:
+      raise
+    except Exception:
+      # std/os.moveFile exposes Exception in its effect contract. Programming
+      # defects still propagate through the preceding branch.
+      loadResult.errorMessage = getCurrentExceptionMsg()
+    finally:
+      removePartialAsset(temporaryPath)
+
+    worker.tasks.del(identifier)
+    worker.notifyLoadFinished(identifier, loadResult)
+    if worker.closing:
+      if worker.tasks.len == 0:
+        await worker.finishClosing()
+    else:
+      worker.startQueuedLoads()
+
+  proc startQueuedLoads(worker: UrlAssetWorker) {.raises: [], gcsafe.} =
+    while not worker.closing and worker.pending.len > 0 and
+        worker.tasks.len < worker.maximumConcurrentLoads:
+      let request = worker.pending[0]
+      worker.pending.delete(0)
+      let task = worker.loadUrlAsset(
+        request.identifier, request.url, request.path, request.maximumAssetBytes
+      )
+      worker.tasks[request.identifier] = task
+      asyncSpawn task
+
+  proc executeUrlAssetLoad(
+      worker: UrlAssetWorker,
+      identifier: uint64,
+      url: string,
+      path: string,
+      maximumAssetBytes: int,
+  ) {.slot.} =
+    if worker.closing:
+      emit worker.urlAssetLoadFinished(
+        identifier,
+        UrlAssetResult(
+          url: url,
+          state: ualsCancelled,
+          errorMessage: "URL asset loader is closing",
+          workerThreadId: getThreadId(),
+        ),
+      )
+      return
+    if worker.tasks.len + worker.pending.len >= worker.maximumPendingLoads:
+      worker.notifyLoadFinished(
+        identifier,
+        UrlAssetResult(
+          url: url,
+          state: ualsFailed,
+          workerThreadId: getThreadId(),
+          errorMessage: "URL asset request queue is full",
+        ),
+      )
+      return
+    worker.pending.add UrlAssetRequest(
+      identifier: identifier, url: url, path: path, maximumAssetBytes: maximumAssetBytes
+    )
     worker.startQueuedLoads()
 
-proc startQueuedLoads(worker: UrlAssetWorker) {.raises: [], gcsafe.} =
-  while not worker.closing and worker.pending.len > 0 and
-      worker.tasks.len < worker.maximumConcurrentLoads:
-    let request = worker.pending[0]
-    worker.pending.delete(0)
-    let task = worker.loadUrlAsset(
-      request.identifier, request.url, request.path, request.maximumAssetBytes
-    )
-    worker.tasks[request.identifier] = task
-    asyncSpawn task
+  proc cancelUrlAssetLoad(worker: UrlAssetWorker, identifier: uint64) {.slot.} =
+    if identifier in worker.tasks:
+      worker.tasks[identifier].cancelSoon()
+    else:
+      for index, request in worker.pending:
+        if request.identifier == identifier:
+          worker.notifyLoadFinished(
+            identifier,
+            UrlAssetResult(
+              url: request.url,
+              state: ualsCancelled,
+              errorMessage: "URL asset load was cancelled",
+            ),
+          )
+          worker.pending.delete(index)
+          return
 
-proc executeUrlAssetLoad(
-    worker: UrlAssetWorker,
-    identifier: uint64,
-    url: string,
-    path: string,
-    maximumAssetBytes: int,
-) {.slot.} =
-  if worker.closing:
-    emit worker.urlAssetLoadFinished(
-      identifier,
-      UrlAssetResult(
-        url: url,
-        state: ualsCancelled,
-        errorMessage: "URL asset loader is closing",
-        workerThreadId: getThreadId(),
-      ),
-    )
-    return
-  if worker.tasks.len + worker.pending.len >= worker.maximumPendingLoads:
-    worker.notifyLoadFinished(
-      identifier,
-      UrlAssetResult(
-        url: url,
-        state: ualsFailed,
-        workerThreadId: getThreadId(),
-        errorMessage: "URL asset request queue is full",
-      ),
-    )
-    return
-  worker.pending.add UrlAssetRequest(
-    identifier: identifier, url: url, path: path, maximumAssetBytes: maximumAssetBytes
-  )
-  worker.startQueuedLoads()
+  proc closeUrlAssetWorker(worker: UrlAssetWorker) {.slot.} =
+    if worker.closing:
+      return
+    worker.closing = true
+    for request in worker.pending:
+      worker.notifyLoadFinished(
+        request.identifier,
+        UrlAssetResult(
+          url: request.url,
+          state: ualsCancelled,
+          errorMessage: "URL asset loader is closing",
+        ),
+      )
+    worker.pending.setLen(0)
+    var tasks: seq[Future[void]]
+    for task in worker.tasks.values:
+      tasks.add task
+    for task in tasks:
+      task.cancelSoon()
+    if tasks.len == 0:
+      asyncSpawn worker.finishClosing()
 
-proc cancelUrlAssetLoad(worker: UrlAssetWorker, identifier: uint64) {.slot.} =
-  if identifier in worker.tasks:
-    worker.tasks[identifier].cancelSoon()
-  else:
-    for index, request in worker.pending:
-      if request.identifier == identifier:
-        worker.notifyLoadFinished(
-          identifier,
-          UrlAssetResult(
-            url: request.url,
-            state: ualsCancelled,
-            errorMessage: "URL asset load was cancelled",
-          ),
-        )
-        worker.pending.delete(index)
-        return
+else:
+  proc executeUrlAssetLoad(
+    worker: AgentProxy[UrlAssetWorker],
+    request: UrlAssetRequest,
+    cancellation: UrlAssetCancellation,
+  ) {.signal.}
 
-proc closeUrlAssetWorker(worker: UrlAssetWorker) {.slot.} =
-  if worker.closing:
-    return
-  worker.closing = true
-  for request in worker.pending:
-    worker.notifyLoadFinished(
-      request.identifier,
-      UrlAssetResult(
-        url: request.url,
-        state: ualsCancelled,
-        errorMessage: "URL asset loader is closing",
-      ),
-    )
-  worker.pending.setLen(0)
-  var tasks: seq[Future[void]]
-  for task in worker.tasks.values:
-    tasks.add task
-  for task in tasks:
-    task.cancelSoon()
-  if tasks.len == 0:
-    asyncSpawn worker.finishClosing()
+  proc executeUrlAssetLoad(
+      worker: UrlAssetWorker,
+      request: UrlAssetRequest,
+      cancellation: UrlAssetCancellation,
+  ) {.slot.} =
+    var loadResult =
+      UrlAssetResult(url: request.url, state: ualsFailed, workerThreadId: getThreadId())
+    var temporaryPath: string
+    try:
+      cancellation.checkCancelled()
+      temporaryPath = createPartialAsset(request.path)
+      let response = fetchUrlAsset(
+        parseUri(request.url), temporaryPath, request.maximumAssetBytes, cancellation
+      )
+      cancellation.checkCancelled()
+      loadResult.storeUrlAsset(
+        response, request.path, temporaryPath, request.maximumAssetBytes
+      )
+    except Defect:
+      raise
+    except Exception:
+      if cancellation[].load(moAcquire):
+        loadResult.state = ualsCancelled
+        loadResult.errorMessage = "URL asset load was cancelled"
+      else:
+        loadResult.errorMessage = getCurrentExceptionMsg()
+    finally:
+      removePartialAsset(temporaryPath)
+    worker.notifyLoadFinished(request.identifier, loadResult)
 
 proc urlAssetDidFinish*(loader: UrlAssetLoader, handle: UrlAssetHandle) {.signal.}
   ## Emitted on the owning thread for ready, failed, and cancelled loads.
 
-proc completeUrlAssetLoad(
+proc finishUrlAssetLoad(
     loader: UrlAssetLoader, identifier: uint64, loadResult: UrlAssetResult
-) {.slot.} =
+) =
   if identifier notin loader.xActive:
     return
   let handle = loader.xActive[identifier]
@@ -521,8 +602,52 @@ proc completeUrlAssetLoad(
   handle.xResult = loadResult
   emit loader.urlAssetDidFinish(handle)
 
-proc completeUrlAssetWorkerClose(loader: UrlAssetLoader) {.slot.} =
-  loader.xWorkerClosed = true
+when not defined(features.merenda.chronos):
+  proc startQueuedLoads(loader: UrlAssetLoader)
+
+proc completeUrlAssetLoad(
+    loader: UrlAssetLoader, identifier: uint64, loadResult: UrlAssetResult
+) {.slot.} =
+  when not defined(features.merenda.chronos):
+    if identifier in loader.xRunning:
+      loader.xRunning.del(identifier)
+  try:
+    loader.finishUrlAssetLoad(identifier, loadResult)
+  finally:
+    when not defined(features.merenda.chronos):
+      loader.startQueuedLoads()
+
+when defined(features.merenda.chronos):
+  proc completeUrlAssetWorkerClose(loader: UrlAssetLoader) {.slot.} =
+    loader.xWorkerClosed = true
+
+else:
+  proc startQueuedLoads(loader: UrlAssetLoader) =
+    while not loader.xClosed and loader.xPending.len > 0 and
+        loader.xRunning.len < loader.xMaximumConcurrentLoads:
+      let request = loader.xPending[0]
+      loader.xPending.delete(0)
+      var worker = UrlAssetWorker()
+      let proxy = worker.moveToThread(loader.xPool)
+      connectThreaded(
+        proxy, executeUrlAssetLoad, proxy, UrlAssetWorker.executeUrlAssetLoad()
+      )
+      connectThreaded(
+        proxy, urlAssetLoadFinished, loader, UrlAssetLoader.completeUrlAssetLoad()
+      )
+      let cancellation = newSharedPtr(default(Atomic[bool]))
+      loader.xRunning[request.identifier] = (worker: proxy, cancellation: cancellation)
+      emit proxy.executeUrlAssetLoad(request, cancellation)
+
+  proc finishCancelledLoad(loader: UrlAssetLoader, request: UrlAssetRequest) =
+    loader.finishUrlAssetLoad(
+      request.identifier,
+      UrlAssetResult(
+        url: request.url,
+        state: ualsCancelled,
+        errorMessage: "URL asset load was cancelled",
+      ),
+    )
 
 proc newUrlAssetLoader*(
     applicationIdentifier: string,
@@ -531,7 +656,7 @@ proc newUrlAssetLoader*(
     maximumConcurrentLoads: Positive = DefaultUrlAssetConcurrentLoads,
     maximumPendingLoads: Positive = DefaultUrlAssetPendingLoads,
 ): UrlAssetLoader =
-  ## Start a reusable Chronos-backed loader for one application's URL assets.
+  ## Start a reusable background loader for one application's URL assets.
   ## Responses stream to disk with a fixed-size buffer and stop at the byte limit.
   ## `maximumPendingLoads` bounds active plus queued requests; duplicate URLs share
   ## one request. Concurrent network transfers are limited independently.
@@ -546,48 +671,55 @@ proc newUrlAssetLoader*(
   createDir(resolvedCacheDirectory)
   startLocalThreadDefault()
   result = UrlAssetLoader(
-    xThread: newSigilChronosThread(),
     xCacheDirectory: resolvedCacheDirectory,
     xMaximumAssetBytes: maximumAssetBytes,
     xMaximumPendingLoads: maximumPendingLoads,
     xActive: initTable[uint64, UrlAssetHandle](),
     xActiveUrls: initTable[string, UrlAssetHandle](),
   )
-  result.xThread.start()
+  when defined(features.merenda.chronos):
+    result.xThread = newSigilChronosThread()
+    result.xThread.start()
 
-  var worker = UrlAssetWorker(
-    tasks: initTable[uint64, Future[void]](),
-    maximumConcurrentLoads: maximumConcurrentLoads,
-    maximumPendingLoads: maximumPendingLoads,
-  )
-  result.xWorker = worker.moveToThread(result.xThread)
-  connectThreaded(
-    result.xWorker,
-    executeUrlAssetLoad,
-    result.xWorker,
-    UrlAssetWorker.executeUrlAssetLoad(),
-  )
-  connectThreaded(
-    result.xWorker,
-    cancelUrlAssetLoad,
-    result.xWorker,
-    UrlAssetWorker.cancelUrlAssetLoad(),
-  )
-  connectThreaded(
-    result.xWorker,
-    closeUrlAssetWorker,
-    result.xWorker,
-    UrlAssetWorker.closeUrlAssetWorker(),
-  )
-  connectThreaded(
-    result.xWorker, urlAssetLoadFinished, result, UrlAssetLoader.completeUrlAssetLoad()
-  )
-  connectThreaded(
-    result.xWorker,
-    urlAssetWorkerDidClose,
-    result,
-    UrlAssetLoader.completeUrlAssetWorkerClose(),
-  )
+    var worker = UrlAssetWorker(
+      tasks: initTable[uint64, Future[void]](),
+      maximumConcurrentLoads: maximumConcurrentLoads,
+      maximumPendingLoads: maximumPendingLoads,
+    )
+    result.xWorker = worker.moveToThread(result.xThread)
+    connectThreaded(
+      result.xWorker,
+      executeUrlAssetLoad,
+      result.xWorker,
+      UrlAssetWorker.executeUrlAssetLoad(),
+    )
+    connectThreaded(
+      result.xWorker,
+      cancelUrlAssetLoad,
+      result.xWorker,
+      UrlAssetWorker.cancelUrlAssetLoad(),
+    )
+    connectThreaded(
+      result.xWorker,
+      closeUrlAssetWorker,
+      result.xWorker,
+      UrlAssetWorker.closeUrlAssetWorker(),
+    )
+    connectThreaded(
+      result.xWorker,
+      urlAssetLoadFinished,
+      result,
+      UrlAssetLoader.completeUrlAssetLoad(),
+    )
+    connectThreaded(
+      result.xWorker,
+      urlAssetWorkerDidClose,
+      result,
+      UrlAssetLoader.completeUrlAssetWorkerClose(),
+    )
+  else:
+    result.xPool = nimkitWorkerPool()
+    result.xMaximumConcurrentLoads = maximumConcurrentLoads
 
 proc load*(loader: UrlAssetLoader, url: string): UrlAssetHandle {.discardable.} =
   ## Load `url`, reusing an existing cached file or in-flight request.
@@ -627,9 +759,18 @@ proc load*(loader: UrlAssetLoader, url: string): UrlAssetHandle {.discardable.} 
   else:
     loader.xActive[result.xIdentifier] = result
     loader.xActiveUrls[url] = result
-    emit loader.xWorker.executeUrlAssetLoad(
-      result.xIdentifier, url, path, loader.xMaximumAssetBytes
-    )
+    when defined(features.merenda.chronos):
+      emit loader.xWorker.executeUrlAssetLoad(
+        result.xIdentifier, url, path, loader.xMaximumAssetBytes
+      )
+    else:
+      loader.xPending.add UrlAssetRequest(
+        identifier: result.xIdentifier,
+        url: url,
+        path: path,
+        maximumAssetBytes: loader.xMaximumAssetBytes,
+      )
+      loader.startQueuedLoads()
 
 proc load*(loader: UrlAssetLoader, url: urls.Url): UrlAssetHandle {.discardable.} =
   ## Load a parsed HTTP or HTTPS URL.
@@ -641,7 +782,17 @@ proc cancel*(loader: UrlAssetLoader, handle: UrlAssetHandle) =
     return
   if handle.xIdentifier in loader.xActive and
       loader.xActive[handle.xIdentifier] == handle:
-    emit loader.xWorker.cancelUrlAssetLoad(handle.xIdentifier)
+    when defined(features.merenda.chronos):
+      emit loader.xWorker.cancelUrlAssetLoad(handle.xIdentifier)
+    else:
+      if handle.xIdentifier in loader.xRunning:
+        loader.xRunning[handle.xIdentifier].cancellation[].store(true, moRelease)
+      else:
+        for index, request in loader.xPending:
+          if request.identifier == handle.xIdentifier:
+            loader.xPending.delete(index)
+            loader.finishCancelledLoad(request)
+            break
 
 proc poll*(loader: UrlAssetLoader): int {.discardable.} =
   ## Deliver worker results on the loader's owning thread.
@@ -663,18 +814,33 @@ proc waitFor*(
   handle.isFinished()
 
 proc close*(loader: UrlAssetLoader) =
-  ## Cancel pending loads, close the HTTP session, and join the worker thread.
+  ## Cancel pending loads and wait for active workers to release their files.
+  ## The synchronous HTTP client observes cancellation between blocking reads.
   if loader.isNil or loader.xClosed:
     return
   loader.xClosed = true
-  emit loader.xWorker.closeUrlAssetWorker()
-  while not loader.xWorkerClosed:
+  when defined(features.merenda.chronos):
+    emit loader.xWorker.closeUrlAssetWorker()
+    while not loader.xWorkerClosed:
+      discard loader.poll()
+      if not loader.xWorkerClosed:
+        sleep(1)
+    loader.xWorker = nil
+    loader.xThread.stop()
+    loader.xThread.join()
     discard loader.poll()
-    if not loader.xWorkerClosed:
-      sleep(1)
-  loader.xWorker = nil
-  loader.xThread.stop()
-  loader.xThread.join()
-  discard loader.poll()
+  else:
+    for load in loader.xRunning.values:
+      load.cancellation[].store(true, moRelease)
+    let pending = move(loader.xPending)
+    for request in pending:
+      loader.finishCancelledLoad(request)
+    while loader.xRunning.len > 0:
+      discard loader.poll()
+      if loader.xRunning.len > 0:
+        sleep(1)
   loader.xActive.clear()
   loader.xActiveUrls.clear()
+
+when not defined(features.merenda.chronos):
+  var urlAssetWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

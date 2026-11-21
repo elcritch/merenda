@@ -112,7 +112,7 @@ jobs:
         run: nim -v
 
       - name: Install dependencies
-        run: atlas install -tuk --features:kosmo
+        run: atlas install -tuk --features:kosmo,chronos
 
       - name: Build Kosmo
         run: |
@@ -211,7 +211,7 @@ jobs:
           nim -v
 
       - name: Install dependencies
-        run: atlas install -tuk --features:kosmo
+        run: atlas install -tuk --features:kosmo,chronos
 
       - name: Build Kosmo
         run: |
@@ -354,7 +354,7 @@ jobs:
         run: nim -v
 
       - name: Install dependencies
-        run: atlas install -tuk --features:kosmo
+        run: atlas install -tuk --features:kosmo,chronos
 
       - name: Avoid shared-only graphics linker flags
         run: |
@@ -471,7 +471,7 @@ jobs:
             export PKG_CONFIG_PATH="/usr/local/libdata/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
             atlas -v
             nim -v
-            atlas install -tuk --features:kosmo
+            atlas install -tuk --features:kosmo,chronos
             version="${KOSMO_RELEASE_VERSION#v}"
             revision="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
             mkdir -p build dist
@@ -548,7 +548,7 @@ jobs:
         run: nim -v
 
       - name: Install dependencies
-        run: atlas install -tuk --features:kosmo
+        run: atlas install -tuk --features:kosmo,chronos
 
       - name: Validate signing credentials
         if: env.NOTARIZE_MACOS == 'true'
@@ -812,7 +812,7 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: atlas install -tuk --features:kosmo
+        run: atlas install -tuk --features:kosmo,chronos
 
       - name: Set up MinGW and text libraries
         uses: ./.github/actions/setup-mingw

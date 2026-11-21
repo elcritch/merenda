@@ -102,7 +102,8 @@ else:
   import nimkit/table_column_resizing
   import nimkit/tableviews
   import nimkit/tabviews
-  import nimkit/terminalgeometry
+  when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
+    import nimkit/terminalgeometry
   import nimkit/terminalfilelinks
   import nimkit/textbackends
   import nimkit/texteditors

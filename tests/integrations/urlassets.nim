@@ -23,6 +23,8 @@ type
     statusCode: int
     bodyKind: int
     streaming: int
+    redirectPort: int
+    holdResponse: bool
     bodyStarted: Atomic[bool]
     allowFinish: Atomic[bool]
     peerClosed: Atomic[bool]
@@ -66,11 +68,28 @@ proc serveOneRequest(state: ptr TestServerState) {.thread.} =
         break
 
     discard state.requestCount.fetchAdd(1, moRelaxed)
-    if state.streaming > 0:
+    if state.holdResponse:
+      let deadline = getMonoTime() + initDuration(seconds = 10)
+      while not state.allowFinish.load(moAcquire) and getMonoTime() < deadline:
+        sleep(1)
+      if not state.allowFinish.load(moAcquire):
+        state.failed.store(true, moRelease)
+        return
+    if state.redirectPort > 0:
+      client.send(
+        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:" & $state.redirectPort &
+          "/redirected\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+      )
+    elif state.streaming > 0:
       client.send(
         "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
       )
-      client.send(if state.streaming == 1: "8\r\n12345678\r\n" else: "1\r\nx\r\n")
+      client.send(
+        case state.streaming
+        of 1: "8\r\n12345678\r\n"
+        of 3: "2\r\n12\r\n3\r\n345\r\n"
+        else: "1\r\nx\r\n"
+      )
       state.bodyStarted.store(true, moRelease)
       let deadline = getMonoTime() + initDuration(seconds = 10)
       while not state.allowFinish.load(moAcquire) and getMonoTime() < deadline:
@@ -99,12 +118,20 @@ proc serveOneRequest(state: ptr TestServerState) {.thread.} =
   except CatchableError:
     state.failed.store(true, moRelease)
 
-proc newTestServer(statusCode = 200, bodyKind = 0, streaming = 0): TestServer =
+proc newTestServer(
+    statusCode = 200,
+    bodyKind = 0,
+    streaming = 0,
+    redirectPort = 0,
+    holdResponse = false,
+): TestServer =
   result =
     TestServer(state: cast[ptr TestServerState](allocShared0(sizeof(TestServerState))))
   result.state.statusCode = statusCode
   result.state.bodyKind = bodyKind
   result.state.streaming = streaming
+  result.state.redirectPort = redirectPort
+  result.state.holdResponse = holdResponse
   result.state.port.store(0, moRelaxed)
   result.state.requestCount.store(0, moRelaxed)
   result.state.failed.store(false, moRelaxed)
@@ -146,7 +173,7 @@ suite "URL asset loader":
     expect ValueError:
       discard urlAssetCacheDirectory("  ")
 
-  test "downloads on a Chronos worker and reuses the cached asset":
+  test "downloads on a background worker and reuses the cached asset":
     let
       cache = createTempDir("merenda-url-assets-", "")
       server = newTestServer()
@@ -240,6 +267,28 @@ suite "URL asset loader":
     check handle.result().errorMessage.contains("404")
     check not fileExists(loader.cachedAssetPath(assetUrl))
 
+  test "uses the final HTTP response after a redirect":
+    let cache = createTempDir("merenda-url-redirect-", "")
+    defer:
+      removeDir(cache)
+    let destination = newTestServer(bodyKind = 2)
+    defer:
+      destination.close()
+    let redirect = newTestServer(redirectPort = destination.state.port.load(moAcquire))
+    defer:
+      redirect.close()
+    let loader = newUrlAssetLoader("org.example.merenda-tests", cache)
+    defer:
+      loader.close()
+
+    let handle = loader.load(redirect.url("/original"))
+    require loader.waitFor(handle, 5_000)
+    require handle.succeeded()
+    check handle.result().url == redirect.url("/original")
+    check handle.result().statusCode == 200
+    check handle.result().mediaType == "image/png"
+    check readFile(handle.result().path) == readFile(TestImagePath)
+
   test "enforces the configured asset size limit":
     let
       cache = createTempDir("merenda-url-assets-", "")
@@ -265,7 +314,7 @@ suite "URL asset loader":
     let cache = createTempDir("merenda-url-stream-limit-", "")
     defer:
       removeDir(cache)
-    let server = newTestServer(streaming = 1)
+    let server = newTestServer(streaming = 3)
     defer:
       server.close()
     let loader =
@@ -346,8 +395,8 @@ suite "URL asset loader":
   test "Markdown views rerender remote images after asynchronous loading":
     let
       cache = createTempDir("merenda-markdown-url-assets-", "")
-      server = newTestServer(bodyKind = 2)
-      secondServer = newTestServer(bodyKind = 2)
+      server = newTestServer(bodyKind = 2, holdResponse = true)
+      secondServer = newTestServer(bodyKind = 2, holdResponse = true)
       assetUrl = server.url("/remote-image")
       secondAssetUrl = secondServer.url("/second-remote-image")
     defer:
@@ -368,9 +417,11 @@ suite "URL asset loader":
     )
     require view.waitForMarkdownParsing()
     check view.markdownParseError() == ""
-
     check view.urlAssetLoader() == loader
     check view.textView().attachmentPresentations().len == 0
+    check loader.pendingCount() == 2
+    server.state.allowFinish.store(true, moRelease)
+    secondServer.state.allowFinish.store(true, moRelease)
     let deadline = getMonoTime() + initDuration(seconds = 5)
     while loader.pendingCount() > 0 and getMonoTime() < deadline:
       discard loader.poll()

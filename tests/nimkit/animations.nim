@@ -499,7 +499,7 @@ suite "NimKit animations":
     check group.state{} == asStopped
     check scheduler.animationCount == 0
 
-  test "Chronos clock queues ticks and scheduler drains them locally":
+  test "background clock queues ticks and scheduler drains them locally":
     let
       scheduler = newAnimationScheduler(frameInterval = initDuration(milliseconds = 2))
       animation = newValueAnimation[float32](
@@ -548,7 +548,7 @@ suite "NimKit animations":
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
 
-  test "repeated Chronos clock starts reuse dispatcher descriptors":
+  test "repeated background clock starts reuse dispatcher descriptors":
     let warmup = newAnimationSchedulerClock(frameInterval = 2.ms)
     warmup.start()
     warmup.stop()
@@ -562,7 +562,7 @@ suite "NimKit animations":
     if before >= 0 and after >= 0:
       check after <= before + 1
 
-  test "shared Chronos clock remains alive until all clock users stop":
+  test "shared background clock remains alive until all clock users stop":
     let
       first = newAnimationSchedulerClock(frameInterval = 2.ms)
       second = newAnimationSchedulerClock(frameInterval = 2.ms)

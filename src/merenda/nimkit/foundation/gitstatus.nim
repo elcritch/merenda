@@ -2,9 +2,8 @@
 
 import std/[monotimes, os, strutils, times]
 
-import sigils/[core, threadChronos, threadProxies, threads]
-import ./backgroundworkers
-import ./gitprocesses
+import sigils/[core, threadProxies, threads]
+import ./[backgroundworkers, gitprocesses, timerthreads]
 
 const DefaultGitStatusRefreshInterval*: Duration = initDuration(seconds = 3)
 
@@ -40,7 +39,7 @@ type
   GitStatusService* = ref object of Agent
     xPool: SigilThreadPoolPtr
     xWorker: AgentProxy[GitStatusWorker]
-    xTimerThread: SigilChronosThreadPtr
+    xTimerThread: NimkitTimerThreadPtr
     xTicker: AgentProxy[GitStatusRefreshTicker]
     xTimer: SigilTimer
     xRootPaths: seq[string]

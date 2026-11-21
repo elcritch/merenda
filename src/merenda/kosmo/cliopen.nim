@@ -2,9 +2,9 @@
 
 import std/[algorithm, json, nativesockets, net, os, sets, strutils, sysrand, times]
 
-import sigils/[core, threadChronos, threadProxies, threads]
+import sigils/[core, threadProxies, threads]
 
-import ../nimkit/foundation/backgroundworkers
+import ../nimkit/foundation/[backgroundworkers, timerthreads]
 
 const
   KosmoCliProtocolVersion* = 2

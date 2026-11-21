@@ -16,7 +16,7 @@ requires "crunchy >= 0.1.11"
 #requires "gh:elcritch/siwin#fix/cocoa-stale-ime-state"
 requires "gh:elcritch/figdraw >= 0.48.3 [siwin]"
 requires "harfbuzzy >= 0.7.1 [runtime]"
-requires "sigils >= 0.33.0 [sigNameAsString, closures, siwin, chronos]"
+requires "sigils >= 0.33.0 [sigNameAsString, closures, siwin]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
 requires "cborious"
@@ -25,7 +25,7 @@ requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership [regex]"
 requires "gh:elcritch/matter >= 0.6.2"
 requires "reni#fbf085a"
-requires "gh:elcritch/terminex == 0.4.2 [sigils]"
+requires "gh:elcritch/terminex == 0.4.2"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
@@ -38,7 +38,15 @@ feature "nifDemo":
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
+feature "chronos":
+  requires "gh:status-im/nim-chronos >= 4.2.0"
+
+feature "terminal":
+  # Terminex's threaded sessions use Chronos.
+  requires "gh:status-im/nim-chronos >= 4.2.0"
+
 feature "kosmo":
+  requires "gh:status-im/nim-chronos >= 4.2.0"
   requires "gh:elcritch/moe#6adad4c3834c5484e92c462c485be70fd4adee33"
 
 feature "references":
