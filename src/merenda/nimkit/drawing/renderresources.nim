@@ -159,13 +159,13 @@ proc metrics*(manager: RenderResourceManager): RenderResourceMetrics =
     result = manager.metricsValue
 
 proc removeResourcesOutsideManifest[BackendState](
-    renderer: FigRenderer[BackendState], resources: auto
+    renderer: FigRenderer[BackendState], resources: auto, residentEntries: HashSet[Hash]
 ) =
   if not resources.hasResourceFilter():
     return
 
   var removed: seq[Hash]
-  for key, metadata in renderer.ctx.atlasEntryMetaPtr().pairs:
+  for key, metadata in tables.pairs(renderer.ctx.atlasEntryMetaPtr()):
     let retained =
       case metadata.kind
       of aekImage:
@@ -178,7 +178,7 @@ proc removeResourcesOutsideManifest[BackendState](
         # to include in a render manifest, and evicting them here makes every
         # frame allocate the same entries again until the atlas is exhausted.
         true
-    if not retained:
+    if not retained and not sets.contains(residentEntries, key):
       removed.add key
   for key in removed:
     renderer.ctx.removeAtlasEntry(key)
@@ -188,7 +188,7 @@ proc restoreManifestImages[BackendState](
 ) =
   if resources.isNil:
     return
-  for id, resource in resources.images:
+  for id, resource in tables.pairs(resources.images):
     let pixels = resource.source.pixels()
     discard renderer.ensureImage(id, pixels)
 
@@ -204,7 +204,7 @@ proc missingLiveImage[BackendState](
 ): bool =
   if resources.isNil:
     return
-  for id in resources.images.keys:
+  for id in tables.keys(resources.images):
     if not renderer.containsImage(id):
       return true
 
@@ -213,20 +213,29 @@ proc missingLiveImage[BackendState](
 ): bool =
   if not resources.present:
     return
-  for id in resources.images:
+  for id in sets.items(resources.images):
     if not renderer.containsImage(id):
       return true
 
 proc replayWorkingSet[BackendState](
-    manager: RenderResourceManager, renderer: FigRenderer[BackendState], resources: auto
+    manager: RenderResourceManager,
+    renderer: FigRenderer[BackendState],
+    resources: auto,
+    preserveResident = false,
 ) =
   var attempts = 0
   while attempts < 8:
     let generation = renderer.atlasGeneration()
+    var residentEntries: HashSet[Hash]
+    if preserveResident:
+      for key in tables.keys(renderer.ctx.atlasEntryMetaPtr()):
+        sets.incl(residentEntries, key)
     renderer.ctx.ensureImageMessageSubscription()
     replayImageMessages(renderer.ctx.imageMessages)
     renderer.processImageMessages()
-    renderer.removeResourcesOutsideManifest(resources)
+    if renderer.atlasGeneration() != generation:
+      sets.clear(residentEntries)
+    renderer.removeResourcesOutsideManifest(resources, residentEntries)
     renderer.restoreManifestImages(resources)
     inc manager.metricsValue.replayCount
     if renderer.atlasGeneration() == generation:
@@ -258,7 +267,9 @@ proc prepareWithResources[BackendState, Resources](
     # window already published. An image evicted from this renderer while it
     # was outside the live manifest must be restored when it returns.
     inc manager.metricsValue.residencyRecoveryCount
-    manager.replayWorkingSet(renderer, resources)
+    # Retain resident images across visibility changes. Atlas rebuilds and
+    # pressure recovery still prune to the current working set.
+    manager.replayWorkingSet(renderer, resources, preserveResident = true)
 
   var usage = renderer.atlasUsage()
   manager.atlasHighWaterUsedArea = max(manager.atlasHighWaterUsedArea, usage.usedArea)

@@ -944,7 +944,7 @@ proc newKosmoSettingsWindow*(
     terminalLinksEnabled = true,
     terminalLinksHandler: KosmoTerminalLinksHandler = nil,
     justifyMarkdown = false,
-    justifyMarkdownTarget: nimkit.ClosureTarget = nil,
+    justifyMarkdownTarget: nimkit.ActionAdapter = nil,
     terminalInputPolicy = KosmoTerminalInputPolicy.Hybrid,
     terminalInputPolicyHandler: KosmoTerminalInputPolicyHandler = nil,
     shortcutProfile = defaultKosmoShortcutProfile(),

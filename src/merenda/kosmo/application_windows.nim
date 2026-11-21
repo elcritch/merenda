@@ -307,7 +307,14 @@ proc applyJustifyMarkdown(frontend: KosmoApplication, enabled: bool) =
   if frontend.dockController.isNil:
     return
   for group in frontend.dockController.groups:
-    group.editorView.refresh()
+    let
+      pane = group.pane
+      reader = pane.contentView
+      target = reader.readerTarget()
+    if target.isSome:
+      reader.applyReaderStyle(
+        pane.markdownControls.markdownPresentationStyle(target.get)
+      )
 
 proc `justifyMarkdown=`*(frontend: KosmoApplication, enabled: bool) =
   ## Apply and persist Markdown justification across current and future windows.
@@ -642,6 +649,12 @@ protocol KosmoNimdexSettingsTargetMethods of KosmoNimdexSettingsDelegate:
           manager.configPath.len > 0:
         return "Connecting; could not save the setting."
 
+proc changeJustifyMarkdown(
+    lifecycle: KosmoWindowLifecycle, sender: nimkit.DynamicAgent
+) {.nimcall.} =
+  if not lifecycle.frontend.isNil and sender of nimkit.Button:
+    lifecycle.frontend[].justifyMarkdown = nimkit.Button(sender).state == nimkit.bsOn
+
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present Kosmo's application settings without Merenda's global settings pages.
   if frontend.isNil or frontend.application.isNil:
@@ -693,12 +706,8 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       justifyMarkdown = frontend.xJustifyMarkdown,
       justifyMarkdownTarget = nimkit.newActionTarget(
         nimkit.actionSelector(KosmoJustifyMarkdownAction),
-        proc(sender: nimkit.DynamicAgent) =
-          discard sender
-          if not weakFrontend.isNil:
-            weakFrontend[].justifyMarkdown =
-              weakFrontend[].xSettingsWindow.justifyMarkdown()
-        ,
+        frontend.xWindowLifecycle,
+        changeJustifyMarkdown,
       ),
       terminalInputPolicy = frontend.xTerminalInputPolicy,
       terminalInputPolicyHandler = proc(policy: KosmoTerminalInputPolicy) =
