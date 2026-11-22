@@ -49,8 +49,13 @@ suite "SVG drawing resources":
       let raster = newSvgMtsdfResource(FilledPath, renderMode = srmRaster)
       require raster.layers.len == 1
       require raster.layers[0].kind == slkRasterGroup
-      let index =
-        context.addSvgMtsdf(rect(0, 0, 80, 60), raster, fill(rgba(0, 0, 255, 255)))
+      let index = context.addSvgMtsdf(
+        DefaultDrawLevel,
+        FigIdx(-1),
+        rect(0, 0, 80, 60),
+        raster,
+        fill(rgba(0, 0, 255, 255)),
+      )
       require index.int == 0
       let node = context.renderList.nodes[index.int]
       require node.kind == nkImage

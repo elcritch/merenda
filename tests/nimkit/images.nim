@@ -286,7 +286,8 @@ suite "nimkit image resources":
       let svg = newSvgMtsdfResource(
         """<svg viewBox="0 0 16 16"><path d="M1 1 L15 1 L8 15 Z"/></svg>"""
       )
-      let index = context.addSvgMtsdf(rect(0, 0, 16, 16), svg)
+      let index =
+        context.addSvgMtsdf(DefaultDrawLevel, FigIdx(-1), rect(0, 0, 16, 16), svg)
       require index.int >= 0
       let node = context.renderList.nodes[index.int]
       require node.kind == nkMtsdfImage
