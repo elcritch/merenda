@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix DirectView bodies evaluating the host expression twice. A host can be
+  cleared and rebuilt after a nested setter or key check raises.
+- Preserve pending binding updates across callback failures and synchronize
+  empty selection and selection mode in virtualized DirectView collections.
+
 - Make Chronos opt-in for NimKit. Markdown image downloads use the shared
   Sigils worker pool by default. Enable the Atlas `chronos` feature to use
   Chronos for downloads and timers. Standalone projects can enable threaded
@@ -24,7 +29,7 @@
   vanish in one window after its image atlas was rebuilt while the icon was off
   screen. Render preparation now restores live images missing from a renderer's
   atlas, not only after an atlas generation change.
-- Require FigDraw 0.48.3 or newer.
+- Require FigDraw 0.49.0 or newer.
 - Reduce CPU time spent rendering text while scrolling Markdown, Git diffs,
   and other viewport-rendered text.
 - Reuse glyph layouts when scrolling in the Moe editor and Terminal, and

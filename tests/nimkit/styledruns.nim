@@ -1,4 +1,7 @@
 import std/[strutils, unicode, unittest]
+
+from figdraw import sourceRunes
+
 import merenda/nimkit
 import merenda/nimkit/text/textbytecursors
 import merenda/nimkit/text/textsnapshots

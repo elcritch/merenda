@@ -14,7 +14,7 @@ requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
 # This revision loads Vulkan lazily so a missing driver can use OpenGL.
 #requires "gh:elcritch/siwin#fix/cocoa-stale-ime-state"
-requires "gh:elcritch/figdraw >= 0.48.4 [siwin]"
+requires "gh:elcritch/figdraw >= 0.49.0 [siwin]"
 requires "harfbuzzy >= 0.7.1 [runtime]"
 requires "sigils >= 0.33.0 [sigNameAsString, closures, siwin]"
 requires "gh:elcritch/variant#fix/ic-type-ids"

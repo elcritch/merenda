@@ -15,6 +15,12 @@ type RebindingObserver = ref object of Responder
   first, second: ArrayController
   field: TextField
 
+type ReplacingRowsObserver = ref object of Responder
+  rows: CollectionRows
+  collection: CollectionView
+  controller: ArrayController
+  replacing: bool
+
 proc readBoundTitle(controller: ArrayController, id: string): string =
   controller.valueForItem(id, "title").requireString()
 
@@ -33,7 +39,102 @@ proc closeRows(observer: ClosingObserver, sender: DynamicAgent) {.slot.} =
   observer.rows.close()
   observer.rows.close()
 
+proc replaceRows(observer: ReplacingRowsObserver, sender: DynamicAgent) {.slot.} =
+  if observer.replacing:
+    return
+  observer.replacing = true
+  observer.rows.close()
+  observer.rows = newCollectionRows(
+    observer.collection,
+    observer.controller,
+    proc(row: DirectView, controller: ArrayController, identifier: string) =
+      discard,
+  )
+  observer.replacing = false
+
 suite "editable virtual collection demo":
+  test "selection and mode round-trip through the virtual collection":
+    let demo = newDirectCollectionDemo(30)
+    let selection = ArrayController(demo.view.dataSource()).selectionController
+    demo.view.selectItemAtIndex(0)
+    check selection.selectedIdentifiers == @["0"]
+    demo.view.selectedIdentifiers = []
+    demo.rows.flushBindings()
+    check demo.view.selectedIdentifiers.len == 0
+    check selection.selectedIdentifiers.len == 0
+
+    selection.mode = mselMultiple
+    selection.setSelectedIdentifiers(["0", "1"])
+    demo.rows.flushBindings()
+    check demo.view.selectionMode == csmMultiple
+    check demo.view.selectedIdentifiers == @["0", "1"]
+    check selection.selectedIdentifiers == @["0", "1"]
+    demo.view.selectItemAtIndex(1, {kmControl})
+    demo.view.selectItemAtIndex(0, {kmControl})
+    demo.rows.flushBindings()
+    check demo.view.selectedIdentifiers.len == 0
+    check selection.selectedIdentifiers.len == 0
+
+    selection.setSelectedIdentifiers(["0", "1"])
+    selection.mode = mselSingle
+    demo.rows.flushBindings()
+    check demo.view.selectionMode == csmSingle
+    check demo.view.selectedIdentifiers == @["0"]
+    check selection.selectedIdentifiers == @["0"]
+    selection.mode = mselMultiple
+    demo.rows.flushBindings()
+    demo.view.selectItemAtIndex(1, {kmControl})
+    check demo.view.selectedIdentifiers == @["0", "1"]
+    check selection.selectedIdentifiers == @["0", "1"]
+    selection.mode = mselSingle
+    demo.rows.flushBindings()
+    selection.mode = mselNone
+    demo.rows.flushBindings()
+    check demo.view.selectionMode == csmNone
+    check demo.view.selectedIdentifiers.len == 0
+    check selection.selectedIdentifiers.len == 0
+    check selection.anchorIdentifier == ""
+    check selection.leadIdentifier == ""
+    selection.mode = mselSingle
+    demo.rows.flushBindings()
+    demo.view.selectItemAtIndex(1)
+    check selection.selectedIdentifiers == @["1"]
+    demo.rows.close()
+
+  test "teardown during a collection selection signal is safe":
+    let demo = newDirectCollectionDemo(30)
+    let baselineSubscriptions = demo.view.subcriptions.len - 1
+    let controller = ArrayController(demo.view.dataSource())
+    let observer = ClosingObserver(rows: demo.rows)
+    initResponder(observer)
+    demo.view.connect(collectionSelectionDidChange, observer, closeRows)
+    demo.view.selectItemAtIndex(0)
+    demo.view.disconnect(collectionSelectionDidChange, observer, closeRows)
+    # Detaching the data source clears the selection and emits a nested change.
+    check observer.calls == 2
+    check controller.selectionController.subcriptions.len == 0
+    check demo.view.subcriptions.len == baselineSubscriptions
+
+  test "replacing rows during a selection signal keeps the new observer live":
+    let demo = newDirectCollectionDemo(30)
+    let baselineSubscriptions = demo.view.subcriptions.len - 1
+    let controller = ArrayController(demo.view.dataSource())
+    let observer = ReplacingRowsObserver(
+      rows: demo.rows, collection: demo.view, controller: controller
+    )
+    initResponder(observer)
+    demo.view.connect(collectionSelectionDidChange, observer, replaceRows)
+    demo.view.selectItemAtIndex(0)
+    demo.view.disconnect(collectionSelectionDidChange, observer, replaceRows)
+    demo.view.selectedIdentifiers = []
+    observer.rows.flushBindings()
+    check controller.selectionController.selectedIdentifiers.len == 0
+    check demo.view.selectedIdentifiers.len == 0
+    observer.rows.close()
+    check demo.view.subcriptions.len == baselineSubscriptions
+    check controller.subcriptions.len == 0
+    check controller.selectionController.subcriptions.len == 0
+
   test "native composition ranges preserve Unicode and committed text":
     let demo = newDirectCollectionDemo(30)
     let window = newWindow("Composition", frame = rect(0, 0, 640, 480))

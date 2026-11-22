@@ -311,8 +311,14 @@ proc `mode=`*(controller: SelectionController, mode: ModelSelectionMode) =
   if controller.xMode == mode:
     return
   controller.xMode = mode
-  if mode in {mselNone, mselSingle} and controller.xSelectedIdentifiers.len > 1:
-    controller.xSelectedIdentifiers.setLen(if mode == mselNone: 0 else: 1)
+  if mode == mselNone:
+    controller.xSelectedIdentifiers.setLen(0)
+    controller.xAnchorIdentifier = ""
+    controller.xLeadIdentifier = ""
+  elif mode == mselSingle and controller.xSelectedIdentifiers.len > 1:
+    controller.xSelectedIdentifiers.setLen(1)
+    controller.xAnchorIdentifier = controller.xSelectedIdentifiers[0]
+    controller.xLeadIdentifier = controller.xSelectedIdentifiers[0]
   controller.notifySelectionControllerDidChange()
 
 proc selectedIdentifiers*(controller: SelectionController): seq[string] =

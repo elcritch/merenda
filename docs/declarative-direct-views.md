@@ -3,12 +3,11 @@
 This experimental API requires an explicit `merenda/nimkit/directviews` import
 and may change incompatibly without a stability promise.
 
-This is the P7 experiment in [the declarative design comparison](../TODO-declarative.md#proposed-alternative-prototypes).
-It does not construct a `ViewSpec` tree. A declaration finds or creates actual
-NimKit views and configures them through their existing APIs. Controllers own
-application operations and collection structure; bindings connect changes to the
-appropriate live views. The first prototype is implemented alongside P0; the
-sections below retain the broader design goals, including work still deferred.
+A DirectView body creates or reuses NimKit views and configures them through
+their existing APIs. Controllers own application operations and collection
+structure, and bindings connect changes to the appropriate views.
+The [DirectView roadmap](../TODO-declarative.md) tracks correctness fixes,
+recovery from interrupted updates, and native application validation.
 
 ## Current prototype: collections and owned components
 
@@ -135,11 +134,25 @@ installed. Arbitrary user statements can still have side effects, so detached
 mode is not a sandbox. Drag commits check their task snapshot against current
 state; unrelated counters are outside that snapshot.
 
+### Recovering from an error
+
+A body applies setters as it runs. If a builder, setter or key check raises a
+catchable error, the caller receives that error. The host may contain earlier
+property changes, newly built subtrees, and controls from the previous pass. Call
+`host.clear()` before composing a replacement body from the model. Clearing
+retires the host's bindings and actions, including those on controls retained
+by application code. For a low-level `DirectViewSession`, close the failed
+session and create a fresh one.
+
+When a queued binding getter or setter raises a catchable error,
+`BindingScope.flushBindings()` attempts the remaining bindings in that scope
+and then raises the first error. A still-current failed binding remains pending.
+After addressing the cause, flush again to retry it. A subsequent source
+notification also schedules a flush. If this happens during a GUI drain, the
+remaining frame work is available on the next drain.
+
 ### Remaining limitations
 
-- Direct execution streams mutations. Duplicate keys fail when encountered;
-  earlier setters may have run. Collection publication now prevalidates model
-  keys, but arbitrary UI trees have no transactional rollback or whole-tree preflight.
 - Components require one root, sibling keys and StackView arrangement. Cross-parent
   moves recreate views; offscreen/deleted editor lifetime is not solved here.
 - Inline actions still allocate adapters on structural evaluation. Neither an
@@ -482,7 +495,9 @@ controller must own any draft that must survive the end of editing or a row's
 retirement; row identity is not a durable draft or asynchronous validity token.
 The adapter uses the collection's delegate and expects unique, stable item IDs.
 
-Programmatic selection changes through the collection or its controller preserve
+The adapter applies the controller's selection mode before its selected IDs.
+Clearing the view selection or toggling its last selected item off also clears
+the controller selection. Programmatic selection changes through either preserve
 the active editor, including when revealing the selected row scrolls it offscreen.
 Pointer selection requests focus for the collection and follows the window's normal
 end-editing and validation behavior.
