@@ -301,9 +301,14 @@ suite "Kosmo settings layout":
     let tabs =
       TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
     let minimumSize = window.contentMinSize()
-    check minimumSize.width == KosmoSettingsMinimumWidth
+    check minimumSize.width >= KosmoSettingsMinimumWidth
     check minimumSize.height >= KosmoSettingsMinimumHeight
     window.frame = rect(initPoint(180, 160), minimumSize)
+    settings.contentView().layoutSubtreeIfNeeded()
+    for index in 0 ..< tabs.items().len:
+      let tab = tabs.tabRect(index)
+      check tab.origin.x >= 0.0'f32
+      check tab.origin.x + tab.size.width <= tabs.bounds().size.width + 0.1'f32
     for item in tabs.items():
       require tabs.selectPage(item.identifier())
       settings.contentView().layoutSubtreeIfNeeded()
@@ -333,7 +338,7 @@ suite "Kosmo settings layout":
     window.setContentView(settings.contentView())
     let attachedMinimum = window.contentMinSize().height
     check attachedMinimum >= constructedMinimum + attachedRow.fittingSize().height
-    check window.contentMinSize().width == KosmoSettingsMinimumWidth
+    check window.contentMinSize().width >= KosmoSettingsMinimumWidth
     let appearanceRow = newLabel("Second additional measurement row")
     page.addArrangedSubview(appearanceRow)
     window.setAppearance(window.effectiveAppearance())

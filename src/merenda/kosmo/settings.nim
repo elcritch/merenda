@@ -758,14 +758,15 @@ proc settingsContentMinimumHeight(content: nimkit.View, tabs: nimkit.TabView): f
   content.fittingSize().height - tallestPage + tallestRequirement
 
 proc refreshContentMinimumSize(settings: KosmoSettingsWindow) =
-  ## Recompute the content-derived window minimum. Runs at construction and
+  ## Recompute the content-derived window minimum. The width keeps every tab
+  ## title visible, and the height keeps page text legible. Runs at construction and
   ## whenever the settings content attaches to the window or the window's
   ## effective appearance changes, since both can resolve a different UI font
   ## than the detached default appearance measured during construction.
   if settings.isNil or settings.xWindow.isNil:
     return
   settings.xWindow.contentMinSize = nimkit.initSize(
-    KosmoSettingsMinimumWidth,
+    max(KosmoSettingsMinimumWidth, settings.xContentView.fittingSize().width),
     max(
       KosmoSettingsMinimumHeight,
       settingsContentMinimumHeight(settings.xContentView, settings.xTabs),

@@ -193,3 +193,17 @@ suite "nimkit form views":
 
     label.removeFromSuperview()
     check form.rows.len == 0
+
+  test "a stacked form keeps its natural height beside a flexible spacer":
+    let
+      stack = newStackView(laVertical)
+      form = newFormView()
+      field = newFixedIntrinsicView(100, 20)
+    stack.alignment = svaFill
+    form.edgeInsets = insets(0.0)
+    form.addRow(newFixedIntrinsicView(40, 12), field)
+    stack.addArrangedSubview(form)
+    stack.addFlexibleSpacer()
+    stack.frame = rect(0, 0, 300, 400)
+    stack.layoutSubtreeIfNeeded()
+    check form.frame().size.height == form.fittingSize().height
