@@ -2,7 +2,8 @@ import std/[hashes, monotimes, options, os, sets, strutils, times, unicode, unit
 
 import sigils/core
 import sigils/threads
-from figdraw import GlyphArrangement, len, `[]`, utf8RunesFromText, sameUtf8Runes
+from figdraw import
+  GlyphArrangement, len, sameUtf8Runes, sourceRunes, utf8RunesFromText, `[]`
 from threading/smartptrs import `[]`
 import merenda/nimkit/foundation/mainthreadwork
 

@@ -1,8 +1,8 @@
 import std/[hashes, math, options, strutils, unicode]
 
 from figdraw import
-  GlyphArrangement, glyphArrangementView, lineGlyphRanges, shareGlyphArrangement, len,
-  `[]`, sourceRuneRange
+  GlyphArrangement, arrangedGlyphs, glyphArrangementView, len, lineGlyphRanges,
+  positions, runes, selectionRects, shareGlyphArrangement, sourceRuneRange, `[]`
 from pkg/vmath import x, y
 import threading/smartptrs
 

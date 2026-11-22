@@ -16,7 +16,7 @@ import
 import std/hashes
 from pkg/pixie import resize
 
-from figdraw import SystemTypeface, Utf8Runes, len, pairs, `[]`
+from figdraw import SystemTypeface, Utf8Runes, arrangedGlyphs, len, pairs, `[]`
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8

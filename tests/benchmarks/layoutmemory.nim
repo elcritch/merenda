@@ -72,12 +72,14 @@ proc makeLayout(): GlyphArrangement =
   result = GlyphArrangement(
     spans: @[0 .. TotalGlyphs - 1],
     fonts: @[font],
-    sourceRunes: source,
-    runes: source,
-    positions: positions,
-    selectionRects: rectangles,
-    arrangedGlyphs: buildArrangedGlyphs(
-      source, positions, rectangles, @[0 .. TotalGlyphs - 1], @[font]
+    textLayout: FigTextLayout(
+      sourceRunes: source,
+      runes: source,
+      positions: positions,
+      selectionRects: rectangles,
+      arrangedGlyphs: buildArrangedGlyphs(
+        source, positions, rectangles, @[0 .. TotalGlyphs - 1], @[font]
+      ),
     ),
   )
   for lineIndex in 0 ..< LineCount:

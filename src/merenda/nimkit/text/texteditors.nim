@@ -1,3 +1,4 @@
+from figdraw import bounding, selectionRects
 import sigils/core
 
 import ../accessibility/accessibility
