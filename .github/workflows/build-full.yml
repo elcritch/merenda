@@ -22,12 +22,12 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            nimversion: '2.2.10'
+            nimversion: '2.2.12'
             display: none
             nimargs: ''
             features: kosmo,nifDemo,chronos
           - os: ubuntu-26.04
-            nimversion: '2.2.10'
+            nimversion: '2.2.12'
             display: x11
             nimargs: '-- --opt:none'
             features: kosmo,nifDemo
@@ -256,11 +256,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            nimversion: '2.2.10'
+            nimversion: '2.2.12'
             display: none
             nimargs: ''
           - os: ubuntu-26.04
-            nimversion: '2.2.10'
+            nimversion: '2.2.12'
             display: x11
             nimargs: ''
     steps:
@@ -397,14 +397,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-nim2.2.10-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+        key: ${{ runner.os }}-nim2.2.12-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
     - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         bash .github/scripts/install-atlas.sh
-        "$HOME/.local/bin/atlas" env "2.2.10" --binary --github-path
+        "$HOME/.local/bin/atlas" env "2.2.12" --binary --github-path
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       timeout-minutes: 30
@@ -464,7 +464,7 @@ jobs:
       fail-fast: false
       matrix:
         nimversion:
-          - '2.2.10'
+          - '2.2.12'
         os:
           - macos-latest
           - ubuntu-latest
