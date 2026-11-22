@@ -6,7 +6,16 @@
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize
   empty selection and selection mode in virtualized DirectView collections.
-
+- Add `MerendaSettingsController`, which builds Merenda's Appearance,
+  Typography, and Behavior settings pages for a host's own tab view.
+  `MerendaSettingsWindow` is now a panel around the same controller. An
+  optional inherited-appearance provider adds a "Use Merenda Settings" theme
+  choice.
+- Add Merenda's Appearance and Typography pages to Kosmo Settings. Their theme
+  and fonts style only Kosmo windows, leave the application-wide Merenda
+  appearance unchanged, and persist as `kosmoTheme`, `kosmoFont`,
+  `kosmoMonoFont`, and `kosmoFontSize`. When these keys are empty, Kosmo
+  windows follow Merenda Settings.
 - Make Chronos opt-in for NimKit. Markdown image downloads use the shared
   Sigils worker pool by default. Enable the Atlas `chronos` feature to use
   Chronos for downloads and timers. Standalone projects can enable threaded

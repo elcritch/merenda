@@ -307,7 +307,6 @@ suite "Kosmo settings layout":
     for item in tabs.items():
       require tabs.selectPage(item.identifier())
       settings.contentView().layoutSubtreeIfNeeded()
-      require item.view() of StackView
       let stack = StackView(item.view())
       for child in stack.arrangedSubviews():
         if stack.arrangedSubviewSizingPolicy(child) == svspFillAvailableSpace:

@@ -370,6 +370,84 @@ proc refreshAdaptiveChrome(manager: KosmoWindowManager) =
   appearance.theme = compiled.theme
   manager.application.setAppearance(appearance)
 
+proc interfaceAppearance(manager: KosmoWindowManager): Option[nimkit.Appearance] =
+  ## Compose the Kosmo-only appearance over the current Merenda appearance.
+  if manager.isNil or manager.application.isNil or manager.interfaceStyle.isEmpty:
+    return
+  some(
+    manager.application.effectiveAppearance().composeAppearance(
+      manager.interfaceStyle, inheritsFontSize = true
+    )
+  )
+
+proc applyInterfaceAppearance(
+    window: nimkit.Window, appearance: Option[nimkit.Appearance]
+) =
+  if window.isNil:
+    return
+  if appearance.isSome:
+    window.setAppearance(appearance.get)
+  else:
+    window.clearAppearance()
+
+proc applyInterfaceAppearance(frontend: KosmoApplication, window: nimkit.Window) =
+  if not frontend.isNil and not frontend.xWindowManager.isNil:
+    window.applyInterfaceAppearance(frontend.xWindowManager{}.interfaceAppearance())
+
+proc refreshInterfaceAppearance(
+    frontend: KosmoApplication, appearance: Option[nimkit.Appearance]
+) =
+  frontend.window.applyInterfaceAppearance(appearance)
+  if not frontend.dockController.isNil:
+    for host in frontend.dockController.hosts:
+      if host.window != frontend.window:
+        host.window.applyInterfaceAppearance(appearance)
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.window.applyInterfaceAppearance(appearance)
+
+proc refreshInterfaceAppearance(manager: KosmoWindowManager) =
+  ## Restyle every Kosmo window after the Kosmo or Merenda appearance changed.
+  let appearance = manager.interfaceAppearance()
+  for frontend in manager.frontends:
+    if not frontend.xClosed:
+      frontend.refreshInterfaceAppearance(appearance)
+
+proc interfaceStyle*(frontend: KosmoApplication): KosmoInterfaceStyle =
+  ## Return the theme and fonts applied only to Kosmo windows.
+  if not frontend.isNil and not frontend.xWindowManager.isNil:
+    result = frontend.xWindowManager{}.interfaceStyle
+
+proc storeInterfaceStyle(frontend: KosmoApplication, style: KosmoInterfaceStyle): bool =
+  ## Apply a Kosmo-only style and report whether it was persisted.
+  if frontend.isNil or frontend.xWindowManager.isNil:
+    return
+  let manager = frontend.xWindowManager{}
+  manager.interfaceStyle = style
+  manager.config.storeKosmoInterfaceStyle(style)
+  manager.refreshInterfaceAppearance()
+  manager.configPath.len == 0 or manager.config.saveKosmoConfig(manager.configPath)
+
+proc `interfaceStyle=`*(frontend: KosmoApplication, style: KosmoInterfaceStyle) =
+  ## Apply and persist a Kosmo-only theme and fonts without changing the
+  ## application-wide Merenda appearance. An empty style follows Merenda Settings.
+  discard frontend.storeInterfaceStyle(style)
+
+proc commitInterfaceSettings(
+    frontend: KosmoApplication, settings: nimkit.MerendaSettings
+): bool =
+  if not frontend.isNil:
+    result = frontend.storeInterfaceStyle(
+      settings.interfaceStyle(frontend.application.effectiveAppearance())
+    )
+
+proc supplementalFonts(app: nimkit.Application): seq[nimkit.FontCatalogEntry] =
+  let provider = app.supplementalFontCatalogProvider()
+  if not provider.isNil:
+    try:
+      result = provider()
+    except CatchableError:
+      discard
+
 proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
   ## Apply an available Moe theme and repaint every editor pane.
   if frontend.isNil or frontend.dockController.isNil:
@@ -394,6 +472,8 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
       discard manager.config.saveKosmoConfig(manager.configPath)
       if previousMoeTheme != identifier:
         manager.refreshAdaptiveChrome()
+        if manager.interfaceStyle.theme.isAdaptiveMerendaTheme():
+          manager.refreshInterfaceAppearance()
     return outcome.applied
 
 proc applyTerminalTheme(frontend: KosmoApplication, theme: ContentTheme) =
@@ -656,7 +736,8 @@ proc changeJustifyMarkdown(
     lifecycle.frontend[].justifyMarkdown = nimkit.Button(sender).state == nimkit.bsOn
 
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
-  ## Present Kosmo's application settings without Merenda's global settings pages.
+  ## Present Kosmo's settings, including Merenda's Appearance and Typography
+  ## pages scoped to Kosmo windows.
   if frontend.isNil or frontend.application.isNil:
     return
   let
@@ -744,7 +825,20 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           return weakFrontend[].setTheme(identifier, target)
       ,
       textMateGrammars = textMateGrammars,
+      interfaceAppearance = frontend.window.effectiveAppearance(),
+      interfaceTheme = frontend.interfaceStyle.theme,
+      inheritedAppearanceProvider = proc(): nimkit.Appearance =
+        if weakFrontend.isNil:
+          nimkit.initAppearance()
+        else:
+          weakFrontend[].application.effectiveAppearance(),
+      interfaceStyleHandler = proc(settings: nimkit.MerendaSettings): bool =
+        if not weakFrontend.isNil:
+          return weakFrontend[].commitInterfaceSettings(settings)
+      ,
+      supplementalFonts = frontend.application.supplementalFonts(),
     )
+    frontend.applyInterfaceAppearance(frontend.xSettingsWindow.window)
     frontend.xSettingsWindow.vscodeGrammarInstalledHandler = proc() =
       if weakFrontend.isNil or weakFrontend[].dockController.isNil:
         return
@@ -1332,8 +1426,22 @@ proc newKosmoWindowManager*(
     keyBindingsPath: keyBindingsPath,
     configPath: configPath,
     config: config,
+    interfaceStyle: config.kosmoInterfaceStyle(),
   )
   nimkit.initResponder(result)
+  if not app.isNil:
+    var managerRef: nimkit.BackRef[KosmoWindowManager]
+    managerRef.target = result
+    result.appearanceObserver = nimkit.sharedNotificationCenter().observe(
+        nimkit.nkApplicationAppearanceDidChange,
+        proc(notification: nimkit.Notification) =
+          discard notification
+          let manager = managerRef{}
+          if not manager.isNil and not manager.interfaceStyle.isEmpty:
+            manager.refreshInterfaceAppearance()
+        ,
+        sender = nimkit.DynamicAgent(app),
+      )
   result.installKosmoMenuActions()
   discard result.registerKnownSession()
   if not app.isNil:
@@ -1728,6 +1836,7 @@ proc newKosmoApplication*(
   documentView.onFocusToolbar = proc(): bool =
     result = controller.focusToolToolbar()
   controller.hosts.add mainHost
+  result.refreshInterfaceAppearance(manager.interfaceAppearance())
   controller.installShortcutBindings(result.window)
   discard controller.newEditorGroup(
     dockView,
@@ -2224,6 +2333,7 @@ proc close*(manager: KosmoWindowManager) =
     restoresSaveHandler = not app.isNil and lastKnownSession(app) == manager
     restoresPalette = adaptiveSession{} == manager
   manager.forgetKnownSession()
+  discard manager.appearanceObserver.unregister()
   var replacement = lastKnownSession(app, requireFrontend = true)
   if replacement.isNil:
     replacement = lastKnownSession(app)
