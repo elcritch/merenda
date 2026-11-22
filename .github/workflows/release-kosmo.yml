@@ -446,7 +446,6 @@ jobs:
               fontconfig \
               fribidi \
               git \
-              gmake \
               harfbuzz \
               libX11 \
               libXcursor \
@@ -471,10 +470,6 @@ jobs:
             bash .github/scripts/install-atlas.sh
             export PKG_CONFIG_PATH="/usr/local/libdata/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
             atlas -v
-            if [ "$(nim --version | awk 'NR == 1 {print $4}')" != "$NIM_VERSION" ]; then
-              atlas env "$NIM_VERSION" --deps=deps --source
-              export PATH="$PWD/deps/nim-$NIM_VERSION/bin:$PATH"
-            fi
             nim -v
             atlas install -tuk --features:kosmo,chronos
             version="${KOSMO_RELEASE_VERSION#v}"
