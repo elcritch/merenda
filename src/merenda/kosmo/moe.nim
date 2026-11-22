@@ -2493,9 +2493,6 @@ proc remapMatterMarkdownFallback(buffer: TextBuffer, event: MatterRemapEvent) =
   let cache = buffer.incrementalHighlight
   if buffer.language != moeHighlight.SourceLanguage.langMarkdown or cache.isNil:
     return
-  template states(): untyped =
-    cache.lineStates.states
-
   case event.kind
   of rrekClear:
     buffer.incrementalHighlight = nil
@@ -2505,7 +2502,7 @@ proc remapMatterMarkdownFallback(buffer: TextBuffer, event: MatterRemapEvent) =
     let
       delta = event.lastAffectedRowAfter - event.lastAffectedRowBefore
       row = event.firstAffectedRow + ord(event.preservesFirstRow)
-      oldLength = states().len
+      oldLength = cache.lineStates.len
     cache.parsedUpTo = min(cache.parsedUpTo, event.firstAffectedRow - 1)
     if row < 0 or row > oldLength:
       return
@@ -2513,17 +2510,17 @@ proc remapMatterMarkdownFallback(buffer: TextBuffer, event: MatterRemapEvent) =
       var insertedState = buffer.newBufferTokenizerState()
       if row > 0:
         insertedState.lang.markdown.inCodeBlock =
-          states()[row - 1].lang.markdown.inCodeBlock
-      states().setLen(oldLength + delta)
+          cache.lineStates[row - 1].lang.markdown.inCodeBlock
+      cache.lineStates.setLen(oldLength + delta)
       for index in countdown(oldLength - 1, row):
-        states()[index + delta] = move states()[index]
+        cache.lineStates[index + delta] = cache.lineStates[index]
       for index in row ..< row + delta:
-        states()[index] = insertedState
+        cache.lineStates[index] = insertedState
     elif delta < 0:
       let removed = min(-delta, oldLength - row)
       for index in row ..< oldLength - removed:
-        states()[index] = move states()[index + removed]
-      states().setLen(oldLength - removed)
+        cache.lineStates[index] = cache.lineStates[index + removed]
+      cache.lineStates.setLen(oldLength - removed)
 
 proc remapMatterSyntaxFallback(
     state: MatterSyntaxFallbackState, buffer: TextBuffer, event: MatterRemapEvent
@@ -2727,16 +2724,18 @@ proc applyMatterHighlightResult(
     let cache = current.incrementalHighlight
     # An edited snapshot replaces its prefix in batches. Keep the remapped
     # suffix visible instead of dropping all later fenced backgrounds.
-    cache.lineStates.states.setLen(
+    cache.lineStates.setLen(
       if completed.finished:
         completed.endRow
       else:
-        max(cache.lineStates.states.len, completed.endRow)
+        max(cache.lineStates.len, completed.endRow)
     )
     for index, inCodeBlock in completed.markdownCodeBlockStates:
       let row = completed.firstRow + index
-      cache.lineStates.states[row].backend = hbBuiltin
-      cache.lineStates.states[row].lang.markdown.inCodeBlock = inCodeBlock
+      var state = cache.lineStates[row]
+      state.backend = hbBuiltin
+      state.lang.markdown.inCodeBlock = inCodeBlock
+      cache.lineStates[row] = state
     cache.parsedUpTo = completed.endRow - 1
     editor.matterLineStateVersions[current.id] = current.contentVersion
   else:

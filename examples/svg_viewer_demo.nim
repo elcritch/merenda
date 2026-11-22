@@ -1,5 +1,6 @@
 import std/[math, os, strformat]
 
+from pkg/vmath import x, y
 import merenda/nimkit
 import sigils/selectors
 
@@ -56,7 +57,7 @@ protocol SvgCanvasDrawing of ViewDrawingProtocol:
       return
 
     let
-      imageAspect = canvas.svg.size.width / canvas.svg.size.height
+      imageAspect = canvas.svg.size.x / canvas.svg.size.y
       imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom, canvas.panOffset)
 
     discard context.addSvgMtsdf(imageRect, canvas.svg)
@@ -100,9 +101,7 @@ proc reportError(error: ref CatchableError) =
 
 proc loadSvgFile(filePath: string) =
   try:
-    let svg = newSvgMtsdfResourceFromFile(
-      filePath, name = "svg-viewer-field", cachePolicy = icpAlways
-    )
+    let svg = newSvgMtsdfResourceFromFile(filePath)
     canvas.installSvg(svg, splitFile(filePath).name & ".svg", status)
   except CatchableError as error:
     reportError(error)
@@ -178,9 +177,7 @@ if paramCount() > 0:
   loadSvgFile(paramStr(1))
 else:
   try:
-    let svg = newSvgMtsdfResource(
-      DefaultSvg, name = "svg-viewer-field", cachePolicy = icpAlways
-    )
+    let svg = newSvgMtsdfResource(DefaultSvg)
     canvas.installSvg(svg, "Embedded sample", status)
   except CatchableError as error:
     reportError(error)

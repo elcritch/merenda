@@ -1,8 +1,9 @@
-import std/[hashes, os, strutils, tables, unicode]
+import std/[hashes, options, os, strutils, tables, unicode]
 
 import figdraw
 
 import figdraw/figextras
+import figdraw/svgs/svg as figSvg
 from figdraw/common/typefaces import getLineHeightImpl
 import ./fontfallbacks
 
@@ -1554,130 +1555,38 @@ proc addImage*(
     layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
   )
 
-proc toFigStrokeCap(value: SvgStrokeCap): StrokeCap =
-  case value
-  of svcButt: scButt
-  of svcRound: scRound
-  of svcSquare: scSquare
-
-proc toFigStrokeJoin(value: SvgStrokeJoin): StrokeJoin =
-  case value
-  of svjMiter: sjMiter
-  of svjRound: sjRound
-  of svjBevel: sjBevel
-
-proc svgLayerRect(
-    target: nimkitTypes.Rect, documentSize: nimkitTypes.Size, frame: nimkitTypes.Rect
-): nimkitTypes.Rect =
-  let
-    scaleX = target.size.width / documentSize.width
-    scaleY = target.size.height / documentSize.height
-  nimkitTypes.rect(
-    target.origin.x + frame.origin.x * scaleX,
-    target.origin.y + frame.origin.y * scaleY,
-    frame.size.width * scaleX,
-    frame.size.height * scaleY,
-  )
-
-proc svgLocalPoint(point: nimkitTypes.Point, scaleX, scaleY: float32): Vec2 =
-  vec2(point.x * scaleX, point.y * scaleY)
-
-proc svgPathNode(
-    target: nimkitTypes.Rect,
-    documentSize: nimkitTypes.Size,
-    svgLayer: SvgLayer,
-    fillValue: Fill,
-): Fig =
-  let
-    scaleX = target.size.width / documentSize.width
-    scaleY = target.size.height / documentSize.height
-  result = Fig(
-    kind: nkDrawable,
-    screenBox: target.toFigRect,
-    fill: fill(rgba(0, 0, 0, 0)),
-    drawStroke: RenderStroke(
-      weight: svgLayer.strokeWidth * min(abs(scaleX), abs(scaleY)),
-      fill: fillValue,
-      cap: svgLayer.strokeCap.toFigStrokeCap(),
-      join: svgLayer.strokeJoin.toFigStrokeJoin(),
-    ),
-  )
-  for segment in svgLayer.segments:
-    let
-      start = segment.start.svgLocalPoint(scaleX, scaleY)
-      stop = segment.stop.svgLocalPoint(scaleX, scaleY)
-    case segment.kind
-    of spsLine:
-      result.drawOps.add drawableLine(start, stop)
-    of spsQuadratic:
-      result.drawOps.add drawableBezier(
-        start, segment.control1.svgLocalPoint(scaleX, scaleY), stop
-      )
-    of spsCubic:
-      result.drawOps.add drawableBezier(
-        start,
-        segment.control1.svgLocalPoint(scaleX, scaleY),
-        segment.control2.svgLocalPoint(scaleX, scaleY),
-        stop,
-      )
-
-proc svgCircleNodes(
-    context: DrawContext,
+proc appendSvg(
+    list: var RenderList,
+    resources: var RenderResourceManifest,
     layer: ZLevel,
     parent: FigIdx,
-    target: nimkitTypes.Rect,
-    documentSize: nimkitTypes.Size,
-    svgLayer: SvgLayer,
-    fillValue: Fill,
-    strokeFillValue: Fill,
+    target: bumpy.Rect,
+    svg: SvgMtsdfResource,
+    tint: Option[Fill],
+    strokeWeight, sdThreshold: float32,
 ): FigIdx =
-  let
-    scaleX = target.size.width / documentSize.width
-    scaleY = target.size.height / documentSize.height
-    transform = svgLayer.transform
-    translation = vec2(
-      target.origin.x + transform.tx * scaleX, target.origin.y + transform.ty * scaleY
-    )
-  var matrix = mat4()
-  matrix[0, 0] = transform.a * scaleX
-  matrix[0, 1] = transform.b * scaleY
-  matrix[1, 0] = transform.c * scaleX
-  matrix[1, 1] = transform.d * scaleY
-
-  let transformIndex = context.addFig(
-    layer,
-    parent,
-    Fig(
-      kind: nkTransform,
-      screenBox: target.toFigRect,
-      transform:
-        TransformStyle(translation: translation, matrix: matrix, useMatrix: true),
-    ),
-  )
-  var circle = Fig(
-    kind: nkDrawable,
-    screenBox: bumpy.rect(-1.0'f32, -1.0'f32, 2.0'f32, 2.0'f32),
-    fill:
-      if svgLayer.drawsFill:
-        fillValue
+  let first = list.nodes.len
+  try:
+    result =
+      if tint.isSome:
+        figSvg.addSvgMtsdf(
+          list, target, svg, tint.get(), parent, strokeWeight, sdThreshold
+        )
       else:
-        fill(rgba(0, 0, 0, 0)),
-  )
-  if svgLayer.drawsStroke:
-    circle.drawStroke =
-      RenderStroke(weight: svgLayer.localStrokeWidth, fill: strokeFillValue)
-  circle.drawOps.add drawableCircle(vec2(1.0'f32, 1.0'f32), 1.0'f32)
-  context.addFig(layer, transformIndex, circle)
-
-type SvgPaintOverride = object
-  enabled: bool
-  value: Fill
-
-proc layerFill(svgLayer: SvgLayer, paintOverride: SvgPaintOverride): Fill =
-  if paintOverride.enabled:
-    paintOverride.value
-  else:
-    fill(svgLayer.paint.rgba)
+        figSvg.addSvgMtsdf(list, target, svg, parent, strokeWeight, sdThreshold)
+  finally:
+    # Keep the images actually emitted by FigDraw, including draw-time fallbacks.
+    for index in first ..< list.nodes.len:
+      list.nodes[index].zlevel = layer
+      case list.nodes[index].kind
+      of nkImage:
+        resources.addImage(list.nodes[index].image.id)
+      of nkMsdfImage:
+        resources.addImage(list.nodes[index].msdfImage.id)
+      of nkMtsdfImage:
+        resources.addImage(list.nodes[index].mtsdfImage.id)
+      else:
+        discard
 
 proc addSvgMtsdfLayers(
     context: DrawContext,
@@ -1685,60 +1594,24 @@ proc addSvgMtsdfLayers(
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     svg: SvgMtsdfResource,
-    paintOverride: SvgPaintOverride,
-    strokeWeight = 0.0'f32,
-    sdThreshold = 0.5'f32,
-): FigIdx {.discardable.} =
-  if svg.layers.len == 0 or svg.size.width <= 0.0'f32 or svg.size.height <= 0.0'f32:
+    tint: Option[Fill],
+    strokeWeight, sdThreshold: float32,
+): FigIdx =
+  if svg.layers.len == 0 or svg.size.x <= 0.0'f32 or svg.size.y <= 0.0'f32:
     return (-1).FigIdx
-
   context.ensureDefaultRenderSlot()
-  let target = context.renderRectFor(rect)
-  result = (-1).FigIdx
-  for svgLayer in svg.layers:
-    let fillValue = svgLayer.layerFill(paintOverride)
-    case svgLayer.kind
-    of slkMtsdfFill, slkMtsdfStroke:
-      if not svgLayer.image.isNil:
-        context.xResources.addImage(svgLayer.image)
-        let
-          layerRect = target.svgLayerRect(svg.size, svgLayer.frame)
-          layerStrokeWeight =
-            if svgLayer.kind == slkMtsdfStroke:
-              svgLayer.mtsdfStrokeWidth *
-                min(
-                  abs(target.size.width / svg.size.width),
-                  abs(target.size.height / svg.size.height),
-                )
-            else:
-              strokeWeight
-        result = context.addFig(
-          layer,
-          parent,
-          Fig(
-            kind: nkMtsdfImage,
-            screenBox: layerRect.toFigRect,
-            mtsdfImage: MsdfImageStyle(
-              id: svgLayer.image.imageId(),
-              fill: fillValue,
-              pxRange: svgLayer.pixelRange,
-              sdThreshold: sdThreshold,
-              strokeWeight: layerStrokeWeight,
-            ),
-          ),
-        )
-    of slkStrokePath:
-      result =
-        context.addFig(layer, parent, target.svgPathNode(svg.size, svgLayer, fillValue))
-    of slkCircle:
-      let strokeFillValue =
-        if paintOverride.enabled:
-          paintOverride.value
-        else:
-          fill(svgLayer.strokePaint.rgba)
-      result = context.svgCircleNodes(
-        layer, parent, target, svg.size, svgLayer, fillValue, strokeFillValue
-      )
+  if context.xRenders.isNil:
+    raise newException(ValueError, "cannot draw an unchanged render slot")
+  context.xRenders[layer].appendSvg(
+    context.xResources,
+    layer,
+    parent,
+    context.renderRectFor(rect).toFigRect,
+    svg,
+    tint,
+    strokeWeight,
+    sdThreshold,
+  )
 
 proc addSvgMtsdf*(
     context: DrawContext,
@@ -1751,7 +1624,7 @@ proc addSvgMtsdf*(
 ): FigIdx {.discardable.} =
   ## Draws an SVG using its source fill and stroke colors.
   context.addSvgMtsdfLayers(
-    layer, parent, rect, svg, SvgPaintOverride(), strokeWeight, sdThreshold
+    layer, parent, rect, svg, none(Fill), strokeWeight, sdThreshold
   )
 
 proc addSvgMtsdf*(
@@ -1766,13 +1639,7 @@ proc addSvgMtsdf*(
 ): FigIdx {.discardable.} =
   ## Draws an SVG with one caller-selected tint replacing its source paints.
   context.addSvgMtsdfLayers(
-    layer,
-    parent,
-    rect,
-    svg,
-    SvgPaintOverride(enabled: true, value: fillValue),
-    strokeWeight,
-    sdThreshold,
+    layer, parent, rect, svg, some(fillValue), strokeWeight, sdThreshold
   )
 
 proc addSvgMtsdf*(

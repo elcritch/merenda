@@ -274,6 +274,33 @@ suite "nimkit image resources":
     image.unpinImage()
     check not hasImage(image.imageId())
 
+  test "a retained FigDraw SVG image survives a renderer atlas rebuild":
+    let
+      context = initDrawContext()
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    var id: ImageId
+    block:
+      let svg = newSvgMtsdfResource(
+        """<svg viewBox="0 0 16 16"><path d="M1 1 L15 1 L8 15 Z"/></svg>"""
+      )
+      let index = context.addSvgMtsdf(rect(0, 0, 16, 16), svg)
+      require index.int >= 0
+      let node = context.renderList.nodes[index.int]
+      require node.kind == nkMtsdfImage
+      id = node.mtsdfImage.id
+
+    require context.resources.containsImage(id)
+    manager.prepare(recovery.renderer, context.resources)
+    check id.Hash in recovery.context.entries
+
+    recovery.renderer.rebuildImageAtlas()
+    require id.Hash notin recovery.context.entries
+    manager.prepare(recovery.renderer, context.resources)
+    check id.Hash in recovery.context.entries
+
   test "managed subscriptions recover renderer generations and pressure rebuilds":
     clearImageCache()
     let
