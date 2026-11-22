@@ -21,6 +21,7 @@ import ../drawing
 import ../foundation/events
 import ../foundation/objectvalues
 import ../foundation/selectors
+import ../foundation/sourcedispatch
 import ../foundation/types
 import ../foundation/undomanagers
 import ../themes
@@ -1662,7 +1663,12 @@ proc applySelectedIdentifiers(
     if not collectionView.xSuppressSelectionReveal:
       collectionView.scrollItemToVisible(leadIndex)
   collectionView.invalidateCollectionItems()
-  emit collectionView.collectionSelectionDidChange(DynamicAgent(collectionView))
+  let source = Agent(collectionView)
+  beginSourceDispatch(source)
+  try:
+    emit collectionView.collectionSelectionDidChange(DynamicAgent(collectionView))
+  finally:
+    endSourceDispatch(source)
   collectionView.postAccessibilityNotification(anSelectionChanged)
   let selectedIndex = collectionView.collectionItemIndexForIdentifier(nextSelected)
   if selectedIndex >= 0:

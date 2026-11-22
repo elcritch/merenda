@@ -22,6 +22,15 @@ proc drainMainThreadWork*(): int {.discardable.} =
   pendingMainThreadWork = @[]
   for index in 0 ..< ready.len:
     var work = move ready[index]
-    if work():
-      pendingMainThreadWork.add move work
-    inc result
+    try:
+      if work():
+        pendingMainThreadWork.add move work
+      inc result
+    except CatchableError:
+      # Work queued during this drain follows the untouched frame work.
+      var remaining: seq[MainThreadWork]
+      for next in index + 1 ..< ready.len:
+        remaining.add move ready[next]
+      remaining.add move pendingMainThreadWork
+      pendingMainThreadWork = move remaining
+      raise

@@ -12,14 +12,29 @@ type Model = ref object of Responder
   observable: Sigil[int]
   triggerOnRead: bool
   sourceReads: int
+  failRead: bool
 
 type Target = ref object of Responder
   value: int
   writes: int
+  failWrite: bool
 
 proc changed(model: Model, value: int) {.signal.}
 proc readValue(model: Model, context: int): int =
   model.value + context
+
+proc readSometimesFailing(model: Model, context: int): int =
+  if model.failRead:
+    model.failRead = false
+    raise newException(ValueError, "getter failed")
+  model.value
+
+proc writeSometimesFailing(target: Target, value: int) =
+  if target.failWrite:
+    target.failWrite = false
+    raise newException(ValueError, "setter failed")
+  target.value = value
+  inc target.writes
 
 proc writeValue(target: Target, value: int) =
   target.value = value
@@ -380,3 +395,56 @@ suite "direct owned bindings":
     check field.stringValue == "draft"
     check model.text == "draft"
     scope.dispose()
+
+  test "a callback failure preserves the batch and supports explicit retry":
+    let model = Model(value: 1)
+    let bad = Target()
+    let good = Target()
+    let scope = newBindingScope()
+    defer:
+      scope.dispose()
+    scope.bindValue(
+      "bad", model, changed, model, 0, readValue, bad, writeSometimesFailing
+    )
+    scope.bindValue("good", model, changed, model, 0, readValue, good, writeValue)
+    model.value = 2
+    bad.failWrite = true
+    emit model.changed(0)
+    expect ValueError:
+      scope.flushBindings()
+    check good.value == 2
+    check scope.hasPendingBindings
+    scope.flushBindings()
+    check bad.value == 2
+    check not scope.hasPendingBindings
+
+  test "GUI delivery retains later scopes after a getter failure":
+    let model = Model(value: 1)
+    let otherModel = Model(value: 1)
+    let bad = Target()
+    let good = Target()
+    let first = newBindingScope()
+    let second = newBindingScope()
+    defer:
+      first.dispose()
+      second.dispose()
+    first.bindValue(
+      "bad", model, changed, model, 0, readSometimesFailing, bad, writeValue
+    )
+    second.bindValue(
+      "good", otherModel, changed, otherModel, 0, readValue, good, writeValue
+    )
+    model.value = 4
+    otherModel.value = 4
+    model.failRead = true
+    emit model.changed(0)
+    emit otherModel.changed(0)
+    expect ValueError:
+      discard drainMainThreadWork()
+    check first.hasPendingBindings
+    discard drainMainThreadWork()
+    check good.value == 4
+    check bad.value == 1
+    emit model.changed(0)
+    discard drainMainThreadWork()
+    check bad.value == 4

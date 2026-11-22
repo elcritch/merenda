@@ -68,13 +68,19 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
     when compiles(value == binding.lastValue):
       if binding.skipUnchanged and binding.hasLast and value == binding.lastValue:
         return
+    # A setter can synchronously flush a newer value for this binding.
     binding.lastValue = value
     binding.hasLast = true
+    let wasUpdating = binding.updating
     binding.updating = true
+    var applied = false
     try:
       binding.setter(target, value)
+      applied = true
     finally:
-      binding.updating = false
+      binding.updating = wasUpdating
+      if not applied and binding.generation == generation:
+        binding.hasLast = false
 
 proc textEdited(editor: EditBinding, sender: DynamicAgent) {.slot.} =
   let owner = editor.owner{}
@@ -105,7 +111,7 @@ proc flushBindings*(scope: BindingScope)
 
 proc invalidate(binding: Binding) {.slot.} =
   let scope = binding.scope{}
-  if binding.active and not binding.pending and not scope.isNil and not scope.disposed:
+  if binding.active and not scope.isNil and not scope.disposed:
     binding.pending = true
     if not scope.suspended and not scope.scheduled:
       scope.scheduled = true
@@ -212,6 +218,9 @@ proc dispose*(scope: BindingScope) =
 
 proc flushBindings*(scope: BindingScope) =
   ## One pass: invalidations raised while applying wait for the next pass.
+  ## A failed binding remains pending for an explicit flush or a new source
+  ## notification; other bindings in the batch are still delivered.
+  ## The first callback error is re-raised after the batch has been attempted.
   if scope.isNil or scope.disposed or scope.suspended:
     return
   scope.scheduled = false
@@ -221,6 +230,7 @@ proc flushBindings*(scope: BindingScope) =
     if binding.pending:
       binding.pending = false
       pending.add (binding, binding.generation)
+  var failure: ref CatchableError
   for item in pending:
     if item.binding.active and item.binding.generation == item.generation:
       if scope.disposed:
@@ -228,7 +238,16 @@ proc flushBindings*(scope: BindingScope) =
       if scope.suspended:
         item.binding.pending = true
       else:
-        item.binding.applyValue(item.binding)
+        try:
+          item.binding.applyValue(item.binding)
+        except CatchableError as error:
+          if item.binding.active and item.binding.generation == item.generation and
+              not scope.disposed:
+            item.binding.pending = true
+          if failure.isNil:
+            failure = error
+  if not failure.isNil:
+    raise failure
 
 proc applyOrDefer(binding: Binding) =
   let scope = binding.scope{}

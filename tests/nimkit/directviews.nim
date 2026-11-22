@@ -123,6 +123,42 @@ static:
   )
 
 suite "direct view composition":
+  test "body receiver is evaluated once and its update is completed":
+    let first = newDirectView()
+    let second = newDirectView()
+    second.viewBody:
+      Label(identifier = "second")
+    let original = second.arrangedSubviews[0]
+    var lookups = 0
+    proc selectedHost(): DirectView =
+      inc lookups
+      if lookups == 1: first else: second
+
+    selectedHost().viewBody:
+      Button(identifier = "first")
+
+    check lookups == 1
+    require first.arrangedSubviews.len == 1
+    check first.arrangedSubviews[0].identifier == "first"
+    require second.arrangedSubviews.len == 1
+    check second.arrangedSubviews[0] == original
+    check second.arrangedSubviews[0].identifier == "second"
+
+    first.viewBody:
+      Label(identifier = "updated")
+    require first.arrangedSubviews.len == 1
+    check first.arrangedSubviews[0].identifier == "updated"
+
+  test "the receiver stays alive until its body finishes":
+    var host = newDirectView()
+    var weakHost: BackRef[DirectView]
+    weakHost.target = host
+    host.viewBody:
+      host = nil
+      check not weakHost.isNil
+      Button("mounted")
+    check weakHost.isNil
+
   test "positional button title updates once per evaluation and before the body":
     let host = newDirectView()
     let owner = DirectController()

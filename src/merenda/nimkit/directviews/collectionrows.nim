@@ -19,6 +19,11 @@ type
     scope: BindingScope
     build: CollectionRowBuilder
     closed: bool
+    applyingSelection: bool
+
+  CollectionSelection = object
+    mode: ModelSelectionMode
+    identifiers: seq[string]
 
 proc activeEditor(view: View): FieldEditor =
   let owner = view.window()
@@ -48,16 +53,40 @@ proc refreshRows(rows: CollectionRows, changed: bool) =
       collection.delegate() == DynamicAgent(rows):
     collection.reloadData()
 
-proc readSelection(controller: SelectionController, context: int): seq[string] =
+proc readSelection(controller: SelectionController, context: int): CollectionSelection =
   discard context
-  controller.selectedIdentifiers()
+  CollectionSelection(
+    mode: controller.mode(), identifiers: controller.selectedIdentifiers()
+  )
 
-proc refreshSelection(rows: CollectionRows, identifiers: seq[string]) =
+proc refreshSelection(rows: CollectionRows, selection: CollectionSelection) =
   let collection = rows.collection{}
   if not rows.closed and not collection.isNil and
-      collection.delegate() == DynamicAgent(rows) and
-      collection.selectedIdentifiers() != identifiers:
-    collection.selectedIdentifiers = identifiers
+      collection.delegate() == DynamicAgent(rows):
+    let wasApplyingSelection = rows.applyingSelection
+    rows.applyingSelection = true
+    try:
+      collection.selectionMode =
+        case selection.mode
+        of mselNone: csmNone
+        of mselSingle: csmSingle
+        of mselMultiple: csmMultiple
+      if not rows.closed and not rows.controller.isNil and
+          readSelection(rows.controller.selectionController, 0) == selection and
+          collection.delegate() == DynamicAgent(rows) and
+          collection.selectedIdentifiers() != selection.identifiers:
+        collection.selectedIdentifiers = selection.identifiers
+    finally:
+      rows.applyingSelection = wasApplyingSelection
+
+proc selectionChanged(rows: CollectionRows, sender: DynamicAgent) {.slot.} =
+  discard sender
+  let collection = rows.collection{}
+  if not rows.closed and not rows.applyingSelection and not collection.isNil and
+      collection.delegate() == DynamicAgent(rows) and not rows.controller.isNil:
+    rows.controller.selectionController.setSelectedIdentifiers(
+      collection.selectedIdentifiers()
+    )
 
 protocol DirectCollectionRowsDelegate of CollectionViewDelegate:
   method viewForCollectionItem(
@@ -126,19 +155,6 @@ protocol DirectCollectionRowsDelegate of CollectionViewDelegate:
       DirectView(view).clear()
       view.accessibilityLabel = ""
 
-  method didSelectCollectionItem(
-      rows: CollectionRows,
-      collectionView: CollectionView,
-      index: int,
-      identifier: string,
-  ) =
-    discard index
-    discard identifier
-    if not rows.closed and not rows.controller.isNil:
-      rows.controller.selectionController.setSelectedIdentifiers(
-        collectionView.selectedIdentifiers()
-      )
-
 proc newCollectionRows*(
     collection: CollectionView, controller: ArrayController, build: CollectionRowBuilder
 ): CollectionRows =
@@ -154,12 +170,18 @@ proc newCollectionRows*(
   collection.delegate = DynamicAgent(nil)
   collection.dataSource = controller
   collection.delegate = result
-  collection.selectionMode =
-    case controller.selectionController.mode
-    of mselNone: csmNone
-    of mselSingle: csmSingle
-    of mselMultiple: csmMultiple
-  collection.selectedIdentifiers = controller.selectionController.selectedIdentifiers
+  result.refreshSelection(readSelection(controller.selectionController, 0))
+  let rows = result
+  if sourceDispatchActive(Agent(collection)):
+    discard deferSourceWork(
+      Agent(collection),
+      proc() =
+        if not rows.closed and collection.delegate() == DynamicAgent(rows):
+          collection.connect(collectionSelectionDidChange, rows, selectionChanged)
+      ,
+    )
+  else:
+    collection.connect(collectionSelectionDidChange, result, selectionChanged)
   controller.connect(arrayControllerDidChange, result, retireMissingRows)
   bindValue(
     result.scope,
@@ -206,6 +228,15 @@ proc close*(rows: CollectionRows) =
       controller.disconnect(arrayControllerDidChange, rows, retireMissingRows)
     rows.scope.dispose()
     let collection = rows.collection{}
+    if not collection.isNil:
+      if sourceDispatchActive(Agent(collection)):
+        discard deferSourceWork(
+          Agent(collection),
+          proc() =
+            collection.disconnect(collectionSelectionDidChange, rows, selectionChanged),
+        )
+      else:
+        collection.disconnect(collectionSelectionDidChange, rows, selectionChanged)
     if not collection.isNil and collection.delegate() == DynamicAgent(rows):
       collection.delegate = DynamicAgent(nil)
       if collection.dataSource() == DynamicAgent(controller):

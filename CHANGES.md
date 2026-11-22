@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix DirectView bodies evaluating the host expression twice. A host can be
+  cleared and rebuilt after a nested setter or key check raises.
+- Preserve pending binding updates across callback failures and synchronize
+  empty selection and selection mode in virtualized DirectView collections.
+
 - Make Chronos opt-in for NimKit. Markdown image downloads use the shared
   Sigils worker pool by default. Enable the Atlas `chronos` feature to use
   Chronos for downloads and timers. Standalone projects can enable threaded

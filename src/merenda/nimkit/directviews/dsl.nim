@@ -118,7 +118,8 @@ macro viewBody*(session, body: untyped): untyped =
           for statement in item[^1]:
             configuration.add statement.copyNimTree()
         let widgetType = newLit(name.normalize)
-        let nested = statements(configuration, node, newEmptyNode())
+        let context = genSym(nskLet, "context")
+        let nested = statements(configuration, context, newEmptyNode())
         result.add quote do:
           block:
             let `node` = child(
@@ -130,11 +131,8 @@ macro viewBody*(session, body: untyped): untyped =
             )
             let this {.inject.} = typeof(`factory`)(`node`.view)
             let bindingScope {.inject.} = `node`.bindings
-            discard beginUpdate(`node`)
-            try:
+            composeBody(`node`, `context`):
               `nested`
-            finally:
-              endUpdate(`node`)
       elif item.kind == nnkAsgn and item[0].kind == nnkDotExpr and
           item[0][0].eqIdent("this") and item[0][1].eqIdent("stringValue"):
         result.add newCall(bindSym"patchText", parent, ident"this", item[1])
@@ -170,8 +168,5 @@ macro viewBody*(session, body: untyped): untyped =
   let content = statements(body, root, newEmptyNode())
   result = quote:
     block:
-      let `root` = beginUpdate(`session`)
-      try:
+      composeBody(`session`, `root`):
         `content`
-      finally:
-        endUpdate(`session`)

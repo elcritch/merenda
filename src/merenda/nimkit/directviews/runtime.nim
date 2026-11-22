@@ -217,6 +217,29 @@ proc endUpdate*(session: DirectViewSession) =
 proc endUpdate*(view: DirectView) =
   view.root.endUpdate()
 
+proc interruptUpdate(node: DirectNode) =
+  # Keep unvisited mounts reachable by clear(). Arranging a partial
+  # component here can mask the body error with a root-count error.
+  for id, child in node.previous:
+    if id notin node.seen:
+      node.children.add child
+  node.previous.clear()
+  node.applying = false
+
+template composeBody*(receiver, context, body: untyped) =
+  ## Finish a streamed body on normal exit, including an early return.
+  block:
+    let host = receiver
+    let context = beginUpdate(host)
+    try:
+      body
+    except CatchableError:
+      interruptUpdate(context)
+      raise
+    finally:
+      if context.applying:
+        endUpdate(host)
+
 proc abortUpdate*(session: DirectViewSession) =
   ## Complete a partially streamed update; this is not a rollback.
   session.endUpdate()
