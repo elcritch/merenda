@@ -725,8 +725,8 @@ suite "Kosmo configuration":
       panel.contentView().viewWithIdentifier(SettingsThemePickerIdentifier)
     let
       themePicker = ComboBox(themeView)
+      textStyle = controlStyle(srTextView)
       merendaTheme = app.merendaSettingsThemeIdentifier
-      merendaGeneration = app.appearance().theme.generation
       aquaBackground = initAquaTheme().resolveFill(
           controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
         )
@@ -737,6 +737,15 @@ suite "Kosmo configuration":
 
     check themePicker.stringValue == "Use Merenda Settings"
     check not frontend.window.hasAppearance
+
+    var
+      appearance = app.effectiveAppearance()
+      builder = initThemeBuilder(appearance.theme)
+    let inheritedSize = appearance.resolveLength(textStyle, StyleFontSize, 14.0'f32) + 4
+    builder[srTextView, StyleFontSize] = inheritedSize
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
+    let merendaGeneration = app.appearance().theme.generation
 
     themePicker.selectedIndex = 2
     check themePicker.sendAction()
@@ -749,7 +758,11 @@ suite "Kosmo configuration":
     check app.merendaSettingsThemeIdentifier == merendaTheme
     var saved = loadKosmoConfig(path)
     check saved.kosmoTheme == "aqua"
+    check saved.kosmoFontSize == 0.0'f32
     check saved.merendaTheme.len == 0
+    check frontend.window.effectiveAppearance().resolveLength(
+      textStyle, StyleFontSize, 0.0'f32
+    ) == inheritedSize
 
     let second = newKosmoApplication(manager, monitorsGitStatus = false)
     check second.window.background() == aquaBackground
@@ -762,6 +775,27 @@ suite "Kosmo configuration":
     saved = loadKosmoConfig(path)
     check saved.kosmoTheme.len == 0
     check app.appearance().theme.generation == merendaGeneration
+
+    require tabs.selectPage(KosmoTypographySettingsTabIdentifier)
+    let
+      sizeStepper =
+        Stepper(panel.contentView().viewWithIdentifier("settings-font-size-stepper"))
+      applyFont = Button(panel.contentView().viewWithIdentifier("settings-apply-font"))
+      kosmoSize = inheritedSize + 2
+    require not sizeStepper.isNil
+    require not applyFont.isNil
+    sizeStepper.value = kosmoSize
+    require sizeStepper.sendAction()
+    require applyFont.sendAction()
+    check loadKosmoConfig(path).kosmoFontSize == kosmoSize
+
+    require tabs.selectPage(KosmoAppearanceSettingsTabIdentifier)
+    themePicker.selectedIndex = 2
+    require themePicker.sendAction()
+    check loadKosmoConfig(path).kosmoFontSize == kosmoSize
+    check frontend.window.effectiveAppearance().resolveLength(
+      textStyle, StyleFontSize, 0.0'f32
+    ) == kosmoSize
 
   test "Kosmo-only fonts follow later Merenda theme changes":
     let

@@ -433,12 +433,25 @@ proc `interfaceStyle=`*(frontend: KosmoApplication, style: KosmoInterfaceStyle) 
   discard frontend.storeInterfaceStyle(style)
 
 proc commitInterfaceSettings(
-    frontend: KosmoApplication, settings: nimkit.MerendaSettings
+    frontend: KosmoApplication, settings, previous: nimkit.MerendaSettings
 ): bool =
-  if not frontend.isNil:
-    result = frontend.storeInterfaceStyle(
-      settings.interfaceStyle(frontend.application.effectiveAppearance())
-    )
+  if frontend.isNil or frontend.xClosed:
+    return
+  # An open panel can still display fonts inherited before Merenda's appearance changed.
+  let
+    changes = settings.interfaceStyle(previous.appearance)
+    overrides = settings.interfaceStyle(frontend.application.effectiveAppearance())
+  var style = frontend.interfaceStyle
+  if settings.theme != previous.theme:
+    style.theme = overrides.theme
+  for role in nimkit.FontRole:
+    if changes.fontNames[role].len > 0 or
+        settings.appearance.fontFaces(role) != previous.appearance.fontFaces(role):
+      style.fontNames[role] = overrides.fontNames[role]
+      style.fontFaces[role] = overrides.fontFaces[role]
+  if changes.fontSize != 0.0'f32:
+    style.fontSize = overrides.fontSize
+  frontend.storeInterfaceStyle(style)
 
 proc supplementalFonts(app: nimkit.Application): seq[nimkit.FontCatalogEntry] =
   let provider = app.supplementalFontCatalogProvider()
@@ -751,6 +764,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     if not frontend.xSettingsWindow.isNil:
       frontend.xSettingsWindow.close()
     let weakFrontend = frontend.unsafeWeakRef()
+    var previousInterfaceSettings: nimkit.MerendaSettings
     let nimdexTarget = KosmoNimdexSettingsTarget()
     nimkit.initResponder(nimdexTarget)
     nimdexTarget.controller.set(
@@ -834,10 +848,14 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           weakFrontend[].application.effectiveAppearance(),
       interfaceStyleHandler = proc(settings: nimkit.MerendaSettings): bool =
         if not weakFrontend.isNil:
-          return weakFrontend[].commitInterfaceSettings(settings)
+          result =
+            weakFrontend[].commitInterfaceSettings(settings, previousInterfaceSettings)
+          previousInterfaceSettings = settings
       ,
       supplementalFonts = frontend.application.supplementalFonts(),
     )
+    previousInterfaceSettings =
+      frontend.xSettingsWindow.interfaceSettings().currentSettings()
     frontend.applyInterfaceAppearance(frontend.xSettingsWindow.window)
     frontend.xSettingsWindow.vscodeGrammarInstalledHandler = proc() =
       if weakFrontend.isNil or weakFrontend[].dockController.isNil:
