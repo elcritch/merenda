@@ -458,13 +458,16 @@ suite "nimkit views":
       root = newView("root", frame = rect(0, 0, 200, 160))
       child = newView(frame = rect(20, 20, 80, 40))
       grandchild = newView("grandchild", frame = rect(5, 5, 30, 20))
+      sibling = newView("grandchild")
 
     root.tag = 1
     child.tag = 2
     child.name = "child"
     grandchild.tag = 3
+    sibling.tag = 3
     root.addSubview(child)
     child.addSubview(grandchild)
+    root.addSubview(sibling)
 
     check root.tag == 1
     check root.identifier == "root"
@@ -479,6 +482,10 @@ suite "nimkit views":
     check root.viewWithIdentifier("child") == child
     check root.viewNamed("grandchild") == grandchild
     check root.viewNamed("missing").isNil
+    root.tag = 3
+    root.name = "grandchild"
+    check root.viewWithTag(3) == root
+    check root.viewWithIdentifier("grandchild") == root
 
   test "addSubviews assigns automatic child identifiers":
     let

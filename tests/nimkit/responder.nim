@@ -4,6 +4,7 @@ import sigils/selectors
 from sigils/hom import findFirstReply, get, isNone, isSome
 
 import merenda/nimkit except performKeyEquivalent, undoManager
+from merenda/nimkit/app/backend import HostTextComposition
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
 from merenda/nimkit/view/viewprotos import nil
 
@@ -1032,6 +1033,46 @@ suite "nimkit responder":
       KeyEvent(key: keyArrowDown), consumeIfOffered = true
     )
     check trackingEvents == @["start", "outer"]
+
+  test "native marked text uses the handling responder's replacement coordinates":
+    let
+      window = newWindow("IME composition", frame = rect(0, 0, 240, 160))
+      root = newView("outer", frame = rect(0, 0, 240, 160))
+      child = newView("inner", frame = rect(10, 10, 100, 80))
+    defer:
+      window.close()
+    child.acceptsFirstResponder = true
+    root.addSubview(child)
+    window.setContentView(root)
+    require window.makeFirstResponder(child)
+
+    for view in [child, root]:
+      require view.addMethod(
+        textInputAttributedSubstringForRange(),
+        proc(self: View, range: TextRange): AttributedString =
+          trackingEvents.add(self.identifier() & ".text")
+          newAttributedString(if self.identifier() == "outer": "😀abcd" else: "abcd"),
+      )
+    require root.addMethod(
+      setMarkedText(),
+      proc(
+          self: View,
+          args: tuple[text: string, selectedRange, replacementRange: TextRange],
+      ) =
+        trackingEvents.add("outer.marked")
+        check args.text == "😀x"
+        check args.selectedRange == initTextRange(1, 0)
+        check args.replacementRange == initTextRange(1, 1)
+      ,
+    )
+
+    resetTracking()
+    check window.dispatchTextComposition(
+      HostTextComposition(
+        text: "😀x", selectedStart: 2, replacementStart: 2, replacementLength: 1
+      )
+    )
+    check trackingEvents == @["inner.text", "outer.text", "outer.marked"]
 
   test "native text input state probes keep selection and text on the same responder":
     let

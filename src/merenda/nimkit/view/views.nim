@@ -2,6 +2,7 @@ import std/tables
 
 import pkg/chronicles
 import sigils/core
+from sigils/hom import findFirst, get
 
 import ../app/animations
 import ../responder/responders
@@ -40,21 +41,18 @@ proc name*(view: View): string =
 proc `name=`*(view: View, name: string) =
   view.identifier = name
 
+proc childViews(view: View): seq[View] =
+  view.xSubviews
+
 proc viewWithTag*(view: View, tag: int): View =
-  if view.xTag == tag:
-    return view
-  for child in view.xSubviews:
-    let match = child.viewWithTag(tag)
-    if not match.isNil:
-      return match
+  let match = view.findFirst(childViews) do(candidate: View) -> bool:
+    candidate.xTag == tag
+  match.get(nil)
 
 proc viewWithIdentifier*(view: View, identifier: string): View =
-  if view.xIdentifier == identifier:
-    return view
-  for child in view.xSubviews:
-    let match = child.viewWithIdentifier(identifier)
-    if not match.isNil:
-      return match
+  let match = view.findFirst(childViews) do(candidate: View) -> bool:
+    candidate.xIdentifier == identifier
+  match.get(nil)
 
 proc viewNamed*(view: View, name: string): View =
   view.viewWithIdentifier(name)

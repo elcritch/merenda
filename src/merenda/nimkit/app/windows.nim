@@ -2909,7 +2909,7 @@ proc applyMouseHitPolicy(
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
 ): EventDispatchResult =
-  let handlesScroll = proc(responder: Responder): bool =
+  let match = target.responderChain().findFirst do(responder: Responder) -> bool:
     var localEvent = event
     if responder of View:
       localEvent =
@@ -2917,8 +2917,7 @@ proc dispatchScrollEventInChain(
     let wantsForwarded =
       responder.trySendLocal(wantsForwardedScrollEvents(), localEvent).get(false)
     not wantsForwarded and responder.sendLocalIfHandled(scrollWheel(), localEvent)
-  result.responder =
-    Responder(target).responderChain().findFirst(handlesScroll).get(nil)
+  result.responder = match.get(nil)
   result.handled = not result.responder.isNil
 
 proc dispatchKeyEventInChain(
@@ -2977,8 +2976,8 @@ func utf16TextRange(text: string, start, length: int): TextRange =
 
 proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool =
   ## Native marked-text ranges use UTF-16; text input protocols use runes.
-  var responder = window.keyDispatchTarget()
-  while not responder.isNil:
+  let target = window.keyDispatchTarget()
+  let match = target.responderChain().findFirst do(responder: Responder) -> bool:
     var replacement = initTextRange(0, 0)
     if event.replacementStart >= 0:
       let text = responder.trySendLocal(
@@ -2988,7 +2987,7 @@ proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool 
         replacement = text.get().stringValue().utf16TextRange(
             event.replacementStart, event.replacementLength
           )
-    if responder.sendLocalIfHandled(
+    responder.sendLocalIfHandled(
       setMarkedText(),
       (
         text: event.text,
@@ -2996,9 +2995,8 @@ proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool 
           event.text.utf16TextRange(event.selectedStart, event.selectedLength),
         replacementRange: replacement,
       ),
-    ):
-      return true
-    responder = responder.nextResponder()
+    )
+  match.isSome
 
 proc dispatchTextUnmark*(window: Window): bool =
   window.keyDispatchTarget().sendToFirstHandlerInChain(unmarkText(), ())

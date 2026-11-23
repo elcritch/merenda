@@ -91,15 +91,15 @@
     responder. Localize coordinates at each hop, honor
     `wantsForwardedScrollEvents`, and accept any handled `scrollWheel` reply.
     [Windows](src/merenda/nimkit/app/windows.nim)
-24. [ ] **Native marked-text composition.** Use `findFirst` to stop at the
+24. [x] **Native marked-text composition.** Use `findFirst` to stop at the
     first local `setMarkedText` handler. Calculate the replacement range from
     each candidate's text when the native event supplies a range.
     [Windows](src/merenda/nimkit/app/windows.nim)
-25. [ ] **Menu keyboard shortcuts.** Search menu items in depth-first order.
+25. [x] **Menu keyboard shortcuts.** Search menu items in depth-first order.
     Skip hidden items and separators with their submenus, and check each
     parent's shortcut before descending.
     [Menus](src/merenda/nimkit/controls/menus.nim)
-26. [ ] **View lookup by tag or identifier.** Share the recursive searches
+26. [x] **View lookup by tag or identifier.** Share the recursive searches
     through the tree overload of `findFirst`. Preserve root-first order and
     the existing field comparisons.
     [Views](src/merenda/nimkit/view/views.nim)
