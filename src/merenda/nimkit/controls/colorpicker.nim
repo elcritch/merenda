@@ -3,7 +3,7 @@
 from figdraw import FigIdx, ZLevel
 import std/[math, strutils]
 
-import sigils/core
+import sigils/[core, hom]
 
 import ../accessibility/accessibility
 import ../app/windows
@@ -470,8 +470,7 @@ proc synchronizeFromSource(wheel: ColorWheelView) =
 proc synchronizePicker(well: ColorWell) =
   if well.xPicker.isNil:
     return
-  for button in well.xPicker.xPaletteButtons:
-    button.needsDisplay = true
+  well.xPicker.xPaletteButtons.sendEachTo(`needsDisplay=`(true))
   well.xPicker.xWheelView.synchronizeFromSource()
   well.xPicker.xValuesView.synchronizeFromSource()
 

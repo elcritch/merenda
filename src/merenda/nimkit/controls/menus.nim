@@ -4,7 +4,7 @@ import std/options
 from figdraw import FigIdx
 
 import sigils/core
-from sigils/hom import findFirst, get, isSome
+from sigils/hom import findFirst, get
 import sigils/selectors
 
 import ../accessibility/accessibilityprotocols
@@ -987,21 +987,16 @@ proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): boo
     ),
   )
 
-func isShortcutItem(item: MenuItem): bool =
-  not item.xSeparator and not item.xHidden
-
-proc shortcutSubmenuItems(item: MenuItem): seq[MenuItem] =
-  if item.isShortcutItem() and not item.xSubmenu.isNil:
-    result = item.xSubmenu.xItems
-
 proc findKeyEquivalentItem*(menu: Menu, event: KeyEvent): MenuItem =
-  let matches = proc(item: MenuItem): bool =
-    item.isShortcutItem() and item.xHasKeyEquivalent and
-      item.xKeyEquivalent.matches(event)
   for item in menu.xItems:
-    let match = item.findFirst(shortcutSubmenuItems, matches)
-    if match.isSome:
-      return match.get()
+    if item.isNil or item.xSeparator or item.xHidden:
+      discard
+    elif item.xHasKeyEquivalent and item.xKeyEquivalent.matches(event):
+      return item
+    elif not item.xSubmenu.isNil:
+      let found = item.xSubmenu.findKeyEquivalentItem(event)
+      if not found.isNil:
+        return found
 
 proc performKeyEquivalentImpl(menu: Menu, event: KeyEvent, start: Responder): bool =
   let item = menu.findKeyEquivalentItem(event)

@@ -542,39 +542,49 @@ suite "nimkit text fields":
     editor.moveToBeginningOfLineText()
     check editor.bounds().origin.x == 0.0'f32
 
-  test "scrolled field editor keeps accepting edits during native text input queries":
-    let
-      window = newWindow("Text scrolling edits", frame = rect(0, 0, 240, 120))
-      root = newView(frame = rect(0, 0, 240, 120))
-      field = newTextField("", frame = rect(10, 10, 80, 30))
-    defer:
-      window.close()
-    root.addSubview(field)
-    window.setContentView(root)
-    require window.makeFirstResponder(field)
-    template editWithState(action: untyped) =
-      discard window.textInputState()
-      require action
-      discard window.textInputState()
-      discard window.buildRenders()
+  for queriesInputState in [false, true]:
+    let testName =
+      if queriesInputState:
+        "scrolled field editor keeps accepting edits during native text input queries"
+      else:
+        "scrolled field editor keeps accepting edits without native text input queries"
+    test testName:
+      let
+        window = newWindow("Text scrolling edits", frame = rect(0, 0, 240, 120))
+        root = newView(frame = rect(0, 0, 240, 120))
+        field = newTextField("", frame = rect(10, 10, 80, 30))
+      defer:
+        window.close()
+      root.addSubview(field)
+      window.setContentView(root)
+      require window.makeFirstResponder(field)
 
-    proc pressKey(key: Key) =
-      editWithState(window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord)))
+      template edit(action: untyped, redraw = true) =
+        if queriesInputState:
+          discard window.textInputState()
+        require action
+        if queriesInputState:
+          discard window.textInputState()
+        if redraw or queriesInputState:
+          discard window.buildRenders()
 
-    let text = "viewProtocolSearchTextLongerThanField"
-    for ch in text:
-      editWithState(window.dispatchTextInput($ch))
-    check field.stringValue == text
-    pressKey(keyBackspace)
-    check field.stringValue == text[0 ..^ 2]
-    pressKey(keyArrowLeft)
-    pressKey(keyArrowLeft)
-    editWithState(window.dispatchTextInput("X"))
-    check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
-    let editor = window.fieldEditor()
-    check editor.selectedRange == initTextRange(text.len - 2, 0)
-    editWithState(window.dispatchTextInput("Y"))
-    check field.stringValue == text[0 ..^ 4] & "XY" & text[^3 ..^ 2]
+      proc pressKey(key: Key, redraw = true) =
+        edit(window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord)), redraw)
+
+      let text = "viewProtocolSearchTextLongerThanField"
+      for ch in text:
+        edit(window.dispatchTextInput($ch))
+      check field.stringValue == text
+      pressKey(keyBackspace)
+      check field.stringValue == text[0 ..^ 2]
+      pressKey(keyArrowLeft, redraw = false)
+      pressKey(keyArrowLeft)
+      edit(window.dispatchTextInput("X"))
+      check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
+      let editor = window.fieldEditor()
+      check editor.selectedRange == initTextRange(text.len - 2, 0)
+      edit(window.dispatchTextInput("Y"))
+      check field.stringValue == text[0 ..^ 4] & "XY" & text[^3 ..^ 2]
 
   test "field editor text rect and accessibility geometry do not shift on focus":
     let

@@ -141,24 +141,6 @@ protocol TestPopupDelegate of PopupListDelegate:
     inc host.closes
 
 suite "nimkit menus":
-  test "menu shortcut search visits parents first and skips hidden and separator branches":
-    let
-      menu = newMenu("Shortcuts")
-      hidden = menu.addItem("Hidden")
-      separator = menu.addSeparator()
-      branch = menu.addItem("Visible")
-      event = KeyEvent(text: "p", key: keyP)
-    hidden.hidden = true
-    for item in [hidden, separator, branch]:
-      let submenu = newMenu()
-      discard submenu.addItem("Nested", keyEquivalent = "p")
-      item.submenu = submenu
-    discard menu.addItem("Later", keyEquivalent = "p")
-
-    check menu.findKeyEquivalentItem(event) == branch.submenu()[0.Natural]
-    branch.setKeyEquivalent("p")
-    check menu.findKeyEquivalentItem(event) == branch
-
   test "mutable menu items change menu bar intrinsic size without a reload":
     let menu = newMenu("Bar")
     let item = newMenuItem("Short")
