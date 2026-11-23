@@ -6,6 +6,7 @@ import ./fixtures/widgetflows
 import merenda/nimkit/app/settings
 from figdraw/extras/systemfonttypes import initSystemTypeface
 
+privateAccess(MerendaSettingsController)
 privateAccess(MerendaSettingsWindow)
 
 type
@@ -935,3 +936,59 @@ suite "nimkit settings":
     check settings.previewFonts[frUI].faces.italic == italic
     check settings.previewFonts[frUI].faces.bold == bold
     check familyIdentifier in settings.fontPickerController.items
+
+  test "embedded settings pages report theme changes only to their handlers":
+    var
+      applied: seq[Appearance]
+      saved: seq[MerendaSettings]
+    let inherited = initAppearance(initPunchTheme())
+    proc saveSettings(settings: MerendaSettings): bool =
+      saved.add settings
+      true
+
+    proc applyAppearance(appearance: Appearance) =
+      applied.add appearance
+
+    proc inheritedAppearance(): Appearance =
+      inherited
+
+    let controller = newMerendaSettingsController(
+      appearanceHandler = applyAppearance,
+      inheritedAppearanceProvider = inheritedAppearance,
+      saveDefaultsHandler = saveSettings,
+      autoSaveDefaults = true,
+    )
+    defer:
+      controller.close()
+    let items = controller.tabViewItems()
+    require items.len == 2
+    check items[0].identifier() == SettingsAppearanceTabIdentifier
+    check items[1].identifier() == SettingsTypographyTabIdentifier
+    check not controller.tabViewDelegate().isNil
+    let appearancePage = items[0].view()
+    check appearancePage.viewWithIdentifier(SettingsUiScaleIdentifier).isNil
+    check not items[1].view().viewWithIdentifier(SettingsFontPickerIdentifier).isNil
+    let themeView = appearancePage.viewWithIdentifier(SettingsThemePickerIdentifier)
+    let picker = ComboBox(themeView)
+    check picker.stringValue == "Use Merenda Settings"
+    check controller.firstResponder() == Responder(picker)
+    check controller.currentSettings().theme == ""
+
+    picker.selectedIndex = 2
+    check picker.sendAction()
+    check picker.stringValue == "Aqua"
+    require saved.len == 1
+    check saved[^1].theme == "aqua"
+    check applied.len == 1
+
+    picker.selectedIndex = 0
+    check picker.sendAction()
+    require saved.len == 2
+    check saved[^1].theme == ""
+    check controller.currentSettings().theme == ""
+    check applied[^1].theme.resolveFill(
+      controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+    ) ==
+      inherited.theme.resolveFill(
+        controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+      )

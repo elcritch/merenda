@@ -698,6 +698,141 @@ suite "Kosmo configuration":
     check abs(app2.uiScale - saved.merendaUiScale) < 0.0001'f32
     check app2.invertScrolling
 
+  test "Kosmo Settings themes Kosmo windows without changing Merenda's theme":
+    let
+      root = createTempDir("merenda-kosmo-interface-theme-", "")
+      path = root / "config.json"
+      app = newApplication("Kosmo Interface Theme Test")
+      manager = newKosmoWindowManager(
+        app, configPath = path, assetCacheDirectory = root / "assets"
+      )
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    app.addWindow(frontend.window)
+    require frontend.showSettings()
+    let
+      panel = frontend.settingsWindow().window()
+      tabsView = panel.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier)
+    let tabs = TabView(tabsView)
+    require tabs.selectPage(KosmoTypographySettingsTabIdentifier)
+    require tabs.selectPage(KosmoAppearanceSettingsTabIdentifier)
+    panel.contentView().layoutSubtreeIfNeeded()
+    tabs.checkVisibleIn(panel.contentView())
+    check panel.contentView().viewWithIdentifier(SettingsUiScaleIdentifier).isNil
+    let themeView =
+      panel.contentView().viewWithIdentifier(SettingsThemePickerIdentifier)
+    let
+      themePicker = ComboBox(themeView)
+      textStyle = controlStyle(srTextView)
+      merendaTheme = app.merendaSettingsThemeIdentifier
+      aquaBackground = initAquaTheme().resolveFill(
+          controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+        )
+    proc background(window: Window): Fill =
+      window.effectiveAppearance().theme.resolveFill(
+        controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+      )
+
+    check themePicker.stringValue == "Use Merenda Settings"
+    check not frontend.window.hasAppearance
+
+    var
+      appearance = app.effectiveAppearance()
+      builder = initThemeBuilder(appearance.theme)
+    let inheritedSize = appearance.resolveLength(textStyle, StyleFontSize, 14.0'f32) + 4
+    builder[srTextView, StyleFontSize] = inheritedSize
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
+    let merendaGeneration = app.appearance().theme.generation
+
+    themePicker.selectedIndex = 2
+    check themePicker.sendAction()
+    check themePicker.stringValue == "Aqua"
+    check frontend.interfaceStyle.theme == "aqua"
+    check frontend.window.hasAppearance
+    check panel.hasAppearance
+    check frontend.window.background() == aquaBackground
+    check app.appearance().theme.generation == merendaGeneration
+    check app.merendaSettingsThemeIdentifier == merendaTheme
+    var saved = loadKosmoConfig(path)
+    check saved.kosmoTheme == "aqua"
+    check saved.kosmoFontSize == 0.0'f32
+    check saved.merendaTheme.len == 0
+    check frontend.window.effectiveAppearance().resolveLength(
+      textStyle, StyleFontSize, 0.0'f32
+    ) == inheritedSize
+
+    let second = newKosmoApplication(manager, monitorsGitStatus = false)
+    check second.window.background() == aquaBackground
+
+    themePicker.selectedIndex = 0
+    check themePicker.sendAction()
+    check frontend.interfaceStyle.isEmpty
+    check not frontend.window.hasAppearance
+    check not second.window.hasAppearance
+    saved = loadKosmoConfig(path)
+    check saved.kosmoTheme.len == 0
+    check app.appearance().theme.generation == merendaGeneration
+
+    require tabs.selectPage(KosmoTypographySettingsTabIdentifier)
+    let
+      sizeStepper =
+        Stepper(panel.contentView().viewWithIdentifier("settings-font-size-stepper"))
+      applyFont = Button(panel.contentView().viewWithIdentifier("settings-apply-font"))
+      kosmoSize = inheritedSize + 2
+    require not sizeStepper.isNil
+    require not applyFont.isNil
+    sizeStepper.value = kosmoSize
+    require sizeStepper.sendAction()
+    require applyFont.sendAction()
+    check loadKosmoConfig(path).kosmoFontSize == kosmoSize
+
+    require tabs.selectPage(KosmoAppearanceSettingsTabIdentifier)
+    themePicker.selectedIndex = 2
+    require themePicker.sendAction()
+    check loadKosmoConfig(path).kosmoFontSize == kosmoSize
+    check frontend.window.effectiveAppearance().resolveLength(
+      textStyle, StyleFontSize, 0.0'f32
+    ) == kosmoSize
+
+  test "Kosmo-only fonts follow later Merenda theme changes":
+    let
+      root = createTempDir("merenda-kosmo-interface-font-", "")
+      path = root / "config.json"
+      app = newApplication("Kosmo Interface Font Test")
+    defer:
+      removeDir(root)
+    require KosmoConfig(kosmoFontSize: 21.0'f32).saveKosmoConfig(path)
+    let manager = newKosmoWindowManager(
+      app, configPath = path, assetCacheDirectory = root / "assets"
+    )
+    defer:
+      manager.close()
+    let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    proc fontSize(window: Window): float32 =
+      window.effectiveAppearance().resolveLength(
+        controlStyle(srTextView), StyleFontSize, 0.0'f32
+      )
+
+    check frontend.interfaceStyle.fontSize == 21.0'f32
+    check frontend.window.fontSize() == 21.0'f32
+    check app.effectiveAppearance().resolveLength(
+      controlStyle(srTextView), StyleFontSize, 0.0'f32
+    ) != 21.0'f32
+
+    var punch = app.effectiveAppearance()
+    punch.theme = initPunchTheme()
+    app.setAppearance(punch)
+    let punchBackground = initPunchTheme().resolveFill(
+        controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+      )
+    check frontend.window.effectiveAppearance().theme.resolveFill(
+      controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+    ) == punchBackground
+    check frontend.window.fontSize() == 21.0'f32
+
   test "live monospace appearance changes reach the editor and terminal":
     let
       app = newApplication("Kosmo Live Font Test")

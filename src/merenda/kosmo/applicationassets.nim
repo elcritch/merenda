@@ -202,33 +202,102 @@ func isAdaptiveMerendaTheme*(identifier: string): bool =
   else:
     false
 
+type KosmoInterfaceStyle* = object
+  ## A Merenda theme and fonts layered over an inherited appearance.
+  theme*: string ## Theme identifier; empty keeps the inherited theme.
+  fontNames*: array[nimkit.FontRole, string] ## Empty names keep inherited fonts.
+  fontFaces*: array[nimkit.FontRole, nimkit.FontFaceSet]
+    ## Exact faces chosen this session; empty faces resolve `fontNames` by name.
+  fontSize*: float32 ## Control text size; zero keeps the inherited size.
+
+func isEmpty*(style: KosmoInterfaceStyle): bool =
+  ## Whether the style leaves the inherited appearance unchanged.
+  style.theme.len == 0 and style.fontSize <= 0.0'f32 and
+    style.fontNames[nimkit.frUI].len == 0 and
+    style.fontNames[nimkit.frMonospace].len == 0
+
+func merendaInterfaceStyle(config: KosmoConfig): KosmoInterfaceStyle =
+  result.theme = config.merendaTheme
+  result.fontNames[nimkit.frUI] = config.merendaFont
+  result.fontNames[nimkit.frMonospace] = config.merendaMonoFont
+  result.fontSize = config.merendaFontSize
+
+func kosmoInterfaceStyle*(config: KosmoConfig): KosmoInterfaceStyle =
+  ## Return the persisted theme and fonts that apply only to Kosmo windows.
+  result.theme = config.kosmoTheme
+  result.fontNames[nimkit.frUI] = config.kosmoFont
+  result.fontNames[nimkit.frMonospace] = config.kosmoMonoFont
+  result.fontSize = config.kosmoFontSize
+
+proc storeKosmoInterfaceStyle*(config: var KosmoConfig, style: KosmoInterfaceStyle) =
+  ## Persist the Kosmo-only theme and font names; exact faces are session-only.
+  config.kosmoTheme = style.theme
+  config.kosmoFont = style.fontNames[nimkit.frUI]
+  config.kosmoMonoFont = style.fontNames[nimkit.frMonospace]
+  config.kosmoFontSize = style.fontSize
+
+proc controlFontSize(appearance: nimkit.Appearance): float32 =
+  appearance.resolveLength(
+    nimkit.controlStyle(nimkit.srTextView),
+    nimkit.StyleFontSize,
+    nimkit.defaultFontSize(),
+  )
+
+proc interfaceStyle*(
+    settings: nimkit.MerendaSettings, inherited: nimkit.Appearance
+): KosmoInterfaceStyle =
+  ## Return the parts of committed settings that differ from `inherited`.
+  result.theme = settings.theme
+  for role in nimkit.FontRole:
+    let name = settings.appearance.fontName(role)
+    if name != inherited.fontName(role):
+      result.fontNames[role] = name
+      result.fontFaces[role] = settings.appearance.fontFaces(role)
+  let size = settings.appearance.controlFontSize()
+  if size != inherited.controlFontSize():
+    result.fontSize = size
+
+proc composeAppearance*(
+    inherited: nimkit.Appearance, style: KosmoInterfaceStyle, inheritsFontSize = false
+): nimkit.Appearance =
+  ## Layer `style` over `inherited`. A replacement theme keeps the inherited fonts,
+  ## and keeps the inherited text size when `inheritsFontSize` is set.
+  result =
+    if style.theme.len > 0:
+      nimkit.initAppearance(nimkit.initThemeByName(style.theme))
+    else:
+      inherited
+  var builder = nimkit.initThemeBuilder(result.theme)
+  if style.theme.len > 0:
+    for role in nimkit.FontRole:
+      builder.setFontName(role, inherited.fontName(role))
+      builder.setFontFaces(role, inherited.fontFaces(role))
+  for role in nimkit.FontRole:
+    if style.fontNames[role].len == 0:
+      continue
+    builder.setFontName(role, style.fontNames[role])
+    if style.fontFaces[role].regular.file.path.len > 0:
+      builder.setFontFaces(role, style.fontFaces[role])
+    else:
+      builder.setFontFace(role, SystemTypeface())
+  let fontSize =
+    if style.fontSize > 0.0'f32:
+      style.fontSize
+    elif inheritsFontSize and style.theme.len > 0:
+      inherited.controlFontSize()
+    else:
+      0.0'f32
+  if fontSize > 0.0'f32:
+    for role in KosmoConfigTextStyleRoles:
+      builder[role, nimkit.StyleFontSize] = fontSize
+  result.theme = builder.finish()
+
 proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
   if app.isNil:
     return
-  if config.merendaTheme.len > 0 or config.merendaFont.len > 0 or
-      config.merendaMonoFont.len > 0 or config.merendaFontSize > 0.0'f32:
-    let inheritedAppearance = app.effectiveAppearance()
-    var appearance =
-      if config.merendaTheme.len > 0:
-        nimkit.initAppearance(nimkit.initThemeByName(config.merendaTheme))
-      else:
-        inheritedAppearance
-    var builder = nimkit.initThemeBuilder(appearance.theme)
-    if config.merendaTheme.len > 0:
-      for role in nimkit.FontRole:
-        builder.setFontName(role, inheritedAppearance.fontName(role))
-        builder.setFontFaces(role, inheritedAppearance.fontFaces(role))
-    if config.merendaFont.len > 0:
-      builder.setFontName(nimkit.frUI, config.merendaFont)
-      builder.setFontFace(nimkit.frUI, SystemTypeface())
-    if config.merendaMonoFont.len > 0:
-      builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
-      builder.setFontFace(nimkit.frMonospace, SystemTypeface())
-    if config.merendaFontSize > 0.0'f32:
-      for role in KosmoConfigTextStyleRoles:
-        builder[role, nimkit.StyleFontSize] = config.merendaFontSize
-    appearance.theme = builder.finish()
-    app.setAppearance(appearance)
+  let style = config.merendaInterfaceStyle()
+  if not style.isEmpty:
+    app.setAppearance(app.effectiveAppearance().composeAppearance(style))
   app.invertScrolling = config.merendaInvertScrolling
   if config.merendaUiScale > 0.0'f32:
     app.uiScale = config.merendaUiScale
