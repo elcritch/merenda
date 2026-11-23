@@ -27,9 +27,10 @@
    source at each index and appends only handled replies. `collectEach` would keep
    sending to the starting data source if a callback replaces it, and would
    collect intermediate replies before filtering. [Menus](src/merenda/nimkit/controls/menus.nim)
-8. [ ] **Document tab model loading.** Evaluate the same `collectEach` pattern for
-   `documentTabModelAtIndex` and `matrixItemModelAtIndex`. Preserve selection
-   restoration and decide whether a reload should retain its starting data source.
+8. [x] **Document tab and matrix model loading.** Keep the direct loops. Each
+   reads the current source at every index, skips unhandled replies, and restores
+   selection after collecting models. `collectEach` would keep querying a source
+   after a callback replaces it or a matrix switches to static models.
    [Document tabs](src/merenda/nimkit/containers/documenttabs.nim) · [Matrices](src/merenda/nimkit/controls/matrices.nim)
 9. [ ] **Kosmo hint mode.** Use a first-handled-reply operation if Sigils adds one.
    A handled false ends the live walk because the inner surface owns the request.
