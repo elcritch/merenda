@@ -8,7 +8,7 @@ from figdraw import Renders, ZLevel
 import figdraw/windowing as siwinshim
 type SiwinWindow = siwinshim.Window
 import sigils/core
-from sigils/hom import findFirst, get
+from sigils/hom import findFirst, findFirstReply, get, isSome
 
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
@@ -24,7 +24,7 @@ import ../foundation/terminaltrace
 import ../foundation/notifications
 import ../text/fieldeditors
 import ../text/texttypes
-from ../text/textstorage import TextStorage, stringValue
+from ../text/textstorage import AttributedString, TextStorage, stringValue
 from ../text/textviews import
   TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
   isInsertableText, `insertionPointVisible=`
@@ -3008,37 +3008,44 @@ proc dispatchTextUnmark*(window: Window): bool =
   window.keyDispatchTarget().sendToFirstHandlerInChain(unmarkText(), ())
 
 proc textInputState*(window: Window): HostTextInputState =
-  var responder = window.keyDispatchTarget()
-  while not responder.isNil:
-    let selected = responder.trySendLocal(textInputSelectedRange())
-    let content = responder.trySendLocal(
-      textInputAttributedSubstringForRange(), initTextRange(0, high(int))
-    )
-    if selected.isSome and content.isSome and not content.get().isNil:
-      let text = content.get().stringValue()
-      let selection = selected.get()
-      let start = text.runeUtf16Index(int(selection.location))
-      let stop = text.runeUtf16Index(int(selection.location + selection.length))
-      result.valid = true
-      result.text = text
-      result.selectedStart = start
-      result.selectedLength = stop - start
-      result.markedStart = -1
-      if responder.trySendLocal(textInputHasMarkedText()).get(false):
-        let marked = responder.trySendLocal(textInputMarkedRange())
-        if marked.isSome:
-          let range = marked.get()
-          result.markedStart = text.runeUtf16Index(int(range.location))
-          result.markedLength =
-            text.runeUtf16Index(int(range.location + range.length)) - result.markedStart
-      result.caret = responder
-        .trySendLocal(
-          textInputFirstRectForCharacterRange(),
-          initTextRange(int(selection.location), 0),
-        )
-        .get(rect(0, 0, 0, 0))
-      return
-    responder = responder.nextResponder()
+  type TextInputReply = tuple[selection: TextRange, content: AttributedString]
+  let
+    queryClient = proc(responder: Responder): TextInputReply =
+      let selected = responder.trySendLocal(textInputSelectedRange())
+      let content = responder.trySendLocal(
+        textInputAttributedSubstringForRange(), initTextRange(0, high(int))
+      )
+      if selected.isSome:
+        result = (selection: selected.get(), content: content.get(nil))
+    hasText = proc(reply: TextInputReply): bool =
+      not reply.content.isNil
+    match =
+      window.keyDispatchTarget().responderChain().findFirstReply(queryClient, hasText)
+  if match.isSome:
+    let
+      client = match.get()
+      responder = client.receiver
+      text = client.reply.content.stringValue()
+      selection = client.reply.selection
+      start = text.runeUtf16Index(int(selection.location))
+      stop = text.runeUtf16Index(int(selection.location + selection.length))
+    result.valid = true
+    result.text = text
+    result.selectedStart = start
+    result.selectedLength = stop - start
+    result.markedStart = -1
+    if responder.trySendLocal(textInputHasMarkedText()).get(false):
+      let marked = responder.trySendLocal(textInputMarkedRange())
+      if marked.isSome:
+        let range = marked.get()
+        result.markedStart = text.runeUtf16Index(int(range.location))
+        result.markedLength =
+          text.runeUtf16Index(int(range.location + range.length)) - result.markedStart
+    result.caret = responder
+      .trySendLocal(
+        textInputFirstRectForCharacterRange(), initTextRange(int(selection.location), 0)
+      )
+      .get(rect(0, 0, 0, 0))
 
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent

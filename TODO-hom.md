@@ -63,15 +63,15 @@
 16. [x] **Compact-tab buttons.** Send `hidden=` to the buttons when the bar
     collapses or expands and `needsDisplay=` when focus changes.
     [Compact tabs](src/merenda/nimkit/containers/compacttabviews.nim)
-17. [ ] **Mouse hit policy.** Return both the first non-default `mouseHitPolicy`
-    reply and its responder with `findFirstReply`. Localize the event for each
-    receiver and read the next responder after the send.
+17. [x] **Mouse hit policy.** Keep the direct loop. It localizes the event for
+    each receiver, returns the first non-default reply with its responder, and
+    reads the next responder after each send.
     [Windows](src/merenda/nimkit/app/windows.nim)
-18. [ ] **Keyboard scroll routing.** Find the first local `scrollKey` reply of
-    true. With `consumeIfOffered`, remember a handled false and still give outer
-    responders a chance. Keep one live pass through the chain.
+18. [x] **Keyboard scroll routing.** Walk `responderChain()` once and return on
+    the first local `scrollKey` reply of true. With `consumeIfOffered`, remember
+    a handled false and still give outer responders a chance.
     [Responders](src/merenda/nimkit/responder/responders.nim)
-19. [ ] **Native IME state.** Find the first responder that supplies both selection
+19. [x] **Native IME state.** Find the first responder that supplies both selection
     and text, then query caret and marked-range state on that responder. Preserve
     the order of the initial local probes.
     [Windows](src/merenda/nimkit/app/windows.nim)

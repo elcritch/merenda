@@ -177,14 +177,12 @@ proc performScrollKeyInChain*(
   ## Readers can consume an offered key even without overflow to preserve selection.
   if event.modifiers != {} or event.key notin KeyboardScrollKeys:
     return
-  var current = responder
-  while not current.isNil:
-    let handled = current.trySendLocal(scrollKey(), event)
-    if handled.isSome:
-      result = consumeIfOffered
-      if handled.get():
+  for candidate in responder.responderChain():
+    let reply = candidate.trySendLocal(scrollKey(), event)
+    if reply.isSome:
+      if reply.get():
         return true
-    current = current.nextResponder()
+      result = consumeIfOffered
 
 proc tryToPerform*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent = nil

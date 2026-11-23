@@ -970,6 +970,103 @@ suite "nimkit responder":
     check start.performKeyEquivalentInChain(KeyEvent(key: keyF12))
     check trackingEvents == @["declined", "replacement.equivalent"]
 
+  test "a declined keyboard scroll follows the updated next responder":
+    let
+      start = newResponder()
+      original = newResponder()
+      outer = newResponder()
+    start.setNextResponder(original)
+    outer.setNextResponder(original)
+    require start.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("start")
+        self.setNextResponder(outer)
+        false,
+    )
+    require original.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("original")
+        true,
+    )
+    require outer.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("outer")
+        true,
+    )
+
+    resetTracking()
+    check start.performScrollKeyInChain(
+      KeyEvent(key: keyArrowDown), consumeIfOffered = true
+    )
+    check trackingEvents == @["start", "outer"]
+
+  test "native text input state probes keep selection and text on the same responder":
+    let
+      window = newWindow("IME state", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      child = newView(frame = rect(10, 10, 100, 80))
+      caret = rect(8, 10, 1, 12)
+    defer:
+      window.close()
+    child.acceptsFirstResponder = true
+    root.addSubview(child)
+    window.setContentView(root)
+    require window.makeFirstResponder(child)
+
+    require child.addMethod(
+      textInputAttributedSubstringForRange(),
+      proc(self: View, range: TextRange): AttributedString =
+        trackingEvents.add("child.text")
+        newAttributedString("child"),
+    )
+    require root.addMethod(
+      textInputSelectedRange(),
+      proc(self: View): TextRange =
+        trackingEvents.add("root.selection")
+        initTextRange(1, 1),
+    )
+    require root.addMethod(
+      textInputAttributedSubstringForRange(),
+      proc(self: View, range: TextRange): AttributedString =
+        trackingEvents.add("root.text")
+        newAttributedString("a😀z"),
+    )
+    require root.addMethod(
+      textInputHasMarkedText(),
+      proc(self: View): bool =
+        trackingEvents.add("root.hasMarked")
+        true,
+    )
+    require root.addMethod(
+      textInputMarkedRange(),
+      proc(self: View): TextRange =
+        trackingEvents.add("root.marked")
+        initTextRange(0, 2),
+    )
+    require root.addMethod(
+      textInputFirstRectForCharacterRange(),
+      proc(self: View, range: TextRange): Rect =
+        trackingEvents.add("root.caret")
+        check range == initTextRange(1, 0)
+        caret,
+    )
+
+    resetTracking()
+    let state = window.textInputState()
+    check trackingEvents ==
+      @[
+        "child.text", "root.selection", "root.text", "root.hasMarked", "root.marked",
+        "root.caret",
+      ]
+    check state.valid
+    check state.text == "a😀z"
+    check (state.selectedStart, state.selectedLength) == (1, 2)
+    check (state.markedStart, state.markedLength) == (0, 3)
+    check state.caret == caret
+
   test "valid requestor and undo manager lookup walk responder chain":
     let
       manager = newUndoManager()
