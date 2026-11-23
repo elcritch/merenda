@@ -21,6 +21,14 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   merendaInvertScrolling*: bool
   merendaUiScale*: float32
   merendaAutoSaveDefaults*: bool
+  kosmoTheme*: string
+    ## Merenda theme for Kosmo windows only; empty follows the Merenda Settings theme.
+  kosmoFont*: string
+    ## Interface font for Kosmo windows only; empty follows Merenda Settings.
+  kosmoMonoFont*: string
+    ## Monospace font for Kosmo windows only; empty follows Merenda Settings.
+  kosmoFontSize*: float32
+    ## Control text size for Kosmo windows only; zero follows Merenda Settings.
   preferEditorPanes*: bool = true
     ## Open editor tabs in a pane that is not displaying a terminal when available.
   terminalInput*: string = "hybrid"

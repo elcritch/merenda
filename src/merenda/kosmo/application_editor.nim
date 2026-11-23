@@ -57,6 +57,7 @@ proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
+proc applyInterfaceAppearance(frontend: KosmoApplication, window: nimkit.Window)
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.}
 proc show*(frontend: KosmoApplication)
 proc close*(frontend: KosmoApplication)

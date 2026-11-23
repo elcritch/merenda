@@ -24,6 +24,8 @@ const
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoTextMateGrammarsSettingsTabIdentifier* = "kosmo.settings.textMateGrammars"
   KosmoMarkdownSettingsTabIdentifier* = "kosmo.settings.markdown"
+  KosmoAppearanceSettingsTabIdentifier* = nimkit.SettingsAppearanceTabIdentifier
+  KosmoTypographySettingsTabIdentifier* = nimkit.SettingsTypographyTabIdentifier
   KosmoJustifyMarkdownIdentifier* = "kosmo.settings.markdown.justify"
   KosmoJustifyMarkdownAction* = "kosmo.justifyMarkdownChanged"
   KosmoPreferEditorPanesIdentifier* = "kosmo.settings.terminal.preferEditorPanes"
@@ -138,6 +140,7 @@ type
     xTerminalInputPolicyChoice: nimkit.ComboBox
     xTerminalInputPolicyHandler: KosmoTerminalInputPolicyHandler
     xTabs: nimkit.TabView
+    xInterfaceSettings: nimkit.MerendaSettingsController
     xNimdexMode: nimkit.ComboBox
     xNimdexLocal, xNimdexAddress: nimkit.TextField
     xNimdexDelegate: nimkit.BackRef[nimkit.Responder]
@@ -715,6 +718,7 @@ proc close*(settings: KosmoSettingsWindow) =
   if not settings.isNil:
     settings.xGrammarInstaller.close()
     settings.xVscodeGrammarCatalog.close()
+    settings.xInterfaceSettings.close()
 
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack = nimkit.newStackView(nimkit.laVertical)
@@ -754,14 +758,15 @@ proc settingsContentMinimumHeight(content: nimkit.View, tabs: nimkit.TabView): f
   content.fittingSize().height - tallestPage + tallestRequirement
 
 proc refreshContentMinimumSize(settings: KosmoSettingsWindow) =
-  ## Recompute the content-derived window minimum. Runs at construction and
+  ## Recompute the content-derived window minimum. The width keeps every tab
+  ## title visible, and the height keeps page text legible. Runs at construction and
   ## whenever the settings content attaches to the window or the window's
   ## effective appearance changes, since both can resolve a different UI font
   ## than the detached default appearance measured during construction.
   if settings.isNil or settings.xWindow.isNil:
     return
   settings.xWindow.contentMinSize = nimkit.initSize(
-    KosmoSettingsMinimumWidth,
+    max(KosmoSettingsMinimumWidth, settings.xContentView.fittingSize().width),
     max(
       KosmoSettingsMinimumHeight,
       settingsContentMinimumHeight(settings.xContentView, settings.xTabs),
@@ -886,6 +891,13 @@ proc `forceInputMode=`*(settings: KosmoSettingsWindow, enabled: bool) =
   if not settings.isNil and not settings.xForceInputModeButton.isNil:
     settings.xForceInputModeButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
 
+proc interfaceSettings*(
+    settings: KosmoSettingsWindow
+): nimkit.MerendaSettingsController =
+  ## Return the embedded Merenda Appearance and Typography pages for Kosmo windows.
+  if not settings.isNil:
+    result = settings.xInterfaceSettings
+
 proc selectedMoeThemeIdentifier*(settings: KosmoSettingsWindow): string =
   ## Return the theme selected in the Moe Themes settings tab.
   if not settings.isNil and not settings.xMoeThemesSource.isNil:
@@ -962,8 +974,18 @@ proc newKosmoSettingsWindow*(
     selectedGitHubThemeIdentifier = "",
     moeThemeHandler: KosmoMoeThemeHandler = nil,
     textMateGrammars: openArray[KosmoTextMateGrammar] = [],
+    interfaceAppearance = nimkit.Appearance(),
+    interfaceTheme = "",
+    inheritedAppearanceProvider: nimkit.SettingsAppearanceProvider = nil,
+    interfaceStyleHandler: nimkit.SettingsSaveHandler = nil,
+    supplementalFonts: openArray[nimkit.FontCatalogEntry] = [],
 ): KosmoSettingsWindow =
-  ## Create Kosmo's settings panel, which intentionally contains no Merenda settings.
+  ## Create Kosmo's settings panel.
+  ##
+  ## The Appearance and Typography pages are Merenda's own settings pages, but
+  ## their committed values go only to `interfaceStyleHandler`, so they style
+  ## Kosmo windows without changing the application-wide Merenda appearance.
+  ## An empty `interfaceTheme` follows `inheritedAppearanceProvider`.
   let
     shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
     moeThemesSource = newKosmoMoeThemesTableSource(moeThemeHandler)
@@ -987,6 +1009,21 @@ proc newKosmoSettingsWindow*(
     xTextMateGrammarsSource: textMateGrammarsSource,
     xVscodeGrammarCatalog: newKosmoVscodeGrammarCatalog(),
     xVscodeGrammarSearchSource: vscodeGrammarSearchSource,
+    xInterfaceSettings: nimkit.newMerendaSettingsController(
+      initialAppearance = interfaceAppearance,
+      inheritedAppearanceProvider =
+        if inheritedAppearanceProvider.isNil:
+          proc(): nimkit.Appearance =
+            interfaceAppearance
+        else:
+          inheritedAppearanceProvider,
+      appearanceSummary =
+        "Choose the interface theme for Kosmo windows. Merenda Settings styles other windows.",
+      supplementalFonts = supplementalFonts,
+      initialTheme = interfaceTheme,
+      saveDefaultsHandler = interfaceStyleHandler,
+      autoSaveDefaults = true,
+    ),
   )
   nimkit.initResponder(result)
   result.xNimdexDelegate{} = nimdexDelegate
@@ -1578,6 +1615,9 @@ proc newKosmoSettingsWindow*(
       "Shortcuts", shortcutsPage.view, KosmoShortcutsSettingsTabIdentifier
     )
   )
+  for item in result.xInterfaceSettings.tabViewItems():
+    discard tabs.addTabViewItem(item)
+  tabs.delegate = result.xInterfaceSettings.tabViewDelegate()
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
       "Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier

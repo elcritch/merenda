@@ -1241,6 +1241,7 @@ proc detachPaneTab(
   controller.finishPaneTabMove(source, group, identifier)
   window.setContentView(contentView)
   frontend.application.addWindow(window)
+  frontend.applyInterfaceAppearance(window)
   if frontend.application.isRunning():
     frontend.application.activateWindow(window)
 

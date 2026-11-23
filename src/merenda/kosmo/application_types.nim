@@ -231,6 +231,8 @@ type
     keyBindingsPath: string
     configPath: string
     config: KosmoConfig
+    interfaceStyle: KosmoInterfaceStyle
+    appearanceObserver: nimkit.NotificationObserverToken
     frontends: seq[KosmoApplication]
     cliServer: KosmoCliOpenServer
 

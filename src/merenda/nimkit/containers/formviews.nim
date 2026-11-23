@@ -326,3 +326,5 @@ proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
 proc newFormView*(frame: Rect = AutoRect): FormView =
   result = FormView()
   initFormViewFields(result, frame)
+  # Rows have a natural height; spare height belongs to flexible siblings.
+  result.setHuggingPriority(LayoutPriorityHigh, laVertical)
