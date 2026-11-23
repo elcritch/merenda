@@ -47,6 +47,10 @@ proc newAccessibilityTableDelegate(): AccessibilityTableDelegate =
   initResponder(result)
   discard result.withProtocol(AccessibilityTableDelegateMethods)
 
+protocol AccessibilityPopupDataSource of PopupListDataSource:
+  method totalCount(source: Responder, popupList: PopupListView): int =
+    2
+
 suite "nimkit accessibility":
   test "accessibility properties share storage with protocol setters":
     let view = newView()
@@ -471,16 +475,11 @@ suite "nimkit accessibility":
     check button.accessibilityActionNames() == @[AccessibilityActionShowMenu]
 
   test "combo boxes popup lists and scroll areas expose roles and traits":
+    let source = newResponder()
+    discard source.withProtocol(AccessibilityPopupDataSource)
     let
       combo = newComboBox(["Low", "High"])
-      popup = newPopupListView(
-        PopupListData(
-          itemCount: proc(): int =
-            2,
-          itemText: proc(index: int): string =
-            if index == 0: "Low" else: "High",
-        )
-      )
+      popup = newPopupListView(dataSource = source)
       scroll = newScrollView(
         frame = rect(0, 0, 120, 80),
         documentView = newView(frame = rect(0, 0, 240, 160)),

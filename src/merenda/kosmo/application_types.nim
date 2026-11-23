@@ -131,7 +131,7 @@ type
     splitView*: nimkit.SplitView
     setInitialDivider: bool
     tabs*: nimkit.CompactTabView
-    fileTree: KosmoFileTree
+    fileTree: FileTree
     searchPanel: KosmoFileSearchPanel
     activeIndicator: KosmoPaneIndicator
     dockController: WeakRef[KosmoDockController]
@@ -219,7 +219,7 @@ type
     onShowTerminal: proc() {.closure.}
     onFocusPanel: proc(panelNumber: int) {.closure.}
     onFocusToolbar: proc(): bool {.closure.}
-    quickOpenPanel: KosmoQuickOpenPanel
+    quickOpenPanel: QuickOpenPanel
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
@@ -254,14 +254,14 @@ type
     editorPane*: KosmoEditorPane
     documentTabs*: nimkit.DocumentTabs
     statusLabel*: nimkit.Label
-    fileTree*: KosmoFileTree
-    fileBrowserPanel*: KosmoFileBrowserPanel
+    fileTree*: FileTree
+    fileBrowserPanel*: FileBrowserPanel
     gitDiffPanel*: KosmoGitDiffPanel
     gitHubPanel*: KosmoGitHubPanel
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
-    quickOpenPanel*: KosmoQuickOpenPanel
+    quickOpenPanel*: QuickOpenPanel
     splitView*: nimkit.SplitView
     dockView*: nimkit.DockView
     contentView*: nimkit.MenuRootView

@@ -114,7 +114,7 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
 proc newKosmoContentView(
     splitView: nimkit.SplitView,
     statusLabel: nimkit.Label,
-    quickOpenPanel: KosmoQuickOpenPanel,
+    quickOpenPanel: QuickOpenPanel,
     hasFileBrowser: bool,
 ): KosmoContentView =
   result = KosmoContentView(
@@ -1656,12 +1656,12 @@ proc newKosmoApplication*(
       )
     )
     editorPane = newKosmoEditorPane(editorView)
-    fileTree = newKosmoFileTree(
+    fileTree = newFileTree(
       initialRootPath, indentationPerLevel = manager.config.fileTreeIndentation
     )
-    fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
+    fileBrowserPanel = newFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
-    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath, fileTree.workspaceFiles)
+    quickOpenPanel = newQuickOpenPanel(fileTree.rootPath, fileTree.workspaceFiles)
     sidebarTabs = nimkit.newCompactTabView(
       [
         nimkit.initCompactTabItem(

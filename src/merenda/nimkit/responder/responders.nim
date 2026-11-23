@@ -1,6 +1,7 @@
 import std/options
 
 import sigils/selectors as dynamicSelectors
+from sigils/hom import findFirst, findFirstReply, get, isSome
 
 import ../foundation/events
 import ../foundation/backrefs
@@ -64,6 +65,9 @@ proc asDynamicAgent*[T: Responder](target: T): DynamicAgent {.inline.} =
 
 proc nextResponder*(responder: Responder): Responder
 proc clearNextResponder*(responder: Responder)
+proc performCommandInChain*(
+  responder: Responder, args: TryToPerformArgs
+): Responder {.discardable.}
 
 proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent =
   discard selector
@@ -104,12 +108,8 @@ protocol ResponderProtocol {.setterStyle: nim.} from Responder:
 
   method doCommandBySelector*(self: Responder, selector: CommandSelector) =
     let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(self))
-    var responder = self
-    while not responder.isNil:
-      if responder.tryToPerform(args):
-        return
-      responder = responder.nextResponder()
-    self.noResponderFor(selector)
+    if self.performCommandInChain(args).isNil:
+      self.noResponderFor(selector)
 
   method noResponderFor*(self: Responder, selector: CommandSelector) =
     let owner = if self.isNil: "nil" else: "responder"
@@ -145,13 +145,29 @@ proc clearNextResponder*(responder: Responder) =
     responder.xNextResponderLink.targetRef.clear()
   dynamicSelectors.clearNextResponder(responder)
 
-proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
+iterator responderChain*(responder: Responder, stopBefore: Responder = nil): Responder =
+  ## Walk live responder links up to the exclusive boundary.
   var current = responder
-  while not current.isNil:
-    let handled = current.trySendLocal(performKeyEquivalent(), event)
-    if handled.isSome and handled.get():
-      return true
+  while not current.isNil and current != stopBefore:
+    yield current
     current = current.nextResponder()
+
+proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder =
+  ## Dispatch the command and return the first responder that consumes it.
+  let handlesCommand = proc(candidate: Responder): bool =
+    candidate.tryToPerform(args)
+  responder.responderChain().findFirst(handlesCommand).get(nil)
+
+proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
+  responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
+
+proc sendToFirstHandlerInChain*[A](
+    responder: Responder, selector: Selector[A, EmptyArgs], args: A
+): bool =
+  ## Send locally along the live responder chain until a handler runs.
+  let handled = proc(_: EmptyArgs): bool =
+    true
+  responder.responderChain().findFirst(selector, args, handled).isSome
 
 proc performScrollKeyInChain*(
     responder: Responder, event: KeyEvent, consumeIfOffered = false
@@ -179,31 +195,15 @@ proc doCommandBySelector*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent
 ) =
   let args = TryToPerformArgs(selector: selector, sender: sender)
-  var current = responder
-  while not current.isNil:
-    if current.tryToPerform(args):
-      return
-    current = current.nextResponder()
-  responder.noResponderFor(selector)
-
-proc findValidRequestorForSendType*(
-    responder: Responder, sendType, returnType: string
-): DynamicAgent =
-  let args = ValidRequestorArgs(sendType: sendType, returnType: returnType)
-  var current = responder
-  while not current.isNil:
-    let requestor = current.trySendLocal(validRequestorForSendType(), args)
-    if requestor.isSome and requestor.get().isSome:
-      return requestor.get().get()
-    current = current.nextResponder()
+  if responder.performCommandInChain(args).isNil:
+    responder.noResponderFor(selector)
 
 proc findUndoManager*(responder: Responder): UndoManager =
-  var current = responder
-  while not current.isNil:
-    let manager = current.trySendLocal(undoManager(), ())
-    if manager.isSome and manager.get().isSome:
-      return manager.get().get()
-    current = current.nextResponder()
+  let matched = responder.responderChain().findFirstReply(
+      undoManager(), (), options.isSome[UndoManager]
+    )
+  if matched.isSome:
+    result = matched.get().reply.get()
 
 proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A

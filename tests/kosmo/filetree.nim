@@ -49,7 +49,7 @@ suite "Kosmo":
       removeDir(root)
 
     let
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 340, 120))
+      tree = newFileTree(root, frame = rect(0, 0, 340, 120))
       scrollView = tree.scrollView()
       wideTitle = tree.renderedTextStartingWith("a_very")
       wideTextFrame = tree.renderedTextFrameStartingWith("a_very")
@@ -87,7 +87,7 @@ suite "Kosmo":
       removeDir(folder)
       removeDir(root)
 
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     check tree.indentationPerLevel == 10.0'f32
     check tree.rootPath == absolutePath(root)
     require tree.rowForItem(folder) >= 0
@@ -111,7 +111,7 @@ suite "Kosmo":
       removeDir(firstRoot)
       removeDir(workspace)
 
-    let tree = newKosmoFileTree(firstRoot)
+    let tree = newFileTree(firstRoot)
     check tree.rootPaths == @[absolutePath(firstRoot)]
     check tree.addRootPath(secondRoot)
     check tree.rootPaths == @[absolutePath(firstRoot), absolutePath(secondRoot)]
@@ -133,7 +133,7 @@ suite "Kosmo":
       createDir(root)
     for root in [second, folder]:
       writeFile(root / "file.txt", "keep")
-    let tree = newKosmoFileTree(first)
+    let tree = newFileTree(first)
     defer:
       tree.stopGitStatusMonitoring()
       removeDir(workspace)
@@ -177,7 +177,7 @@ suite "Kosmo":
       path = nested / "changed.txt"
     createDir(nested)
     writeFile(path, "keep")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     defer:
       tree.stopGitStatusMonitoring()
       removeDir(root)
@@ -224,7 +224,7 @@ suite "Kosmo":
       ignoredNestedFile = ignoredFolder / "cached.bin"
       untrackedFile = root / "notes.txt"
       ignoredFile = root / "ignored.log"
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 140))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 140))
     createDir(folder)
     createDir(gitDirectory)
     createDir(githubFolder)
@@ -308,7 +308,7 @@ suite "Kosmo":
     )
     let untrackedFile = root / "worker-result.txt"
     writeFile(untrackedFile, "worker result\n")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     discard tree.startGitStatusMonitoring(refreshInterval = initDuration())
     defer:
       tree.stopGitStatusMonitoring()
@@ -324,7 +324,7 @@ suite "Kosmo":
     writeFile(filePath, "document body")
     let
       window = newWindow("Kosmo File Tree Activation", frame = rect(0, 0, 300, 120))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 120))
     defer:
       removeFile(filePath)
       removeDir(root)
@@ -368,7 +368,7 @@ suite "Kosmo":
     writeFile(nestedFile, "nested")
     let
       window = newWindow("Kosmo Folder Activation", frame = rect(0, 0, 300, 120))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 120))
     defer:
       removeFile(nestedFile)
       removeDir(folder)

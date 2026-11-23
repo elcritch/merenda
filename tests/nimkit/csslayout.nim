@@ -218,6 +218,35 @@ suite "NimKit CSS layout":
     check extra.frame == rect(5, 5, 190, 50)
     check stack.cssLayoutDiagnostics.len == 0
 
+  test "layout ownership uses the first ancestor that claims the subview locally":
+    let
+      root = newView("root", frame = rect(0, 0, 200, 100))
+      manager = newView("manager")
+      bridge = newView("bridge")
+      parent = newView("parent")
+      child = newView("child")
+      unrelated = newView("unrelated")
+    root.addSubview(manager)
+    manager.addSubview(bridge)
+    bridge.addSubview(parent)
+    parent.addSubview(child)
+    bridge.setNextResponder(unrelated)
+    child.styleId = "child"
+    var consulted: seq[string]
+    for ancestor in [root, manager, parent, unrelated]:
+      require ancestor.addMethod(
+        managesSubviewLayout(),
+        proc(self: View, subject: DynamicAgent): bool =
+          if subject == DynamicAgent(child):
+            consulted.add(self.identifier())
+          self.identifier() != "parent",
+      )
+
+    root.installCss("#child { width: 80px; }")
+    root.layoutSubtreeIfNeeded()
+    check root.hasDiagnostic("arranged by")
+    check consulted == @["parent", "manager"]
+
   test "root fitting and layout use separate scratch eligibility and diagnostics in either order":
     for fittingFirst in [true, false]:
       let root = newView(frame = rect(0, 0, 300, 150))

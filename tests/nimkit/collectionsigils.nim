@@ -1,5 +1,5 @@
-import std/[options, unittest]
-import sigils/[core, reactive]
+import std/unittest
+import sigils/reactive
 import merenda/nimkit/app/collectionsigils
 import merenda/nimkit/responder/responders
 import merenda/nimkit/directviews/bindings
@@ -12,35 +12,16 @@ type
 
   Watcher = ref object of Responder
     writes: int
-    value: Option[Row]
-
-  RecursiveWriter = ref object of Responder
-    rows: CollectionSigil[int, Row]
-    rejected: bool
+    value: Opt[Row]
 
 proc key(row: Row): int =
   row.id
 
-proc record(watcher: Watcher, value: Option[Row]) =
+proc record(watcher: Watcher, value: Opt[Row]) =
   inc watcher.writes
   watcher.value = value
 
-proc writeRecursively(writer: RecursiveWriter, attrs: set[SigilAttributes]) {.slot.} =
-  try:
-    writer.rows <- @[]
-  except ValueError:
-    writer.rejected = true
-
-suite "keyed collection Sigils":
-  test "recursive publication cannot interleave snapshots":
-    let rows = newCollectionSigil(@[Row(id: 1)], key)
-    let writer = RecursiveWriter(rows: rows)
-    rows.connect(change, writer, writeRecursively)
-    rows <- @[Row(id: 2)]
-    check writer.rejected
-    check rows.len == 1
-    check 2 in rows
-
+suite "NimKit bindings to keyed collections":
   test "item changes notify only that identity and preserve structural projections":
     let rows =
       newCollectionSigil(@[Row(id: 1, text: "one"), Row(id: 2, text: "two")], key)
@@ -69,68 +50,23 @@ suite "keyed collection Sigils":
     check a.writes == 2
     check b.writes == 1
 
-  test "snapshots cannot mutate storage and duplicate IDs fail before publication":
+  test "a binding retains a temporary projection through removal and reinsertion":
     let rows = newCollectionSigil(@[Row(id: 1, text: "one")], key)
-    let item = rows.item(1)
-    let order = rows.order
-    var copy = rows{}
-    copy[0].text = "local"
-    check rows[1].text == "one"
-    expect ValueError:
-      rows <- @[Row(id: 1, text: "a"), Row(id: 1, text: "b")]
-    check rows[1].text == "one"
-    check item{}.get.text == "one"
-    check order{} == @[1]
-    expect KeyError:
-      discard rows[8]
-    expect ValueError:
-      rows[1] = Row(id: 2)
-    check rows.get(8).isNone
-
-  test "missing identities survive removal and reinsertion without leaked observations":
-    var rows = newCollectionSigil(@[Row(id: 1, text: "one")], key)
-    var weakRows: BackRef[CollectionSigil[int, Row]]
-    weakRows.target = rows
-    var item = rows.item(1)
-    var weakItem: BackRef[CollectionValue[Option[Row]]]
-    weakItem.target = item
-    rows <- @[]
-    check item{}.isNone
-    rows <- @[Row(id: 1, text: "again")]
-    check item{}.get.text == "again"
-    rows = nil
-    check not weakRows.isNil
-    item = nil
-    check weakRows.isNil
-    check weakItem.isNil
-
-  test "all projections are committed before synchronous observers run":
-    let rows = newCollectionSigil(@[Row(id: 1, text: "one")], key)
-    let order = rows.order
-    let first = rows.item(1)
-    let derived = computedNow[string]:
-      discard order{}
-      rows[1].text & first{}.get.text
-    rows <- @[Row(id: 2, text: "two"), Row(id: 1, text: "new")]
-    check derived{} == "newnew"
-
-  test "thousands of subscribed rows do not run unrelated getters":
-    var initial: seq[Row]
-    for id in 0 ..< 1000:
-      initial.add Row(id: id, text: $id)
-    let rows = newCollectionSigil(initial, key)
     let scope = newBindingScope()
     defer:
       scope.dispose()
-    var watchers: seq[Watcher]
-    for id in 0 ..< 1000:
-      let watcher = Watcher()
-      watchers.add watcher
-      scope.bindValue($id, rows.item(id), watcher, record)
-    rows[500] = Row(id: 500, text: "changed")
+    let watcher = Watcher()
+    scope.bindValue("row", rows.item(1), watcher, record)
+    check watcher.value.get.text == "one"
+
+    rows <- @[]
     discard drainMainThreadWork()
-    var writes = 0
-    for watcher in watchers:
-      writes += watcher.writes
-    check writes == 1001
-    check watchers[500].value.get.text == "changed"
+    check watcher.value.isNone
+    rows <- @[Row(id: 1, text: "again")]
+    discard drainMainThreadWork()
+    check watcher.value.get.text == "again"
+
+    scope.dispose()
+    rows <- @[]
+    discard drainMainThreadWork()
+    check watcher.writes == 3

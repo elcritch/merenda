@@ -1,13 +1,12 @@
 ## Retained real-view composition; mutation and flushing belong to the GUI thread.
 import std/[sets, tables]
-import sigils/[core, reactive, selectors]
+import sigils/[collections, core, reactive, selectors]
 import ../view/views
 import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
 import ../responder/actiontargets
 import ../foundation/[selectors, types]
-import ../app/collectionsigils
 import ../declarative/actions
 import ./bindings
 

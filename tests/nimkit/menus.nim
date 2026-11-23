@@ -116,6 +116,30 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyActions)
   discard result.withProtocol(MenuModelSpyValidation)
 
+type PopupTestHost = ref object of Responder
+  titles: seq[string]
+  markedIndex: int
+  markedState: ButtonState
+  closes: int
+
+protocol TestPopupDataSource of PopupListDataSource:
+  method totalCount(host: PopupTestHost, popupList: PopupListView): int =
+    host.titles.len
+
+  method rowAtIndex(
+      host: PopupTestHost, popupList: PopupListView, index: int
+  ): PopupListItem =
+    PopupListItem(text: host.titles[index])
+
+  method stateForItem(
+      host: PopupTestHost, popupList: PopupListView, index: int
+  ): ButtonState =
+    if index == host.markedIndex: host.markedState else: bsOff
+
+protocol TestPopupDelegate of PopupListDelegate:
+  method dismissList(host: PopupTestHost, popupList: PopupListView) =
+    inc host.closes
+
 suite "nimkit menus":
   test "mutable menu items change menu bar intrinsic size without a reload":
     let menu = newMenu("Bar")
@@ -925,7 +949,7 @@ suite "nimkit menus":
       check itemFillFound
       check itemTextFound
 
-  test "popup lists without a tab callback keep window key view traversal":
+  test "popup lists without a tab delegate method keep window key view traversal":
     let
       window = newWindow("Popup list tab", frame = rect(0, 0, 320, 200))
       root = newView(frame = rect(0, 0, 320, 200))
@@ -933,14 +957,9 @@ suite "nimkit menus":
       following = newView(frame = rect(8, 72, 100, 24))
     defer:
       window.close()
-    var closes = 0
-    let popup = newPopupListView(
-      actions = PopupListActions(
-        close: proc() =
-          inc closes
-      ),
-      frame = rect(8, 40, 100, 24),
-    )
+    let delegate = PopupTestHost()
+    discard delegate.withProtocol(TestPopupDelegate)
+    let popup = newPopupListView(delegate = delegate, frame = rect(8, 40, 100, 24))
     previous.acceptsFirstResponder = true
     following.acceptsFirstResponder = true
     for view in [previous, View(popup), following]:
@@ -960,7 +979,25 @@ suite "nimkit menus":
       let focusAdvanced = window.firstResponder() == expected
       check focusAdvanced
       check expected.isFocusVisible()
-    check closes == 0
+    check delegate.closes == 0
+
+  test "a popup can outlive its data source and delegate":
+    let popup = newPopupListView()
+    block:
+      let host = PopupTestHost(titles: @["Open"])
+      discard host.withProtocol(TestPopupDataSource)
+      discard host.withProtocol(TestPopupDelegate)
+      popup.dataSource = host
+      popup.delegate = host
+      check popup.itemText(0) == "Open"
+      popup.finishPopupListTracking(popup.bounds(), initPoint(0, 0))
+      check host.closes == 1
+
+    check popup.dataSource().isNil
+    check popup.delegate().isNil
+    check popup.itemCount() == 0
+    check popup.itemIsEnabled(0)
+    popup.finishPopupListTracking(popup.bounds(), initPoint(0, 0))
 
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))
@@ -1001,16 +1038,13 @@ suite "nimkit menus":
     ]:
       let
         appearance = initAppearance(initTheme())
-        popup = newPopupListView(
-          PopupListData(
-            itemCount: proc(): int =
-              scenario.titles.len,
-            itemText: proc(index: int): string =
-              scenario.titles[index],
-            itemState: proc(index: int): ButtonState =
-              if index == scenario.marked: scenario.state else: bsOff,
-          )
+        host = PopupTestHost(
+          titles: scenario.titles,
+          markedIndex: scenario.marked,
+          markedState: scenario.state,
         )
+      discard host.withProtocol(TestPopupDataSource)
+      let popup = newPopupListView(dataSource = host)
       popup.frame = rect(0, 0, 160, popup.popupListContentSize(appearance).height)
       var
         mark: Fig

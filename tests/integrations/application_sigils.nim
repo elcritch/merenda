@@ -1,5 +1,5 @@
 ## Application and Sigils scheduler integration behavior.
-import std/unittest
+import std/[times, unittest]
 
 import sigils/threadBase
 
@@ -51,4 +51,31 @@ suite "NimKit application Sigils scheduler":
     check hasPendingMainThreadWork()
     discard app.runForFrames(1)
     check chunkCount == 3
+    check not hasPendingMainThreadWork()
+
+  test "timers armed during a drain wait until the next frame and can be cancelled":
+    let app = newApplication("Main Thread Timer Test")
+    var fired = false
+    var cancel: proc() {.closure, gcsafe.}
+    scheduleMainThreadWork(
+      proc(): bool =
+        cancel = scheduleMainThreadTimer(
+          initDuration(),
+          proc() =
+            fired = true,
+        )
+    )
+
+    discard app.runForFrames(1)
+    check not fired
+    require hasPendingMainThreadWork()
+
+    # Cancel after the next frame takes its snapshot of ready timers.
+    scheduleMainThreadWork(
+      proc(): bool =
+        cancel()
+    )
+
+    discard app.runForFrames(1)
+    check not fired
     check not hasPendingMainThreadWork()

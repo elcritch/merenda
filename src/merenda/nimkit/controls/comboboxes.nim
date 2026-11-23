@@ -124,8 +124,6 @@ proc clearPopupState(comboBox: ComboBox, host: PopupHost = nil)
 proc openPopupHost(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true)
 proc updatePopupPresentation(comboBox: ComboBox)
-proc popupListData(comboBox: ComboBox): PopupListData
-proc popupListActions(comboBox: ComboBox): PopupListActions
 proc popupList(comboBox: ComboBox): PopupListView
 proc itemObjectValueAtIndex*(comboBox: ComboBox, index: int): ObjectValue
 proc indexOfOptionMatchingText*(comboBox: ComboBox, text: string, startIndex = 0): int
@@ -1434,66 +1432,82 @@ proc indexOfOptionMatchingText*(comboBox: ComboBox, text: string, startIndex = 0
       return index
   -1
 
-proc popupListData(comboBox: ComboBox): PopupListData =
-  PopupListData(
-    itemCount: proc(): int =
-      comboBox.numberOfItems(),
-    visibleCount: proc(): int =
-      comboBox.visibleItemCount(),
-    firstIndex: proc(): int =
-      comboBox.popupFirstItemIndex(),
-    selectedIndex: proc(): int =
-      comboBox.indexOfSelectedItem(),
-    highlightedIndex: proc(): int =
-      comboBox.highlightedIndex(),
-    rowHeight: proc(): float32 =
-      comboBox.popupItemHeight(),
-    itemText: proc(index: int): string =
-      comboBox.itemAtIndex(index),
-    itemIsSeparator: proc(index: int): bool =
-      comboBox.optionIsSeparatorAtIndex(index),
-    itemIsEnabled: proc(index: int): bool =
-      comboBox.optionIsEnabledAtIndex(index),
-    enabled: proc(): bool =
-      comboBox.isEnabled(),
-    focused: proc(): bool =
-      comboBox.isFocused(),
-    opened: proc(): bool =
-      comboBox.popupOpen(),
-    styleId: proc(): string =
-      comboBox.styleId(),
-    styleClasses: proc(): seq[string] =
-      comboBox.styleClasses(),
-  )
+protocol ComboBoxPopupListDataSource of PopupListDataSource:
+  method totalCount(comboBox: ComboBox, popupList: PopupListView): int =
+    comboBox.numberOfItems()
 
-proc popupListActions(comboBox: ComboBox): PopupListActions =
-  PopupListActions(
-    highlight: proc(index: int) =
-      comboBox.setHoveredPopupIndex(index),
-    activate: proc(index: int) =
-      comboBox.activateItemAtIndex(index)
-      comboBox.closePopup(),
-    close: proc() =
-      comboBox.closePopup(),
-    scroll: proc(delta: int) =
-      comboBox.scrollPopupRows(delta),
-    keyDown: proc(event: KeyEvent) =
-      discard comboBox.keyDown(event),
-    tab: proc(delta: int) =
-      let owner = comboBox.window()
-      comboBox.closePopup()
-      if owner of Window:
-        if delta < 0:
-          Window(owner).selectKeyViewPrecedingView(comboBox)
-        else:
-          Window(owner).selectKeyViewFollowingView(comboBox)
-    ,
-  )
+  method visibleCount(comboBox: ComboBox, popupList: PopupListView): int =
+    comboBox.visibleItemCount()
+
+  method topIndex(comboBox: ComboBox, popupList: PopupListView): int =
+    comboBox.popupFirstItemIndex()
+
+  method selectionIndex(comboBox: ComboBox, popupList: PopupListView): int =
+    comboBox.indexOfSelectedItem()
+
+  method highlightIndex(comboBox: ComboBox, popupList: PopupListView): int =
+    comboBox.highlightedIndex()
+
+  method heightOfRow(comboBox: ComboBox, popupList: PopupListView): float32 =
+    comboBox.popupItemHeight()
+
+  method rowAtIndex(
+      comboBox: ComboBox, popupList: PopupListView, index: int
+  ): PopupListItem =
+    PopupListItem(
+      text: comboBox.itemAtIndex(index),
+      separator: comboBox.optionIsSeparatorAtIndex(index),
+      disabled: not comboBox.optionIsEnabledAtIndex(index),
+    )
+
+  method isInteractive(comboBox: ComboBox, popupList: PopupListView): bool =
+    comboBox.isEnabled()
+
+  method hasFocus(comboBox: ComboBox, popupList: PopupListView): bool =
+    comboBox.isFocused()
+
+  method isShowing(comboBox: ComboBox, popupList: PopupListView): bool =
+    comboBox.popupOpen()
+
+  method contentStyleId(comboBox: ComboBox, popupList: PopupListView): string =
+    comboBox.styleId()
+
+  method contentStyleClasses(
+      comboBox: ComboBox, popupList: PopupListView
+  ): seq[string] =
+    comboBox.styleClasses()
+
+protocol ComboBoxPopupListDelegate of PopupListDelegate:
+  method highlightRow(comboBox: ComboBox, popupList: PopupListView, index: int) =
+    comboBox.setHoveredPopupIndex(index)
+
+  method activateRow(comboBox: ComboBox, popupList: PopupListView, index: int) =
+    comboBox.activateItemAtIndex(index)
+    comboBox.closePopup()
+
+  method dismissList(comboBox: ComboBox, popupList: PopupListView) =
+    comboBox.closePopup()
+
+  method scrollByRows(comboBox: ComboBox, popupList: PopupListView, delta: int) =
+    comboBox.scrollPopupRows(delta)
+
+  method handleKeyDown(comboBox: ComboBox, popupList: PopupListView, event: KeyEvent) =
+    discard comboBox.keyDown(event)
+
+  method moveFocus(comboBox: ComboBox, popupList: PopupListView, delta: int) =
+    let owner = comboBox.window()
+    comboBox.closePopup()
+    if owner of Window:
+      if delta < 0:
+        Window(owner).selectKeyViewPrecedingView(comboBox)
+      else:
+        Window(owner).selectKeyViewFollowingView(comboBox)
 
 proc popupList(comboBox: ComboBox): PopupListView =
   if comboBox.xPopupList.isNil:
-    comboBox.xPopupList =
-      newPopupListView(comboBox.popupListData(), comboBox.popupListActions())
+    discard comboBox.withProtocol(ComboBoxPopupListDataSource)
+    discard comboBox.withProtocol(ComboBoxPopupListDelegate)
+    comboBox.xPopupList = newPopupListView(dataSource = comboBox, delegate = comboBox)
   comboBox.xPopupList
 
 proc setHoveredPopupIndex(comboBox: ComboBox, index: int) =

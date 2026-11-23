@@ -1,6 +1,7 @@
 import std/[macros, math, monotimes, options, sets, tables, times]
 
 import pkg/kiwiberry
+from sigils/hom import findFirst, isSome
 
 import ../themes
 from ../themes/themecore import
@@ -1626,12 +1627,14 @@ proc cssDiagnostic(state: var LayoutSolveState, view: View, property, message: s
   if diagnostic notin state.cssDiagnostics:
     state.cssDiagnostics.add diagnostic
 
-proc managedBySuperview(view: View): bool =
+iterator superviewChain(view: View): View =
   var parent = view.superviewBacklink()
   while not parent.isNil:
-    if parent.trySendLocal(managesSubviewLayout(), DynamicAgent(view)).get(false):
-      return true
+    yield parent
     parent = parent.superviewBacklink()
+
+proc managedBySuperview(view: View): bool =
+  view.superviewChain().findFirst(managesSubviewLayout(), DynamicAgent(view)).isSome
 
 proc checkCssGenerationBudget(state: LayoutSolveState, additional: Natural) =
   state.checkSolveBudget()

@@ -1199,14 +1199,17 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
       -firstColumn.float32 * metrics.cellWidth, bar.commandBarTextVerticalOffset()
     )
 
+proc setIndexProgressHidden(bar: KosmoStatusBar, hidden: bool) =
+  bar.indexProgress.hidden = hidden
+  bar.indexSpinner.hidden = hidden
+  bar.indexProgressLabel.hidden = hidden
+
 proc syncIndexProgress(
     bar: KosmoStatusBar,
     progress: tuple[active: bool, percentage: int, hundredths: int, entryPoint: string],
 ) =
   if bar.indexProgress.hidden != not progress.active:
-    bar.indexProgress.hidden = not progress.active
-    bar.indexSpinner.hidden = not progress.active
-    bar.indexProgressLabel.hidden = not progress.active
+    bar.setIndexProgressHidden(not progress.active)
     if progress.active:
       bar.indexSpinner.startAnimation()
       let animation = nimkit.newPropertyAnimation[float32](
@@ -1428,20 +1431,18 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].applyKosmoEditorStyle(appearance)
       handler.editorView[].refresh()
 
-proc containsPaneResponder(group: KosmoEditorGroup, candidate: nimkit.Responder): bool =
-  var responder = candidate
-  while not responder.isNil:
-    if responder == nimkit.Responder(group.pane):
+proc containsPaneResponder(pane: KosmoEditorPane, candidate: nimkit.Responder): bool =
+  for responder in candidate.responderChain():
+    if responder == nimkit.Responder(pane):
       return true
-    responder = responder.nextResponder()
 
 proc hasPaneFocus(group: KosmoEditorGroup): bool =
   if group.isNil or group.window.isNil:
     return
   let window = group.window
-  if group.containsPaneResponder(window.firstResponder()):
+  if group.pane.containsPaneResponder(window.firstResponder()):
     return true
-  group.containsPaneResponder(window.fieldEditorClient())
+  group.pane.containsPaneResponder(window.fieldEditorClient())
 
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
@@ -3647,7 +3648,7 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
 
 proc newKosmoSidebarPane(
     tabs: nimkit.CompactTabView,
-    fileBrowserPanel: KosmoFileBrowserPanel,
+    fileBrowserPanel: FileBrowserPanel,
     searchPanel: KosmoFileSearchPanel,
 ): KosmoSidebarPane =
   let
@@ -3912,15 +3913,12 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   indexProgress.accessibilityLabel = "Nimdex indexing"
   indexProgress.toolTip = "Nimdex: estimated progress for the current entry point"
   indexProgress.maxValue = 100
-  indexProgress.hidden = true
   indexSpinner.identifier = "kosmo.nimdex.progress.spinner"
   indexSpinner.accessibilityLabel = "Nimdex indexing activity"
   indexSpinner.progressIndicatorStyle = nimkit.pisSpinning
   indexSpinner.indeterminate = true
   indexSpinner.displayedWhenStopped = false
-  indexSpinner.hidden = true
   indexProgressLabel.identifier = "kosmo.nimdex.progress.percentage"
-  indexProgressLabel.hidden = true
   indexEntryLabel.identifier = "kosmo.nimdex.progress.entrypoint"
   indexEntryLabel.hidden = true
   indexEntryLabel.alignment = nimkit.taRight
@@ -3946,6 +3944,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     nimdexStopIcon: stopIcon,
   )
   result.initViewFields()
+  result.setIndexProgressHidden(true)
   result.addSubview(label)
   result.addSubview(choice)
   result.addSubview(nimdexSection)
@@ -4155,20 +4154,21 @@ proc dispatchContentEditingCommand(
   let command = args.selector.nativeEditingCommand()
   if command.isNone or pane.contentView == nimkit.View(pane.editorView):
     return
+  let selector = command.get()
   # Retry Kosmo's namespaced shortcut as a native command within the visible
   # content. This also reaches text views created lazily by document viewers.
   let owner = pane.window()
   if owner of nimkit.Window:
     let focused = nimkit.Window(owner).firstResponder()
-    var ancestor = focused
-    while not ancestor.isNil and ancestor != nimkit.Responder(pane):
-      ancestor = ancestor.nextResponder()
-    var target = if ancestor.isNil: nil else: focused
-    while not target.isNil and target != nimkit.Responder(pane):
-      if target.tryToPerform(command.get(), args.sender) or
-          not target.localMethod(command.get().name).isNil:
+    if pane.containsPaneResponder(focused):
+      let claimsCommand = proc(target: nimkit.Responder): bool =
+        # A local action claims the command even if tryToPerform returns false.
+        target.tryToPerform(selector, args.sender) or
+          not target.localMethod(selector).isNil
+      let handledBy =
+        focused.responderChain(nimkit.Responder(pane)).findFirst(claimsCommand)
+      if handledBy.isSome:
         return true
-      target = target.nextResponder()
   # Container focus uses the document's preferred responder, just as tab
   # activation does. Markdown buffer previews are hosted directly by the pane.
   var preferred: nimkit.Responder
@@ -4180,7 +4180,7 @@ proc dispatchContentEditingCommand(
     if not document.isNil:
       preferred = document.preferredFirstResponder
   if not preferred.isNil:
-    discard preferred.tryToPerform(command.get(), args.sender)
+    discard preferred.tryToPerform(selector, args.sender)
   # Unsupported edits belong to the visible document too. In particular,
   # pasting into a reader must never modify the hidden Moe buffer.
   true
@@ -4745,89 +4745,79 @@ proc syncPopupMenu(pane: KosmoEditorPane) =
     y = initialY.clamp(0.0'f32, max(paneBounds.size.height - popupHeight, 0.0'f32))
   pane.popupList.setFrameFromLayout(nimkit.rect(x, y, popupWidth, popupHeight))
 
-proc newKosmoPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
-  let weakPane = pane.unsafeWeakRef()
-  result = nimkit.newPopupListView(
-    nimkit.PopupListData(
-      itemCount: proc(): int =
-        if weakPane.isNil or weakPane[].popupMenuState.isNone:
-          0
-        else:
-          weakPane[].popupMenuState.get.items.len,
-      visibleCount: proc(): int =
-        if weakPane.isNil or weakPane[].popupMenuState.isNone:
-          0
-        else:
-          let
-            paneBounds = weakPane[].bounds()
-            rowHeight =
-              max(weakPane[].editorView.monoTextMetrics().lineHeight, 22.0'f32)
-          min(
-            min(
-              max(weakPane[].popupMenuState.get.maxVisibleItems, 1),
-              weakPane[].popupMenuState.get.items.len,
-            ),
-            max(int(floor(paneBounds.size.height / rowHeight)), 1),
-          ),
-      firstIndex: proc(): int =
-        if weakPane.isNil or weakPane[].popupMenuState.isNone:
-          0
-        else:
-          weakPane[].popupMenuState.get.firstIndex,
-      selectedIndex: proc(): int =
-        if weakPane.isNil or weakPane[].popupMenuState.isNone:
-          -1
-        else:
-          weakPane[].popupMenuState.get.selectedIndex,
-      highlightedIndex: proc(): int =
-        if weakPane.isNil: -1 else: weakPane[].popupHighlightedIndex,
-      rowHeight: proc(): float32 =
-        if weakPane.isNil:
-          22.0'f32
-        else:
-          max(weakPane[].editorView.monoTextMetrics().lineHeight, 22.0'f32),
-      itemText: proc(index: int): string =
-        if weakPane.isNil or weakPane[].popupMenuState.isNone:
-          ""
-        elif index < 0 or index >= weakPane[].popupMenuState.get.items.len:
-          ""
-        else:
-          popupItemText(weakPane[].popupMenuState.get.items[index]),
-      focused: proc(): bool =
-        false,
-      enabled: proc(): bool =
-        not weakPane.isNil and weakPane[].popupMenuState.isSome and
-          weakPane[].editorView.isActiveEditorGroup(),
-      opened: proc(): bool =
-        not weakPane.isNil and weakPane[].popupMenuState.isSome and
-          weakPane[].editorView.isActiveEditorGroup(),
-    ),
-    nimkit.PopupListActions(
-      highlight: proc(index: int) =
-        if not weakPane.isNil and weakPane[].popupMenuState.isSome:
-          weakPane[].popupHighlightedIndex = index
-          discard weakPane[].editorView.editor.selectPopupMenuItem(index)
-          weakPane[].popupList.needsDisplay = true
-      ,
-      activate: proc(index: int) =
-        if not weakPane.isNil:
-          discard weakPane[].editorView.editor.activatePopupMenuItem(index)
-          weakPane[].popupHighlightedIndex = -1
-          weakPane[].editorView.refresh()
-      ,
-      close: proc() =
-        if not weakPane.isNil:
-          weakPane[].editorView.editor.dismissPopupMenu()
-          weakPane[].popupHighlightedIndex = -1
-          weakPane[].editorView.refresh()
-      ,
-      scroll: proc(delta: int) =
-        if not weakPane.isNil:
-          weakPane[].editorView.editor.scrollPopupMenu(delta)
-          weakPane[].editorView.refresh()
-      ,
-    ),
-  )
+protocol EditorPopupDataSource of nimkit.PopupListDataSource:
+  method totalCount(pane: KosmoEditorPane, popupList: nimkit.PopupListView): int =
+    if pane.popupMenuState.isSome: pane.popupMenuState.get.items.len else: 0
+
+  method visibleCount(pane: KosmoEditorPane, popupList: nimkit.PopupListView): int =
+    if pane.popupMenuState.isNone:
+      return 0
+    let
+      paneBounds = pane.bounds()
+      rowHeight = max(pane.editorView.monoTextMetrics().lineHeight, 22.0'f32)
+      popup = pane.popupMenuState.get
+    min(
+      min(max(popup.maxVisibleItems, 1), popup.items.len),
+      max(int(floor(paneBounds.size.height / rowHeight)), 1),
+    )
+
+  method topIndex(pane: KosmoEditorPane, popupList: nimkit.PopupListView): int =
+    if pane.popupMenuState.isSome: pane.popupMenuState.get.firstIndex else: 0
+
+  method selectionIndex(pane: KosmoEditorPane, popupList: nimkit.PopupListView): int =
+    if pane.popupMenuState.isSome: pane.popupMenuState.get.selectedIndex else: -1
+
+  method highlightIndex(pane: KosmoEditorPane, popupList: nimkit.PopupListView): int =
+    pane.popupHighlightedIndex
+
+  method heightOfRow(pane: KosmoEditorPane, popupList: nimkit.PopupListView): float32 =
+    max(pane.editorView.monoTextMetrics().lineHeight, 22.0'f32)
+
+  method rowAtIndex(
+      pane: KosmoEditorPane, popupList: nimkit.PopupListView, index: int
+  ): nimkit.PopupListItem =
+    if pane.popupMenuState.isSome:
+      let popup = pane.popupMenuState.get
+      if index in 0 ..< popup.items.len:
+        result.text = popupItemText(popup.items[index])
+
+  method isInteractive(pane: KosmoEditorPane, popupList: nimkit.PopupListView): bool =
+    pane.popupMenuState.isSome and pane.editorView.isActiveEditorGroup()
+
+  method isShowing(pane: KosmoEditorPane, popupList: nimkit.PopupListView): bool =
+    pane.popupMenuState.isSome and pane.editorView.isActiveEditorGroup()
+
+protocol EditorPopupDelegate of nimkit.PopupListDelegate:
+  method highlightRow(
+      pane: KosmoEditorPane, popupList: nimkit.PopupListView, index: int
+  ) =
+    if pane.popupMenuState.isSome:
+      pane.popupHighlightedIndex = index
+      discard pane.editorView.editor.selectPopupMenuItem(index)
+      popupList.needsDisplay = true
+
+  method activateRow(
+      pane: KosmoEditorPane, popupList: nimkit.PopupListView, index: int
+  ) =
+    discard pane.editorView.editor.activatePopupMenuItem(index)
+    pane.popupHighlightedIndex = -1
+    pane.editorView.refresh()
+
+  method dismissList(pane: KosmoEditorPane, popupList: nimkit.PopupListView) =
+    pane.editorView.editor.dismissPopupMenu()
+    pane.popupHighlightedIndex = -1
+    pane.editorView.refresh()
+
+  method scrollByRows(
+      pane: KosmoEditorPane, popupList: nimkit.PopupListView, delta: int
+  ) =
+    pane.editorView.editor.scrollPopupMenu(delta)
+    pane.editorView.refresh()
+
+proc newEditorPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
+  discard pane.withProtocol(EditorPopupDataSource)
+  discard pane.withProtocol(EditorPopupDelegate)
+  result = nimkit.newPopupListView(dataSource = pane, delegate = pane)
   result.acceptsFirstResponder = false
   result.setPopupListRoles(nimkit.srComboBox, nimkit.srComboBoxItem)
 
@@ -4853,7 +4843,7 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   result.addSubview(commandBar)
   result.addSubview(activeIndicator)
   result.addSubview(markdownControls)
-  result.popupList = result.newKosmoPopupList()
+  result.popupList = result.newEditorPopupList()
   result.popupList.hidden = true
   result.addSubview(result.popupList)
   discard result.withProtocol(KosmoEditorPaneLayout)

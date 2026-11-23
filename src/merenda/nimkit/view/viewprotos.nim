@@ -1,4 +1,5 @@
 import std/[algorithm, macros]
+from sigils/hom import findFirst, get
 
 import ../app/animations
 import ../foundation/selectors
@@ -10,6 +11,23 @@ import ./viewbase
 import sigils/core
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect)
+
+iterator keyViewChain(view: View, link: Selector[EmptyArgs, View]): View =
+  var candidate = view.send(link, ())
+  for _ in 0 ..< 4096:
+    if candidate.isNil:
+      break
+    yield candidate
+    if candidate == view:
+      break
+    candidate = candidate.send(link, ())
+
+proc validKeyView(
+    view: View, link: Selector[EmptyArgs, View], eligibility: Selector[EmptyArgs, bool]
+): View =
+  let isValid = proc(candidate: View): bool =
+    candidate.send(eligibility, ())
+  view.keyViewChain(link).findFirst(isValid).get(nil)
 
 proc updateUncachedIntrinsicCount(view: View, count: uint32, added: bool) =
   if count == 0:
@@ -328,30 +346,10 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.viewCanBecomeKeyView()
 
   method nextValidKeyView*(self: View): View =
-    var candidate = self.nextKeyView()
-    var hopCount = 0
-    while not candidate.isNil and hopCount < 4096:
-      if candidate == self:
-        if candidate.canBecomeKeyView():
-          return candidate
-        return nil
-      if candidate.canBecomeKeyView():
-        return candidate
-      candidate = candidate.nextKeyView()
-      inc hopCount
+    self.validKeyView(nextKeyView(), canBecomeKeyView())
 
   method previousValidKeyView*(self: View): View =
-    var candidate = self.previousKeyView()
-    var hopCount = 0
-    while not candidate.isNil and hopCount < 4096:
-      if candidate == self:
-        if candidate.canBecomeKeyView():
-          return candidate
-        return nil
-      if candidate.canBecomeKeyView():
-        return candidate
-      candidate = candidate.previousKeyView()
-      inc hopCount
+    self.validKeyView(previousKeyView(), canBecomeKeyView())
 
   method isHidden*(self: View): bool =
     ssHidden in self.xWidgetStates

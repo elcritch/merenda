@@ -1,5 +1,4 @@
 ## Two independent task editors using direct views and the shared document policy.
-import std/options
 import sigils/[core, reactive]
 import merenda/nimkit
 import merenda/nimkit/directviews
@@ -26,7 +25,7 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
       Label:
         this.identifier = "accepted-" & $task.id
         bindingScope.bindValue("accepted", owner.tasks.item(task.id), this) do(
-          label: Label, value: Option[EditorTask]
+          label: Label, value: Opt[EditorTask]
         ):
           label.stringValue = "Accepted: " & (if value.isSome: value.get.title else: "")
       Button(

@@ -323,7 +323,7 @@ suite "Kosmo shared workspace inventory":
       removeDir(root)
     createDir(folder)
     writeFile(deletedFile, "discard\n")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     defer:
       tree.workspaceFiles.close()
     require tree.workspaceFiles.waitForFiles()

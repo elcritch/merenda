@@ -32,11 +32,11 @@ const
   LoadingFilesTitle = "Loading files…"
 
 type
-  KosmoQuickOpenHandler* = proc(path: string) {.closure.}
+  QuickOpenHandler* = proc(path: string) {.closure.}
 
   QuickOpenProgressIndicator = ref object of nimkit.ProgressIndicator
 
-  KosmoQuickOpenPanel* = ref object of nimkit.Box
+  QuickOpenPanel* = ref object of nimkit.Box
     queryField*: nimkit.TextField
     resultsView*: nimkit.PopupListView
     progressIndicator*: nimkit.ProgressIndicator
@@ -47,7 +47,7 @@ type
     xFilteredFiles: seq[string]
     xHighlightedIndex: int
     xFirstIndex: int
-    xOnOpen: KosmoQuickOpenHandler
+    xOnOpen: QuickOpenHandler
     xObservedWindow: WeakRef[nimkit.Window]
     xPresentationOffset: float32
     xPresentationAnimation: nimkit.Animation
@@ -57,26 +57,24 @@ type
     xRegularExpression: bool
     xSearchError: string
 
-  KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
-    panel: WeakRef[KosmoQuickOpenPanel]
+  QuickOpenFieldEditor = ref object of nimkit.FieldEditor
+    panel: WeakRef[QuickOpenPanel]
 
-  KosmoQuickOpenFieldCell = ref object of nimkit.TextFieldCell
-    editor: KosmoQuickOpenFieldEditor
+  QuickOpenFieldCell = ref object of nimkit.TextFieldCell
+    editor: QuickOpenFieldEditor
 
   RankedFile = object
     path: string
     score: int
 
-protocol KosmoQuickOpenPresentationProtocol {.
-  selectorScope: protocol, setterStyle: nim
-.}:
+protocol QuickOpenPresentationProtocol {.selectorScope: protocol, setterStyle: nim.}:
   property presentationOffset -> float32
 
-protocol DefaultKosmoQuickOpenPresentation of KosmoQuickOpenPresentationProtocol:
-  method presentationOffset(panel: KosmoQuickOpenPanel): float32 =
+protocol DefaultQuickOpenPresentation of QuickOpenPresentationProtocol:
+  method presentationOffset(panel: QuickOpenPanel): float32 =
     panel.xPresentationOffset
 
-  method `presentationOffset=`(panel: KosmoQuickOpenPanel, offset: float32) =
+  method `presentationOffset=`(panel: QuickOpenPanel, offset: float32) =
     if panel.xPresentationOffset == offset:
       return
     panel.xPresentationOffset = offset
@@ -89,10 +87,10 @@ protocol QuickOpenProgressDrawing of nimkit.ViewDrawingProtocol:
   method drawLevel(indicator: QuickOpenProgressIndicator): ZLevel =
     nimkit.PopupDrawLevel
 
-proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int)
-proc activateHighlighted(panel: KosmoQuickOpenPanel)
-proc filterFiles(panel: KosmoQuickOpenPanel)
-proc scrollHighlightedToVisible(panel: KosmoQuickOpenPanel)
+proc moveHighlight(panel: QuickOpenPanel, delta: int)
+proc activateHighlighted(panel: QuickOpenPanel)
+proc filterFiles(panel: QuickOpenPanel)
+proc scrollHighlightedToVisible(panel: QuickOpenPanel)
 
 func fuzzyFileScore*(candidate, query: string): int =
   ## Score a case-insensitive fuzzy subsequence match.
@@ -151,7 +149,7 @@ proc fuzzyFilterFiles*(files: openArray[string], query: string): seq[string] =
   for match in ranked:
     result.add match.path
 
-proc applyProjectFiles(panel: KosmoQuickOpenPanel) {.slot.} =
+proc applyProjectFiles(panel: QuickOpenPanel) {.slot.} =
   template files(): untyped =
     panel.xWorkspaceFiles.snapshot()
 
@@ -178,10 +176,10 @@ proc applyProjectFiles(panel: KosmoQuickOpenPanel) {.slot.} =
     panel.xHighlightedIndex = selected
     panel.scrollHighlightedToVisible()
 
-proc workspaceFiles*(panel: KosmoQuickOpenPanel): WorkspaceFiles =
+proc workspaceFiles*(panel: QuickOpenPanel): WorkspaceFiles =
   panel.xWorkspaceFiles
 
-proc `workspaceFiles=`*(panel: KosmoQuickOpenPanel, files: WorkspaceFiles) =
+proc `workspaceFiles=`*(panel: QuickOpenPanel, files: WorkspaceFiles) =
   ## Borrow the browser's controller, rather than maintaining a second index.
   if files.isNil or panel.xWorkspaceFiles == files:
     return
@@ -191,7 +189,7 @@ proc `workspaceFiles=`*(panel: KosmoQuickOpenPanel, files: WorkspaceFiles) =
   files.connect(workspaceFilesDidChange, panel, applyProjectFiles)
   panel.applyProjectFiles()
 
-proc beginProjectFileLoad(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
+proc beginProjectFileLoad(panel: QuickOpenPanel, rootPaths: openArray[string]) =
   panel.xWorkspaceFiles.setRoots(rootPaths)
   panel.applyProjectFiles()
   panel.xLoading = panel.xWorkspaceFiles.isLoading()
@@ -199,28 +197,28 @@ proc beginProjectFileLoad(panel: KosmoQuickOpenPanel, rootPaths: openArray[strin
     panel.progressIndicator.startAnimation()
   panel.resultsView.needsDisplay = true
 
-proc visibleItemCount(panel: KosmoQuickOpenPanel): int =
+proc visibleItemCount(panel: QuickOpenPanel): int =
   let availableRows =
     max(int(floor(panel.resultsView.bounds().size.height / QuickOpenRowHeight)), 1)
   min(availableRows, QuickOpenMaximumVisibleItems)
 
-proc itemCount(panel: KosmoQuickOpenPanel): int =
+proc itemCount(panel: QuickOpenPanel): int =
   max(panel.xFilteredFiles.len, 1)
 
-proc clampFirstIndex(panel: KosmoQuickOpenPanel) =
+proc clampFirstIndex(panel: QuickOpenPanel) =
   panel.xFirstIndex = max(
     0,
     min(panel.xFirstIndex, max(panel.xFilteredFiles.len - panel.visibleItemCount(), 0)),
   )
 
-proc scrollHighlightedToVisible(panel: KosmoQuickOpenPanel) =
+proc scrollHighlightedToVisible(panel: QuickOpenPanel) =
   if panel.xHighlightedIndex < panel.xFirstIndex:
     panel.xFirstIndex = panel.xHighlightedIndex
   elif panel.xHighlightedIndex >= panel.xFirstIndex + panel.visibleItemCount():
     panel.xFirstIndex = panel.xHighlightedIndex - panel.visibleItemCount() + 1
   panel.clampFirstIndex()
 
-proc setHighlightedIndex(panel: KosmoQuickOpenPanel, index: int) =
+proc setHighlightedIndex(panel: QuickOpenPanel, index: int) =
   let boundedIndex =
     if panel.xFilteredFiles.len == 0:
       -1
@@ -232,13 +230,13 @@ proc setHighlightedIndex(panel: KosmoQuickOpenPanel, index: int) =
   panel.scrollHighlightedToVisible()
   panel.resultsView.needsDisplay = true
 
-proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int) =
+proc moveHighlight(panel: QuickOpenPanel, delta: int) =
   if panel.isNil or panel.xFilteredFiles.len == 0:
     return
   let current = max(panel.xHighlightedIndex, 0)
   panel.setHighlightedIndex(current + delta)
 
-proc stopPresentationAnimation(panel: KosmoQuickOpenPanel, finished = true) =
+proc stopPresentationAnimation(panel: QuickOpenPanel, finished = true) =
   if panel.isNil or panel.xPresentationAnimation.isNil:
     return
   let owner = panel.window()
@@ -250,7 +248,7 @@ proc stopPresentationAnimation(panel: KosmoQuickOpenPanel, finished = true) =
     panel.xPresentationAnimation.stop(finished)
   panel.xPresentationAnimation = nil
 
-proc finishDismiss(panel: KosmoQuickOpenPanel) =
+proc finishDismiss(panel: QuickOpenPanel) =
   if panel.isNil:
     return
   panel.stopPresentationAnimation()
@@ -261,7 +259,7 @@ proc finishDismiss(panel: KosmoQuickOpenPanel) =
   if not parent.isNil:
     parent.needsDisplay = true
 
-proc dismiss*(panel: KosmoQuickOpenPanel, reason = nimkit.tdrProgrammatic) =
+proc dismiss*(panel: QuickOpenPanel, reason = nimkit.tdrProgrammatic) =
   ## Dismiss the picker and restore the responder active before it opened.
   if panel.isNil:
     return
@@ -270,7 +268,7 @@ proc dismiss*(panel: KosmoQuickOpenPanel, reason = nimkit.tdrProgrammatic) =
     discard nimkit.Window(owner).endTransientSession(reason)
   panel.finishDismiss()
 
-proc activateIndex(panel: KosmoQuickOpenPanel, index: int) =
+proc activateIndex(panel: QuickOpenPanel, index: int) =
   if panel.isNil or index notin 0 ..< panel.xFilteredFiles.len:
     return
   let
@@ -280,11 +278,11 @@ proc activateIndex(panel: KosmoQuickOpenPanel, index: int) =
   if not handler.isNil:
     handler(path)
 
-proc activateHighlighted(panel: KosmoQuickOpenPanel) =
+proc activateHighlighted(panel: QuickOpenPanel) =
   if not panel.isNil:
     panel.activateIndex(panel.xHighlightedIndex)
 
-proc filterFiles(panel: KosmoQuickOpenPanel) =
+proc filterFiles(panel: QuickOpenPanel) =
   panel.xSearchError = ""
   if panel.xRegularExpression and panel.queryField.text().len > 0:
     panel.xFilteredFiles.setLen(0)
@@ -304,56 +302,56 @@ proc filterFiles(panel: KosmoQuickOpenPanel) =
   panel.xHighlightedIndex = if panel.xFilteredFiles.len > 0: 0 else: -1
   panel.resultsView.needsDisplay = true
 
-func regularExpression*(panel: KosmoQuickOpenPanel): bool =
+func regularExpression*(panel: QuickOpenPanel): bool =
   panel.xRegularExpression
 
-func searchError*(panel: KosmoQuickOpenPanel): string =
+func searchError*(panel: QuickOpenPanel): string =
   panel.xSearchError
 
-proc `regularExpression=`*(panel: KosmoQuickOpenPanel, enabled: bool) =
+proc `regularExpression=`*(panel: QuickOpenPanel, enabled: bool) =
   ## Switch between fuzzy filename ranking and Reni expressions.
   panel.xRegularExpression = enabled
   panel.expressionButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
   panel.filterFiles()
 
 proc quickOpenQueryDidChange(
-    panel: KosmoQuickOpenPanel, sender: nimkit.DynamicAgent
+    panel: QuickOpenPanel, sender: nimkit.DynamicAgent
 ) {.slot.} =
   discard sender
   panel.filterFiles()
 
-protocol KosmoQuickOpenFieldCellEditing of nimkit.CellEditingProtocol:
+protocol QuickOpenFieldCellEditing of nimkit.CellEditingProtocol:
   method fieldEditorForView(
-      cell: KosmoQuickOpenFieldCell, controlView: nimkit.View
+      cell: QuickOpenFieldCell, controlView: nimkit.View
   ): nimkit.FieldEditor =
     discard controlView
     cell.editor
 
-protocol KosmoQuickOpenEditorMovement of nimkit.TextEditingCommandProtocol:
-  method moveUp(editor: KosmoQuickOpenFieldEditor, args: nimkit.ActionArgs) =
+protocol QuickOpenEditorMovement of nimkit.TextEditingCommandProtocol:
+  method moveUp(editor: QuickOpenFieldEditor, args: nimkit.ActionArgs) =
     discard args
     if not editor.panel.isNil:
       editor.panel[].moveHighlight(-1)
 
-  method moveDown(editor: KosmoQuickOpenFieldEditor, args: nimkit.ActionArgs) =
+  method moveDown(editor: QuickOpenFieldEditor, args: nimkit.ActionArgs) =
     discard args
     if not editor.panel.isNil:
       editor.panel[].moveHighlight(1)
 
-protocol KosmoQuickOpenEditorActivation of nimkit.KeyViewCommandProtocol:
-  method insertNewline(editor: KosmoQuickOpenFieldEditor, args: nimkit.ActionArgs) =
+protocol QuickOpenEditorActivation of nimkit.KeyViewCommandProtocol:
+  method insertNewline(editor: QuickOpenFieldEditor, args: nimkit.ActionArgs) =
     discard args
     if not editor.panel.isNil:
       editor.panel[].activateHighlighted()
 
-protocol KosmoQuickOpenEditorCancellation of nimkit.MenuCommandProtocol:
-  method cancelOperation(editor: KosmoQuickOpenFieldEditor, args: nimkit.ActionArgs) =
+protocol QuickOpenEditorCancellation of nimkit.MenuCommandProtocol:
+  method cancelOperation(editor: QuickOpenFieldEditor, args: nimkit.ActionArgs) =
     discard args
     if not editor.panel.isNil:
       editor.panel[].dismiss(nimkit.tdrEscape)
 
-protocol KosmoQuickOpenLayout of nimkit.ViewLayoutProtocol:
-  method layoutSubviews(panel: KosmoQuickOpenPanel) =
+protocol QuickOpenLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(panel: QuickOpenPanel) =
     let contentFrame = panel.contentRect()
     panel.contentView().setFrameFromLayout(contentFrame)
     let bounds = panel.contentView().bounds()
@@ -394,7 +392,7 @@ func tint(fill: nimkit.Fill, opacity: float32): nimkit.Fill =
   let base = fill.centerColor()
   nimkit.fill(nimkit.color(base.r, base.g, base.b, opacity))
 
-proc frameInPanel(panel: KosmoQuickOpenPanel, view: nimkit.View): nimkit.Rect =
+proc frameInPanel(panel: QuickOpenPanel, view: nimkit.View): nimkit.Rect =
   let
     contentFrame = panel.contentRect()
     childFrame = view.frame()
@@ -405,8 +403,8 @@ proc frameInPanel(panel: KosmoQuickOpenPanel, view: nimkit.View): nimkit.Rect =
     childFrame.size.height,
   )
 
-protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
-  method draw(panel: KosmoQuickOpenPanel, context: nimkit.DrawContext) =
+protocol QuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
+  method draw(panel: QuickOpenPanel, context: nimkit.DrawContext) =
     let bounds = panel.bounds()
     if bounds.isEmpty:
       return
@@ -492,7 +490,7 @@ protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
           textRect, titleText, panelStyle.text, alignment = nimkit.taCenter
         )
 
-proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearance) =
+proc applyQuickOpenAppearance(panel: QuickOpenPanel, base: nimkit.Appearance) =
   var appearance = base
   let
     panelSelector = nimkit.initStyleSelector(nimkit.srBox, id = QuickOpenPanelStyleId)
@@ -557,20 +555,20 @@ proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearanc
   )
   panel.appearance = appearance
 
-protocol KosmoQuickOpenAppearanceObserver of nimkit.WindowAppearanceEvents:
+protocol QuickOpenAppearanceObserver of nimkit.WindowAppearanceEvents:
   proc didChangeEffectiveAppearance(
-      panel: KosmoQuickOpenPanel, appearance: nimkit.Appearance
+      panel: QuickOpenPanel, appearance: nimkit.Appearance
   ) {.slot.} =
     panel.applyQuickOpenAppearance(appearance)
 
-proc stopObservingWindow*(panel: KosmoQuickOpenPanel) =
+proc stopObservingWindow*(panel: QuickOpenPanel) =
   ## Stop mirroring appearance changes from the popup's host window.
   if panel.isNil or panel.xObservedWindow.isNil:
     return
   panel.unobserveProtocol(panel.xObservedWindow[], nimkit.WindowAppearanceEvents)
   panel.xObservedWindow = default(WeakRef[nimkit.Window])
 
-proc observeWindow*(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
+proc observeWindow*(panel: QuickOpenPanel, window: nimkit.Window) =
   ## Keep the popup's translucent styling synchronized with its host window.
   if panel.isNil:
     return
@@ -581,25 +579,86 @@ proc observeWindow*(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
   panel.observeProtocol(window, nimkit.WindowAppearanceEvents)
   panel.applyQuickOpenAppearance(window.effectiveAppearance())
 
-proc newKosmoQuickOpenPanel*(
-    rootPath = "", files: WorkspaceFiles = nil
-): KosmoQuickOpenPanel =
-  result = KosmoQuickOpenPanel(xRootPath: rootPath)
+protocol QuickOpenPopupDataSource of nimkit.PopupListDataSource:
+  method totalCount(panel: QuickOpenPanel, popupList: nimkit.PopupListView): int =
+    panel.itemCount()
+
+  method visibleCount(panel: QuickOpenPanel, popupList: nimkit.PopupListView): int =
+    panel.visibleItemCount()
+
+  method topIndex(panel: QuickOpenPanel, popupList: nimkit.PopupListView): int =
+    panel.xFirstIndex
+
+  method highlightIndex(panel: QuickOpenPanel, popupList: nimkit.PopupListView): int =
+    panel.xHighlightedIndex
+
+  method heightOfRow(panel: QuickOpenPanel, popupList: nimkit.PopupListView): float32 =
+    QuickOpenRowHeight
+
+  method rowAtIndex(
+      panel: QuickOpenPanel, popupList: nimkit.PopupListView, index: int
+  ): nimkit.PopupListItem =
+    result.disabled = panel.xLoading or index notin 0 ..< panel.xFilteredFiles.len
+    if panel.xSearchError.len > 0:
+      result.text = panel.xSearchError
+    elif panel.xLoading:
+      result.text = LoadingFilesTitle
+    elif panel.xFilteredFiles.len == 0:
+      result.text = NoMatchingFilesTitle
+    elif not result.disabled:
+      result.text = panel.xFilteredFiles[index]
+
+  method hasFocus(panel: QuickOpenPanel, popupList: nimkit.PopupListView): bool =
+    let owner = panel.window()
+    owner of nimkit.Window and
+      nimkit.Window(owner).fieldEditorClient() == panel.queryField
+
+  method isShowing(panel: QuickOpenPanel, popupList: nimkit.PopupListView): bool =
+    not panel.hidden()
+
+  method contentStyleId(
+      panel: QuickOpenPanel, popupList: nimkit.PopupListView
+  ): string =
+    QuickOpenResultsStyleId
+
+protocol QuickOpenPopupDelegate of nimkit.PopupListDelegate:
+  method highlightRow(
+      panel: QuickOpenPanel, popupList: nimkit.PopupListView, index: int
+  ) =
+    panel.setHighlightedIndex(index)
+
+  method activateRow(
+      panel: QuickOpenPanel, popupList: nimkit.PopupListView, index: int
+  ) =
+    panel.activateIndex(index)
+
+  method dismissList(panel: QuickOpenPanel, popupList: nimkit.PopupListView) =
+    panel.dismiss()
+
+  method scrollByRows(
+      panel: QuickOpenPanel, popupList: nimkit.PopupListView, delta: int
+  ) =
+    panel.xFirstIndex += delta
+    panel.clampFirstIndex()
+    popupList.needsDisplay = true
+
+proc newQuickOpenPanel*(rootPath = "", files: WorkspaceFiles = nil): QuickOpenPanel =
+  result = QuickOpenPanel(xRootPath: rootPath)
   result.initBoxFields("Open File")
   result.styleId = QuickOpenPanelStyleId
-  discard result.withProtocol(DefaultKosmoQuickOpenPresentation)
-  discard result.withProtocol(KosmoQuickOpenPanelDrawing)
+  discard result.withProtocol(DefaultQuickOpenPresentation)
+  discard result.withProtocol(QuickOpenPanelDrawing)
   let
     panel = result.unsafeWeakRef()
-    editor = KosmoQuickOpenFieldEditor(panel: panel)
+    editor = QuickOpenFieldEditor(panel: panel)
   editor.initFieldEditorFields()
-  discard editor.withProtocol(KosmoQuickOpenEditorMovement)
-  discard editor.withProtocol(KosmoQuickOpenEditorActivation)
-  discard editor.withProtocol(KosmoQuickOpenEditorCancellation)
+  discard editor.withProtocol(QuickOpenEditorMovement)
+  discard editor.withProtocol(QuickOpenEditorActivation)
+  discard editor.withProtocol(QuickOpenEditorCancellation)
 
-  let cell = KosmoQuickOpenFieldCell(editor: editor)
+  let cell = QuickOpenFieldCell(editor: editor)
   cell.initTextFieldCellFields()
-  discard cell.withProtocol(KosmoQuickOpenFieldCellEditing)
+  discard cell.withProtocol(QuickOpenFieldCellEditing)
   result.queryField = nimkit.newTextField()
   result.queryField.setCell(cell)
   # Preserve the panel-assigned frame when descendant constraints are solved.
@@ -617,73 +676,9 @@ proc newKosmoQuickOpenPanel*(
       if owner of nimkit.Window:
         discard nimkit.Window(owner).makeFirstResponder(panel[].queryField)
 
-  result.resultsView = nimkit.newPopupListView(
-    nimkit.PopupListData(
-      itemCount: proc(): int =
-        if panel.isNil:
-          0
-        else:
-          panel[].itemCount(),
-      visibleCount: proc(): int =
-        if panel.isNil:
-          0
-        else:
-          panel[].visibleItemCount(),
-      firstIndex: proc(): int =
-        if panel.isNil: 0 else: panel[].xFirstIndex,
-      selectedIndex: proc(): int =
-        -1,
-      highlightedIndex: proc(): int =
-        if panel.isNil: -1 else: panel[].xHighlightedIndex,
-      rowHeight: proc(): float32 =
-        QuickOpenRowHeight,
-      itemText: proc(index: int): string =
-        if not panel.isNil and panel[].xSearchError.len > 0:
-          panel[].xSearchError
-        elif not panel.isNil and panel[].xLoading:
-          LoadingFilesTitle
-        elif panel.isNil or panel[].xFilteredFiles.len == 0:
-          NoMatchingFilesTitle
-        elif index in 0 ..< panel[].xFilteredFiles.len:
-          panel[].xFilteredFiles[index]
-        else:
-          "",
-      itemIsEnabled: proc(index: int): bool =
-        not panel.isNil and not panel[].xLoading and
-          index in 0 ..< panel[].xFilteredFiles.len,
-      focused: proc(): bool =
-        if panel.isNil:
-          false
-        else:
-          let owner = panel[].window()
-          owner of nimkit.Window and
-            nimkit.Window(owner).fieldEditorClient() == panel[].queryField,
-      opened: proc(): bool =
-        not panel.isNil and not panel[].hidden(),
-      styleId: proc(): string =
-        QuickOpenResultsStyleId,
-    ),
-    nimkit.PopupListActions(
-      highlight: proc(index: int) =
-        if not panel.isNil:
-          panel[].setHighlightedIndex(index)
-      ,
-      activate: proc(index: int) =
-        if not panel.isNil:
-          panel[].activateIndex(index)
-      ,
-      close: proc() =
-        if not panel.isNil:
-          panel[].dismiss()
-      ,
-      scroll: proc(delta: int) =
-        if not panel.isNil:
-          panel[].xFirstIndex += delta
-          panel[].clampFirstIndex()
-          panel[].resultsView.needsDisplay = true
-      ,
-    ),
-  )
+  discard result.withProtocol(QuickOpenPopupDataSource)
+  discard result.withProtocol(QuickOpenPopupDelegate)
+  result.resultsView = nimkit.newPopupListView(dataSource = result, delegate = result)
   let progressIndicator = QuickOpenProgressIndicator()
   progressIndicator.initProgressIndicatorFields()
   discard progressIndicator.withProtocol(QuickOpenProgressDrawing)
@@ -696,7 +691,7 @@ proc newKosmoQuickOpenPanel*(
   result.contentView().addSubview(result.expressionButton)
   result.contentView().addSubview(result.resultsView)
   result.contentView().addSubview(result.progressIndicator)
-  discard result.withProtocol(KosmoQuickOpenLayout)
+  discard result.withProtocol(QuickOpenLayout)
   result.queryField.connect(nimkit.textDidChange, result, quickOpenQueryDidChange)
   result.applyQuickOpenAppearance(result.effectiveAppearance())
   result.hidden = true
@@ -711,39 +706,37 @@ proc newKosmoQuickOpenPanel*(
     # Standalone pickers retain their initial root until the first load.
     result.xRootPath = rootPath
 
-proc rootPath*(panel: KosmoQuickOpenPanel): string =
+proc rootPath*(panel: QuickOpenPanel): string =
   if panel.isNil: "" else: panel.xRootPath
 
-proc rootPaths*(panel: KosmoQuickOpenPanel): seq[string] =
+proc rootPaths*(panel: QuickOpenPanel): seq[string] =
   ## Return the indexed folders in browser order.
   if not panel.isNil:
     result = panel.xRootPaths
 
-proc projectFiles*(panel: KosmoQuickOpenPanel): seq[string] =
+proc projectFiles*(panel: QuickOpenPanel): seq[string] =
   if not panel.isNil:
     result = panel.xProjectFiles
 
-proc filteredFiles*(panel: KosmoQuickOpenPanel): seq[string] =
+proc filteredFiles*(panel: QuickOpenPanel): seq[string] =
   if not panel.isNil:
     result = panel.xFilteredFiles
 
-proc highlightedIndex*(panel: KosmoQuickOpenPanel): int =
+proc highlightedIndex*(panel: QuickOpenPanel): int =
   if panel.isNil: -1 else: panel.xHighlightedIndex
 
-proc highlightedFile*(panel: KosmoQuickOpenPanel): string =
+proc highlightedFile*(panel: QuickOpenPanel): string =
   if not panel.isNil and panel.xHighlightedIndex in 0 ..< panel.xFilteredFiles.len:
     result = panel.xFilteredFiles[panel.xHighlightedIndex]
 
-proc isOpen*(panel: KosmoQuickOpenPanel): bool =
+proc isOpen*(panel: QuickOpenPanel): bool =
   not panel.isNil and not panel.hidden()
 
-proc isLoading*(panel: KosmoQuickOpenPanel): bool =
+proc isLoading*(panel: QuickOpenPanel): bool =
   ## Return whether the picker is indexing its current project roots.
   not panel.isNil and panel.xLoading
 
-proc waitForProjectFiles*(
-    panel: KosmoQuickOpenPanel, timeoutMilliseconds = 10_000
-): bool =
+proc waitForProjectFiles*(panel: QuickOpenPanel, timeoutMilliseconds = 10_000): bool =
   ## Deliver worker results until project indexing finishes in tests or tools.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
   while panel.isLoading() and getMonoTime() < deadline:
@@ -751,13 +744,13 @@ proc waitForProjectFiles*(
     sleep(1)
   not panel.isLoading()
 
-proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
+proc reloadProjectFiles*(panel: QuickOpenPanel, rootPaths: openArray[string]) =
   ## Index all roots, preserving distinct names and deduplicating overlapping files.
   if panel.isNil:
     return
   panel.xWorkspaceFiles.reload(rootPaths)
 
-proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
+proc reloadProjectFiles*(panel: QuickOpenPanel, rootPath = "") =
   ## Refresh a single root, or the current roots when no argument is supplied.
   if not panel.isNil:
     if rootPath.len > 0:
@@ -767,7 +760,7 @@ proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
     else:
       panel.reloadProjectFiles([panel.xRootPath])
 
-proc startPresentationAnimation(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
+proc startPresentationAnimation(panel: QuickOpenPanel, window: nimkit.Window) =
   if panel.isNil or window.isNil:
     return
   panel.stopPresentationAnimation()
@@ -800,10 +793,10 @@ proc startPresentationAnimation(panel: KosmoQuickOpenPanel, window: nimkit.Windo
     panel.xPresentationAnimation = nil
 
 proc present*(
-    panel: KosmoQuickOpenPanel,
+    panel: QuickOpenPanel,
     window: nimkit.Window,
     rootPaths: openArray[string],
-    onOpen: KosmoQuickOpenHandler,
+    onOpen: QuickOpenHandler,
 ): bool {.discardable.} =
   ## Show the picker, focus its query, and preserve the previous responder.
   if panel.isNil or window.isNil:
@@ -840,10 +833,10 @@ proc present*(
     panel.startPresentationAnimation(window)
 
 proc present*(
-    panel: KosmoQuickOpenPanel,
+    panel: QuickOpenPanel,
     window: nimkit.Window,
     rootPath: string,
-    onOpen: KosmoQuickOpenHandler,
+    onOpen: QuickOpenHandler,
 ): bool {.discardable.} =
   ## Show a picker for one folder.
   panel.present(window, [rootPath], onOpen)

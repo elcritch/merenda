@@ -4,7 +4,7 @@ import std/[json, jsonutils, os]
 
 import ../nimkit/foundation/atomicfiles
 
-const DefaultKosmoFileTreeIndentation* = 10.0'f32
+const DefaultFileTreeIndentation* = 10.0'f32
 
 type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
@@ -35,7 +35,7 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
     ## Terminal Control shortcut routing: "hybrid" or "raw".
   terminalOptionAsMeta*: bool = not (defined(macosx) or defined(macos))
     ## Whether Option/Alt sends the terminal Meta modifier.
-  fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation
+  fileTreeIndentation*: float32 = DefaultFileTreeIndentation
     ## Horizontal spacing in points for each file-tree level; zero removes indentation.
   justifyMarkdown*: bool
     ## Justify Markdown paragraphs with optimal (Knuth-Plass) line breaking.

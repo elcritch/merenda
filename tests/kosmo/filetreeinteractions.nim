@@ -47,8 +47,8 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
 suite "Kosmo file tree interactions":
   test "branch selector displays Git branches above the file tree":
     let root = createTempDir("kosmo-branch-selector-", "")
-    let tree = newKosmoFileTree(root)
-    let panel = newKosmoFileBrowserPanel(tree)
+    let tree = newFileTree(root)
+    let panel = newFileBrowserPanel(tree)
     let window = newWindow("Git branches", rect(0, 0, 280, 320))
     defer:
       window.close()
@@ -99,8 +99,8 @@ suite "Kosmo file tree interactions":
       writeFile(path, "test")
     let window = newWindow("Tree navigation", frame = rect(0, 0, 640, 400))
     let content = newView(frame = rect(0, 0, 640, 400))
-    let letters = newKosmoFileTree(root, frame = rect(0, 0, 300, 400))
-    let arrows = newKosmoFileTree(root, frame = rect(320, 0, 300, 400))
+    let letters = newFileTree(root, frame = rect(0, 0, 300, 400))
+    let arrows = newFileTree(root, frame = rect(320, 0, 300, 400))
     defer:
       window.close()
       removeDir(root)
@@ -148,8 +148,8 @@ suite "Kosmo file tree interactions":
   test "navigation letters remain text in the file filter":
     let root = createTempDir("kosmo-tree-filter-navigation-", "")
     writeFile(root / "hjkl.txt", "test")
-    let tree = newKosmoFileTree(root)
-    let panel = newKosmoFileBrowserPanel(tree)
+    let tree = newFileTree(root)
+    let panel = newFileBrowserPanel(tree)
     let window = newWindow("Tree filter navigation", frame = rect(0, 0, 320, 400))
     defer:
       window.close()
@@ -176,7 +176,7 @@ suite "Kosmo file tree interactions":
     writeFile(firstFile, "first")
     writeFile(secondFile, "second")
     let
-      tree = newKosmoFileTree(first, frame = rect(20, 20, 280, 300))
+      tree = newFileTree(first, frame = rect(20, 20, 280, 300))
       window = newWindow("File path tooltips", frame = rect(0, 0, 440, 360))
       root = newView()
     defer:
@@ -228,8 +228,8 @@ suite "Kosmo file tree interactions":
     createDir(root / "folder" / "nested")
     writeFile(root / "folder" / "nested" / "file.txt", "test")
     let
-      tree = newKosmoFileTree(root)
-      panel = newKosmoFileBrowserPanel(tree)
+      tree = newFileTree(root)
+      panel = newFileBrowserPanel(tree)
       window = newWindow("Browser shortcuts", rect(0, 0, 300, 400))
     defer:
       window.close()
@@ -285,7 +285,7 @@ suite "Kosmo file tree interactions":
       root = createTempDir("merenda-kosmo-tree-git-redraw-", "")
       ignoredPath = root / "ignored.log"
     writeFile(ignoredPath, "ignored")
-    let tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+    let tree = newFileTree(root, frame = rect(0, 0, 300, 120))
     defer:
       removeFile(ignoredPath)
       removeDir(root)
@@ -318,7 +318,7 @@ suite "Kosmo file tree interactions":
 
     let
       window = newWindow("Kosmo File Tree Hover", frame = rect(0, 0, 300, 120))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 120))
       hoverFill = fill(color(0.91, 0.23, 0.67, 1.0))
     var appearance = initAppearance()
     appearance[srRowItem, {ssHovered}, StyleFill] = hoverFill
@@ -351,7 +351,7 @@ suite "Kosmo file tree interactions":
 
     let
       window = newWindow("Kosmo File Tree Scroll", frame = rect(0, 0, 300, 74))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 74))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 74))
     window.setContentView(tree)
 
     check tree.renderedTextStartingWith("00-row") == "00-row.txt"
@@ -370,7 +370,7 @@ suite "Kosmo file tree interactions":
       writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
     let
       window = newWindow("Kosmo File Tree Refresh", frame = rect(0, 0, 300, 98))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 98))
       selectedPath = root / "00-row.txt"
       createdPath = root / "zz-created.txt"
     defer:
@@ -406,7 +406,7 @@ suite "Kosmo file tree interactions":
       writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
     let
       window = newWindow("Kosmo File Tree Git Refresh", frame = rect(0, 0, 300, 98))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 98))
       selectedPath = root / "07-row.txt"
     defer:
       window.close()
@@ -440,7 +440,7 @@ suite "Kosmo file tree interactions":
     for index in 0 ..< 24:
       writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
     let
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 98))
       selectedPath = root / "07-row.txt"
       createdPath = root / "00-created.txt"
     defer:
@@ -502,7 +502,7 @@ suite "Kosmo file tree interactions":
       removeDir(hiddenFolder)
       removeDir(root)
 
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     check tree.displayMode == FileTreeDisplayMode.VisibleFiles
     check tree.rowForItem(hiddenFile) < 0
     check tree.rowForItem(hiddenFolder) < 0
@@ -555,7 +555,7 @@ suite "Kosmo file tree interactions":
     createDir(visibleFolder)
     for path in [ignoredFile, ignoredChild, visibleFile]:
       writeFile(path, "content")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     defer:
       tree.workspaceFiles.close()
     tree.displayMode = FileTreeDisplayMode.VisibleFiles
@@ -600,7 +600,7 @@ suite "Kosmo file tree interactions":
       removedFolder = root / "removed"
       deletedFile = removedFolder / "old.nim"
       window = newWindow("Kosmo Deleted Folder", frame = rect(0, 0, 300, 120))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+      tree = newFileTree(root, frame = rect(0, 0, 300, 120))
     defer:
       window.close()
       removeDir(root)
@@ -639,7 +639,7 @@ suite "Kosmo file tree interactions":
       removeDir(nestedRoot)
       removeDir(root)
 
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     check tree.addRootPath(nestedRoot)
     tree.applyGitStatus(
       GitStatusSnapshot(
@@ -669,8 +669,8 @@ suite "Kosmo file tree interactions":
     for name in ["a.b", "axb", "λcat.nim"]:
       writeFile(root / "src" / name, "")
     let
-      tree = newKosmoFileTree(root)
-      panel = newKosmoFileBrowserPanel(tree)
+      tree = newFileTree(root)
+      panel = newFileBrowserPanel(tree)
       window = newWindow("File filter regex", frame = rect(0, 0, 320, 360))
     defer:
       window.close()
@@ -738,7 +738,7 @@ suite "Kosmo file tree interactions":
       removeDir(hiddenFolder)
       removeDir(root)
 
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     check not tree.isItemExpanded(folder)
     tree.filterText = "needLE"
     check tree.filterText == "needLE"
@@ -762,7 +762,7 @@ suite "Kosmo file tree interactions":
       let path = root / ("entry-" & $index & ".txt")
       writeFile(path, "entry")
       paths.add path
-    let tree = newKosmoFileTree(root, directoryEntryLimit = 3)
+    let tree = newFileTree(root, directoryEntryLimit = 3)
     defer:
       tree.workspaceFiles.close()
       for path in paths:
@@ -794,8 +794,8 @@ suite "Kosmo file tree interactions":
     writeFile(matchingFile, "match")
     writeFile(otherFile, "other")
     let
-      tree = newKosmoFileTree(root)
-      panel = newKosmoFileBrowserPanel(tree)
+      tree = newFileTree(root)
+      panel = newFileBrowserPanel(tree)
       window = newWindow("Kosmo File Browser Controls", rect(0, 0, 280, 320))
     defer:
       window.close()
@@ -915,8 +915,8 @@ suite "Kosmo file browser item actions":
     writeFile(firstRoot / "first.txt", "first")
     writeFile(secondRoot / "second.txt", "second")
     let
-      firstTree = newKosmoFileTree(firstRoot, frame = rect(20, 20, 340, 180))
-      secondTree = newKosmoFileTree(secondRoot, frame = rect(20, 20, 340, 180))
+      firstTree = newFileTree(firstRoot, frame = rect(20, 20, 340, 180))
+      secondTree = newFileTree(secondRoot, frame = rect(20, 20, 340, 180))
     firstContent.addSubview(firstTree)
     secondContent.addSubview(secondTree)
     firstWindow.setContentView(firstContent)
@@ -951,7 +951,7 @@ suite "Kosmo file browser item actions":
     writeFile(root / "two.txt", "two")
     let
       window = newWindow("Context", frame = rect(0, 0, 400, 240))
-      tree = newKosmoFileTree(root, frame = rect(20, 20, 340, 180))
+      tree = newFileTree(root, frame = rect(20, 20, 340, 180))
       content = newView(frame = rect(0, 0, 400, 240))
     defer:
       window.close()
@@ -986,7 +986,7 @@ suite "Kosmo file browser item actions":
       root = createTempDir("kosmo-root-context-", "")
       nested = root / "nested"
       window = newWindow("Root Context", frame = rect(0, 0, 400, 240))
-      tree = newKosmoFileTree(root, frame = rect(0, 0, 340, 180))
+      tree = newFileTree(root, frame = rect(0, 0, 340, 180))
     createDir(nested)
     require tree.addRootPath(nested)
     defer:
@@ -1104,7 +1104,7 @@ suite "Kosmo file browser item actions":
     writeFile(root / "two.txt", "two")
     createDir(root / "folder")
     writeFile(root / "folder" / "child.txt", "child")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     expect ValueError:
       discard tree.renameItem(root / "one.txt", "../escape")
     expect IOError:
@@ -1147,7 +1147,7 @@ suite "Kosmo file browser item actions":
     createDir(root / "target")
     writeFile(root / "target" / "child.txt", "keep")
     createSymlink(root / "target", root / "link")
-    let tree = newKosmoFileTree(root)
+    let tree = newFileTree(root)
     tree.deleteItem(root / "link")
     check not symlinkExists(root / "link")
     check readFile(root / "target" / "child.txt") == "keep"

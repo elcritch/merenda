@@ -8,6 +8,7 @@ from figdraw import Renders, ZLevel
 import figdraw/windowing as siwinshim
 type SiwinWindow = siwinshim.Window
 import sigils/core
+from sigils/hom import findFirst, get
 
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
@@ -2567,13 +2568,8 @@ proc dispatchCommandInChain(
     target: Responder, selector: CommandSelector, sender: DynamicAgent
 ): EventDispatchResult =
   let args = TryToPerformArgs(selector: selector, sender: sender)
-  var responder = target
-  while not responder.isNil:
-    if responder.tryToPerform(args):
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+  result.responder = target.performCommandInChain(args)
+  result.handled = not result.responder.isNil
 
 proc dispatchActionInChain*(
     window: Window, selector: ActionSelector, sender: DynamicAgent
@@ -2849,18 +2845,16 @@ proc dispatchEventInChain[A](
     event: A,
     selector: Selector[A, bool],
     localize: proc(target, contentView: View, contentPoint: Point, event: A): A,
+    stopBefore: Responder = nil,
 ): EventDispatchResult =
-  var responder = target
-  while not responder.isNil:
+  let handlesEvent = proc(responder: Responder): bool =
     var localEvent = event
     if responder of View:
       localEvent = localize(View(responder), window.xContentView, contentPoint, event)
     var handled = false
-    if responder.performLocal(selector, localEvent, handled) and handled:
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+    responder.performLocal(selector, localEvent, handled) and handled
+  result.responder = target.responderChain(stopBefore).findFirst(handlesEvent).get(nil)
+  result.handled = not result.responder.isNil
 
 proc dispatchMouseEventInChain(
     window: Window,
@@ -2870,21 +2864,9 @@ proc dispatchMouseEventInChain(
     selector: MouseEventSelector,
     stopBefore: Responder = nil,
 ): EventDispatchResult =
-  ## Walks the responder chain from ``target`` outward.
-  ## The first responder method returning ``true`` ends dispatch.
-  ## ``false`` means "not handled", so we continue to ``nextResponder``.
-  var responder = Responder(target)
-  while not responder.isNil and responder != stopBefore:
-    var localEvent = event
-    if responder of View:
-      localEvent =
-        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
-    var handled = false
-    if responder.performLocal(selector, localEvent, handled) and handled:
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+  window.dispatchEventInChain(
+    Responder(target), contentPoint, event, selector, localMouseEvent, stopBefore
+  )
 
 proc mouseHitPolicyInChain(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
@@ -2953,15 +2935,6 @@ proc dispatchKeyEventInChain(
     target, initPoint(0.0, 0.0), event, selector, localKeyEvent
   )
 
-proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchResult =
-  var responder = target
-  while not responder.isNil:
-    if responder.sendLocalIfHandled(insertText(), text):
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
-
 proc suppressShortcutText*(window: Window, text = "") =
   ## Consume a shortcut's next text commit even if the action changes focus.
   ## A nonempty text restricts suppression to that exact commit.
@@ -2978,10 +2951,7 @@ proc dispatchTextInput*(window: Window, text: string): bool =
   window.xSuppressedShortcutText.setLen(0)
   if suppress and (suppressed.len == 0 or suppressed == text):
     return true
-  let target = window.keyDispatchTarget()
-  if target.isNil:
-    return false
-  dispatchTextInputInChain(target, text).handled
+  window.keyDispatchTarget().sendToFirstHandlerInChain(insertText(), text)
 
 func utf16RuneIndex(text: string, offset: int): int =
   var units = 0
@@ -3035,11 +3005,7 @@ proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool 
     responder = responder.nextResponder()
 
 proc dispatchTextUnmark*(window: Window): bool =
-  var responder = window.keyDispatchTarget()
-  while not responder.isNil:
-    if responder.sendLocalIfHandled(unmarkText()):
-      return true
-    responder = responder.nextResponder()
+  window.keyDispatchTarget().sendToFirstHandlerInChain(unmarkText(), ())
 
 proc textInputState*(window: Window): HostTextInputState =
   var responder = window.keyDispatchTarget()

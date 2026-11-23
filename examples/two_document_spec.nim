@@ -1,5 +1,4 @@
 ## The same two independent task editors using ViewSpec.
-import std/options
 import sigils/[core, reactive]
 import merenda/nimkit
 import merenda/nimkit/declarative
@@ -35,7 +34,7 @@ proc taskRow(task: EditorTask, owner: EditorController): ViewSpec =
     task.id,
     proc(scope: BindingScope, owner: EditorController, id: int, label: Label) =
       scope.bindValue("accepted", owner.tasks.item(id), label) do(
-        label: Label, value: Option[EditorTask]
+        label: Label, value: Opt[EditorTask]
       ):
         label.stringValue = "Accepted: " & (if value.isSome: value.get.title else: ""),
   )

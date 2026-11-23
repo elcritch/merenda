@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Replace `PopupListData` and `PopupListActions` with the `PopupListDataSource`
+  and `PopupListDelegate` protocols. Pass their responder targets to
+  `newPopupListView(dataSource = ..., delegate = ...)` and keep them alive while
+  the popup uses them.
+- Rename Kosmo's quick-open and file-browser types to `QuickOpenPanel`,
+  `FileBrowserPanel`, and `FileTree`. Their constructors use the same shorter
+  names.
+- Use Sigils' keyed collections for NimKit bindings. The existing import path
+  re-exports the Sigils API. Item projections yield `Opt[T]`, and keyed `get`
+  raises `KeyError` for missing keys.
+- Reflow Markdown tables after a cancellable resize timer. The application can
+  wait for the timer while the viewport settles.
+- Remove `findValidRequestorForSendType`. Search `responderChain()` with
+  `findFirstReply` and the `validRequestorForSendType()` selector.
 - Use FigDraw's SVG parser, resources, and renderer throughout NimKit.
   SVG resources expose FigDraw's `Vec2` size and support raster rendering through
   `renderMode = srmRaster`. SVG images use FigDraw's image cache.

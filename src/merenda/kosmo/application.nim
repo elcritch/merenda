@@ -12,6 +12,7 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 import std/[math, monotimes, options, os, strutils, times, unicode]
 
 from figdraw import len, `[]`
+from sigils/hom import findFirst, isSome
 
 import ./readerpresentation
 import ../nimkit as nimkit
@@ -45,8 +46,8 @@ const
   KosmoKeyModeSelectorIdentifier* = "kosmo.status.keymode"
   KosmoCommandBarLineHeightMultiplier = 1.6'f32
   KosmoRenameAlertHeight* = 240.0'f32
-  KosmoQuickOpenTopInset = 96.0'f32
-  KosmoQuickOpenBottomInset = 24.0'f32
+  QuickOpenTopInset = 96.0'f32
+  QuickOpenBottomInset = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoMarkdownControlsStyleId* = "kosmo.markdown-controls"

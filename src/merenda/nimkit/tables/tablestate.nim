@@ -2,6 +2,7 @@
 
 import std/[options, strutils, tables]
 import sigils/core
+from sigils/hom import findFirst, get
 import ../app/userdefaults
 import ../app/windows
 import ../foundation/selectors
@@ -123,12 +124,10 @@ proc documentTableViewStateStore*(identifier: string): TableViewStateStore =
   )
 
 proc stateProviderForTableView(tableView: TableView): Responder =
-  var responder = Responder(tableView)
-  while not responder.isNil:
-    if responder.trySendLocal(defaultsStore(), ()).isSome or
-        responder.trySendLocal(defaultsScopeId(), ()).isSome:
-      return responder
-    responder = responder.nextResponder()
+  let providesState = proc(responder: Responder): bool =
+    responder.trySendLocal(defaultsStore()).isSome or
+      responder.trySendLocal(defaultsScopeId()).isSome
+  Responder(tableView).responderChain().findFirst(providesState).get(nil)
 
 proc stateStorageFromProvider(provider: Responder): DynamicAgent =
   if provider.isNil:

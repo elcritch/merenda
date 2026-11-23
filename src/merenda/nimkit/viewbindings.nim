@@ -1,12 +1,11 @@
 ## Scope-owned value bindings. All operations run on the owning GUI thread.
 import std/tables
-import sigils/[core, reactive, selectors]
+import sigils/[collections, core, reactive, selectors]
 import ./responder/responders
 import ./foundation/mainthreadwork
 import ./foundation/sourcedispatch
 import ./foundation/viewprofiling
 import ./text/textfields
-import ./app/collectionsigils
 
 type
   BindingScope* = ref object of Responder

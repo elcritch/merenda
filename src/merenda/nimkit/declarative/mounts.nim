@@ -1,9 +1,8 @@
 ## Retained mounting and keyed updates for declarative descriptions.
 ## All operations belong to the owning GUI thread. Model ownership stays with callers.
 import std/[sets, tables]
-import sigils/[core, selectors]
+import sigils/[collections, core, selectors]
 import sigils/reactive
-import ../app/collectionsigils
 import ../view/views
 import ../containers/stackviews
 import ../controls/[buttons, controls]

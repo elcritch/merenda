@@ -57,20 +57,26 @@ when defined(macosx):
   suite "NimKit native event loop":
     test "nested native loops honor frame deadlines without a polling timer":
       var deadlines = 0
-      var due = getMonoTime() + initDuration(milliseconds = 20)
-      let timeout = getMonoTime() + initDuration(seconds = 2)
-      withNativeEventLoop(
-        proc(): Duration =
-          let now = getMonoTime()
-          if now >= due:
+      let timeout = getMonoTime() + initDuration(seconds = 60)
+      proc armDeadline() =
+        discard scheduleMainThreadTimer(
+          initDuration(milliseconds = 20),
+          proc() =
             inc deadlines
-            due = now + initDuration(milliseconds = 20)
             if deadlines == 3:
               CFRunLoopStop(CFRunLoopGetCurrent())
-          due - now
+            else:
+              armDeadline(),
+        )
+
+      armDeadline()
+      withNativeEventLoop(
+        proc(): Duration =
+          discard drainMainThreadWork()
+          mainThreadTimerDelay(getMonoTime())
       ):
-        # CoreFoundation owns this wait. Only the bridge can schedule frames;
-        # the two-second timeout is a failure deadline, not a polling interval.
+        # CoreFoundation owns this wait. Only the bridge can schedule frames.
+        # The timeout caps the wait if the bridge fails to stop it.
         while deadlines < 3 and getMonoTime() < timeout:
           discard CFRunLoopRunInMode(
             cast[pointer](@"NSModalPanelRunLoopMode"),
@@ -78,6 +84,35 @@ when defined(macosx):
             false,
           )
       check deadlines == 3
+
+    test "an earlier timer interrupts a native wait already in progress":
+      let target = timerTarget()
+      defer:
+        nativeLoopTick = nil
+        target.release()
+      var fired = false
+      nativeLoopTick = proc() =
+        discard scheduleMainThreadTimer(
+          initDuration(milliseconds = 10),
+          proc() =
+            fired = true,
+        )
+      let source = NSTimer.timerWithTimeInterval(
+        0.02, target, sel_registerName("tick:"), nil, false
+      )
+      NSRunLoop.current().addTimer(source, NSDefaultRunLoopMode)
+      defer:
+        source.invalidate()
+
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while not fired and getMonoTime() < deadline:
+        let now = getMonoTime()
+        withMainThreadTimerWake(wakeNativeEventLoop):
+          discard waitForNativeEvents(min(deadline - now, mainThreadTimerDelay(now)))
+        if getMonoTime() < deadline:
+          discard drainMainThreadWork()
+      check fired
+      discard drainMainThreadWork()
 
     test "a frame rearms a wake consumed by AppKit":
       let app = newApplication("Native wake regression")

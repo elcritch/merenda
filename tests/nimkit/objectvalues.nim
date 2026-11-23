@@ -51,6 +51,46 @@ proc newObjectTableSpy(values: openArray[int]): ObjectTableSpy =
   discard result.withProtocol(ObjectTableSpyDelegate)
 
 suite "nimkit object values":
+  test "value hooks notify the target then the control for each edit":
+    let
+      field = newTextField()
+      target = newView("target")
+    field.identifier = "field"
+    field.objectParseContext = initObjectParseContext(expectedKind = ovInt)
+    var deliveries: seq[string]
+    for receiver in [target, View(field)]:
+      require receiver.addMethod(
+        didCommitValue(),
+        proc(self: View, args: tuple[control: Control, value: ObjectValue]) =
+          check args.control.identifier == "field"
+          check args.value == args.control.objectValue()
+          deliveries.add("commit " & self.identifier),
+      )
+      require receiver.addMethod(
+        didFailValue(),
+        proc(self: View, args: tuple[control: Control, error: ObjectValidationError]) =
+          check args.control.identifier == "field"
+          check args.error.kind == oveParseFailed
+          deliveries.add("fail " & self.identifier),
+      )
+
+    field.target = target
+    check field.commitEditedObjectText("1")
+    check not field.commitEditedObjectText("invalid")
+    check deliveries == @["commit target", "commit field", "fail target", "fail field"]
+
+    deliveries.setLen(0)
+    field.target = nil
+    check field.commitEditedObjectText("2")
+    check not field.commitEditedObjectText("invalid")
+    check deliveries == @["commit field", "fail field"]
+
+    deliveries.setLen(0)
+    field.target = field
+    check field.commitEditedObjectText("3")
+    check not field.commitEditedObjectText("invalid")
+    check deliveries == @["commit field", "commit field", "fail field", "fail field"]
+
   test "object values require typed access explicitly":
     let text = toObj("abc")
 
