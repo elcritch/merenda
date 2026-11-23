@@ -16,6 +16,11 @@
   wait for the timer while the viewport settles.
 - Remove `findValidRequestorForSendType`. Search `responderChain()` with
   `findFirstReply` and the `validRequestorForSendType()` selector.
+- Use FigDraw's SVG parser, resources, and renderer throughout NimKit.
+  SVG resources expose FigDraw's `Vec2` size and support raster rendering through
+  `renderMode = srmRaster`. SVG images use FigDraw's image cache.
+- Use upstream Moe for Kosmo, with the merged POSIX Git process ownership fix.
+
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

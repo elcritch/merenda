@@ -1,4 +1,4 @@
-version       = "0.32.4"
+version       = "0.32.5"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -47,7 +47,7 @@ feature "terminal":
 
 feature "kosmo":
   requires "gh:status-im/nim-chronos >= 4.2.0"
-  requires "gh:elcritch/moe#6adad4c3834c5484e92c462c485be70fd4adee33"
+  requires "gh:fox0430/moe#195dcd8946705eb6a7445bebfc3a18b075576aab"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

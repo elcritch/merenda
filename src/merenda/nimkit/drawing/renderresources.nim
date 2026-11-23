@@ -10,7 +10,7 @@ const
 
 type
   RenderImageResource = object
-    ## Retains both renderer ownership and the pixels needed after atlas loss.
+    ## Retains the FigDraw handle and the local pixel source for NimKit images.
     source: ImageResource
     owned: ImageRef
 
@@ -81,6 +81,12 @@ proc addImage*(manifest: var RenderResourceManifest, image: ImageResource) =
   manifest.ensureManifest()
   let owned = image.renderingRef()
   manifest.images[owned.id] = RenderImageResource(source: image, owned: owned)
+
+proc addImage*(manifest: var RenderResourceManifest, id: ImageId) =
+  ## Retains an image already uploaded through FigDraw's image cache.
+  manifest.ensureManifest()
+  if id notin manifest.images:
+    manifest.images[id] = RenderImageResource(owned: imageRef(id))
 
 proc addResources*(
     manifest: var RenderResourceManifest, resources: RenderResourceManifest
@@ -189,8 +195,9 @@ proc restoreManifestImages[BackendState](
   if resources.isNil:
     return
   for id, resource in tables.pairs(resources.images):
-    let pixels = resource.source.pixels()
-    discard renderer.ensureImage(id, pixels)
+    if not resource.source.isNil:
+      let pixels = resource.source.pixels()
+      discard renderer.ensureImage(id, pixels)
 
 proc restoreManifestImages[BackendState](
     renderer: FigRenderer[BackendState], resources: RenderResourceSnapshot

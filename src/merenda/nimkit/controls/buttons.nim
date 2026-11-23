@@ -11,6 +11,7 @@ import ../foundation/events
 import ../foundation/types
 import ../accessibility/accessibility
 from figdraw import ColorRGBA
+from pkg/vmath import x, y
 
 export controls
 
@@ -193,7 +194,7 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
     let style = appearance.resolveButtonStyle(cell.buttonStyleContext(srButton))
     let contentSize =
       if cell.xIcon.len > 0:
-        cell.xIcon.size
+        initSize(cell.xIcon.size.x, cell.xIcon.size.y)
       else:
         cell.buttonTextSize(style)
     initIntrinsicSize(style.buttonControlSize(contentSize))
@@ -712,15 +713,13 @@ proc drawChoiceButtonCell*(
 proc drawButtonIcon(
     context: DrawContext, icon: SvgMtsdfResource, rect: Rect, tint: Color
 ) =
-  if icon.size.width <= 0 or icon.size.height <= 0 or rect.isEmpty:
+  if icon.size.x <= 0 or icon.size.y <= 0 or rect.isEmpty:
     return
   let
-    scale = min(
-      1.0'f32,
-      min(rect.size.width / icon.size.width, rect.size.height / icon.size.height),
-    )
-    width = icon.size.width * scale
-    height = icon.size.height * scale
+    scale =
+      min(1.0'f32, min(rect.size.width / icon.size.x, rect.size.height / icon.size.y))
+    width = icon.size.x * scale
+    height = icon.size.y * scale
     frame = rect(
       rect.minX + (rect.size.width - width) / 2,
       rect.minY + (rect.size.height - height) / 2,
