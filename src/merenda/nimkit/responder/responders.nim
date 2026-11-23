@@ -1,6 +1,7 @@
 import std/options
 
 import sigils/selectors as dynamicSelectors
+from sigils/hom import findFirst, isSome
 
 import ../foundation/events
 import ../foundation/backrefs
@@ -145,13 +146,14 @@ proc clearNextResponder*(responder: Responder) =
     responder.xNextResponderLink.targetRef.clear()
   dynamicSelectors.clearNextResponder(responder)
 
-proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
+iterator responderChain(responder: Responder): Responder =
   var current = responder
   while not current.isNil:
-    let handled = current.trySendLocal(performKeyEquivalent(), event)
-    if handled.isSome and handled.get():
-      return true
+    yield current
     current = current.nextResponder()
+
+proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
+  responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
 
 proc performScrollKeyInChain*(
     responder: Responder, event: KeyEvent, consumeIfOffered = false

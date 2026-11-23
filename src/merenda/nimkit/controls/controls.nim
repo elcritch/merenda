@@ -1,4 +1,5 @@
 import sigils/core
+from sigils/hom import sendEach
 
 import ./cells
 import ../responder/actiontargets
@@ -410,21 +411,14 @@ proc clearValidationError*(control: Control) =
   control.setValidationError(initObjectValidationError())
 
 proc sendValueFailure(control: Control, error: ObjectValidationError) =
-  let target = control.target()
-  if not target.isNil:
-    discard target.sendLocalIfHandled(didFailValue(), (control: control, error: error))
-  discard DynamicAgent(control).sendLocalIfHandled(
-      didFailValue(), (control: control, error: error)
-    )
+  [control.target(), DynamicAgent(control)].sendEach(
+    didFailValue(), (control: control, error: error)
+  )
 
 proc sendValueCommit(control: Control, value: ObjectValue) =
-  let target = control.target()
-  if not target.isNil:
-    discard
-      target.sendLocalIfHandled(didCommitValue(), (control: control, value: value))
-  discard DynamicAgent(control).sendLocalIfHandled(
-      didCommitValue(), (control: control, value: value)
-    )
+  [control.target(), DynamicAgent(control)].sendEach(
+    didCommitValue(), (control: control, value: value)
+  )
 
 proc rejectObjectValueEdit*(control: Control, error: ObjectValidationError): bool =
   control.setValidationError(error)

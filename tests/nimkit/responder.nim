@@ -911,6 +911,25 @@ suite "nimkit responder":
     check trackingEvents == @["parent.equivalent"]
     check trackingModifiers == @[{kmCommand}]
 
+  test "a declined key equivalent follows the updated next responder":
+    let
+      start = newResponder()
+      replacement = newTrackingSpyView("replacement", AutoRect)
+      original = newTrackingSpyView("original", AutoRect)
+    start.setNextResponder(original)
+    replacement.setNextResponder(original)
+    require start.addMethod(
+      performKeyEquivalent(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("declined")
+        self.setNextResponder(replacement)
+        false,
+    )
+
+    resetTracking()
+    check start.performKeyEquivalentInChain(KeyEvent(key: keyF12))
+    check trackingEvents == @["declined", "replacement.equivalent"]
+
   test "valid requestor and undo manager lookup walk responder chain":
     let
       manager = newUndoManager()

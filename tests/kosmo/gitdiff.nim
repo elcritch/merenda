@@ -164,6 +164,31 @@ suite "Kosmo Git diff":
             check node.kind != nkText
           check icons > 0
 
+  test "revision controls follow the panel between static and repository diffs":
+    let root = createTempDir("kosmo-diff-revision-controls-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    let snapshot = parseGitDiff("", root)
+    let panel = newKosmoGitDiffPanel(snapshot)
+    defer:
+      panel.close()
+    let separator = panel.viewWithIdentifier("kosmo.gitDiff.revisionSeparator")
+    require not separator.isNil
+    let controls = [
+      View(panel.fromRevisionButton), panel.toRevisionButton, panel.fromHistoryButton,
+      panel.toHistoryButton, separator,
+    ]
+    for control in controls:
+      check control.hidden
+    panel.displayRepositoryDiff(root)
+    require panel.waitForDiff()
+    for control in controls:
+      check not control.hidden
+    panel.displayDiff(snapshot)
+    for control in controls:
+      check control.hidden
+
   test "panel key equivalents use the responder selector despite procedure overloads":
     let panel = newKosmoGitDiffPanel(parseGitDiff(""))
     defer:

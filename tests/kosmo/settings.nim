@@ -1,8 +1,10 @@
-import std/[options, os, strutils, tempfiles, unicode, unittest]
+import
+  std/[importutils, options, os, strutils, tables, tempfiles, times, unicode, unittest]
 
 import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
+from moepkg/types/lsp_integration_types import LspProgressState
 import fixtures/ui
 
 type NimdexSettingsSpy = ref object of Responder
@@ -174,6 +176,36 @@ suite "Kosmo settings":
     check settingsTabs.selectedTabViewItem().identifier() ==
       KosmoNimdexSettingsTabIdentifier
     check not frontend.editorView.editor.nimdexRequested()
+
+  test "status bar shows and hides the Nimdex progress controls together":
+    privateAccess(KosmoEditor)
+    let
+      content = frontend.contentView
+      controls = [
+        content.viewWithIdentifier("kosmo.nimdex.progress"),
+        content.viewWithIdentifier("kosmo.nimdex.progress.spinner"),
+        content.viewWithIdentifier("kosmo.nimdex.progress.percentage"),
+      ]
+      entry = content.viewWithIdentifier("kosmo.nimdex.progress.entrypoint")
+      lsp = frontend.editorView.editor.editor.lsp
+      token = "nimdex-index"
+    require not entry.isNil
+    for control in controls:
+      require not control.isNil
+      check control.hidden
+
+    lsp.activeProgress[token] = LspProgressState(
+      token: token, langId: "nim", title: "Nimdex indexing", startTime: epochTime()
+    )
+    frontend.editorView.refresh()
+    for control in controls:
+      check not control.hidden
+    check entry.hidden
+
+    lsp.activeProgress.del(token)
+    frontend.editorView.refresh()
+    for control in controls:
+      check control.hidden
 
   test "status bar keymode popup switches editing and follows settings":
     frontend.window.setContentView(frontend.contentView)

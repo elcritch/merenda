@@ -281,7 +281,7 @@ type
     refreshPending: bool
     refreshDeadline: MonoTime
     refreshDebounce: Duration
-    repositoryBacked: bool
+    xRepositoryBacked: bool
     repositoryRootPath: string
     repositoryScopePath: string
     comparison: GitDiffComparison
@@ -1293,6 +1293,17 @@ proc selectRevision(
 )
 
 proc syncComparisonControls(panel: KosmoGitDiffPanel)
+
+func repositoryBacked(panel: KosmoGitDiffPanel): bool {.inline.} =
+  panel.xRepositoryBacked
+
+proc `repositoryBacked=`(panel: KosmoGitDiffPanel, value: bool) =
+  panel.xRepositoryBacked = value
+  panel.fromRevisionButton.hidden = not value
+  panel.toRevisionButton.hidden = not value
+  panel.fromHistoryButton.hidden = not value
+  panel.toHistoryButton.hidden = not value
+  panel.revisionSeparator.hidden = not value
 
 func splitHistoryRevision(revision: string): tuple[base, suffix: string] =
   for choice in GitDiffHistoryChoices:
@@ -3016,14 +3027,9 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
   ## Replace the current contents with an already prepared, static snapshot.
   if panel.isNil or panel.closed:
     return
-  panel.repositoryBacked = false
   panel.repositoryRootPath = ""
   panel.repositoryScopePath = ""
-  panel.fromRevisionButton.hidden = true
-  panel.toRevisionButton.hidden = true
-  panel.fromHistoryButton.hidden = true
-  panel.toHistoryButton.hidden = true
-  panel.revisionSeparator.hidden = true
+  panel.repositoryBacked = false
   inc panel.readGeneration
   panel.readingGit = false
   panel.applyDiff(snapshot)
@@ -3061,14 +3067,9 @@ proc displayRepositoryDiff*(
     panel.repositoryScopePath != scopePath
   if not panel.repositoryBacked or panel.repositoryRootPath != rootPath:
     panel.comparison = GitDiffComparison()
-  panel.repositoryBacked = true
   panel.repositoryRootPath = rootPath
   panel.repositoryScopePath = scopePath
-  panel.fromRevisionButton.hidden = false
-  panel.toRevisionButton.hidden = false
-  panel.fromHistoryButton.hidden = false
-  panel.toHistoryButton.hidden = false
-  panel.revisionSeparator.hidden = false
+  panel.repositoryBacked = true
   panel.syncComparisonControls()
   if changed and panel.readingGit:
     inc panel.readGeneration
@@ -3458,7 +3459,6 @@ proc newKosmoGitDiffPanel(
     autoRefreshSwitch: nimkit.newSwitchButton(),
     snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
     refreshDebounce: GitDiffRefreshDebounceInterval,
-    repositoryBacked: refreshesRepository,
     repositoryRootPath: if refreshesRepository: rootPath else: "",
     repositoryScopePath: if refreshesRepository: scopePath else: "",
     disclosureButtons: initTable[string, GitDiffDisclosureButton](),
@@ -3473,6 +3473,7 @@ proc newKosmoGitDiffPanel(
     pool: newSigilThreadPool(workers = 1),
     control: newGitDiffControl(),
   )
+  result.repositoryBacked = refreshesRepository
   result.comparisonButton = result.toRevisionButton
   result.matterGrammarSources = installedVscodeGrammars().viewerGrammarSources()
   result.initViewFields()
@@ -3505,11 +3506,6 @@ proc newKosmoGitDiffPanel(
   discard result.withProtocol(GitDiffKeyEquivalents)
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
-  result.fromRevisionButton.hidden = not refreshesRepository
-  result.toRevisionButton.hidden = not refreshesRepository
-  result.fromHistoryButton.hidden = not refreshesRepository
-  result.toHistoryButton.hidden = not refreshesRepository
-  result.revisionSeparator.hidden = not refreshesRepository
   result.fromHistoryButton.accessibilityLabel = "Git diff from history"
   result.toHistoryButton.accessibilityLabel = "Git diff to revision or working tree"
   result.revisionSeparator.identifier = "kosmo.gitDiff.revisionSeparator"

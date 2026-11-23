@@ -1199,14 +1199,17 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
       -firstColumn.float32 * metrics.cellWidth, bar.commandBarTextVerticalOffset()
     )
 
+proc setIndexProgressHidden(bar: KosmoStatusBar, hidden: bool) =
+  bar.indexProgress.hidden = hidden
+  bar.indexSpinner.hidden = hidden
+  bar.indexProgressLabel.hidden = hidden
+
 proc syncIndexProgress(
     bar: KosmoStatusBar,
     progress: tuple[active: bool, percentage: int, hundredths: int, entryPoint: string],
 ) =
   if bar.indexProgress.hidden != not progress.active:
-    bar.indexProgress.hidden = not progress.active
-    bar.indexSpinner.hidden = not progress.active
-    bar.indexProgressLabel.hidden = not progress.active
+    bar.setIndexProgressHidden(not progress.active)
     if progress.active:
       bar.indexSpinner.startAnimation()
       let animation = nimkit.newPropertyAnimation[float32](
@@ -3912,15 +3915,12 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   indexProgress.accessibilityLabel = "Nimdex indexing"
   indexProgress.toolTip = "Nimdex: estimated progress for the current entry point"
   indexProgress.maxValue = 100
-  indexProgress.hidden = true
   indexSpinner.identifier = "kosmo.nimdex.progress.spinner"
   indexSpinner.accessibilityLabel = "Nimdex indexing activity"
   indexSpinner.progressIndicatorStyle = nimkit.pisSpinning
   indexSpinner.indeterminate = true
   indexSpinner.displayedWhenStopped = false
-  indexSpinner.hidden = true
   indexProgressLabel.identifier = "kosmo.nimdex.progress.percentage"
-  indexProgressLabel.hidden = true
   indexEntryLabel.identifier = "kosmo.nimdex.progress.entrypoint"
   indexEntryLabel.hidden = true
   indexEntryLabel.alignment = nimkit.taRight
@@ -3946,6 +3946,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     nimdexStopIcon: stopIcon,
   )
   result.initViewFields()
+  result.setIndexProgressHidden(true)
   result.addSubview(label)
   result.addSubview(choice)
   result.addSubview(nimdexSection)
