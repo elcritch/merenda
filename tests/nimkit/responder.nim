@@ -977,6 +977,11 @@ suite "nimkit responder":
 
     parent.xUndoManager = manager
     parent.addSubview(child)
+    require child.addMethod(
+      validRequestorForSendType(),
+      proc(self: View, args: ValidRequestorArgs): Option[DynamicAgent] =
+        none(DynamicAgent),
+    )
 
     check child.findValidRequestorForSendType(PasteboardTypeString, "") ==
       DynamicAgent(parent)

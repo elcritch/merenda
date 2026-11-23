@@ -16,9 +16,9 @@
    mouse dispatch `stopBefore` boundary. This requires a receiver predicate or a
    selector overload that can compute arguments per receiver.
    [Windows](src/merenda/nimkit/app/windows.nim)
-5. [ ] **Tooltip owner lookup.** Search the live superview chain for the first nonempty
-   `toolTipAtPoint` reply. Convert pointer coordinates separately for each view and
-   preserve the selector's existing routing. [Windows](src/merenda/nimkit/app/windows.nim)
+5. [x] **Tooltip owner lookup.** Evaluated `follow` and kept the direct loop, which
+   keeps per-view coordinates, the routed `toolTipAtPoint` call, and the early return
+   together. [Windows](src/merenda/nimkit/app/windows.nim)
 6. [ ] **Table state provider lookup.** Search the live responder chain for the first
    responder that handles `defaultsStore` or `defaultsScopeId`. Preserve the probe
    order, short circuit, and acceptance of empty replies.
@@ -34,7 +34,7 @@
 9. [ ] **Kosmo hint mode.** Use a first-handled-reply operation if Sigils adds one.
    A handled false ends the live walk because the inner surface owns the request.
    [Hint mode](src/merenda/kosmo/hintsmode.nim)
-10. [ ] **Undo manager and pasteboard requestor lookup.** Share a first-matching-reply
-    operation if Sigils adds one. Skip unhandled sends and handled `none` replies.
+10. [x] **Undo manager and pasteboard requestor lookup.** Share `findFirstReply` over
+    the live responder chain. Skip unhandled sends and handled `none` replies.
     Return the object from the original send to the winning provider.
     [Responders](src/merenda/nimkit/responder/responders.nim)

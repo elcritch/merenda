@@ -1,7 +1,7 @@
 import std/options
 
 import sigils/selectors as dynamicSelectors
-from sigils/hom import findFirst, get, isSome
+from sigils/hom import findFirst, findFirstReply, get, isSome
 
 import ../foundation/events
 import ../foundation/backrefs
@@ -200,20 +200,18 @@ proc findValidRequestorForSendType*(
     responder: Responder, sendType, returnType: string
 ): DynamicAgent =
   let args = ValidRequestorArgs(sendType: sendType, returnType: returnType)
-  var current = responder
-  while not current.isNil:
-    let requestor = current.trySendLocal(validRequestorForSendType(), args)
-    if requestor.isSome and requestor.get().isSome:
-      return requestor.get().get()
-    current = current.nextResponder()
+  let matched = responder.responderChain().findFirstReply(
+      validRequestorForSendType(), args, options.isSome[DynamicAgent]
+    )
+  if matched.isSome:
+    result = matched.get().reply.get()
 
 proc findUndoManager*(responder: Responder): UndoManager =
-  var current = responder
-  while not current.isNil:
-    let manager = current.trySendLocal(undoManager(), ())
-    if manager.isSome and manager.get().isSome:
-      return manager.get().get()
-    current = current.nextResponder()
+  let matched = responder.responderChain().findFirstReply(
+      undoManager(), (), options.isSome[UndoManager]
+    )
+  if matched.isSome:
+    result = matched.get().reply.get()
 
 proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A
