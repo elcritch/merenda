@@ -16,6 +16,8 @@
 
 import std/[options, strutils, unicode]
 
+from sigils/hom import findFirstReply, get, isSome
+
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent, interceptKeyEquivalent
 import ../nimkit/text/[searchmatching, textbytecursors]
@@ -461,13 +463,13 @@ proc performKosmoHintModeInChain*(
   ## when it shows no matches — so inner surfaces shadow outer ones. Returns
   ## false when no surface implements the request or the presenting surface
   ## finds no matches to present.
-  var current = responder
-  while not current.isNil:
-    let handled = current.trySendLocal(showKosmoHintMode(), args)
-    if handled.isSome:
-      return handled.get()
-    current = current.nextResponder()
-  false
+  let matched = responder.responderChain().findFirstReply(
+      showKosmoHintMode(),
+      args,
+      proc(_: bool): bool =
+        true,
+    )
+  matched.isSome and matched.get().reply
 
 proc kosmoHintInView*(hint: KosmoHint, source, host: nimkit.View): KosmoHint =
   ## Reposition a hint collected on `source` into `host`'s coordinates, for

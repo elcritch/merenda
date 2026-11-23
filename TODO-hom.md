@@ -32,8 +32,8 @@
    selection after collecting models. `collectEach` would keep querying a source
    after a callback replaces it or a matrix switches to static models.
    [Document tabs](src/merenda/nimkit/containers/documenttabs.nim) · [Matrices](src/merenda/nimkit/controls/matrices.nim)
-9. [ ] **Kosmo hint mode.** Use a first-handled-reply operation if Sigils adds one.
-   A handled false ends the live walk because the inner surface owns the request.
+9. [x] **Kosmo hint mode.** Use `findFirstReply` over the live responder chain.
+   Accept every local reply, including false, so the first surface owns the request.
    [Hint mode](src/merenda/kosmo/hintsmode.nim)
 10. [x] **Undo manager and pasteboard requestor lookup.** Use `findFirstReply` over
     the live responder chain for undo managers. Exercise the requestor selector

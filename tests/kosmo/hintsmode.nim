@@ -337,13 +337,35 @@ suite "Kosmo hint mode":
     check pasteboard.plainText() == "src/reported.nim:12"
     check not kosmoHintsVisible(textView)
 
-  test "hint requests decline on responder chains without a hint surface":
-    let window = newWindow("No hint surface", frame = rect(0, 0, 320, 200))
-    defer:
-      window.close()
-    check not performKosmoHintModeInChain(
-      window.firstResponder(), KosmoHintModeArgs(kind: khkLink, action: khaCopy)
+  test "the first hint surface owns the request even when it declines":
+    let
+      focused = newResponder()
+      inner = newResponder()
+      outer = newResponder()
+      args = KosmoHintModeArgs(kind: khkLink, action: khaCopy)
+    focused.setNextResponder(inner)
+    inner.setNextResponder(outer)
+    check not focused.performKosmoHintModeInChain(args)
+
+    var outerCalls = 0
+    require outer.addMethod(
+      showKosmoHintMode(),
+      proc(_: Responder, args: KosmoHintModeArgs): bool =
+        discard args
+        inc outerCalls
+        true,
     )
+    check focused.performKosmoHintModeInChain(args)
+    check outerCalls == 1
+
+    require inner.addMethod(
+      showKosmoHintMode(),
+      proc(_: Responder, args: KosmoHintModeArgs): bool =
+        discard args
+        false,
+    )
+    check not focused.performKosmoHintModeInChain(args)
+    check outerCalls == 1
 
   test "insert requests decline on surfaces without terminal insertion":
     let
