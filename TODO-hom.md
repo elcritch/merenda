@@ -39,7 +39,7 @@
     the live responder chain for undo managers. Exercise the requestor selector
     directly in tests. Both searches skip unhandled sends and handled `none` replies.
     [Responders](src/merenda/nimkit/responder/responders.nim)
-11. [ ] **Popup-list key-view commands.** Reuse `performCommandInChain` for next
+11. [x] **Popup-list key-view commands.** Reuse `performCommandInChain` for next
     and previous key-view commands. Start at the popup's next responder and
     preserve `tryToPerform` overrides.
     [Popup lists](src/merenda/nimkit/controls/popuplists.nim)

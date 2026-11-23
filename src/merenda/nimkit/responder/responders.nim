@@ -65,7 +65,9 @@ proc asDynamicAgent*[T: Responder](target: T): DynamicAgent {.inline.} =
 
 proc nextResponder*(responder: Responder): Responder
 proc clearNextResponder*(responder: Responder)
-proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder
+proc performCommandInChain*(
+  responder: Responder, args: TryToPerformArgs
+): Responder {.discardable.}
 
 proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent =
   discard selector

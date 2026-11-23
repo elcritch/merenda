@@ -121,15 +121,6 @@ proc close(popupList: PopupListView)
 proc scrollBy(popupList: PopupListView, delta: int)
 proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
-proc forwardKeyViewCommand(
-    popupList: PopupListView, selector: CommandSelector, args: ActionArgs
-) =
-  var responder = popupList.nextResponder()
-  while not responder.isNil:
-    if responder.tryToPerform(selector, args.sender):
-      return
-    responder = responder.nextResponder()
-
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method drawLevel(popupList: PopupListView): ZLevel =
     PopupDrawLevel
@@ -182,14 +173,18 @@ protocol DefaultPopupListKeyCommands of KeyViewCommandProtocol:
   method insertTab(popupList: PopupListView, args: ActionArgs) =
     let tab = popupList.actions().tab
     if tab.isNil:
-      popupList.forwardKeyViewCommand(insertTab(), args)
+      popupList.nextResponder().performCommandInChain(
+        TryToPerformArgs(selector: insertTab(), sender: args.sender)
+      )
     else:
       tab(1)
 
   method insertBacktab(popupList: PopupListView, args: ActionArgs) =
     let tab = popupList.actions().tab
     if tab.isNil:
-      popupList.forwardKeyViewCommand(insertBacktab(), args)
+      popupList.nextResponder().performCommandInChain(
+        TryToPerformArgs(selector: insertBacktab(), sender: args.sender)
+      )
     else:
       tab(-1)
 
