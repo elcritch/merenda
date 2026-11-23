@@ -75,7 +75,47 @@
     and text, then query caret and marked-range state on that responder. Preserve
     the order of the initial local probes.
     [Windows](src/merenda/nimkit/app/windows.nim)
-20. [ ] **Table type-to-select.** Search wrapped indexes lazily with
-    `normalizedSearchTextForRow`. Preserve disabled-row skipping and use the row
-    summary only when the selector is unhandled.
+20. [x] **Table type-to-select.** Use `findFirst` over lazy wrapped indexes.
+    Skip disabled rows and use the row summary only when the source leaves
+    `normalizedSearchTextForRow` unhandled.
     [Table selection](src/merenda/nimkit/tables/tableselection.nim)
+21. [ ] **Kosmo toolbar focus.** Replace the panel-type ladder in
+    `focusToolToolbar` with an optional selector and `findFirstReply`. Accept a
+    handled false as final and continue past editor panes with hidden controls.
+    [Dock controller](src/merenda/kosmo/application_dock.nim)
+22. [ ] **Menu action targets.** Use `findFirst` over the live responder chain
+    with the existing `respondsTo` check. Validate and dispatch on the first
+    matching target.
+    [Menus](src/merenda/nimkit/controls/menus.nim)
+23. [ ] **Scroll-wheel dispatch.** Use `findFirst` to return the consuming
+    responder. Localize coordinates at each hop, honor
+    `wantsForwardedScrollEvents`, and accept any handled `scrollWheel` reply.
+    [Windows](src/merenda/nimkit/app/windows.nim)
+24. [ ] **Native marked-text composition.** Use `findFirst` to stop at the
+    first local `setMarkedText` handler. Calculate the replacement range from
+    each candidate's text when the native event supplies a range.
+    [Windows](src/merenda/nimkit/app/windows.nim)
+25. [ ] **Menu keyboard shortcuts.** Search menu items in depth-first order.
+    Skip hidden items and separators with their submenus, and check each
+    parent's shortcut before descending.
+    [Menus](src/merenda/nimkit/controls/menus.nim)
+26. [ ] **View lookup by tag or identifier.** Share the recursive searches
+    through the tree overload of `findFirst`. Preserve root-first order and
+    the existing field comparisons.
+    [Views](src/merenda/nimkit/view/views.nim)
+27. [ ] **Responder membership.** Share a live identity search across
+    transient-window dismissal, Kosmo sidebar focus, and focus transfer when
+    editor content changes.
+    [Windows](src/merenda/nimkit/app/windows.nim) · [Kosmo editor](src/merenda/kosmo/application_editor.nim)
+28. [ ] **Kosmo dock drop targets.** Use `findFirstReply` to return the first
+    eligible host and its valid drop target. Resolve coordinates per host and
+    apply the tab-strip center override to the winning target.
+    [Dock controller](src/merenda/kosmo/application_dock.nim)
+29. [ ] **Table and collection identifier lookup.** Keep the direct data-source
+    lookup first, then use a lazy `findFirst` scan on an absent or out-of-bounds
+    reply. Preserve table aliases and the collection's index-string fallback.
+    [Table rows](src/merenda/nimkit/tables/tablecore.nim) · [Collection items](src/merenda/nimkit/containers/collectionviews.nim)
+30. [ ] **Color-picker palette redraw.** Use `sendEachTo` for `needsDisplay=`
+    across the palette buttons, then synchronize the wheel and value controls
+    in the existing order.
+    [Color picker](src/merenda/nimkit/controls/colorpicker.nim)

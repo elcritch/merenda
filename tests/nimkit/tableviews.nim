@@ -3202,6 +3202,31 @@ suite "NimKit TableView":
     check delegate.beganEdits.len == 0
     check tableView.selectedIndex == 1
 
+  test "table type selection wraps and stops at the first selectable search reply":
+    let
+      tableView = newTableView(frame = rect(0, 0, 260, 140))
+      source = newTableDataSourceSpy(5)
+      delegate = newTableDelegateSpy()
+    var searched: seq[int]
+    require source.addMethod(
+      normalizedSearchTextForRow(),
+      proc(
+          self: TableDataSourceSpy, args: tuple[tableView: TableView, row: int]
+      ): string =
+        searched.add(args.row)
+        if args.row in [1, 4]: "project" else: "",
+    )
+    delegate.disabledRows = @[4]
+    tableView.addColumn(newTableColumn("project", "Project", width = 130.0))
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    tableView.selectedIndex = 3
+    require tableView.selectedIndex == 3
+
+    check tableView.defaultTableViewKeyDown(KeyEvent(text: "P", key: keyP))
+    check tableView.selectedIndex == 1
+    check searched == @[0, 1]
+
   test "table view enter activates row after focused column is hidden":
     let
       window = newWindow("Table hidden focused column", frame = rect(0, 0, 360, 160))

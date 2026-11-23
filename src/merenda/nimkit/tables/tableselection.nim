@@ -2,6 +2,7 @@
 
 import std/[algorithm, strutils, times]
 import sigils/core
+from sigils/hom import findFirst, get
 import ../accessibility/accessibilityprotocols
 import ../controls/controls
 import ../foundation/events
@@ -253,6 +254,16 @@ proc typeSelectStartIndex(tableView: TableView): int =
   else:
     tableView.firstVisibleIndex()
 
+iterator typeSelectRowIndexes(tableView: TableView): int =
+  ## Yield at most the initial row count. Wrap using the current count because
+  ## data-source callbacks can resize the table between candidates.
+  let start = max(tableView.typeSelectStartIndex(), 0)
+  for offset in 0 ..< tableView.len():
+    let count = tableView.len()
+    if count == 0:
+      break
+    yield (start + offset) mod count
+
 proc rowTextMatchesPrefix(
     tableView: TableView, index: int, normalizedPrefix: string
 ): bool =
@@ -268,15 +279,10 @@ proc rowTextMatchesPrefix(
 proc firstRowMatchingText(tableView: TableView, text: string): int =
   if text.len == 0 or tableView.len() == 0:
     return -1
-  let
-    normalized = text.toLowerAscii()
-    start = max(tableView.typeSelectStartIndex(), 0)
-  for offset in 0 ..< tableView.len():
-    let index = (start + offset) mod tableView.len()
-    if tableView.rowSelectable(index) and
-        tableView.rowTextMatchesPrefix(index, normalized):
-      return index
-  -1
+  let normalized = text.toLowerAscii()
+  let match = tableView.typeSelectRowIndexes().findFirst do(index: int) -> bool:
+    tableView.rowSelectable(index) and tableView.rowTextMatchesPrefix(index, normalized)
+  match.get(-1)
 
 proc selectItemMatchingText(tableView: TableView, text: string): bool =
   if tableView.selectionMode() == tsmNone:
