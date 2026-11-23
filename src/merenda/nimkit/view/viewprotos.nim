@@ -11,7 +11,23 @@ import ./viewbase
 import sigils/core
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect)
-proc validKeyView(view: View, forward: bool): View
+
+iterator keyViewChain(view: View, link: Selector[EmptyArgs, View]): View =
+  var candidate = view.send(link, ())
+  for _ in 0 ..< 4096:
+    if candidate.isNil:
+      break
+    yield candidate
+    if candidate == view:
+      break
+    candidate = candidate.send(link, ())
+
+proc validKeyView(
+    view: View, link: Selector[EmptyArgs, View], eligibility: Selector[EmptyArgs, bool]
+): View =
+  let isValid = proc(candidate: View): bool =
+    candidate.send(eligibility, ())
+  view.keyViewChain(link).findFirst(isValid).get(nil)
 
 proc updateUncachedIntrinsicCount(view: View, count: uint32, added: bool) =
   if count == 0:
@@ -330,10 +346,10 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.viewCanBecomeKeyView()
 
   method nextValidKeyView*(self: View): View =
-    self.validKeyView(forward = true)
+    self.validKeyView(nextKeyView(), canBecomeKeyView())
 
   method previousValidKeyView*(self: View): View =
-    self.validKeyView(forward = false)
+    self.validKeyView(previousKeyView(), canBecomeKeyView())
 
   method isHidden*(self: View): bool =
     ssHidden in self.xWidgetStates
@@ -462,27 +478,6 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
         return bestHit
 
     if inside: self else: nil
-
-iterator keyViewChain(view: View, forward: bool): View =
-  template step(candidate: View): View =
-    if forward:
-      candidate.nextKeyView()
-    else:
-      candidate.previousKeyView()
-
-  var candidate = step(view)
-  for _ in 0 ..< 4096:
-    if candidate.isNil:
-      break
-    yield candidate
-    if candidate == view:
-      break
-    candidate = step(candidate)
-
-proc validKeyView(view: View, forward: bool): View =
-  let isValid = proc(candidate: View): bool =
-    candidate.canBecomeKeyView()
-  view.keyViewChain(forward).findFirst(isValid).get(nil)
 
 proc `{}`*(view: View, property: ViewProperty): bool =
   ## Read an individual view property through the protocol getter.
