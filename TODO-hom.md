@@ -23,10 +23,10 @@
    responder that handles `defaultsStore` or `defaultsScopeId`. Preserve the probe
    order, short circuit, and acceptance of empty replies.
    [Table state](src/merenda/nimkit/tables/tablestate.nim)
-7. [ ] **Menu model loading.** Evaluate `collectEach` for ordered
-   `menuItemModelAtIndex` replies and omit unhandled indexes. Verify that using one
-   data source for the full reload is appropriate. The loop reads the data source at
-   every index. [Menus](src/merenda/nimkit/controls/menus.nim)
+7. [x] **Menu model loading.** Keep the direct loop. It reads the current data
+   source at each index and appends only handled replies. `collectEach` would keep
+   sending to the starting data source if a callback replaces it, and would
+   collect intermediate replies before filtering. [Menus](src/merenda/nimkit/controls/menus.nim)
 8. [ ] **Document tab model loading.** Evaluate the same `collectEach` pattern for
    `documentTabModelAtIndex` and `matrixItemModelAtIndex`. Preserve selection
    restoration and decide whether a reload should retain its starting data source.
