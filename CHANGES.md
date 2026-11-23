@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep window shortcuts working when the focused control is hidden or removed,
+  including the Close Tab shortcut after switching tabs in Kosmo Settings.
 - Add NimKit's `ToolbarFocusProtocol` so tools can toggle focus between their
   content and controls through the responder chain. Kosmo uses it for its
   readers, file browser, and file search.

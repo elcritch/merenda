@@ -1434,6 +1434,27 @@ proc convertRectFromContent*(window: Window, rect: Rect): Rect =
 proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
+proc isAvailableKeyView(window: Window, responder: Responder): bool =
+  if not (responder of View):
+    return true
+  let view = View(responder)
+  if view.isHiddenOrHasHiddenAncestor():
+    return false
+  let owner = view.window()
+  if owner == window:
+    return true
+  owner.isNil and (window.xContentView.isNil or view.responderChainContains(window))
+
+proc canReceiveKeyboardInput*(window: Window, responder: Responder): bool =
+  ## A view and any field-editor client must be available in this window.
+  if responder.isNil:
+    return false
+  if responder of FieldEditor:
+    let client = FieldEditor(responder).client()
+    if not window.isAvailableKeyView(client):
+      return false
+  window.isAvailableKeyView(responder)
+
 proc fieldEditor*(window: Window): FieldEditor =
   if window.xFieldEditor.isNil:
     window.xFieldEditor = newFieldEditor()
@@ -1522,11 +1543,15 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if not window.shouldMakeFirstResponder(responder):
     return false
   let previousResponder = window.xFirstResponder
-  if not window.xFirstResponder.isNil:
-    if not window.xFirstResponder.shouldResignFirstResponder():
+  if not previousResponder.isNil and (
+    not previousResponder.shouldResignFirstResponder() or
+    not previousResponder.resignFirstResponder()
+  ):
+    if not (previousResponder of FieldEditor) or
+        window.canReceiveKeyboardInput(previousResponder):
       return false
-    if not window.xFirstResponder.resignFirstResponder():
-      return false
+    # A field that is no longer available cannot correct its invalid edit.
+    discard FieldEditor(previousResponder).cancelEditing()
   if not responder.isNil and nextResponder of FieldEditor:
     if not FieldEditor(nextResponder).beginEditing(responder, focusVisible):
       return false
@@ -1625,10 +1650,11 @@ proc selectKeyView(window: Window, view: View): bool =
   true
 
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
-  if not sender.isNil and sender of View:
+  if sender of View and window.canReceiveKeyboardInput(Responder(sender)):
     return View(sender)
-  if not window.xFirstResponder.isNil and window.xFirstResponder of View:
-    return View(window.xFirstResponder)
+  let focused = window.firstResponder()
+  if focused of View and window.canReceiveKeyboardInput(focused):
+    return View(focused)
 
 proc prepareKeyViewLoop(window: Window) =
   if window.xAutorecalculatesKeyViewLoop:
@@ -2557,12 +2583,17 @@ proc clickAt*(window: Window, point: Point): bool =
     return false
   window.mouseUpAt(point)
 
-proc keyDispatchTarget(window: Window): Responder =
-  if not window.xFirstResponder.isNil:
-    return window.xFirstResponder
-  if window.xContentView.isNil:
-    return nil
-  Responder(window.xContentView)
+proc keyDispatchTarget*(window: Window, fallback: Responder = nil): Responder =
+  ## Start at the active responder, then the supplied fallback, content, or window.
+  let focused = window.firstResponder()
+  if window.canReceiveKeyboardInput(focused):
+    return focused
+  if window.canReceiveKeyboardInput(fallback):
+    return fallback
+  let content = window.xContentView
+  if not content.isNil and window.isAvailableKeyView(content):
+    return content
+  Responder(window)
 
 proc dispatchCommandInChain(
     target: Responder, selector: CommandSelector, sender: DynamicAgent
@@ -2574,10 +2605,7 @@ proc dispatchCommandInChain(
 proc dispatchActionInChain*(
     window: Window, selector: ActionSelector, sender: DynamicAgent
 ): EventDispatchResult =
-  var target = window.keyDispatchTarget()
-  if target.isNil:
-    target = Responder(window)
-  dispatchCommandInChain(target, selector, sender)
+  dispatchCommandInChain(window.keyDispatchTarget(), selector, sender)
 
 proc sendAction*(
     window: Window,

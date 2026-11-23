@@ -990,13 +990,14 @@ proc activateWindow*(app: Application, window: Window) =
 proc showWindow*(
     app: Application, window: Window, contentView: View, firstResponder: Responder = nil
 ): Window {.discardable.} =
+  ## Preserve current focus unless an available first responder is supplied.
   if window.isNil:
     return nil
   window.setContentView(contentView)
-  if firstResponder.isNil:
-    discard window.selectNextKeyView()
-  else:
+  if window.canReceiveKeyboardInput(firstResponder):
     discard window.makeFirstResponder(firstResponder)
+  if not window.canReceiveKeyboardInput(window.firstResponder()):
+    discard window.selectNextKeyView()
   app.activateWindow(window)
   window
 
@@ -1140,12 +1141,12 @@ proc rendererThreadId*(app: Application): int =
   -1
 
 proc keyEquivalentDispatchStart(app: Application): Responder =
-  if not app.xKeyWindow.isNil:
-    let firstResponder = app.xKeyWindow.firstResponder()
-    if not firstResponder.isNil:
-      return firstResponder
-    return Responder(app.xKeyWindow)
-  Responder(app)
+  let window = app.xKeyWindow
+  if window.isNil:
+    return app
+  if window.firstResponder().isNil:
+    return window
+  window.keyDispatchTarget()
 
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool =
   if app.xMainMenu.isNil:

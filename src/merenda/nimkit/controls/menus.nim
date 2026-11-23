@@ -959,33 +959,27 @@ proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent)
 proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): bool =
   if item.xSeparator or item.xHidden or not item.xEnabled:
     return false
-  let explicitTarget = item.target()
-  if not explicitTarget.isNil:
-    if not item.validate(explicitTarget):
-      return false
-    return explicitTarget.sendLocalIfHandled(
-      item.xAction,
-      ActionArgs(
-        sender:
-          if sender.isNil:
-            DynamicAgent(item)
-          else:
-            sender
-      ),
-    )
-  let target = findActionTarget(start, item.xAction)
-  if not item.validate(target):
-    return false
-  target.sendLocalIfHandled(
-    item.xAction,
-    ActionArgs(
+  let
+    explicitTarget = item.target()
+    args = ActionArgs(
       sender:
         if sender.isNil:
           DynamicAgent(item)
         else:
           sender
-    ),
-  )
+    )
+  if not explicitTarget.isNil:
+    return
+      item.validate(explicitTarget) and
+      explicitTarget.sendLocalIfHandled(item.xAction, args)
+  for responder in start.responderChain():
+    let target = responder.asDynamicAgent()
+    if target.respondsTo(item.xAction.name):
+      if not item.validate(target):
+        return false
+      # respondsTo can see past this responder, while the local send cannot.
+      if target.sendLocalIfHandled(item.xAction, args):
+        return true
 
 proc findKeyEquivalentItem*(menu: Menu, event: KeyEvent): MenuItem =
   for item in menu.xItems:
@@ -1357,10 +1351,10 @@ proc actionStartResponder(button: PopupMenuButton): Responder =
   if not root.isNil and not root.xActionStartResponder.isNil:
     return root.xActionStartResponder
   let owner = button.ownerWindow()
-  if owner.isNil or owner.firstResponder().isNil:
+  if owner.isNil:
     Responder(button)
   else:
-    owner.firstResponder()
+    owner.keyDispatchTarget(fallback = button)
 
 proc activateItem(button: PopupMenuButton, index: int) =
   let item = button.menuItem(index)
