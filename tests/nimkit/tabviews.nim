@@ -126,6 +126,36 @@ proc newTabViewDemoFixture(): TabViewDemoFixture =
   TabViewDemoFixture(root: root, tabView: tabView)
 
 suite "nimkit tab views":
+  test "compact tabs update all buttons when the bar height or focus changes":
+    let
+      files = newView()
+      search = newView()
+      tabs = newCompactTabView(
+        [
+          initCompactTabItem("files", "Files", SvgMtsdfResource(), files),
+          initCompactTabItem("search", "Search", SvgMtsdfResource(), search),
+        ]
+      )
+    var buttons: seq[View]
+    for child in tabs.subviews():
+      if child of Button:
+        buttons.add child
+    require buttons.len == 2
+
+    for height in [0.0'f32, DefaultCompactTabBarHeight]:
+      tabs.tabBarHeight = height
+      for button in buttons:
+        check button.hidden == (height == 0.0'f32)
+      check not files.hidden
+      check search.hidden
+
+    for focused in [true, false]:
+      for button in buttons:
+        button.needsDisplay = false
+      tabs.focused = focused
+      for button in buttons:
+        check button.needsDisplay
+
   test "tab view items select content views through lifecycle helpers":
     let
       tabView = newTabView(frame = rect(0, 0, 320, 180))

@@ -50,6 +50,10 @@ proc bindSearchTarget(bar: SearchBar, control: Control, action: ActionSelector) 
 
 proc focusSearch(bar: SearchBar, replacing: bool): bool
 
+proc setNavigationEnabled(bar: SearchBar, enabled: bool) =
+  bar.previousButton.enabled = enabled
+  bar.nextButton.enabled = enabled
+
 proc activatePrevious(bar: SearchBar) =
   if not bar.isNil and not bar.onPrevious.isNil:
     bar.onPrevious()
@@ -170,8 +174,7 @@ proc newSearchBar*(
   result.xQueryField.placeholder = "Search"
   result.previousButton = newSearchButton("↑", symbol = true)
   result.nextButton = newSearchButton("↓", symbol = true)
-  result.previousButton.enabled = false
-  result.nextButton.enabled = false
+  result.setNavigationEnabled(false)
   result.closeButton = newSearchButton("×", symbol = true)
   result.errorLabel = newLabel("")
   result.errorLabel.hidden = true
@@ -231,8 +234,7 @@ proc `query=`*(bar: SearchBar, query: string) =
 proc `hasMatches=`*(bar: SearchBar, hasMatches: bool) =
   if not bar.isNil:
     bar.xHasMatches = hasMatches
-    bar.previousButton.enabled = hasMatches
-    bar.nextButton.enabled = hasMatches
+    bar.setNavigationEnabled(hasMatches)
     if not bar.replaceButton.isNil:
       bar.replaceButton.enabled = hasMatches and bar.xErrorMessage.len == 0
       bar.replaceAllButton.enabled = bar.replaceButton.enabled

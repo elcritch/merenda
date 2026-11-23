@@ -1090,6 +1090,12 @@ proc toggleToolbarFocus*(panel: FileBrowserPanel, focused: nimkit.Responder): bo
   discard window.makeFirstResponder(panel.filterField)
   return true
 
+protocol FileBrowserToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      panel: FileBrowserPanel, focused: nimkit.Responder
+  ): Option[bool] =
+    some(panel.toggleToolbarFocus(focused))
+
 proc closeFileFilter(panel: FileBrowserPanel, sender: nimkit.DynamicAgent) =
   discard sender
   panel.dismissFilter()
@@ -1325,6 +1331,7 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
   discard result.withProtocol(FileBrowserPanelCommands)
   discard result.withProtocol(FileBrowserPanelMenuCommands)
   discard result.withProtocol(FileBrowserPanelLayout)
+  discard result.withProtocol(FileBrowserToolbarFocus)
 
   let closeAction = nimkit.actionSelector(FileTreeCloseFilterAction)
   for mode in FileTreeDisplayMode:

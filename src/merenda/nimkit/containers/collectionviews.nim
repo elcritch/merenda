@@ -8,6 +8,7 @@
 import std/[algorithm, math, options, strutils, tables]
 
 import sigils/core
+from sigils/hom import findFirst, get
 import sigils/selectors
 
 import ../accessibility/accessibilityprotocols
@@ -861,10 +862,9 @@ proc collectionItemIndexForIdentifier*(
     )
     if index.isSome and index.get() in 0 ..< collectionView.len():
       return index.get()
-  for index in 0 ..< collectionView.len():
-    if collectionView.collectionItemIdentifier(index) == identifier:
-      return index
-  -1
+  let match = items(0 ..< collectionView.len()).findFirst do(index: int) -> bool:
+    collectionView.collectionItemIdentifier(index) == identifier
+  match.get(-1)
 
 proc collectionItemObjectValue*(
     collectionView: CollectionView, index: int

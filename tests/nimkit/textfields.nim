@@ -542,69 +542,49 @@ suite "nimkit text fields":
     editor.moveToBeginningOfLineText()
     check editor.bounds().origin.x == 0.0'f32
 
-  test "scrolled field editor keeps accepting keyboard edits":
-    let
-      window = newWindow("Text scrolling edits", frame = rect(0, 0, 240, 120))
-      root = newView(frame = rect(0, 0, 240, 120))
-      field = newTextField("", frame = rect(10, 10, 80, 30))
-    defer:
-      window.close()
-    root.addSubview(field)
-    window.setContentView(root)
-    require window.makeFirstResponder(field)
-    let text = "viewProtocolSearchTextLongerThanField"
-    for ch in text:
-      require window.dispatchTextInput($ch)
-      discard window.buildRenders()
-    check field.stringValue == text
-    discard
-      window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
-    discard window.buildRenders()
-    check field.stringValue == text[0 ..^ 2]
-    discard
-      window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
-    discard
-      window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
-    discard window.buildRenders()
-    require window.dispatchTextInput("X")
-    discard window.buildRenders()
-    check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
-    let editor = window.fieldEditor()
-    check editor.selectedRange == initTextRange(text.len - 2, 0)
-    require window.dispatchTextInput("Y")
-    discard window.buildRenders()
-    check field.stringValue == text[0 ..^ 4] & "XY" & text[^3 ..^ 2]
+  for queriesInputState in [false, true]:
+    let testName =
+      if queriesInputState:
+        "scrolled field editor keeps accepting edits during native text input queries"
+      else:
+        "scrolled field editor keeps accepting edits without native text input queries"
+    test testName:
+      let
+        window = newWindow("Text scrolling edits", frame = rect(0, 0, 240, 120))
+        root = newView(frame = rect(0, 0, 240, 120))
+        field = newTextField("", frame = rect(10, 10, 80, 30))
+      defer:
+        window.close()
+      root.addSubview(field)
+      window.setContentView(root)
+      require window.makeFirstResponder(field)
 
-  test "scrolled field editor edits survive native text input state queries":
-    let
-      window = newWindow("Text scrolling native", frame = rect(0, 0, 240, 120))
-      root = newView(frame = rect(0, 0, 240, 120))
-      field = newTextField("", frame = rect(10, 10, 80, 30))
-    defer:
-      window.close()
-    root.addSubview(field)
-    window.setContentView(root)
-    require window.makeFirstResponder(field)
-    proc native(text: string) =
-      discard window.textInputState()
-      require window.dispatchTextInput(text)
-      discard window.textInputState()
-      discard window.buildRenders()
+      template edit(action: untyped, redraw = true) =
+        if queriesInputState:
+          discard window.textInputState()
+        require action
+        if queriesInputState:
+          discard window.textInputState()
+        if redraw or queriesInputState:
+          discard window.buildRenders()
 
-    proc nativeKey(key: Key) =
-      discard window.textInputState()
-      discard window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord))
-      discard window.textInputState()
-      discard window.buildRenders()
+      proc pressKey(key: Key, redraw = true) =
+        edit(window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord)), redraw)
 
-    let text = "viewProtocolSearchTextLongerThanField"
-    for ch in text:
-      native($ch)
-    nativeKey(keyBackspace)
-    nativeKey(keyArrowLeft)
-    nativeKey(keyArrowLeft)
-    native("X")
-    check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
+      let text = "viewProtocolSearchTextLongerThanField"
+      for ch in text:
+        edit(window.dispatchTextInput($ch))
+      check field.stringValue == text
+      pressKey(keyBackspace)
+      check field.stringValue == text[0 ..^ 2]
+      pressKey(keyArrowLeft, redraw = false)
+      pressKey(keyArrowLeft)
+      edit(window.dispatchTextInput("X"))
+      check field.stringValue == text[0 ..^ 4] & "X" & text[^3 ..^ 2]
+      let editor = window.fieldEditor()
+      check editor.selectedRange == initTextRange(text.len - 2, 0)
+      edit(window.dispatchTextInput("Y"))
+      check field.stringValue == text[0 ..^ 4] & "XY" & text[^3 ..^ 2]
 
   test "field editor text rect and accessibility geometry do not shift on focus":
     let

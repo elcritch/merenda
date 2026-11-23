@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add NimKit's `ToolbarFocusProtocol` so tools can toggle focus between their
+  content and controls through the responder chain. Kosmo uses it for its
+  readers, file browser, and file search.
 - Replace `PopupListData` and `PopupListActions` with the `PopupListDataSource`
   and `PopupListDelegate` protocols. Pass their responder targets to
   `newPopupListView(dataSource = ..., delegate = ...)` and keep them alive while

@@ -340,6 +340,12 @@ proc toggleToolbarFocus*(panel: KosmoGitHubPanel, focused: nimkit.Responder): bo
         return window.makeFirstResponder(control)
   false
 
+protocol GitHubToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      panel: KosmoGitHubPanel, focused: nimkit.Responder
+  ): Option[bool] =
+    some(panel.toggleToolbarFocus(focused))
+
 proc searchField*(panel: KosmoGitHubPanel): nimkit.TextField =
   panel.search.bar.queryField()
 
@@ -498,6 +504,7 @@ proc newKosmoGitHubPanel(
     KosmoControlScrollMultiplier
   discard result.withProtocol(GitHubReaderPresentation)
   discard result.withProtocol(KosmoGitHubHintSurface)
+  discard result.withProtocol(GitHubToolbarFocus)
   result.markdownView.matterGrammarSources =
     installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true

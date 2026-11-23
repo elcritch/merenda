@@ -496,8 +496,11 @@ proc setTokenFieldEnabled(field: TokenField, value: bool) =
   field.cell().setEnabled(value)
   if not field.xInput.isNil:
     field.xInput.enabled = value
-  for chip in field.xChips:
-    chip.enabled = value
+  # A setter can rebuild the chips, which inherit the updated cell state.
+  var index = 0
+  while index < field.xChips.len:
+    field.chipAtIndex(index).enabled = value
+    inc index
   field.needsDisplay = true
 
 protocol DefaultTokenFieldLayout of ViewLayoutProtocol:

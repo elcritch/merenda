@@ -19,6 +19,11 @@ type
   ResponderLink = ref object of DynamicAgent
     targetRef: BackRef[Responder]
 
+protocol ToolbarFocusProtocol:
+  method requestToolbarFocus*(focused: Responder): Option[bool] {.optional.}
+    ## Toggle focus between a tool's content and toolbar. Return `some` with
+    ## the focus result to claim the request, or `none` to defer.
+
 proc `target=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
   if target.isNil:
     backRef.clear()
@@ -152,6 +157,12 @@ iterator responderChain*(responder: Responder, stopBefore: Responder = nil): Res
     yield current
     current = current.nextResponder()
 
+proc responderChainContains*(responder, member: Responder): bool =
+  ## Check identity along the live chain, including the starting responder.
+  let match = responder.responderChain().findFirst do(candidate: Responder) -> bool:
+    candidate == member
+  match.isSome
+
 proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder =
   ## Dispatch the command and return the first responder that consumes it.
   let handlesCommand = proc(candidate: Responder): bool =
@@ -160,6 +171,13 @@ proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Respo
 
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
   responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
+
+proc performToolbarFocusInChain*(focused: Responder): bool =
+  ## Return the first claimed toolbar focus result, or false if every responder defers.
+  let match = focused.responderChain().findFirstReply(
+      requestToolbarFocus(), focused, options.isSome[bool]
+    )
+  match.isSome and match.get().reply.get()
 
 proc sendToFirstHandlerInChain*[A](
     responder: Responder, selector: Selector[A, EmptyArgs], args: A
@@ -177,14 +195,12 @@ proc performScrollKeyInChain*(
   ## Readers can consume an offered key even without overflow to preserve selection.
   if event.modifiers != {} or event.key notin KeyboardScrollKeys:
     return
-  var current = responder
-  while not current.isNil:
-    let handled = current.trySendLocal(scrollKey(), event)
-    if handled.isSome:
-      result = consumeIfOffered
-      if handled.get():
+  for candidate in responder.responderChain():
+    let reply = candidate.trySendLocal(scrollKey(), event)
+    if reply.isSome:
+      if reply.get():
         return true
-    current = current.nextResponder()
+      result = consumeIfOffered
 
 proc tryToPerform*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent = nil

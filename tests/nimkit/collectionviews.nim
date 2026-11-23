@@ -235,6 +235,16 @@ proc modelItems(): seq[ModelItem] =
   ]
 
 suite "nimkit collection views":
+  test "collection identifier lookup falls back to index strings":
+    let
+      collection = newCollectionView()
+      source = newCollectionSpy([item("a", "Alpha", 1), item("", "Beta", 2)])
+    collection.dataSource = source
+
+    check collection.collectionItemIndexForIdentifier("a") == 0
+    check collection.collectionItemIndexForIdentifier("1") == 1
+    check collection.collectionItemIndexForIdentifier("2") == -1
+
   test "mutable collection layout changes intrinsic size without a reload":
     let collection = newCollectionView(frame = rect(0, 0, 260, 140))
     let layout = newCollectionViewLayout(clkList, itemSize = initSize(60, 40))

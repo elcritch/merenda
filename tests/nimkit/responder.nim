@@ -4,6 +4,7 @@ import sigils/selectors
 from sigils/hom import findFirstReply, get, isNone, isSome
 
 import merenda/nimkit except performKeyEquivalent, undoManager
+from merenda/nimkit/app/backend import HostTextComposition
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
 from merenda/nimkit/view/viewprotos import nil
 
@@ -970,6 +971,173 @@ suite "nimkit responder":
     check start.performKeyEquivalentInChain(KeyEvent(key: keyF12))
     check trackingEvents == @["declined", "replacement.equivalent"]
 
+  test "toolbar focus keeps a handled false and skips a responder that defers":
+    let
+      focused = newResponder()
+      inner = newResponder()
+      outer = newResponder()
+    var
+      innerReply = some(false)
+      outerCalls = 0
+    focused.setNextResponder(inner)
+    inner.setNextResponder(outer)
+    require inner.addMethod(
+      requestToolbarFocus(),
+      proc(self: Responder, origin: Responder): Option[bool] =
+        check origin == focused
+        innerReply,
+    )
+    require outer.addMethod(
+      requestToolbarFocus(),
+      proc(self: Responder, origin: Responder): Option[bool] =
+        check origin == focused
+        inc outerCalls
+        some(true),
+    )
+
+    check not focused.performToolbarFocusInChain()
+    check outerCalls == 0
+    innerReply = none(bool)
+    check focused.performToolbarFocusInChain()
+    check outerCalls == 1
+
+  test "a declined keyboard scroll follows the updated next responder":
+    let
+      start = newResponder()
+      original = newResponder()
+      outer = newResponder()
+    start.setNextResponder(original)
+    outer.setNextResponder(original)
+    require start.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("start")
+        self.setNextResponder(outer)
+        false,
+    )
+    require original.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("original")
+        true,
+    )
+    require outer.addMethod(
+      scrollKey(),
+      proc(self: Responder, event: KeyEvent): bool =
+        trackingEvents.add("outer")
+        true,
+    )
+
+    resetTracking()
+    check start.performScrollKeyInChain(
+      KeyEvent(key: keyArrowDown), consumeIfOffered = true
+    )
+    check trackingEvents == @["start", "outer"]
+
+  test "native marked text uses the handling responder's replacement coordinates":
+    let
+      window = newWindow("IME composition", frame = rect(0, 0, 240, 160))
+      root = newView("outer", frame = rect(0, 0, 240, 160))
+      child = newView("inner", frame = rect(10, 10, 100, 80))
+    defer:
+      window.close()
+    child.acceptsFirstResponder = true
+    root.addSubview(child)
+    window.setContentView(root)
+    require window.makeFirstResponder(child)
+
+    for view in [child, root]:
+      require view.addMethod(
+        textInputAttributedSubstringForRange(),
+        proc(self: View, range: TextRange): AttributedString =
+          trackingEvents.add(self.identifier() & ".text")
+          newAttributedString(if self.identifier() == "outer": "😀abcd" else: "abcd"),
+      )
+    require root.addMethod(
+      setMarkedText(),
+      proc(
+          self: View,
+          args: tuple[text: string, selectedRange, replacementRange: TextRange],
+      ) =
+        trackingEvents.add("outer.marked")
+        check args.text == "😀x"
+        check args.selectedRange == initTextRange(1, 0)
+        check args.replacementRange == initTextRange(1, 1)
+      ,
+    )
+
+    resetTracking()
+    check window.dispatchTextComposition(
+      HostTextComposition(
+        text: "😀x", selectedStart: 2, replacementStart: 2, replacementLength: 1
+      )
+    )
+    check trackingEvents == @["inner.text", "outer.text", "outer.marked"]
+
+  test "native text input state probes keep selection and text on the same responder":
+    let
+      window = newWindow("IME state", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      child = newView(frame = rect(10, 10, 100, 80))
+      caret = rect(8, 10, 1, 12)
+    defer:
+      window.close()
+    child.acceptsFirstResponder = true
+    root.addSubview(child)
+    window.setContentView(root)
+    require window.makeFirstResponder(child)
+
+    require child.addMethod(
+      textInputAttributedSubstringForRange(),
+      proc(self: View, range: TextRange): AttributedString =
+        trackingEvents.add("child.text")
+        newAttributedString("child"),
+    )
+    require root.addMethod(
+      textInputSelectedRange(),
+      proc(self: View): TextRange =
+        trackingEvents.add("root.selection")
+        initTextRange(1, 1),
+    )
+    require root.addMethod(
+      textInputAttributedSubstringForRange(),
+      proc(self: View, range: TextRange): AttributedString =
+        trackingEvents.add("root.text")
+        newAttributedString("a😀z"),
+    )
+    require root.addMethod(
+      textInputHasMarkedText(),
+      proc(self: View): bool =
+        trackingEvents.add("root.hasMarked")
+        true,
+    )
+    require root.addMethod(
+      textInputMarkedRange(),
+      proc(self: View): TextRange =
+        trackingEvents.add("root.marked")
+        initTextRange(0, 2),
+    )
+    require root.addMethod(
+      textInputFirstRectForCharacterRange(),
+      proc(self: View, range: TextRange): Rect =
+        trackingEvents.add("root.caret")
+        check range == initTextRange(1, 0)
+        caret,
+    )
+
+    resetTracking()
+    let state = window.textInputState()
+    check trackingEvents ==
+      @[
+        "child.text", "root.selection", "root.text", "root.hasMarked", "root.marked",
+        "root.caret",
+      ]
+    check state.valid
+    check state.text == "a😀z"
+    check (state.selectedStart, state.selectedLength) == (1, 2)
+    check (state.markedStart, state.markedLength) == (0, 3)
+    check state.caret == caret
+
   test "valid requestor and undo manager lookup walk responder chain":
     let
       manager = newUndoManager()
@@ -1075,7 +1243,7 @@ suite "nimkit responder":
     check not window.scrollWheelAt(initPoint(125, 20), deltaY = 1.0)
     check trackingEvents.len == 0
 
-  test "window scroll dispatch bubbles unhandled child scrolls":
+  test "window scroll dispatch bubbles unhandled sends and stops on handled false":
     let
       window = newWindow("Scroll bubbling", frame = rect(0, 0, 240, 160))
       root = newView(frame = rect(0, 0, 240, 160))
@@ -1101,3 +1269,15 @@ suite "nimkit responder":
     check trackingScrollDeltas == @[initPoint(-0.5, 3.0)]
     check trackingModifiers == @[{kmControl}]
     check trackingTimestamps == @[43.0]
+
+    require child.addMethod(
+      scrollWheel(),
+      proc(self: View, event: ScrollEvent): bool =
+        trackingEvents.add("child.scroll")
+        trackingPoints.add(event.location)
+        false,
+    )
+    resetTracking()
+    check window.scrollWheelAt(initPoint(35, 30), deltaY = 3.0)
+    check trackingEvents == @["child.scroll"]
+    check trackingPoints == @[initPoint(5, 5)]
