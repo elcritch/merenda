@@ -53,6 +53,9 @@ when defined(macosx):
 var nativeEventLoopSigilThread {.threadvar.}: SigilThreadPtr
 var nativeEventLoopWakerInstalled {.threadvar.}: bool
 
+proc wakeNativeEventLoop*() =
+  siwinshim.sharedSiwinGlobals().wakeEventLoop()
+
 proc installNativeEventLoopWaker*(thread: SigilThreadPtr) =
   if not thread.isNil and thread != nativeEventLoopSigilThread:
     thread.installSiwinEventLoopWaker(siwinshim.sharedSiwinGlobals())

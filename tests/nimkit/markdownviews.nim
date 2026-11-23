@@ -2168,11 +2168,18 @@ Press <kbd>Enter</kbd>.
     let narrowLineCount = view.textStorage().stringValue().splitLines().len
 
     # Crosses the first whole-word wrap threshold even with wide fallback fonts.
+    view.frame = rect(0, 0, 600, 240)
+    require view.isMarkdownRendering()
     view.frame = rect(0, 0, 1_600, 240)
     require view.waitForMarkdownRendering()
     let wideLineCount = view.textStorage().stringValue().splitLines().len
 
     check wideLineCount < narrowLineCount
+
+    view.frame = rect(0, 0, 360, 240)
+    require view.isMarkdownRendering()
+    discard view.suspendMarkdown()
+    check not view.isMarkdownRendering()
 
   test "CommonMark and GFM configurations select their extension syntax":
     let

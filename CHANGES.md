@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reflow Markdown tables after a cancellable resize timer. The application can
+  wait for the timer while the viewport settles.
 - Remove `findValidRequestorForSendType`. Search `responderChain()` with
   `findFirstReply` and the `validRequestorForSendType()` selector.
 - Fix DirectView bodies evaluating the host expression twice. A host can be

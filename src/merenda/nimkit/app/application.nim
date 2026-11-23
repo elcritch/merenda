@@ -1442,6 +1442,7 @@ proc nextApplicationWait(app: Application): Duration =
       max(deadline.get() - now, initDuration())
     else:
       Duration.high
+  result = min(result, mainThreadTimerDelay(now))
   when defined(merenda.devControl):
     if not app.xDevController.isNil:
       result = min(result, initDuration(milliseconds = 20))
@@ -1458,7 +1459,8 @@ proc waitForApplicationEvents(app: Application) =
     recordTerminalTrace("native-wait-end")
   if hasLocalSigilThread():
     nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
-  discard nimkitBackend.waitForNativeEvents(app.nextApplicationWait())
+  withMainThreadTimerWake(nimkitBackend.wakeNativeEventLoop):
+    discard nimkitBackend.waitForNativeEvents(app.nextApplicationWait())
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:

@@ -21,6 +21,7 @@ from figdraw import SystemTypeface, Utf8Runes, arrangedGlyphs, len, pairs, `[]`
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
 import sigils/[core, threads]
+from sigils/scheduledselectors import ScheduledSend, cancel, sendAfter
 
 import ../accessibility/accessibility
 from ../app/windows import Window, firstResponder, makeFirstResponder
@@ -408,8 +409,7 @@ type
     xHeadingsToggleOnClick: bool
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
-    xMarkdownTableResizePending: bool
-    xMarkdownTableResizeDeadline: MonoTime
+    xMarkdownTableResize: ScheduledSend
     xMarkdownNavigationItems: seq[MarkdownNavigationItem]
     xPendingMarkdownHeadingSelection: string
     xPendingRestoredState: MarkdownViewState
@@ -2747,24 +2747,23 @@ proc markdownTableColumnLimit(view: MarkdownView): int =
     quantizedLimit, MarkdownTableMinimumColumnLimit, MarkdownTableMaximumColumnLimit
   )
 
+proc cancelMarkdownTableResize(view: MarkdownView) =
+  let pending = move view.xMarkdownTableResize
+  pending.cancel()
+
+protocol MarkdownTableResizeProtocol from MarkdownView:
+  method reflowMarkdownTables(view: MarkdownView) =
+    view.xMarkdownTableResize = nil
+    if view.xHasMarkdownTables and view.xActiveMarkdownGeneration == 0 and
+        view.markdownTableColumnLimit() != view.xMarkdownTableColumnLimit:
+      view.renderCurrentMarkdownDocument()
+
 proc scheduleMarkdownTableResize(view: MarkdownView) =
-  if view.isNil or not view.xHasMarkdownTables:
+  if view.isNil or view.xSuspended or not view.xHasMarkdownTables:
     return
-  view.xMarkdownTableResizeDeadline = getMonoTime() + MarkdownTableResizeDebounce
-  if view.xMarkdownTableResizePending:
-    return
-
-  view.xMarkdownTableResizePending = true
-  scheduleMainThreadWork(
-    proc(): bool =
-      if getMonoTime() < view.xMarkdownTableResizeDeadline:
-        return true
-
-      view.xMarkdownTableResizePending = false
-      if view.xHasMarkdownTables and view.xActiveMarkdownGeneration == 0 and
-          view.markdownTableColumnLimit() != view.xMarkdownTableColumnLimit:
-        view.renderCurrentMarkdownDocument()
-      false
+  view.cancelMarkdownTableResize()
+  view.xMarkdownTableResize = view.sendAfter(
+    MarkdownTableResizeDebounce, reflowMarkdownTables(), scheduleMainThreadTimer
   )
 
 proc markdownViewGeometryDidChange(view: MarkdownView) {.slot.} =
@@ -3502,7 +3501,7 @@ proc renderCurrentMarkdownDocument(view: MarkdownView) =
 func isMarkdownRendering*(view: MarkdownView): bool =
   ## Return whether incremental rendering or table resize reflow is pending.
   not view.isNil and
-    (view.xActiveMarkdownRenderGeneration != 0 or view.xMarkdownTableResizePending)
+    (view.xActiveMarkdownRenderGeneration != 0 or not view.xMarkdownTableResize.isNil)
 
 func isMarkdownParsing*(view: MarkdownView): bool =
   ## Return whether structure parsing, code coloring or rendering is in progress.
@@ -3916,6 +3915,7 @@ proc suspendMarkdownImpl(view: MarkdownView): MarkdownViewState =
   inc view.xRestoreToken
   let invocation = view.xRestoreToken
   view.xSuspended = true
+  view.cancelMarkdownTableResize()
   inc view.xMarkdownGeneration
   view.cancelMarkdownColors()
   view.cancelMarkdownRendering()
@@ -4263,6 +4263,7 @@ proc initMarkdownViewFields*(
   view.allowsUndo = false
   view.scrollView().borderType = svbNoBorder
   discard view.withProtocol(MarkdownViewKeyEquivalents)
+  discard view.withProto()
   view.connect(geometryDidChange, view, markdownViewGeometryDidChange)
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
