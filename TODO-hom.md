@@ -39,3 +39,42 @@
     the live responder chain for undo managers. Exercise the requestor selector
     directly in tests. Both searches skip unhandled sends and handled `none` replies.
     [Responders](src/merenda/nimkit/responder/responders.nim)
+11. [ ] **Popup-list key-view commands.** Reuse `performCommandInChain` for next
+    and previous key-view commands. Start at the popup's next responder and
+    preserve `tryToPerform` overrides.
+    [Popup lists](src/merenda/nimkit/controls/popuplists.nim)
+12. [ ] **Kosmo content editing.** Use a bounded `findFirst` for native editing
+    commands within the active pane. A local action implementation claims the
+    edit even when `tryToPerform` returns false.
+    [Editor](src/merenda/kosmo/application_editor.nim)
+13. [ ] **Kosmo file-filter visibility.** Share a `hidden=` send for the filter
+    field, close button, and expression button across initialization, show, and
+    dismiss. Preserve the prompt and error label rules.
+    [File tree](src/merenda/kosmo/filetree.nim)
+14. [ ] **Search-bar controls.** Share the Previous/Next `enabled=` send across
+    initialization and match updates. Send `hidden=` to the replacement controls
+    after transferring focus back to the query field.
+    [Search bars](src/merenda/nimkit/controls/searchbars.nim)
+15. [ ] **Token-field enabled state.** Send `enabled=` to the input and chips
+    after updating the backing cell. Check that snapshotting the chip list
+    preserves behavior if a callback changes it.
+    [Token fields](src/merenda/nimkit/controls/tokenfields.nim)
+16. [ ] **Compact-tab buttons.** Evaluate group sends for `hidden=` when the bar
+    collapses and `needsDisplay=` when focus changes.
+    [Compact tabs](src/merenda/nimkit/containers/compacttabviews.nim)
+17. [ ] **Mouse hit policy.** Return both the first non-default `mouseHitPolicy`
+    reply and its responder with `findFirstReply`. Localize the event for each
+    receiver and read the next responder after the send.
+    [Windows](src/merenda/nimkit/app/windows.nim)
+18. [ ] **Keyboard scroll routing.** Find the first local `scrollKey` reply of
+    true. With `consumeIfOffered`, remember a handled false and still give outer
+    responders a chance. Keep one live pass through the chain.
+    [Responders](src/merenda/nimkit/responder/responders.nim)
+19. [ ] **Native IME state.** Find the first responder that supplies both selection
+    and text, then query caret and marked-range state on that responder. Preserve
+    the order of the initial local probes.
+    [Windows](src/merenda/nimkit/app/windows.nim)
+20. [ ] **Table type-to-select.** Search wrapped indexes lazily with
+    `normalizedSearchTextForRow`. Preserve disabled-row skipping and use the row
+    summary only when the selector is unhandled.
+    [Table selection](src/merenda/nimkit/tables/tableselection.nim)

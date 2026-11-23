@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Use Sigils' keyed collections for NimKit bindings. The existing import path
+  re-exports the Sigils API. Item projections yield `Opt[T]`, and keyed `get`
+  raises `KeyError` for missing keys.
 - Reflow Markdown tables after a cancellable resize timer. The application can
   wait for the timer while the viewport settles.
 - Remove `findValidRequestorForSendType`. Search `responderChain()` with

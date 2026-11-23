@@ -122,10 +122,8 @@ The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews a
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
 text. Indexed lookup avoids scanning the sequence in every getter. Unchanged rows
 receive no item notification. Snapshot publication still validates/indexes O(n)
-values and compares observed items; it is not O(1) mutation. See
-[collection contracts](collection-sigils.md). The native upstream implementation
-is proposed in [Sigils PR #70](https://github.com/elcritch/sigils/pull/70); the local
-prototype does not change the installed dependency yet.
+values and compares observed items. NimKit uses the collection implementation
+from Sigils. See [collection contracts](collection-sigils.md).
 
 Detached `newDirectView(detached = true)` construction uses the same component
 builders with plain snapshot values, then `takeDetachedRoot()` transfers its fresh
