@@ -46,8 +46,8 @@ const
   KosmoKeyModeSelectorIdentifier* = "kosmo.status.keymode"
   KosmoCommandBarLineHeightMultiplier = 1.6'f32
   KosmoRenameAlertHeight* = 240.0'f32
-  KosmoQuickOpenTopInset = 96.0'f32
-  KosmoQuickOpenBottomInset = 24.0'f32
+  QuickOpenTopInset = 96.0'f32
+  QuickOpenBottomInset = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoMarkdownControlsStyleId* = "kosmo.markdown-controls"

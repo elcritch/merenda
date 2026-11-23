@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Replace `PopupListData` and `PopupListActions` with the `PopupListDataSource`
+  and `PopupListDelegate` protocols. Pass their responder targets to
+  `newPopupListView(dataSource = ..., delegate = ...)` and keep them alive while
+  the popup uses them.
+- Rename Kosmo's quick-open and file-browser types to `QuickOpenPanel`,
+  `FileBrowserPanel`, and `FileTree`. Their constructors use the same shorter
+  names.
 - Use Sigils' keyed collections for NimKit bindings. The existing import path
   re-exports the Sigils API. Item projections yield `Opt[T]`, and keyed `get`
   raises `KeyError` for missing keys.

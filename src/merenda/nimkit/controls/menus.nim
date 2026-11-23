@@ -1259,18 +1259,7 @@ proc menuItem(button: PopupMenuButton, index: int): MenuItem =
     return nil
   button.xMenu[index]
 
-proc menuItemText(button: PopupMenuButton, index: int): string =
-  let item = button.menuItem(index)
-  if item.isNil:
-    return ""
-  if item.isSeparatorItem():
-    return ""
-  item.title()
-
-proc menuItemKeyEquivalentText(button: PopupMenuButton, index: int): string =
-  let item = button.menuItem(index)
-  if item.isNil:
-    return ""
+proc menuItemKeyEquivalentText(item: MenuItem): string =
   if item.subtitle().len > 0:
     return item.subtitle()
   if item.hasKeyEquivalent():
@@ -1395,46 +1384,56 @@ proc activateItem(button: PopupMenuButton, index: int) =
   if not button.xMenu.isNil:
     button.xMenu.notifyMenuItemDidActivate(item, DynamicAgent(item))
 
-proc popupListData(button: PopupMenuButton): PopupListData =
-  PopupListData(
-    itemCount: proc(): int =
-      button.menuItemCount(),
-    visibleCount: proc(): int =
-      button.visibleItemCount(),
-    firstIndex: proc(): int =
-      button.popupFirstItemIndex(),
-    selectedIndex: proc(): int =
-      -1,
-    highlightedIndex: proc(): int =
-      button.xHighlightedIndex,
-    rowHeight: proc(): float32 =
-      button.itemHeight(),
-    itemText: proc(index: int): string =
-      button.menuItemText(index),
-    itemKeyEquivalentText: proc(index: int): string =
-      button.menuItemKeyEquivalentText(index),
-    itemIsSeparator: proc(index: int): bool =
-      let item = button.menuItem(index)
-      not item.isNil and item.isSeparatorItem(),
-    itemHasSubmenu: proc(index: int): bool =
-      let item = button.menuItem(index)
-      not item.isNil and not item.hidden() and not item.submenu().isNil,
-    itemIsEnabled: proc(index: int): bool =
-      let item = button.menuItem(index)
-      not item.isNil and not item.hidden() and item.enabled(),
-    itemState: proc(index: int): ButtonState =
-      let item = button.menuItem(index)
-      if item.isNil:
-        bsOff
-      else:
-        item.state(),
-    enabled: proc(): bool =
-      button.enabled(),
-    focused: proc(): bool =
-      button.isFocused(),
-    opened: proc(): bool =
-      button.popupOpen(),
-  )
+protocol MenuPopupListDataSource of PopupListDataSource:
+  method totalCount(button: PopupMenuButton, popupList: PopupListView): int =
+    button.menuItemCount()
+
+  method visibleCount(button: PopupMenuButton, popupList: PopupListView): int =
+    button.visibleItemCount()
+
+  method topIndex(button: PopupMenuButton, popupList: PopupListView): int =
+    button.popupFirstItemIndex()
+
+  method highlightIndex(button: PopupMenuButton, popupList: PopupListView): int =
+    button.xHighlightedIndex
+
+  method heightOfRow(button: PopupMenuButton, popupList: PopupListView): float32 =
+    button.itemHeight()
+
+  method rowAtIndex(
+      button: PopupMenuButton, popupList: PopupListView, index: int
+  ): PopupListItem =
+    let item = button.menuItem(index)
+    if item.isNil:
+      return PopupListItem(disabled: true)
+    let
+      separator = item.isSeparatorItem()
+      hidden = item.hidden()
+    PopupListItem(
+      text: (if separator: "" else: item.title()),
+      keyEquivalentText: item.menuItemKeyEquivalentText(),
+      separator: separator,
+      hasSubmenu: not hidden and not item.submenu().isNil,
+      disabled: hidden or not item.enabled(),
+    )
+
+  method stateForItem(
+      button: PopupMenuButton, popupList: PopupListView, index: int
+  ): ButtonState =
+    let item = button.menuItem(index)
+    if item.isNil:
+      bsOff
+    else:
+      item.state()
+
+  method isInteractive(button: PopupMenuButton, popupList: PopupListView): bool =
+    button.enabled()
+
+  method hasFocus(button: PopupMenuButton, popupList: PopupListView): bool =
+    button.isFocused()
+
+  method isShowing(button: PopupMenuButton, popupList: PopupListView): bool =
+    button.popupOpen()
 
 proc closePopupRoot(button: PopupMenuButton) =
   let root = button.rootPopup()
@@ -1518,26 +1517,32 @@ proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
     return false
   true
 
-proc popupListActions(button: PopupMenuButton): PopupListActions =
-  PopupListActions(
-    highlight: proc(index: int) =
-      button.setHighlightedIndex(index, openSubmenu = true),
-    activate: proc(index: int) =
-      button.activateItem(index),
-    close: proc() =
-      button.closePopupRoot(),
-    scroll: proc(delta: int) =
-      button.scrollPopupRows(delta),
-    keyDown: proc(event: KeyEvent) =
-      discard button.handlePopupKeyDown(event),
-    tab: proc(delta: int) =
-      button.dismissPopupAndAdvanceKeyView(delta),
-  )
+protocol MenuPopupListDelegate of PopupListDelegate:
+  method highlightRow(button: PopupMenuButton, popupList: PopupListView, index: int) =
+    button.setHighlightedIndex(index, openSubmenu = true)
+
+  method activateRow(button: PopupMenuButton, popupList: PopupListView, index: int) =
+    button.activateItem(index)
+
+  method dismissList(button: PopupMenuButton, popupList: PopupListView) =
+    button.closePopupRoot()
+
+  method scrollByRows(button: PopupMenuButton, popupList: PopupListView, delta: int) =
+    button.scrollPopupRows(delta)
+
+  method handleKeyDown(
+      button: PopupMenuButton, popupList: PopupListView, event: KeyEvent
+  ) =
+    discard button.handlePopupKeyDown(event)
+
+  method moveFocus(button: PopupMenuButton, popupList: PopupListView, delta: int) =
+    button.dismissPopupAndAdvanceKeyView(delta)
 
 proc popupList(button: PopupMenuButton): PopupListView =
   if button.xPopupList.isNil:
-    button.xPopupList =
-      newPopupListView(button.popupListData(), button.popupListActions())
+    discard button.withProtocol(MenuPopupListDataSource)
+    discard button.withProtocol(MenuPopupListDelegate)
+    button.xPopupList = newPopupListView(dataSource = button, delegate = button)
   button.xPopupList
 
 proc resolvedPopupPresentation(button: PopupMenuButton): PopupPresentation =

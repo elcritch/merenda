@@ -244,7 +244,7 @@ suite "Kosmo workspace roots":
     for root in [first, second]:
       let initialization = execCmdEx("git -C " & quoteShell(root) & " init -q")
       require initialization.exitCode == 0
-    let tree = newKosmoFileTree(first)
+    let tree = newFileTree(first)
     let monitoring = tree.startGitStatusMonitoring(refreshInterval = initDuration())
     defer:
       tree.stopGitStatusMonitoring()

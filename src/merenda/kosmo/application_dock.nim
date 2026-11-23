@@ -69,8 +69,8 @@ proc focusToolToolbar(controller: KosmoDockController): bool =
       return toggleToolbarFocus(KosmoGitHubPanel(responder), focused)
     if responder of KosmoMarkdownView:
       return toggleToolbarFocus(KosmoMarkdownView(responder), focused)
-    if responder of KosmoFileBrowserPanel:
-      return toggleToolbarFocus(KosmoFileBrowserPanel(responder), focused)
+    if responder of FileBrowserPanel:
+      return toggleToolbarFocus(FileBrowserPanel(responder), focused)
     if responder of KosmoFileSearchPanel:
       return toggleToolbarFocus(KosmoFileSearchPanel(responder), focused)
     if responder of KosmoEditorPane:
@@ -1672,8 +1672,8 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
       let
         availableWidth = max(bounds.size.width - 48.0'f32, 1.0'f32)
         availableHeight = max(
-          bounds.size.height - KosmoStatusBarHeight - KosmoQuickOpenTopInset -
-            KosmoQuickOpenBottomInset,
+          bounds.size.height - KosmoStatusBarHeight - QuickOpenTopInset -
+            QuickOpenBottomInset,
           1.0'f32,
         )
         popupWidth = min(availableWidth, 640.0'f32)
@@ -1681,7 +1681,7 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
       content.quickOpenPanel.setFrameFromLayout(
         nimkit.rect(
           max((bounds.size.width - popupWidth) * 0.5'f32, 0.0'f32),
-          KosmoQuickOpenTopInset + content.quickOpenPanel.presentationOffset(),
+          QuickOpenTopInset + content.quickOpenPanel.presentationOffset(),
           popupWidth,
           popupHeight,
         )

@@ -48,9 +48,9 @@
     A local action implementation claims the edit even when `tryToPerform`
     returns false.
     [Editor](src/merenda/kosmo/application_editor.nim)
-13. [ ] **Kosmo file-filter visibility.** Share a `hidden=` send for the filter
-    field, close button, and expression button across initialization, show, and
-    dismiss. Preserve the prompt and error label rules.
+13. [x] **Kosmo file-filter visibility.** Share the close and expression button
+    setters across initialization, show, and dismiss. Keep direct property
+    assignments to preserve required dispatch and layout notification order.
     [File tree](src/merenda/kosmo/filetree.nim)
 14. [ ] **Search-bar controls.** Share the Previous/Next `enabled=` send across
     initialization and match updates. Send `hidden=` to the replacement controls

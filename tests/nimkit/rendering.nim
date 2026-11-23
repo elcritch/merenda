@@ -175,6 +175,18 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
     abs(left.size.width - right.size.width) <= 0.01'f32 and
     abs(left.size.height - right.size.height) <= 0.01'f32
 
+protocol RenderingPopupDataSource of PopupListDataSource:
+  method totalCount(source: Responder, popupList: PopupListView): int =
+    2
+
+  method heightOfRow(source: Responder, popupList: PopupListView): float32 =
+    38
+
+  method rowAtIndex(
+      source: Responder, popupList: PopupListView, index: int
+  ): PopupListItem =
+    PopupListItem(text: $index)
+
 suite "nimkit rendering":
   test "hard control shadows draw offset silhouettes and retain their opacity":
     let button = newButton("", frame = rect(0, 0, 120, 80))
@@ -221,19 +233,9 @@ suite "nimkit rendering":
     check foundArrow
 
   test "dropdown rows preserve thick popup borders at rounded corners":
-    let popup = newPopupListView(
-      PopupListData(
-        itemCount: proc(): int =
-          2,
-        visibleCount: proc(): int =
-          2,
-        rowHeight: proc(): float32 =
-          38,
-        itemText: proc(index: int): string =
-          $index,
-      ),
-      frame = rect(0, 0, 160, 78),
-    )
+    let source = newResponder()
+    discard source.withProtocol(RenderingPopupDataSource)
+    let popup = newPopupListView(dataSource = source, frame = rect(0, 0, 160, 78))
     let appearance = initAppearance(initPunchTheme())
     var rows = 0
     for node in buildRenders(popup, appearance)[PopupDrawLevel].resolvedNodes():

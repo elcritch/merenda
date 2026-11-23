@@ -26,7 +26,7 @@ suite "Kosmo quick open":
     for name in ["a.b", "axb", "λcat.nim", "dog.txt"]:
       writeFile(root / name, "")
     let
-      panel = newKosmoQuickOpenPanel(root)
+      panel = newQuickOpenPanel(root)
       window = newWindow("Quick open regex", frame = rect(0, 0, 640, 360))
     defer:
       window.close()
@@ -119,7 +119,7 @@ suite "Kosmo quick open":
   test "standalone quick open retains its root for no-argument reloads":
     let root = createTempDir("merenda-kosmo-quick-open-root-", "")
     writeFile(root / "retained.nim", "discard\n")
-    let panel = newKosmoQuickOpenPanel(root)
+    let panel = newQuickOpenPanel(root)
     defer:
       panel.workspaceFiles.close()
       removeDir(root)
@@ -160,7 +160,7 @@ suite "Kosmo quick open":
     let files = newWorkspaceFiles()
     defer:
       files.close()
-    let panel = newKosmoQuickOpenPanel(files = files)
+    let panel = newQuickOpenPanel(files = files)
     let indicator = panel.progressIndicator
     # Render independently of the popup's slide-in animation and file worker.
     indicator.removeFromSuperview()

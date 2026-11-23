@@ -122,7 +122,7 @@ when defined(macosx):
         app = newApplication("Native Context Menu Activation Test")
       var
         windows: seq[nimkitWindows.Window]
-        trees: seq[KosmoFileTree]
+        trees: seq[FileTree]
       defer:
         for window in windows:
           window.close()
@@ -135,7 +135,7 @@ when defined(macosx):
             "Context Menu " & $index,
             frame = rect((80 + index * 40).float32, 80, 360, 240),
           )
-          tree = newKosmoFileTree(root, frame = rect(0, 0, 360, 240))
+          tree = newFileTree(root, frame = rect(0, 0, 360, 240))
         windows.add window
         trees.add tree
         window.setContentView(tree)

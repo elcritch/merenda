@@ -11,52 +11,17 @@ import ../foundation/events
 import ../foundation/types
 
 type
-  PopupListCountProc* = proc(): int {.closure.}
-  PopupListMetricProc* = proc(): float32 {.closure.}
-  PopupListBoolProc* = proc(): bool {.closure.}
-  PopupListStringProc* = proc(): string {.closure.}
-  PopupListClassesProc* = proc(): seq[string] {.closure.}
-  PopupListItemTextProc* = proc(index: int): string {.closure.}
-  PopupListItemBoolProc* = proc(index: int): bool {.closure.}
-  PopupListItemStateProc* = proc(index: int): ButtonState {.closure.}
-  PopupListItemProc* = proc(index: int) {.closure.}
-  PopupListScrollProc* = proc(delta: int) {.closure.}
-  PopupListKeyProc* = proc(event: KeyEvent) {.closure.}
-  PopupListActionProc* = proc() {.closure.}
-  PopupListTabProc* = proc(delta: int) {.closure.}
-
-  PopupListData* = object
-    itemCount*: PopupListCountProc
-    visibleCount*: PopupListCountProc
-    firstIndex*: PopupListCountProc
-    selectedIndex*: PopupListCountProc
-    highlightedIndex*: PopupListCountProc
-    rowHeight*: PopupListMetricProc
-    itemText*: PopupListItemTextProc
-    itemKeyEquivalentText*: PopupListItemTextProc
-    itemIsSeparator*: PopupListItemBoolProc
-    itemHasSubmenu*: PopupListItemBoolProc
-    itemIsEnabled*: PopupListItemBoolProc
-    itemState*: PopupListItemStateProc
-    enabled*: PopupListBoolProc
-    focused*: PopupListBoolProc
-    opened*: PopupListBoolProc
-    styleId*: PopupListStringProc
-    styleClasses*: PopupListClassesProc
-
-  PopupListActions* = object
-    highlight*: PopupListItemProc
-    activate*: PopupListItemProc
-    close*: PopupListActionProc
-    scroll*: PopupListScrollProc
-    keyDown*: PopupListKeyProc
-    tab*: PopupListTabProc
-      ## Override Tab traversal. Without a callback, key-view commands continue
-      ## along the responder chain.
+  PopupListItem* = object
+    ## Presentation of one popup row. An ordinary row is enabled by default.
+    text*: string
+    keyEquivalentText*: string
+    separator*: bool
+    hasSubmenu*: bool
+    disabled*: bool
 
   PopupListView* = ref object of View
-    xData: PopupListData
-    xActions: PopupListActions
+    xDataSource: BackRef[Responder]
+    xDelegate: BackRef[Responder]
     xTrackingItem: bool
     xPopupRole: StyleRole
     xItemRole: StyleRole
@@ -68,6 +33,67 @@ type
     stateWidth: float32
     shortcutWidth: float32
     submenuWidth: float32
+
+protocol PopupListDataSource {.selectorScope: protocol.}:
+  ## Supplies live content, viewport metrics, and presentation state.
+  method totalCount*(popupList: PopupListView): int {.optional.}
+  method visibleCount*(popupList: PopupListView): int {.optional.}
+  method topIndex*(popupList: PopupListView): int {.optional.}
+  method selectionIndex*(popupList: PopupListView): int {.optional.}
+  method highlightIndex*(popupList: PopupListView): int {.optional.}
+  method heightOfRow*(popupList: PopupListView): float32 {.optional.}
+  method rowAtIndex*(popupList: PopupListView, index: int): PopupListItem {.optional.}
+
+  method stateForItem*(popupList: PopupListView, index: int): ButtonState {.optional.}
+
+    ## Kept separate so checking for a state column can skip row text and shortcuts.
+
+  method isInteractive*(popupList: PopupListView): bool {.optional.}
+  method hasFocus*(popupList: PopupListView): bool {.optional.}
+  method isShowing*(popupList: PopupListView): bool {.optional.}
+  method contentStyleId*(popupList: PopupListView): string {.optional.}
+  method contentStyleClasses*(popupList: PopupListView): seq[string] {.optional.}
+
+protocol PopupListDelegate {.selectorScope: protocol.}:
+  ## Handles interactions with popup content.
+  method highlightRow*(popupList: PopupListView, index: int) {.optional.}
+  method activateRow*(popupList: PopupListView, index: int) {.optional.}
+  method dismissList*(popupList: PopupListView) {.optional.}
+  method scrollByRows*(popupList: PopupListView, delta: int) {.optional.}
+  method handleKeyDown*(popupList: PopupListView, event: KeyEvent) {.optional.}
+  method moveFocus*(popupList: PopupListView, delta: int) {.optional.}
+    ## Handles Tab (1) or Backtab (-1). Without this method, the command
+    ## continues along the popup's responder chain.
+
+proc dataSource*(popupList: PopupListView): Responder =
+  ## Returns the current data source, cleared when it is destroyed.
+  popupList.xDataSource.target
+
+proc delegate*(popupList: PopupListView): Responder =
+  ## Returns the current delegate, cleared when it is destroyed.
+  popupList.xDelegate.target
+
+proc `dataSource=`*(popupList: PopupListView, source: Responder) =
+  ## Assigns a data source. Its owner must keep it alive while the popup uses it.
+  if popupList.dataSource() == source:
+    return
+  if not source.isNil:
+    discard source.adopt(PopupListDataSource)
+  popupList.xDataSource.target = source
+  popupList.needsDisplay = true
+
+proc `delegate=`*(popupList: PopupListView, delegate: Responder) =
+  ## Assigns a delegate. Its owner must keep it alive while the popup uses it.
+  if popupList.delegate() == delegate:
+    return
+  if not delegate.isNil:
+    discard delegate.adopt(PopupListDelegate)
+  popupList.xDelegate.target = delegate
+
+proc sendToDelegate[A](
+    popupList: PopupListView, message: Selector[A, EmptyArgs], args: sink A
+): bool {.inline, discardable.} =
+  popupList.delegate().asDynamicAgent().sendLocalIfHandled(message, ensureMove args)
 
 const
   PopupStateGap = 6.0'f32
@@ -116,10 +142,7 @@ proc finishPopupListTracking*(
 
 proc resetPopupListTracking*(popupList: PopupListView)
 proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Point)
-proc activateItem(popupList: PopupListView, index: int)
-proc close(popupList: PopupListView)
 proc scrollBy(popupList: PopupListView, delta: int)
-proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method drawLevel(popupList: PopupListView): ZLevel =
@@ -166,27 +189,21 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
       return true
 
   method keyDown(popupList: PopupListView, event: KeyEvent): bool =
-    popupList.dispatchKeyDown(event)
-    result = true
+    popupList.sendToDelegate(handleKeyDown(), (popupList: popupList, event: event))
+    true
 
 protocol DefaultPopupListKeyCommands of KeyViewCommandProtocol:
   method insertTab(popupList: PopupListView, args: ActionArgs) =
-    let tab = popupList.actions().tab
-    if tab.isNil:
+    if not popupList.sendToDelegate(moveFocus(), (popupList: popupList, delta: 1)):
       popupList.nextResponder().performCommandInChain(
         TryToPerformArgs(selector: insertTab(), sender: args.sender)
       )
-    else:
-      tab(1)
 
   method insertBacktab(popupList: PopupListView, args: ActionArgs) =
-    let tab = popupList.actions().tab
-    if tab.isNil:
+    if not popupList.sendToDelegate(moveFocus(), (popupList: popupList, delta: -1)):
       popupList.nextResponder().performCommandInChain(
         TryToPerformArgs(selector: insertBacktab(), sender: args.sender)
       )
-    else:
-      tab(-1)
 
 protocol DefaultPopupListAccessibility of AccessibilityProtocol:
   method accessibilityRole(popupList: PopupListView): AccessibilityRole =
@@ -205,76 +222,71 @@ protocol DefaultPopupListAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(popupList: PopupListView): bool =
     true
 
-proc data(popupList: PopupListView): PopupListData =
-  popupList.xData
-
-proc actions(popupList: PopupListView): PopupListActions =
-  popupList.xActions
-
-template valueOr(callback, fallback: untyped): untyped =
-  if callback.isNil:
-    fallback
-  else:
-    callback()
-
-template valueAtOr(callback, index, fallback: untyped): untyped =
-  if callback.isNil:
-    fallback
-  else:
-    callback(index)
+template queryPopupData(popupList: PopupListView, message, args: untyped): untyped =
+  popupList.dataSource().asDynamicAgent().trySendLocal(message, args)
 
 proc itemCount*(popupList: PopupListView): int =
-  max(popupList.data().itemCount.valueOr(0), 0)
+  max(popupList.queryPopupData(totalCount(), popupList).get(0), 0)
 
 proc visibleItemCount*(popupList: PopupListView): int =
-  max(popupList.data().visibleCount.valueOr(popupList.itemCount()), 0)
+  let reply = popupList.queryPopupData(visibleCount(), popupList)
+  if reply.isSome:
+    return max(reply.get(), 0)
+  popupList.itemCount()
 
 proc firstIndex*(popupList: PopupListView): int =
-  popupList.data().firstIndex.valueOr(0).clampFirstIndex(
-    popupList.itemCount(), popupList.visibleItemCount()
-  )
+  let first = popupList.queryPopupData(topIndex(), popupList).get(0)
+  first.clampFirstIndex(popupList.itemCount(), popupList.visibleItemCount())
 
 proc selectedIndex*(popupList: PopupListView): int =
-  popupList.data().selectedIndex.valueOr(-1)
+  popupList.queryPopupData(selectionIndex(), popupList).get(-1)
 
 proc highlightedIndex*(popupList: PopupListView): int =
-  popupList.data().highlightedIndex.valueOr(-1)
+  popupList.queryPopupData(highlightIndex(), popupList).get(-1)
 
 proc rowHeight*(popupList: PopupListView): float32 =
-  popupList.data().rowHeight.valueOr(18.0'f32).normalizedRowHeight()
+  let height = popupList.queryPopupData(heightOfRow(), popupList).get(18.0'f32)
+  height.normalizedRowHeight()
+
+proc itemAtIndex*(popupList: PopupListView, index: int): PopupListItem =
+  popupList.queryPopupData(rowAtIndex(), (popupList: popupList, index: index)).get(
+    PopupListItem()
+  )
 
 proc itemText*(popupList: PopupListView, index: int): string =
-  popupList.data().itemText.valueAtOr(index, "")
+  popupList.itemAtIndex(index).text
 
 proc itemKeyEquivalentText*(popupList: PopupListView, index: int): string =
-  popupList.data().itemKeyEquivalentText.valueAtOr(index, "")
+  popupList.itemAtIndex(index).keyEquivalentText
 
 proc itemIsSeparator*(popupList: PopupListView, index: int): bool =
-  popupList.data().itemIsSeparator.valueAtOr(index, false)
+  popupList.itemAtIndex(index).separator
 
 proc itemHasSubmenu*(popupList: PopupListView, index: int): bool =
-  popupList.data().itemHasSubmenu.valueAtOr(index, false)
+  popupList.itemAtIndex(index).hasSubmenu
 
 proc itemIsEnabled*(popupList: PopupListView, index: int): bool =
-  popupList.data().itemIsEnabled.valueAtOr(index, true)
+  not popupList.itemAtIndex(index).disabled
 
 proc itemState*(popupList: PopupListView, index: int): ButtonState =
-  popupList.data().itemState.valueAtOr(index, bsOff)
+  popupList.queryPopupData(stateForItem(), (popupList: popupList, index: index)).get(
+    bsOff
+  )
 
 proc isEnabled*(popupList: PopupListView): bool =
-  popupList.data().enabled.valueOr(true)
+  popupList.queryPopupData(isInteractive(), popupList).get(true)
 
 proc isFocused*(popupList: PopupListView): bool =
-  popupList.data().focused.valueOr(false)
+  popupList.queryPopupData(hasFocus(), popupList).get(false)
 
 proc isOpened*(popupList: PopupListView): bool =
-  popupList.data().opened.valueOr(true)
+  popupList.queryPopupData(isShowing(), popupList).get(true)
 
 proc styleId(popupList: PopupListView): string =
-  popupList.data().styleId.valueOr("")
+  popupList.queryPopupData(contentStyleId(), popupList).get("")
 
 proc styleClasses(popupList: PopupListView): seq[string] =
-  popupList.data().styleClasses.valueOr(@[])
+  popupList.queryPopupData(contentStyleClasses(), popupList).get(@[])
 
 proc popupListScrollRows*(event: ScrollEvent): int =
   rowScrollRows(event)
@@ -312,12 +324,12 @@ proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Re
 
 proc hasStateColumn(popupList: PopupListView): bool =
   for index in 0 ..< popupList.itemCount():
-    if not popupList.itemIsSeparator(index) and popupList.itemState(index) != bsOff:
+    if popupList.itemState(index) != bsOff and not popupList.itemAtIndex(index).separator:
       return true
 
 proc itemMetrics(
     popupList: PopupListView,
-    index: int,
+    item: PopupListItem,
     appearance: Appearance,
     states: set[WidgetState],
     stateColumn: bool,
@@ -336,11 +348,11 @@ proc itemMetrics(
   if stateColumn:
     result.stateWidth = max(textNaturalSize("✓", style.text).width, 12.0'f32)
     result.textInsets.left += result.stateWidth + PopupStateGap
-  let shortcut = popupList.itemKeyEquivalentText(index)
+  let shortcut = item.keyEquivalentText
   if shortcut.len > 0:
     result.shortcutWidth = textNaturalSize(shortcut, style.text).width
     result.textInsets.right += result.shortcutWidth + PopupShortcutGap
-  if popupList.itemHasSubmenu(index):
+  if item.hasSubmenu:
     result.submenuWidth = max(textNaturalSize(">", style.text).width, 10.0'f32)
     result.textInsets.right += result.submenuWidth + PopupSubmenuGap
 
@@ -349,12 +361,13 @@ proc popupListContentSize*(popupList: PopupListView, appearance: Appearance): Si
   ## Include columns for checked states, shortcuts, and submenu indicators.
   let stateColumn = popupList.hasStateColumn()
   for index in 0 ..< popupList.itemCount():
-    if not popupList.itemIsSeparator(index):
-      let metrics = popupList.itemMetrics(index, appearance, {}, stateColumn)
+    let item = popupList.itemAtIndex(index)
+    if not item.separator:
+      let metrics = popupList.itemMetrics(item, appearance, {}, stateColumn)
       result.width = max(
         result.width,
-        textNaturalSize(popupList.itemText(index), metrics.textStyle).width +
-          metrics.textInsets.left + metrics.textInsets.right + 2.0'f32,
+        textNaturalSize(item.text, metrics.textStyle).width + metrics.textInsets.left +
+          metrics.textInsets.right + 2.0'f32,
       )
   result.height =
     max(popupList.rowHeight() * popupList.visibleItemCount().float32 + 2.0'f32, 1.0'f32)
@@ -401,6 +414,7 @@ proc drawPopupList*(
     first = popupList.firstIndex()
     visible = popupList.visibleItemCount()
     total = popupList.itemCount()
+    rowHeight = popupList.rowHeight()
     last = min(first + visible, total) - 1
     borderWidth = max(popupStyle.box.borderWidth, 1.0'f32)
     contentBounds = popupBounds.inset(insets(borderWidth))
@@ -423,9 +437,11 @@ proc drawPopupList*(
     if itemIndex < 0 or itemIndex >= total:
       discard
     else:
-      let itemRect =
-        popupList.popupListItemRect(popupBounds, itemIndex).intersection(contentBounds)
-      if popupList.itemIsSeparator(itemIndex):
+      let
+        item = popupList.itemAtIndex(itemIndex)
+        itemRect = rowItemRect(popupBounds, first, visible, itemIndex, rowHeight)
+          .intersection(contentBounds)
+      if item.separator:
         let line = rect(
           itemRect.origin.x + 8.0'f32,
           itemRect.origin.y + itemRect.size.height / 2.0'f32,
@@ -436,7 +452,7 @@ proc drawPopupList*(
           layer, popupRoot, context.renderRectFor(line), fill(color(0.68, 0.69, 0.71))
         )
       else:
-        let itemEnabled = popupList.isEnabled() and popupList.itemIsEnabled(itemIndex)
+        let itemEnabled = popupList.isEnabled() and not item.disabled
         let
           states = block:
             var rowStates: set[WidgetState] = {}
@@ -449,8 +465,8 @@ proc drawPopupList*(
             if popupList.isFocused():
               rowStates.incl(ssFocused)
             rowStates
-          row = initRowState(itemIndex, popupList.itemText(itemIndex), states = states)
-          metrics = popupList.itemMetrics(itemIndex, appearance, states, stateColumn)
+          row = initRowState(itemIndex, item.text, states = states)
+          metrics = popupList.itemMetrics(item, appearance, states, stateColumn)
           itemCornerRadii = initCornerRadii(
             if itemIndex == first: itemRadius else: 0.0'f32,
             if itemIndex == first: itemRadius else: 0.0'f32,
@@ -466,7 +482,7 @@ proc drawPopupList*(
             cornerRadii = some(itemCornerRadii),
             textInsets = some(metrics.textInsets),
           )
-          keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
+          keyEquivalentText = item.keyEquivalentText
           accessoryStyle = metrics.textStyle
           accessoryY = itemRect.minY + metrics.baseInsets.top
           accessoryHeight = max(
@@ -486,7 +502,8 @@ proc drawPopupList*(
           layer = layer,
           parent = popupRoot,
         )
-        case popupList.itemState(itemIndex)
+        let state = popupList.itemState(itemIndex)
+        case state
         of bsOff:
           discard
         of bsOn, bsMixed:
@@ -499,7 +516,7 @@ proc drawPopupList*(
               metrics.stateWidth,
               accessoryHeight,
             ),
-            if popupList.itemState(itemIndex) == bsOn: "✓" else: "-",
+            if state == bsOn: "✓" else: "-",
             accessoryStyle,
             taCenter,
           )
@@ -512,7 +529,7 @@ proc drawPopupList*(
             accessoryStyle,
             taRight,
           )
-        if popupList.itemHasSubmenu(itemIndex):
+        if item.hasSubmenu:
           context.addText(
             layer,
             popupRoot,
@@ -522,7 +539,7 @@ proc drawPopupList*(
             taRight,
           )
 
-  let knobRect = popupList.popupListScrollerKnobRect(popupBounds)
+  let knobRect = rowScrollerKnobRect(popupBounds, first, visible, total)
   if not knobRect.isEmpty:
     discard context.addRenderRectangle(
       layer,
@@ -536,9 +553,8 @@ proc drawPopupList*(
 
 proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Point) =
   let itemIndex = popupList.popupListItemIndexAtPoint(popupBounds, point)
-  let highlight = popupList.actions().highlight
-  if itemIndex >= 0 and not highlight.isNil:
-    highlight(itemIndex)
+  if itemIndex >= 0:
+    popupList.sendToDelegate(highlightRow(), (popupList: popupList, index: itemIndex))
 
 proc beginPopupListTracking*(
     popupList: PopupListView, popupBounds: Rect, point: Point
@@ -559,46 +575,27 @@ proc finishPopupListTracking*(
       -1
   popupList.xTrackingItem = false
   let itemCanActivate =
-    itemIndex >= 0 and not popupList.itemIsSeparator(itemIndex) and
-    popupList.itemIsEnabled(itemIndex)
+    if itemIndex < 0:
+      false
+    else:
+      let item = popupList.itemAtIndex(itemIndex)
+      not item.separator and not item.disabled
   if itemCanActivate:
-    popupList.activateItem(itemIndex)
+    popupList.sendToDelegate(activateRow(), (popupList: popupList, index: itemIndex))
   if closeWhenDone and (itemIndex < 0 or itemCanActivate):
-    popupList.close()
+    popupList.sendToDelegate(dismissList(), popupList)
 
 proc resetPopupListTracking*(popupList: PopupListView) =
   popupList.xTrackingItem = false
 
-proc activateItem(popupList: PopupListView, index: int) =
-  let activate = popupList.actions().activate
-  if not activate.isNil:
-    activate(index)
-
-proc close(popupList: PopupListView) =
-  let closeAction = popupList.actions().close
-  if not closeAction.isNil:
-    closeAction()
-
 proc scrollBy(popupList: PopupListView, delta: int) =
-  let scroll = popupList.actions().scroll
-  if delta != 0 and not scroll.isNil:
-    scroll(delta)
+  if delta != 0:
+    popupList.sendToDelegate(scrollByRows(), (popupList: popupList, delta: delta))
 
 proc canScrollRows*(popupList: PopupListView, delta: int): bool =
   initRowViewport(popupList.firstIndex()).canScrollBy(
     delta, popupList.itemCount(), popupList.visibleItemCount()
   )
-
-proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent) =
-  let keyDown = popupList.actions().keyDown
-  if not keyDown.isNil:
-    keyDown(event)
-
-proc configure*(
-    popupList: PopupListView, data: PopupListData, actions: PopupListActions
-) =
-  popupList.xData = data
-  popupList.xActions = actions
 
 proc setPopupListRoles*(
     popupList: PopupListView,
@@ -611,15 +608,16 @@ proc setPopupListRoles*(
 
 proc initPopupListViewFields*(
     popupList: PopupListView,
-    data = PopupListData(),
-    actions = PopupListActions(),
+    dataSource: Responder = nil,
+    delegate: Responder = nil,
     frame: Rect = AutoRect,
 ) =
   initViewFields(popupList, frame)
   popupList.xPopupRole = srComboBox
   popupList.xItemRole = srComboBoxItem
   popupList.usesThemedRootBackground = false
-  popupList.configure(data, actions)
+  popupList.dataSource = dataSource
+  popupList.delegate = delegate
   popupList.acceptsFirstResponder = true
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)
@@ -627,7 +625,8 @@ proc initPopupListViewFields*(
   discard popupList.withProtocol(DefaultPopupListAccessibility)
 
 proc newPopupListView*(
-    data = PopupListData(), actions = PopupListActions(), frame: Rect = AutoRect
+    dataSource: Responder = nil, delegate: Responder = nil, frame: Rect = AutoRect
 ): PopupListView =
+  ## Creates a popup that refers to its data source and delegate without owning them.
   result = PopupListView()
-  initPopupListViewFields(result, data, actions, frame)
+  initPopupListViewFields(result, dataSource, delegate, frame)
