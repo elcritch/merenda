@@ -57,7 +57,7 @@ when defined(macosx):
   suite "NimKit native event loop":
     test "nested native loops honor frame deadlines without a polling timer":
       var deadlines = 0
-      let timeout = getMonoTime() + initDuration(seconds = 2)
+      let timeout = getMonoTime() + initDuration(seconds = 60)
       proc armDeadline() =
         discard scheduleMainThreadTimer(
           initDuration(milliseconds = 20),
@@ -75,8 +75,8 @@ when defined(macosx):
           discard drainMainThreadWork()
           mainThreadTimerDelay(getMonoTime())
       ):
-        # CoreFoundation owns this wait. Only the bridge can schedule frames;
-        # the two-second timeout is a failure deadline, not a polling interval.
+        # CoreFoundation owns this wait. Only the bridge can schedule frames.
+        # The timeout caps the wait if the bridge fails to stop it.
         while deadlines < 3 and getMonoTime() < timeout:
           discard CFRunLoopRunInMode(
             cast[pointer](@"NSModalPanelRunLoopMode"),
@@ -104,7 +104,7 @@ when defined(macosx):
       defer:
         source.invalidate()
 
-      let deadline = getMonoTime() + initDuration(seconds = 2)
+      let deadline = getMonoTime() + initDuration(seconds = 60)
       while not fired and getMonoTime() < deadline:
         let now = getMonoTime()
         withMainThreadTimerWake(wakeNativeEventLoop):

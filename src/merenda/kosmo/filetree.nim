@@ -297,7 +297,7 @@ proc includePathAndAncestors(tree: FileTree, path: string, expanded: var seq[str
       if currentPath.len > 0 and currentPath notin expanded:
         expanded.add currentPath
 
-proc ensureSearchIndex(tree: FileTree) =
+proc rebuildSearchIndex(tree: FileTree) =
   if tree.xSearchIndexValid:
     return
   tree.xSearchEntries.setLen(0)
@@ -334,7 +334,7 @@ proc rebuildMatchingPaths(tree: FileTree): seq[string] =
         ):
           tree.includePathAndAncestors(path, result)
     else:
-      tree.ensureSearchIndex()
+      tree.rebuildSearchIndex()
       for entry in tree.xSearchEntries:
         if (
           tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or
