@@ -1,6 +1,7 @@
 import std/[options, unittest]
 
 import sigils/selectors
+from sigils/hom import findFirstReply, get, isNone, isSome
 
 import merenda/nimkit except performKeyEquivalent, undoManager
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
@@ -983,9 +984,20 @@ suite "nimkit responder":
         none(DynamicAgent),
     )
 
-    check child.findValidRequestorForSendType(PasteboardTypeString, "") ==
-      DynamicAgent(parent)
-    check child.findValidRequestorForSendType("missing.type", "") == nil
+    let matched = child.responderChain().findFirstReply(
+        validRequestorForSendType(),
+        ValidRequestorArgs(sendType: PasteboardTypeString),
+        options.isSome[DynamicAgent],
+      )
+    require matched.isSome
+    check matched.get().reply.get() == DynamicAgent(parent)
+    check child
+      .responderChain()
+      .findFirstReply(
+        validRequestorForSendType(),
+        ValidRequestorArgs(sendType: "missing.type"),
+        options.isSome[DynamicAgent],
+      ).isNone
     check child.findUndoManager() == manager
 
   test "window scroll dispatch hit-tests and converts local coordinates":

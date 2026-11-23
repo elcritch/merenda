@@ -1350,6 +1350,16 @@ suite "NimKit TableView":
     check store.hasState("people.document")
     check store.state("people.document").columns[0].width == 144.0'f32
 
+    require root.addMethod(
+      defaultsScopeId(),
+      proc(self: View): string =
+        "",
+    )
+    tableView.autosaveName = "people.document.empty-scope"
+    tableView.saveAutosavedState()
+    check userDefaultsTableViewStateStore().hasState(tableView.autosaveName)
+    check not store.hasState(tableView.autosaveName)
+
   test "table header column dragging previews insertion and drops at edge":
     let
       tableView = newTableView(frame = rect(0, 0, 230, 140))

@@ -196,16 +196,6 @@ proc doCommandBySelector*(
   if responder.performCommandInChain(args).isNil:
     responder.noResponderFor(selector)
 
-proc findValidRequestorForSendType*(
-    responder: Responder, sendType, returnType: string
-): DynamicAgent =
-  let args = ValidRequestorArgs(sendType: sendType, returnType: returnType)
-  let matched = responder.responderChain().findFirstReply(
-      validRequestorForSendType(), args, options.isSome[DynamicAgent]
-    )
-  if matched.isSome:
-    result = matched.get().reply.get()
-
 proc findUndoManager*(responder: Responder): UndoManager =
   let matched = responder.responderChain().findFirstReply(
       undoManager(), (), options.isSome[UndoManager]

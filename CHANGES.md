@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove `findValidRequestorForSendType`. Search `responderChain()` with
+  `findFirstReply` and the `validRequestorForSendType()` selector.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

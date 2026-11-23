@@ -19,7 +19,7 @@
 5. [x] **Tooltip owner lookup.** Evaluated `follow` and kept the direct loop, which
    keeps per-view coordinates, the routed `toolTipAtPoint` call, and the early return
    together. [Windows](src/merenda/nimkit/app/windows.nim)
-6. [ ] **Table state provider lookup.** Search the live responder chain for the first
+6. [x] **Table state provider lookup.** Search the live responder chain for the first
    responder that handles `defaultsStore` or `defaultsScopeId`. Preserve the probe
    order, short circuit, and acceptance of empty replies.
    [Table state](src/merenda/nimkit/tables/tablestate.nim)
@@ -34,7 +34,7 @@
 9. [ ] **Kosmo hint mode.** Use a first-handled-reply operation if Sigils adds one.
    A handled false ends the live walk because the inner surface owns the request.
    [Hint mode](src/merenda/kosmo/hintsmode.nim)
-10. [x] **Undo manager and pasteboard requestor lookup.** Share `findFirstReply` over
-    the live responder chain. Skip unhandled sends and handled `none` replies.
-    Return the object from the original send to the winning provider.
+10. [x] **Undo manager and pasteboard requestor lookup.** Use `findFirstReply` over
+    the live responder chain for undo managers. Exercise the requestor selector
+    directly in tests. Both searches skip unhandled sends and handled `none` replies.
     [Responders](src/merenda/nimkit/responder/responders.nim)
