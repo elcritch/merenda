@@ -4,6 +4,7 @@ import std/options
 from figdraw import FigIdx
 
 import sigils/core
+from sigils/hom import findFirst, get
 import sigils/selectors
 
 import ../accessibility/accessibilityprotocols
@@ -907,11 +908,9 @@ proc validate*(item: MenuItem, target: DynamicAgent): bool =
   target.respondsTo(item.xAction.name)
 
 proc findActionTarget*(start: Responder, selector: ActionSelector): DynamicAgent =
-  var current = start
-  while not current.isNil:
-    if current.respondsTo(selector.name):
-      return DynamicAgent(current)
-    current = current.nextResponder()
+  let target = start.responderChain().findFirst do(candidate: Responder) -> bool:
+    candidate.respondsTo(selector.name)
+  target.get(nil).asDynamicAgent()
 
 proc validate*(item: MenuItem, start: Responder): bool =
   let explicitTarget = item.target()

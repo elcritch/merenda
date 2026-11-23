@@ -3305,6 +3305,21 @@ proc toggleMarkdownControlsFocus(
   if not controls.modeButton.isNil:
     return window.makeFirstResponder(controls.modeButton)
 
+protocol MarkdownToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      view: KosmoMarkdownView, focused: nimkit.Responder
+  ): Option[bool] =
+    some(view.toggleToolbarFocus(focused))
+
+protocol EditorPaneToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      pane: KosmoEditorPane, focused: nimkit.Responder
+  ): Option[bool] =
+    # The controls are siblings of the preview and source editor. The pane can
+    # toggle focus from either mode and from the controls themselves.
+    if not pane.markdownControls.isNil and not pane.markdownControls.hidden():
+      result = some(pane.toggleMarkdownControlsFocus(focused))
+
 proc toggleReaderColorMode(controls: KosmoMarkdownControls, target: KosmoThemeTarget) =
   if controls.isNil:
     return
@@ -4465,6 +4480,7 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result.scrollView().controlScrollMultiplier = KosmoControlScrollMultiplier
   discard result.withProtocol(MarkdownReaderPresentation)
   discard result.withProtocol(KosmoMarkdownHintSurface)
+  discard result.withProtocol(MarkdownToolbarFocus)
   result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.previewGrammarRevision = editorView.editor.viewerGrammarRevision()
   result.editorView = editorView.unsafeWeakRef()
@@ -4850,6 +4866,7 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   discard result.withProtocol(KosmoEditorPaneEvents)
   discard result.withProtocol(KosmoEditorPaneCommandDispatch)
   discard result.withProtocol(KosmoMarkdownLinkDelegate)
+  discard result.withProtocol(EditorPaneToolbarFocus)
   result.markdownView.textView().delegate = nimkit.DynamicAgent(result)
 
 proc groupForView(

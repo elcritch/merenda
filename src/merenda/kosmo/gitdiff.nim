@@ -1,6 +1,7 @@
 ## Standard Git hunks in retained native sections with full-context syntax highlighting.
 
 import std/[atomics, isolation, monotimes, os, sets, strutils, tables, times, unicode]
+from std/options import Option, some
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../nimkit as nimkit
@@ -2369,6 +2370,12 @@ proc toggleToolbarFocus*(panel: KosmoGitDiffPanel, focused: nimkit.Responder): b
         return window.makeFirstResponder(control)
   false
 
+protocol GitDiffToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      panel: KosmoGitDiffPanel, focused: nimkit.Responder
+  ): Option[bool] =
+    some(panel.toggleToolbarFocus(focused))
+
 proc `keyEquivalentHandler=`*(
     panel: KosmoGitDiffPanel, handler: GitDiffKeyEquivalentHandler
 ) =
@@ -3479,6 +3486,7 @@ proc newKosmoGitDiffPanel(
   result.initViewFields()
   discard result.withProtocol(GitDiffReaderPresentation)
   discard result.withProtocol(KosmoGitDiffHintSurface)
+  discard result.withProtocol(GitDiffToolbarFocus)
   let document = GitDiffDocumentView(panel: result.unsafeWeakRef())
   document.initViewFields()
   discard document.withProtocol(GitDiffDocumentDrawing)

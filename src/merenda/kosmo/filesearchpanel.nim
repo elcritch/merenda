@@ -691,6 +691,12 @@ proc toggleToolbarFocus*(panel: KosmoFileSearchPanel, focused: nimkit.Responder)
       return window.makeFirstResponder(panel.resultsView)
   focusQuery(panel)
 
+protocol FileSearchToolbarFocus of nimkit.ToolbarFocusProtocol:
+  method requestToolbarFocus(
+      panel: KosmoFileSearchPanel, focused: nimkit.Responder
+  ): Option[bool] =
+    some(panel.toggleToolbarFocus(focused))
+
 func replacementVisible*(panel: KosmoFileSearchPanel): bool =
   panel.xReplacementVisible
 
@@ -769,6 +775,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   result.addSubview(cancelButton)
   result.addSubview(resultsView)
   discard result.withProtocol(KosmoFileSearchPanelLayout)
+  discard result.withProtocol(FileSearchToolbarFocus)
   let panel = result.unsafeWeakRef()
   result.expressionButton.buttonType = nimkit.btToggle
   result.expressionButton.accessibilityLabel = "Use Reni regular expressions"

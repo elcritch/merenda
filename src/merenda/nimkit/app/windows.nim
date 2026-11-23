@@ -2909,21 +2909,17 @@ proc applyMouseHitPolicy(
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
 ): EventDispatchResult =
-  var responder = Responder(target)
-  while not responder.isNil:
+  let handlesScroll = proc(responder: Responder): bool =
     var localEvent = event
     if responder of View:
       localEvent =
         localScrollEvent(View(responder), window.xContentView, contentPoint, event)
-
     let wantsForwarded =
-      responder.trySendLocal(wantsForwardedScrollEvents(), localEvent)
-    if (wantsForwarded.isNone or not wantsForwarded.get()) and
-        responder.sendLocalIfHandled(scrollWheel(), localEvent):
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+      responder.trySendLocal(wantsForwardedScrollEvents(), localEvent).get(false)
+    not wantsForwarded and responder.sendLocalIfHandled(scrollWheel(), localEvent)
+  result.responder =
+    Responder(target).responderChain().findFirst(handlesScroll).get(nil)
+  result.handled = not result.responder.isNil
 
 proc dispatchKeyEventInChain(
     window: Window,

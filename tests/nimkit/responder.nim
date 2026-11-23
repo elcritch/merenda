@@ -970,6 +970,36 @@ suite "nimkit responder":
     check start.performKeyEquivalentInChain(KeyEvent(key: keyF12))
     check trackingEvents == @["declined", "replacement.equivalent"]
 
+  test "toolbar focus keeps a handled false and skips a responder that defers":
+    let
+      focused = newResponder()
+      inner = newResponder()
+      outer = newResponder()
+    var
+      innerReply = some(false)
+      outerCalls = 0
+    focused.setNextResponder(inner)
+    inner.setNextResponder(outer)
+    require inner.addMethod(
+      requestToolbarFocus(),
+      proc(self: Responder, origin: Responder): Option[bool] =
+        check origin == focused
+        innerReply,
+    )
+    require outer.addMethod(
+      requestToolbarFocus(),
+      proc(self: Responder, origin: Responder): Option[bool] =
+        check origin == focused
+        inc outerCalls
+        some(true),
+    )
+
+    check not focused.performToolbarFocusInChain()
+    check outerCalls == 0
+    innerReply = none(bool)
+    check focused.performToolbarFocusInChain()
+    check outerCalls == 1
+
   test "a declined keyboard scroll follows the updated next responder":
     let
       start = newResponder()
@@ -1172,7 +1202,7 @@ suite "nimkit responder":
     check not window.scrollWheelAt(initPoint(125, 20), deltaY = 1.0)
     check trackingEvents.len == 0
 
-  test "window scroll dispatch bubbles unhandled child scrolls":
+  test "window scroll dispatch bubbles unhandled sends and stops on handled false":
     let
       window = newWindow("Scroll bubbling", frame = rect(0, 0, 240, 160))
       root = newView(frame = rect(0, 0, 240, 160))
@@ -1198,3 +1228,15 @@ suite "nimkit responder":
     check trackingScrollDeltas == @[initPoint(-0.5, 3.0)]
     check trackingModifiers == @[{kmControl}]
     check trackingTimestamps == @[43.0]
+
+    require child.addMethod(
+      scrollWheel(),
+      proc(self: View, event: ScrollEvent): bool =
+        trackingEvents.add("child.scroll")
+        trackingPoints.add(event.location)
+        false,
+    )
+    resetTracking()
+    check window.scrollWheelAt(initPoint(35, 30), deltaY = 3.0)
+    check trackingEvents == @["child.scroll"]
+    check trackingPoints == @[initPoint(5, 5)]

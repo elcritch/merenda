@@ -79,15 +79,15 @@
     Skip disabled rows and use the row summary only when the source leaves
     `normalizedSearchTextForRow` unhandled.
     [Table selection](src/merenda/nimkit/tables/tableselection.nim)
-21. [ ] **Kosmo toolbar focus.** Replace the panel-type ladder in
-    `focusToolToolbar` with an optional selector and `findFirstReply`. Accept a
-    handled false as final and continue past editor panes with hidden controls.
-    [Dock controller](src/merenda/kosmo/application_dock.nim)
-22. [ ] **Menu action targets.** Use `findFirst` over the live responder chain
+21. [x] **Toolbar focus.** Use NimKit's `ToolbarFocusProtocol` and
+    `findFirstReply` for Kosmo's `focusToolToolbar`. Accept a handled false as
+    final and continue past editor panes with hidden controls.
+    [Responders](src/merenda/nimkit/responder/responders.nim) · [Dock controller](src/merenda/kosmo/application_dock.nim)
+22. [x] **Menu action targets.** Use `findFirst` over the live responder chain
     with the existing `respondsTo` check. Validate and dispatch on the first
     matching target.
     [Menus](src/merenda/nimkit/controls/menus.nim)
-23. [ ] **Scroll-wheel dispatch.** Use `findFirst` to return the consuming
+23. [x] **Scroll-wheel dispatch.** Use `findFirst` to return the consuming
     responder. Localize coordinates at each hop, honor
     `wantsForwardedScrollEvents`, and accept any handled `scrollWheel` reply.
     [Windows](src/merenda/nimkit/app/windows.nim)

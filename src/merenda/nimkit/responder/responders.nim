@@ -19,6 +19,11 @@ type
   ResponderLink = ref object of DynamicAgent
     targetRef: BackRef[Responder]
 
+protocol ToolbarFocusProtocol:
+  method requestToolbarFocus*(focused: Responder): Option[bool] {.optional.}
+    ## Toggle focus between a tool's content and toolbar. Return `some` with
+    ## the focus result to claim the request, or `none` to defer.
+
 proc `target=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
   if target.isNil:
     backRef.clear()
@@ -160,6 +165,13 @@ proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Respo
 
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
   responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
+
+proc performToolbarFocusInChain*(focused: Responder): bool =
+  ## Return the first claimed toolbar focus result, or false if every responder defers.
+  let match = focused.responderChain().findFirstReply(
+      requestToolbarFocus(), focused, options.isSome[bool]
+    )
+  match.isSome and match.get().reply.get()
 
 proc sendToFirstHandlerInChain*[A](
     responder: Responder, selector: Selector[A, EmptyArgs], args: A
