@@ -43,9 +43,10 @@
     and previous key-view commands. Start at the popup's next responder and
     preserve `tryToPerform` overrides.
     [Popup lists](src/merenda/nimkit/controls/popuplists.nim)
-12. [ ] **Kosmo content editing.** Use a bounded `findFirst` for native editing
-    commands within the active pane. A local action implementation claims the
-    edit even when `tryToPerform` returns false.
+12. [x] **Kosmo content editing.** Share the pane-membership check with focus
+    detection, then use a bounded live `findFirst` for native editing commands.
+    A local action implementation claims the edit even when `tryToPerform`
+    returns false.
     [Editor](src/merenda/kosmo/application_editor.nim)
 13. [ ] **Kosmo file-filter visibility.** Share a `hidden=` send for the filter
     field, close button, and expression button across initialization, show, and

@@ -12,6 +12,7 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 import std/[math, monotimes, options, os, strutils, times, unicode]
 
 from figdraw import len, `[]`
+from sigils/hom import findFirst, isSome
 
 import ./readerpresentation
 import ../nimkit as nimkit

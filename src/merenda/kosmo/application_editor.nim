@@ -1431,20 +1431,18 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].applyKosmoEditorStyle(appearance)
       handler.editorView[].refresh()
 
-proc containsPaneResponder(group: KosmoEditorGroup, candidate: nimkit.Responder): bool =
-  var responder = candidate
-  while not responder.isNil:
-    if responder == nimkit.Responder(group.pane):
+proc containsPaneResponder(pane: KosmoEditorPane, candidate: nimkit.Responder): bool =
+  for responder in candidate.responderChain():
+    if responder == nimkit.Responder(pane):
       return true
-    responder = responder.nextResponder()
 
 proc hasPaneFocus(group: KosmoEditorGroup): bool =
   if group.isNil or group.window.isNil:
     return
   let window = group.window
-  if group.containsPaneResponder(window.firstResponder()):
+  if group.pane.containsPaneResponder(window.firstResponder()):
     return true
-  group.containsPaneResponder(window.fieldEditorClient())
+  group.pane.containsPaneResponder(window.fieldEditorClient())
 
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
@@ -4156,20 +4154,21 @@ proc dispatchContentEditingCommand(
   let command = args.selector.nativeEditingCommand()
   if command.isNone or pane.contentView == nimkit.View(pane.editorView):
     return
+  let selector = command.get()
   # Retry Kosmo's namespaced shortcut as a native command within the visible
   # content. This also reaches text views created lazily by document viewers.
   let owner = pane.window()
   if owner of nimkit.Window:
     let focused = nimkit.Window(owner).firstResponder()
-    var ancestor = focused
-    while not ancestor.isNil and ancestor != nimkit.Responder(pane):
-      ancestor = ancestor.nextResponder()
-    var target = if ancestor.isNil: nil else: focused
-    while not target.isNil and target != nimkit.Responder(pane):
-      if target.tryToPerform(command.get(), args.sender) or
-          not target.localMethod(command.get().name).isNil:
+    if pane.containsPaneResponder(focused):
+      let claimsCommand = proc(target: nimkit.Responder): bool =
+        # A local action claims the command even if tryToPerform returns false.
+        target.tryToPerform(selector, args.sender) or
+          not target.localMethod(selector).isNil
+      let handledBy =
+        focused.responderChain(nimkit.Responder(pane)).findFirst(claimsCommand)
+      if handledBy.isSome:
         return true
-      target = target.nextResponder()
   # Container focus uses the document's preferred responder, just as tab
   # activation does. Markdown buffer previews are hosted directly by the pane.
   var preferred: nimkit.Responder
@@ -4181,7 +4180,7 @@ proc dispatchContentEditingCommand(
     if not document.isNil:
       preferred = document.preferredFirstResponder
   if not preferred.isNil:
-    discard preferred.tryToPerform(command.get(), args.sender)
+    discard preferred.tryToPerform(selector, args.sender)
   # Unsupported edits belong to the visible document too. In particular,
   # pasting into a reader must never modify the hidden Moe buffer.
   true
