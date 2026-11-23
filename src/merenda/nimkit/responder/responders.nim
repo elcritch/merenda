@@ -143,9 +143,10 @@ proc clearNextResponder*(responder: Responder) =
     responder.xNextResponderLink.targetRef.clear()
   dynamicSelectors.clearNextResponder(responder)
 
-iterator responderChain(responder: Responder): Responder =
+iterator responderChain*(responder: Responder, stopBefore: Responder = nil): Responder =
+  ## Walk live responder links up to the exclusive boundary.
   var current = responder
-  while not current.isNil:
+  while not current.isNil and current != stopBefore:
     yield current
     current = current.nextResponder()
 

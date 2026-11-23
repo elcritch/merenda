@@ -8,6 +8,7 @@ from figdraw import Renders, ZLevel
 import figdraw/windowing as siwinshim
 type SiwinWindow = siwinshim.Window
 import sigils/core
+from sigils/hom import findFirst, get
 
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
@@ -2844,18 +2845,16 @@ proc dispatchEventInChain[A](
     event: A,
     selector: Selector[A, bool],
     localize: proc(target, contentView: View, contentPoint: Point, event: A): A,
+    stopBefore: Responder = nil,
 ): EventDispatchResult =
-  var responder = target
-  while not responder.isNil:
+  let handlesEvent = proc(responder: Responder): bool =
     var localEvent = event
     if responder of View:
       localEvent = localize(View(responder), window.xContentView, contentPoint, event)
     var handled = false
-    if responder.performLocal(selector, localEvent, handled) and handled:
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+    responder.performLocal(selector, localEvent, handled) and handled
+  result.responder = target.responderChain(stopBefore).findFirst(handlesEvent).get(nil)
+  result.handled = not result.responder.isNil
 
 proc dispatchMouseEventInChain(
     window: Window,
@@ -2865,21 +2864,9 @@ proc dispatchMouseEventInChain(
     selector: MouseEventSelector,
     stopBefore: Responder = nil,
 ): EventDispatchResult =
-  ## Walks the responder chain from ``target`` outward.
-  ## The first responder method returning ``true`` ends dispatch.
-  ## ``false`` means "not handled", so we continue to ``nextResponder``.
-  var responder = Responder(target)
-  while not responder.isNil and responder != stopBefore:
-    var localEvent = event
-    if responder of View:
-      localEvent =
-        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
-    var handled = false
-    if responder.performLocal(selector, localEvent, handled) and handled:
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+  window.dispatchEventInChain(
+    Responder(target), contentPoint, event, selector, localMouseEvent, stopBefore
+  )
 
 proc mouseHitPolicyInChain(
     window: Window, target: View, contentPoint: Point, event: MouseEvent

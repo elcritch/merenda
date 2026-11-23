@@ -11,7 +11,7 @@
 3. [x] **Text insertion and unmarking.** Search the live responder chain for the first
    local handler of `insertText` or `unmarkText`. Both selectors return an empty tuple,
    so a successful send is the match. [Windows](src/merenda/nimkit/app/windows.nim)
-4. [ ] **Mouse and key event dispatch.** Share the first-true search that identifies the
+4. [x] **Mouse and key event dispatch.** Share the first-true search that identifies the
    consuming responder. Localize the event separately for each receiver and honor the
    mouse dispatch `stopBefore` boundary. This requires a receiver predicate or a
    selector overload that can compute arguments per receiver.

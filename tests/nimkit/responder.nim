@@ -787,7 +787,7 @@ suite "nimkit responder":
     check trackingEvents == @["left.down", "left.up", "right.down", "right.up"]
     check trackingClickCounts == @[1, 1, 1, 1]
 
-  test "window mouse dispatch bubbles unhandled child events in parent coordinates":
+  test "window localizes bubbled mouse events and honors the tracking boundary":
     let
       window = newWindow("Mouse bubbling", frame = rect(0, 0, 240, 160))
       root = newView(frame = rect(0, 0, 240, 160))
@@ -814,6 +814,18 @@ suite "nimkit responder":
     check trackingPoints == @[initPoint(25, 20), initPoint(25, 20)]
     check trackingModifiers == @[{kmShift, kmCommand}, {kmShift, kmCommand}]
     check trackingTimestamps == @[20.0, 20.1]
+
+    require parent.addMethod(
+      mouseHitPolicy(),
+      proc(self: TrackingSpyView, args: MouseHitPolicyArgs): CellHitPolicy =
+        chpTrackCell,
+    )
+    resetTracking()
+    let point = initPoint(35, 30)
+    check not window.mouseDownAt(point)
+    check not window.mouseDraggedAt(point)
+    check not window.mouseUpAt(point)
+    check trackingEvents.len == 0
 
   test "window dispatches right and other mouse events through responder chain":
     let
