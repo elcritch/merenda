@@ -131,7 +131,15 @@ suite "NimKit reusable search":
       check bar.frame() == embeddedFrame
       check bar.query() == "ensureArrangement"
     for expanded in [true, false]:
+      if not expanded:
+        require window.makeFirstResponder(bar.replacementField())
       bar.replacementVisible = expanded
+      let row = bar.replacementField().superview()
+      check row.hidden == not expanded
+      for control in row.subviews():
+        check control.hidden == not expanded
+      if not expanded:
+        check window.fieldEditorClient() == bar.queryField()
       host.layoutSubtreeIfNeeded()
       check bar.frame() == embeddedFrame
       check bar.query() == "ensureArrangement"

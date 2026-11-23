@@ -52,16 +52,16 @@
     setters across initialization, show, and dismiss. Keep direct property
     assignments to preserve required dispatch and layout notification order.
     [File tree](src/merenda/kosmo/filetree.nim)
-14. [ ] **Search-bar controls.** Share the Previous/Next `enabled=` send across
-    initialization and match updates. Send `hidden=` to the replacement controls
-    after transferring focus back to the query field.
+14. [x] **Search-bar controls.** Share the Previous/Next `enabled=` assignments
+    across initialization and match updates. Set `hidden` directly on replacement
+    controls after transferring focus back to the query field when needed.
     [Search bars](src/merenda/nimkit/controls/searchbars.nim)
-15. [ ] **Token-field enabled state.** Send `enabled=` to the input and chips
-    after updating the backing cell. Check that snapshotting the chip list
-    preserves behavior if a callback changes it.
+15. [x] **Token-field enabled state.** Update the backing cell, then use direct
+    setters for the input and live chip list. If a setter rebuilds the list,
+    new chips inherit the cell's enabled state and traversal skips removed chips.
     [Token fields](src/merenda/nimkit/controls/tokenfields.nim)
-16. [ ] **Compact-tab buttons.** Evaluate group sends for `hidden=` when the bar
-    collapses and `needsDisplay=` when focus changes.
+16. [x] **Compact-tab buttons.** Send `hidden=` to the buttons when the bar
+    collapses or expands and `needsDisplay=` when focus changes.
     [Compact tabs](src/merenda/nimkit/containers/compacttabviews.nim)
 17. [ ] **Mouse hit policy.** Return both the first non-default `mouseHitPolicy`
     reply and its responder with `findFirstReply`. Localize the event for each

@@ -1,6 +1,7 @@
 ## Compact, icon-only tabs for switching between utility views.
 
 import sigils/core
+from sigils/hom import sendEachTo
 
 import ../accessibility/accessibility
 import ../controls/buttons
@@ -81,8 +82,7 @@ proc `tabBarHeight=`*(tabs: CompactTabView, height: float32) =
   if tabs.xTabBarHeight == next:
     return
   tabs.xTabBarHeight = next
-  for button in tabs.xButtons:
-    button.hidden = next == 0.0'f32
+  tabs.xButtons.sendEachTo(`hidden=`(next == 0.0'f32))
   tabs.setNeedsLayout()
 
 proc tabWidth*(tabs: CompactTabView): float32 =
@@ -98,8 +98,7 @@ proc `tabWidth=`*(tabs: CompactTabView, width: float32) =
 proc `focused=`*(tabs: CompactTabView, focused: bool) =
   ## Focus belongs to the utility pane, but its selected tab renders that state.
   View(tabs).focused = focused
-  for button in tabs.xButtons:
-    button.needsDisplay = true
+  tabs.xButtons.sendEachTo(`needsDisplay=`(true))
 
 proc compactTabButtonStates(button: CompactTabButton): set[WidgetState] =
   result = button.widgetStateSet()

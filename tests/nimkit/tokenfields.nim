@@ -1,6 +1,7 @@
 import std/unittest
 
 import figdraw
+import sigils/core
 
 import merenda/nimkit
 
@@ -107,6 +108,37 @@ suite "nimkit token fields":
 
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
     check field.selectedCount == 0
+
+  test "disabling a token field handles chips rebuilt during an enabled setter":
+    let field = newTokenField(
+      [initComboBoxOption("one", "One"), initComboBoxOption("two", "Two")]
+    )
+    require field.selectOptionWithIdentifier("one")
+    require field.selectOptionWithIdentifier("two")
+    let
+      first = field.chipAtIndex(0)
+      detached = field.chipAtIndex(1)
+      rebuild: AroundMethod = proc(
+          self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+      ) =
+        check not field.enabled
+        check not field.input().enabled
+        next(self, invocation)
+        check field.removeSelectedOptionWithIdentifier("one")
+      swizzle = first.pushMethod(`enabled=`(), rebuild)
+    defer:
+      discard swizzle.popMethod()
+
+    field.enabled = false
+    check field.selectedOptionIdentifiers == @["two"]
+    let remaining = field.chipAtIndex(0)
+    require remaining != detached
+    check detached.enabled
+    check not remaining.enabled
+
+    field.enabled = true
+    check field.input().enabled
+    check remaining.enabled
 
   test "clicking an inline popup row selects a token":
     let
