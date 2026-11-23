@@ -157,6 +157,12 @@ iterator responderChain*(responder: Responder, stopBefore: Responder = nil): Res
     yield current
     current = current.nextResponder()
 
+proc responderChainContains*(responder, member: Responder): bool =
+  ## Check identity along the live chain, including the starting responder.
+  let match = responder.responderChain().findFirst do(candidate: Responder) -> bool:
+    candidate == member
+  match.isSome
+
 proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder =
   ## Dispatch the command and return the first responder that consumes it.
   let handlesCommand = proc(candidate: Responder): bool =

@@ -1431,18 +1431,12 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].applyKosmoEditorStyle(appearance)
       handler.editorView[].refresh()
 
-proc containsPaneResponder(pane: KosmoEditorPane, candidate: nimkit.Responder): bool =
-  for responder in candidate.responderChain():
-    if responder == nimkit.Responder(pane):
-      return true
-
 proc hasPaneFocus(group: KosmoEditorGroup): bool =
-  if group.isNil or group.window.isNil:
+  if group.isNil or group.window.isNil or group.pane.isNil:
     return
   let window = group.window
-  if group.pane.containsPaneResponder(window.firstResponder()):
-    return true
-  group.pane.containsPaneResponder(window.fieldEditorClient())
+  window.firstResponder().responderChainContains(group.pane) or
+    window.fieldEditorClient().responderChainContains(group.pane)
 
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
@@ -3516,20 +3510,12 @@ proc applyKosmoSidebarStyle(pane: KosmoSidebarPane, base: nimkit.Appearance) =
   pane.tabs.appearance = appearance
   pane.searchPanel.cancelButton.appearance = appearance
 
-proc containsResponder(pane: KosmoSidebarPane, candidate: nimkit.Responder): bool =
-  var responder = candidate
-  while not responder.isNil:
-    if responder == nimkit.Responder(pane):
-      return true
-    responder = responder.nextResponder()
-
 proc hasSidebarFocus(pane: KosmoSidebarPane): bool =
   if pane.isNil or pane.observedWindow.isNil:
     return
   let window = pane.observedWindow[]
-  if pane.containsResponder(window.firstResponder()):
-    return true
-  pane.containsResponder(window.fieldEditorClient())
+  window.firstResponder().responderChainContains(pane) or
+    window.fieldEditorClient().responderChainContains(pane)
 
 proc handleSidebarPaneKey(pane: KosmoSidebarPane, event: nimkit.KeyEvent): bool =
   if pane.dockController.isNil or not pane.hasSidebarFocus():
@@ -4134,14 +4120,9 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
   if pane.isNil or contentView.isNil or pane.contentView == contentView:
     return
   let owner = pane.window()
-  var transferFocus = false
-  if owner of nimkit.Window and not pane.contentView.isNil:
-    var responder = nimkit.Window(owner).firstResponder()
-    while not responder.isNil:
-      if responder == nimkit.Responder(pane.contentView):
-        transferFocus = true
-        break
-      responder = responder.nextResponder()
+  let transferFocus =
+    owner of nimkit.Window and not pane.contentView.isNil and
+    nimkit.Window(owner).firstResponder().responderChainContains(pane.contentView)
   if pane.contentView.isNil:
     pane.addSubview(contentView, positioned = nimkit.svpBelow)
   elif not pane.replaceSubview(pane.contentView, contentView):
@@ -4175,7 +4156,7 @@ proc dispatchContentEditingCommand(
   let owner = pane.window()
   if owner of nimkit.Window:
     let focused = nimkit.Window(owner).firstResponder()
-    if pane.containsPaneResponder(focused):
+    if focused.responderChainContains(pane):
       let claimsCommand = proc(target: nimkit.Responder): bool =
         # A local action claims the command even if tryToPerform returns false.
         target.tryToPerform(selector, args.sender) or

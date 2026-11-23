@@ -3059,16 +3059,6 @@ proc updateHoverView(
     let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
     result = target.handleMouse(mouseEntered(), localEvent) or result
 
-proc responderChainContains(responder, owner: Responder): bool =
-  if responder.isNil:
-    return false
-  var current = responder
-  while not current.isNil:
-    if current == owner:
-      return true
-    current = current.nextResponder()
-  false
-
 proc shouldDismissTransientForMouse(window: Window, target: View): bool =
   if not window.xTransientSession.active:
     return false
@@ -3077,7 +3067,7 @@ proc shouldDismissTransientForMouse(window: Window, target: View): bool =
     return true
   if target.isNil:
     return true
-  not responderChainContains(Responder(target), session.ownerResponder)
+  not target.responderChainContains(session.ownerResponder)
 
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
   if pressed and event.button == mbSecondary and not window.xIsPopup:

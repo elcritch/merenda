@@ -103,17 +103,18 @@
     through the tree overload of `findFirst`. Preserve root-first order and
     the existing field comparisons.
     [Views](src/merenda/nimkit/view/views.nim)
-27. [ ] **Responder membership.** Share a live identity search across
+27. [x] **Responder membership.** Share a live identity search across
     transient-window dismissal, Kosmo sidebar focus, and focus transfer when
     editor content changes.
-    [Windows](src/merenda/nimkit/app/windows.nim) · [Kosmo editor](src/merenda/kosmo/application_editor.nim)
-28. [ ] **Kosmo dock drop targets.** Use `findFirstReply` to return the first
-    eligible host and its valid drop target. Resolve coordinates per host and
-    apply the tab-strip center override to the winning target.
+    [Responders](src/merenda/nimkit/responder/responders.nim) · [Kosmo editor](src/merenda/kosmo/application_editor.nim)
+28. [x] **Kosmo dock drop targets.** Keep the direct host loop. It keeps
+    per-host coordinate conversion, the tab-strip center override, and the
+    early return for the first valid target together.
     [Dock controller](src/merenda/kosmo/application_dock.nim)
-29. [ ] **Table and collection identifier lookup.** Keep the direct data-source
-    lookup first, then use a lazy `findFirst` scan on an absent or out-of-bounds
-    reply. Preserve table aliases and the collection's index-string fallback.
+29. [x] **Table and collection identifier lookup.** Keep the direct data-source
+    lookup first. On an absent or out-of-bounds reply, keep the direct loop for
+    tables and use lazy `findFirst` for collections. Preserve table aliases and
+    the collection's index-string fallback.
     [Table rows](src/merenda/nimkit/tables/tablecore.nim) · [Collection items](src/merenda/nimkit/containers/collectionviews.nim)
 30. [ ] **Color-picker palette redraw.** Use `sendEachTo` for `needsDisplay=`
     across the palette buttons, then synchronize the wheel and value controls
