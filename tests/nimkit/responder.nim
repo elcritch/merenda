@@ -4,6 +4,7 @@ import sigils/selectors
 
 import merenda/nimkit except performKeyEquivalent, undoManager
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
+from merenda/nimkit/view/viewprotos import nil
 
 type TrackingSpyView = ref object of View
   xName: string
@@ -394,12 +395,13 @@ suite "nimkit responder":
     check not checkbox.isHighlighted
     window.stopAnimationClock()
 
-  test "window key bindings dispatch commands through responder chain":
+  test "window key bindings follow the live command responder chain":
     let
       window = newWindow("Key commands", frame = rect(0, 0, 240, 160))
       root = newView(frame = rect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
+      original = newTrackingSpyView("original", AutoRect)
 
     child.acceptsFirstResponder = true
     parent.addSubview(child)
@@ -409,12 +411,25 @@ suite "nimkit responder":
 
     resetTracking()
 
-    check window.makeFirstResponder(child)
+    require window.makeFirstResponder(child)
+    child.setNextResponder(original)
+    require child.addMethod(
+      dispatchCommand(),
+      proc(self: View, args: TryToPerformArgs): bool =
+        trackingEvents.add("child.declined")
+        self.setNextResponder(self.superview())
+        false,
+    )
+    require child.addMethod(
+      trackingCommand(),
+      proc(self: View, args: ActionArgs) =
+        trackingEvents.add("child.command"),
+    )
     check window.dispatchKeyDown(
       KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmCommand})
     )
 
-    check trackingEvents == @["parent.command"]
+    check trackingEvents == @["child.declined", "parent.command"]
     check trackingCommandSenders == @[DynamicAgent(child)]
 
   test "window key sequences consume prefixes and dispatch completed commands":
@@ -624,6 +639,18 @@ suite "nimkit responder":
     check window.makeFirstResponder(first)
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check window.firstResponder == last
+
+    check first.previousValidKeyView() == last
+    first.nextKeyView = skipped
+    skipped.nextKeyView = last
+    skipped.replaceMethod(
+      viewprotos.canBecomeKeyView(),
+      proc(self: View): bool =
+        self.nextKeyView = first
+        false,
+    )
+    check first.nextValidKeyView() == first
+    check first.previousValidKeyView() == first
 
   test "doCommandBySelector raises for unhandled commands":
     let responder = newResponder()

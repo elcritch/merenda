@@ -1,4 +1,5 @@
 import std/[algorithm, macros]
+from sigils/hom import findFirst, get
 
 import ../app/animations
 import ../foundation/selectors
@@ -10,6 +11,7 @@ import ./viewbase
 import sigils/core
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect)
+proc validKeyView(view: View, forward: bool): View
 
 proc updateUncachedIntrinsicCount(view: View, count: uint32, added: bool) =
   if count == 0:
@@ -328,30 +330,10 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     self.viewCanBecomeKeyView()
 
   method nextValidKeyView*(self: View): View =
-    var candidate = self.nextKeyView()
-    var hopCount = 0
-    while not candidate.isNil and hopCount < 4096:
-      if candidate == self:
-        if candidate.canBecomeKeyView():
-          return candidate
-        return nil
-      if candidate.canBecomeKeyView():
-        return candidate
-      candidate = candidate.nextKeyView()
-      inc hopCount
+    self.validKeyView(forward = true)
 
   method previousValidKeyView*(self: View): View =
-    var candidate = self.previousKeyView()
-    var hopCount = 0
-    while not candidate.isNil and hopCount < 4096:
-      if candidate == self:
-        if candidate.canBecomeKeyView():
-          return candidate
-        return nil
-      if candidate.canBecomeKeyView():
-        return candidate
-      candidate = candidate.previousKeyView()
-      inc hopCount
+    self.validKeyView(forward = false)
 
   method isHidden*(self: View): bool =
     ssHidden in self.xWidgetStates
@@ -480,6 +462,27 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
         return bestHit
 
     if inside: self else: nil
+
+iterator keyViewChain(view: View, forward: bool): View =
+  template step(candidate: View): View =
+    if forward:
+      candidate.nextKeyView()
+    else:
+      candidate.previousKeyView()
+
+  var candidate = step(view)
+  for _ in 0 ..< 4096:
+    if candidate.isNil:
+      break
+    yield candidate
+    if candidate == view:
+      break
+    candidate = step(candidate)
+
+proc validKeyView(view: View, forward: bool): View =
+  let isValid = proc(candidate: View): bool =
+    candidate.canBecomeKeyView()
+  view.keyViewChain(forward).findFirst(isValid).get(nil)
 
 proc `{}`*(view: View, property: ViewProperty): bool =
   ## Read an individual view property through the protocol getter.

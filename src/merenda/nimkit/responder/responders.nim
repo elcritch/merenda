@@ -1,7 +1,7 @@
 import std/options
 
 import sigils/selectors as dynamicSelectors
-from sigils/hom import findFirst, isSome
+from sigils/hom import findFirst, get, isSome
 
 import ../foundation/events
 import ../foundation/backrefs
@@ -65,6 +65,7 @@ proc asDynamicAgent*[T: Responder](target: T): DynamicAgent {.inline.} =
 
 proc nextResponder*(responder: Responder): Responder
 proc clearNextResponder*(responder: Responder)
+proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder
 
 proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent =
   discard selector
@@ -105,12 +106,8 @@ protocol ResponderProtocol {.setterStyle: nim.} from Responder:
 
   method doCommandBySelector*(self: Responder, selector: CommandSelector) =
     let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(self))
-    var responder = self
-    while not responder.isNil:
-      if responder.tryToPerform(args):
-        return
-      responder = responder.nextResponder()
-    self.noResponderFor(selector)
+    if self.performCommandInChain(args).isNil:
+      self.noResponderFor(selector)
 
   method noResponderFor*(self: Responder, selector: CommandSelector) =
     let owner = if self.isNil: "nil" else: "responder"
@@ -152,6 +149,12 @@ iterator responderChain(responder: Responder): Responder =
     yield current
     current = current.nextResponder()
 
+proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Responder =
+  ## Dispatch the command and return the first responder that consumes it.
+  let handlesCommand = proc(candidate: Responder): bool =
+    candidate.tryToPerform(args)
+  responder.responderChain().findFirst(handlesCommand).get(nil)
+
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
   responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
 
@@ -181,12 +184,8 @@ proc doCommandBySelector*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent
 ) =
   let args = TryToPerformArgs(selector: selector, sender: sender)
-  var current = responder
-  while not current.isNil:
-    if current.tryToPerform(args):
-      return
-    current = current.nextResponder()
-  responder.noResponderFor(selector)
+  if responder.performCommandInChain(args).isNil:
+    responder.noResponderFor(selector)
 
 proc findValidRequestorForSendType*(
     responder: Responder, sendType, returnType: string

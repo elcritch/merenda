@@ -2567,13 +2567,8 @@ proc dispatchCommandInChain(
     target: Responder, selector: CommandSelector, sender: DynamicAgent
 ): EventDispatchResult =
   let args = TryToPerformArgs(selector: selector, sender: sender)
-  var responder = target
-  while not responder.isNil:
-    if responder.tryToPerform(args):
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
+  result.responder = target.performCommandInChain(args)
+  result.handled = not result.responder.isNil
 
 proc dispatchActionInChain*(
     window: Window, selector: ActionSelector, sender: DynamicAgent
