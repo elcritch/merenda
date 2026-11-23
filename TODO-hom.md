@@ -8,7 +8,7 @@
    answers true to `canBecomeKeyView`. Preserve selector routing, live links, the
    4,096-hop limit, and one chance for the starting view on wraparound.
    [View protocol](src/merenda/nimkit/view/viewprotos.nim)
-3. [ ] **Text insertion and unmarking.** Search the live responder chain for the first
+3. [x] **Text insertion and unmarking.** Search the live responder chain for the first
    local handler of `insertText` or `unmarkText`. Both selectors return an empty tuple,
    so a successful send is the match. [Windows](src/merenda/nimkit/app/windows.nim)
 4. [ ] **Mouse and key event dispatch.** Share the first-true search that identifies the

@@ -158,6 +158,14 @@ proc performCommandInChain*(responder: Responder, args: TryToPerformArgs): Respo
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
   responder.responderChain().findFirst(performKeyEquivalent(), event).isSome
 
+proc sendToFirstHandlerInChain*[A](
+    responder: Responder, selector: Selector[A, EmptyArgs], args: A
+): bool =
+  ## Send locally along the live responder chain until a handler runs.
+  let handled = proc(_: EmptyArgs): bool =
+    true
+  responder.responderChain().findFirst(selector, args, handled).isSome
+
 proc performScrollKeyInChain*(
     responder: Responder, event: KeyEvent, consumeIfOffered = false
 ): bool =

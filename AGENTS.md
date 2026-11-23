@@ -42,6 +42,7 @@
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.
+- Review each added or changed test for its long-term value. Identify the behavior or regression it would catch beyond existing coverage. Drop redundant or marginal tests once they have served their purpose as one-time verification.
 - Kosmo tests belong in `tests/kosmo/` and must be imported by the shared `tests/tkosmo.nim` runner.
 - NimKit tests belong in `tests/nimkit/` and must be imported by the shared `tests/tnimkit.nim` runner.
 - Tekton tests belong in `tests/tekton/` and must be imported by the shared `tests/ttekton.nim` runner.

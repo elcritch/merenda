@@ -2948,15 +2948,6 @@ proc dispatchKeyEventInChain(
     target, initPoint(0.0, 0.0), event, selector, localKeyEvent
   )
 
-proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchResult =
-  var responder = target
-  while not responder.isNil:
-    if responder.sendLocalIfHandled(insertText(), text):
-      result.handled = true
-      result.responder = responder
-      return
-    responder = responder.nextResponder()
-
 proc suppressShortcutText*(window: Window, text = "") =
   ## Consume a shortcut's next text commit even if the action changes focus.
   ## A nonempty text restricts suppression to that exact commit.
@@ -2973,10 +2964,7 @@ proc dispatchTextInput*(window: Window, text: string): bool =
   window.xSuppressedShortcutText.setLen(0)
   if suppress and (suppressed.len == 0 or suppressed == text):
     return true
-  let target = window.keyDispatchTarget()
-  if target.isNil:
-    return false
-  dispatchTextInputInChain(target, text).handled
+  window.keyDispatchTarget().sendToFirstHandlerInChain(insertText(), text)
 
 func utf16RuneIndex(text: string, offset: int): int =
   var units = 0
@@ -3030,11 +3018,7 @@ proc dispatchTextComposition*(window: Window, event: HostTextComposition): bool 
     responder = responder.nextResponder()
 
 proc dispatchTextUnmark*(window: Window): bool =
-  var responder = window.keyDispatchTarget()
-  while not responder.isNil:
-    if responder.sendLocalIfHandled(unmarkText()):
-      return true
-    responder = responder.nextResponder()
+  window.keyDispatchTarget().sendToFirstHandlerInChain(unmarkText(), ())
 
 proc textInputState*(window: Window): HostTextInputState =
   var responder = window.keyDispatchTarget()
