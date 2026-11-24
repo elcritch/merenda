@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Scroll faster in Quick Open while holding Control.
 - Keep window shortcuts working when the focused control is hidden or removed,
   including the Close Tab shortcut after switching tabs in Kosmo Settings.
 - Add NimKit's `ToolbarFocusProtocol` so tools can toggle focus between their

@@ -4,6 +4,7 @@ import figdraw
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+from merenda/kosmo/scrolling import KosmoControlScrollMultiplier
 import merenda/kosmo/workspacefiles
 import fixtures/ui
 
@@ -21,6 +22,35 @@ proc renderedText(node: Fig): string =
     result.add node.textLayout.displayRune(glyphIndex)
 
 suite "Kosmo quick open":
+  test "Control-wheel scrolls through quick open results faster":
+    let root = createTempDir("kosmo-quick-open-scroll-", "")
+    for index in 0 ..< 32:
+      writeFile(root / ("file" & $index & ".nim"), "")
+    let
+      panel = newQuickOpenPanel(root)
+      window = newWindow("Quick open scroll", frame = rect(0, 0, 640, 500))
+    defer:
+      window.close()
+      panel.workspaceFiles.close()
+      removeDir(root)
+    window.setContentView(panel)
+    require panel.present(window, root, nil)
+    require panel.waitForProjectFiles()
+    panel.layoutSubtreeIfNeeded()
+
+    let
+      results = panel.resultsView
+      point = results.pointToWindow(initPoint(20, 20))
+      start = results.firstIndex()
+    require results.itemCount() - results.visibleItemCount() >
+      int(KosmoControlScrollMultiplier)
+    require window.scrollWheelAt(point, deltaY = -1)
+    let normalRows = results.firstIndex() - start
+    check normalRows == 1
+    require window.scrollWheelAt(point, deltaY = -1, modifiers = {nimkit.kmControl})
+    check results.firstIndex() - start - normalRows ==
+      normalRows * int(KosmoControlScrollMultiplier)
+
   test "filename expressions switch from fuzzy matching and report invalid patterns":
     let root = createTempDir("kosmo-quick-open-regex-", "")
     for name in ["a.b", "axb", "λcat.nim", "dog.txt"]:
