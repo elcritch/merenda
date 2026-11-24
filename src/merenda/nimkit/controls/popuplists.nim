@@ -25,6 +25,7 @@ type
     xTrackingItem: bool
     xPopupRole: StyleRole
     xItemRole: StyleRole
+    xControlScrollRows: int
 
   PopupListItemMetrics = object
     textStyle: TextStyle
@@ -144,6 +145,19 @@ proc resetPopupListTracking*(popupList: PopupListView)
 proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Point)
 proc scrollBy(popupList: PopupListView, delta: int)
 
+func controlScrollRows*(popupList: PopupListView): Positive =
+  ## The number of rows moved by a wheel event while Control is held.
+  max(1, popupList.xControlScrollRows)
+
+proc `controlScrollRows=`*(popupList: PopupListView, rows: Positive) =
+  popupList.xControlScrollRows = rows
+
+proc popupListScrollRows(popupList: PopupListView, event: ScrollEvent): int =
+  let rows = popupListScrollRows(event)
+  if kmControl in event.modifiers:
+    return rows * popupList.controlScrollRows()
+  rows
+
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method drawLevel(popupList: PopupListView): ZLevel =
     PopupDrawLevel
@@ -180,10 +194,11 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
   method wantsForwardedScrollEvents(
       popupList: PopupListView, event: ScrollEvent
   ): bool =
-    not popupList.isOpened() or not popupList.canScrollRows(popupListScrollRows(event))
+    not popupList.isOpened() or
+      not popupList.canScrollRows(popupList.popupListScrollRows(event))
 
   method scrollWheel(popupList: PopupListView, event: ScrollEvent): bool =
-    let delta = popupListScrollRows(event)
+    let delta = popupList.popupListScrollRows(event)
     if popupList.isOpened() and popupList.canScrollRows(delta):
       popupList.scrollBy(delta)
       return true

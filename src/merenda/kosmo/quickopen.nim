@@ -6,6 +6,7 @@ import sigils/[core, threads]
 from figdraw import ZLevel
 
 import ../nimkit as nimkit
+import ./scrolling
 import ./workspacefiles
 import ./searchbuttons
 import ../nimkit/foundation/textsearch
@@ -679,6 +680,7 @@ proc newQuickOpenPanel*(rootPath = "", files: WorkspaceFiles = nil): QuickOpenPa
   discard result.withProtocol(QuickOpenPopupDataSource)
   discard result.withProtocol(QuickOpenPopupDelegate)
   result.resultsView = nimkit.newPopupListView(dataSource = result, delegate = result)
+  result.resultsView.controlScrollRows = int(KosmoControlScrollMultiplier)
   let progressIndicator = QuickOpenProgressIndicator()
   progressIndicator.initProgressIndicatorFields()
   discard progressIndicator.withProtocol(QuickOpenProgressDrawing)

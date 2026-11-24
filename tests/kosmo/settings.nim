@@ -4,6 +4,7 @@ import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
+from ../nimkit/fixtures/widgetflows import clickTab
 
 type NimdexSettingsSpy = ref object of Responder
   command: string
@@ -89,14 +90,40 @@ suite "Kosmo settings":
       check not frontend.window.isClosed
       check not settingsPanel.isClosed
 
-  test "Close Tab menu action closes the focused Kosmo settings panel":
-    app.activateWindow(settingsPanel)
-    require app.keyWindow() == settingsPanel
+  test "close shortcut closes the settings window from every tab":
     let closeItem = app.mainMenu().menuItemForAction(KosmoCloseTabAction)
     require not closeItem.isNil
-    require closeItem.perform(Responder(settingsPanel))
-    check settingsPanel.isClosed
-    check not frontend.window.isClosed
+    require closeItem.hasKeyEquivalent()
+    let
+      stroke = closeItem.keyEquivalent()
+      shortcut = KeyEvent(
+        key: stroke.key,
+        keyCode: stroke.keyCode,
+        text: stroke.text,
+        modifiers: stroke.modifiers,
+      )
+      editorTabCount = frontend.editorView.editor.tabs().len
+    require settingsTabs.len > 1
+    for index, item in settingsTabs.items():
+      let identifier = item.identifier()
+      checkpoint "Settings tab: " & identifier
+      require frontend.showSettings()
+      let
+        panel = frontend.settingsWindow().window()
+        tabs =
+          TabView(panel.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+      defer:
+        panel.close()
+      require not tabs.isNil
+      require app.keyWindow() == panel
+      require panel.clickTab(tabs, identifier)
+      if index == settingsTabs.len - 1:
+        require frontend.showSettings()
+        require app.keyWindow() == panel
+      check panel.dispatchKeyDown(shortcut)
+      check panel.isClosed()
+      check not frontend.window.isClosed()
+      check frontend.editorView.editor.tabs().len == editorTabCount
 
   test "About identifies the application and credits Moe":
     let info = app.aboutInfo()

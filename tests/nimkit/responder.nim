@@ -7,6 +7,7 @@ import merenda/nimkit except performKeyEquivalent, undoManager
 from merenda/nimkit/app/backend import HostTextComposition
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
 from merenda/nimkit/view/viewprotos import nil
+from fixtures/widgetflows import clickView
 
 type TrackingSpyView = ref object of View
   xName: string
@@ -14,6 +15,21 @@ type TrackingSpyView = ref object of View
 
 type FocusSpyView = ref object of View
   xName: string
+
+type FieldEditorClientView = ref object of View
+  text: string
+
+protocol ValidatingFieldEditorClient of FieldEditorClient:
+  method usesFieldEditor(client: FieldEditorClientView, editor: FieldEditor): bool =
+    true
+
+  method setStringFromFieldEditor(
+      client: FieldEditorClientView, editor: FieldEditor, value: string
+  ) =
+    client.text = value
+
+  method shouldEndEditing(client: FieldEditorClientView, editor: FieldEditor): bool =
+    client.text.len == 0
 
 var
   trackingEvents: seq[string]
@@ -286,6 +302,157 @@ suite "nimkit responder":
     check window.firstResponder == button
     check button.isFocused
     check button.isFocusVisible
+
+  test "window shortcuts work after the focused view is hidden or detached":
+    type Change = enum
+      hideParent
+      removeParent
+      hideContent
+
+    for change in Change:
+      checkpoint $change
+      let
+        app = newApplication("Window focus")
+        window = newWindow("Window focus", frame = rect(0, 0, 240, 160))
+        pane = newView(frame = rect(0, 0, 240, 160))
+        field = newTextField("", frame = rect(10, 10, 100, 30))
+        root =
+          if change == hideContent:
+            View(field)
+          else:
+            newView()
+      defer:
+        window.close()
+      app.installStandardMainMenu()
+      if change != hideContent:
+        pane.addSubview(field)
+        root.addSubview(pane)
+      require app.showWindow(window, root, firstResponder = field) == window
+      require window.dispatchTextInput("visible")
+      case change
+      of hideParent:
+        pane.hidden = true
+      of removeParent:
+        pane.removeFromSuperview()
+      of hideContent:
+        root.hidden = true
+
+      check not window.dispatchTextInput("hidden")
+      check field.text == "visible"
+      let shortcut = KeyEvent(
+        key: keyW, keyCode: keyW.ord, text: "w", modifiers: shortcutModifiers()
+      )
+      if change == hideContent:
+        check window.dispatchKeyDown(shortcut)
+      else:
+        check app.performMenuKeyEquivalent(shortcut)
+      check window.isClosed()
+
+  test "the window's Close menu action works before any control has focus":
+    let
+      app = newApplication("Window focus")
+      window = newWindow("Window focus")
+      root = newView()
+    defer:
+      window.close()
+    app.installStandardMainMenu()
+    require root.addMethod(
+      validateUserInterfaceItem(),
+      proc(view: View, args: ValidationArgs): bool =
+        false,
+    )
+    require app.showWindow(window, root) == window
+    check app.performMenuKeyEquivalent(
+      KeyEvent(key: keyW, text: "w", modifiers: shortcutModifiers())
+    )
+    check window.isClosed()
+
+  test "raising a window keeps focus unless its preferred responder is available":
+    let
+      app = newApplication("Window focus")
+      window = newWindow("Window focus", frame = rect(0, 0, 240, 160))
+      root = newView()
+      preferred = newTextField("", frame = rect(10, 10, 100, 30))
+      current = newTextField("", frame = rect(10, 50, 100, 30))
+      other = newTextField("", frame = rect(10, 90, 100, 30))
+      linked = newTrackingSpyView("linked", rect(0, 0, 10, 10))
+    defer:
+      window.close()
+    root.addSubview(preferred)
+    root.addSubview(current)
+    root.addSubview(other)
+    require app.showWindow(window, root, firstResponder = preferred) == window
+    preferred.removeFromSuperview()
+    require window.clickView(current)
+
+    for requested in [Responder(nil), Responder(preferred)]:
+      require app.showWindow(window, root, firstResponder = requested) == window
+      require window.dispatchTextInput("x")
+    check current.text == "xx"
+    check preferred.text == ""
+    check other.text == ""
+    linked.acceptsFirstResponder = true
+    linked.setNextResponder(window)
+    require app.showWindow(window, root, firstResponder = linked) == window
+    resetTracking()
+    check window.dispatchKeyDown(KeyEvent(key: keyX, text: "x"))
+    check trackingEvents == @["linked.key:x"]
+
+  test "menus use the content responder when the focused control is hidden":
+    let
+      app = newApplication("Menu focus")
+      window = newWindow("Menu focus", frame = rect(0, 0, 240, 160))
+      root = newTrackingSpyView("content", rect(0, 0, 240, 160))
+      control = newTrackingSpyView("hidden", rect(10, 10, 100, 30))
+      mainMenu = newMenu("Main")
+      popupMenu = newMenu("Actions")
+      button = newPopupMenuButton("Actions", popupMenu, rect(10, 50, 100, 30))
+    defer:
+      window.close()
+    discard mainMenu.addItem("Run", trackingCommand(), "g", shortcutModifiers())
+    discard popupMenu.addItem("Run", trackingCommand())
+    app.mainMenu = mainMenu
+    button.popupPresentation = ppInline
+    control.acceptsFirstResponder = true
+    root.addSubview(control)
+    root.addSubview(button)
+    require app.showWindow(window, root, firstResponder = control) == window
+    control.hidden = true
+
+    resetTracking()
+    check app.performMenuKeyEquivalent(
+      KeyEvent(key: keyG, text: "g", modifiers: shortcutModifiers())
+    )
+    button.openPopup()
+    require button.popupOpen()
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    check trackingEvents == @["content.command", "content.command"]
+
+  test "an unavailable field editor client cannot retain keyboard input":
+    let
+      window = newWindow("Editing focus", frame = rect(0, 0, 240, 160))
+      root = newView()
+      client = FieldEditorClientView()
+      next = newTextField("", frame = rect(10, 50, 100, 30))
+    defer:
+      window.close()
+    initViewFields(client, rect(10, 10, 100, 30))
+    client.acceptsFirstResponder = true
+    discard client.withProtocol(ValidatingFieldEditorClient)
+    root.addSubview(client)
+    root.addSubview(next)
+    window.setContentView(root)
+    require window.makeFirstResponder(client)
+    require window.dispatchTextInput("draft")
+    check client.text == "draft"
+    check not window.makeFirstResponder(next)
+
+    client.removeFromSuperview()
+    check not window.dispatchTextInput("detached")
+    require window.clickView(next)
+    require window.dispatchTextInput("next")
+    check next.text == "next"
+    check client.text == "draft"
 
   test "first responder lifecycle validates and observes transitions":
     let
