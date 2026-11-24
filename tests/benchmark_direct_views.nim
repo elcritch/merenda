@@ -77,7 +77,7 @@ proc body(
               this.title = "Remove"
               this.acceptsFirstResponder = false
               onAction(receiver, task.id) do(
-                owner: BenchReceiver, id: int, sender: DynamicAgent
+                this: Button, owner: BenchReceiver, id: int
               ):
                 owner.calls += id + 1
 

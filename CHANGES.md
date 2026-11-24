@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show Kosmo's About information in a NimKit window that closes with Cmd-W.
+- Open web links in Kosmo's Markdown previews in the system default browser.
 - Scroll faster in Quick Open while holding Control.
 - Keep window shortcuts working when the focused control is hidden or removed,
   including the Close Tab shortcut after switching tabs in Kosmo Settings.
@@ -27,6 +29,9 @@
   `renderMode = srmRaster`. SVG images use FigDraw's image cache.
 - Use upstream Moe for Kosmo, with the merged POSIX Git process ownership fix.
 
+- DirectView `onAction` and `onChange` handlers take the typed widget first,
+  followed by the receiver and optional context. The receiver parameter can use
+  a base type such as `Responder` or `DynamicAgent`.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

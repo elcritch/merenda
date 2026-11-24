@@ -17,6 +17,8 @@ import figdraw/windowing as siwinshim
 when defined(merenda.softwareRenderer) or defined(windows):
   import figdraw/software/siwin as softwareSiwin
 when defined(windows):
+  from std/widestrs import newWideCString
+  from std/winlean import shellExecuteW, SW_SHOWNORMAL
   import pkg/chronicles
   import siwin/platforms/winapi/window as siwinWinapi
 
@@ -1171,11 +1173,10 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
 
 when not defined(macosx):
   proc openWithSystemHandler(target: string): bool =
-    ## Launch the platform's default handler for `target` without blocking the
-    ## event loop; the shell detaches the helper process. POSIX prefers the
-    ## freedesktop opener and falls back to GNOME's; Windows uses `start`.
+    ## Launch the platform's default handler for `target`.
     when defined(windows):
-      execCmd("start \"\" " & target.quoteShell()) == 0
+      let url = newWideCString(target)
+      shellExecuteW(0, nil, url, nil, nil, SW_SHOWNORMAL) > 32
     else:
       let
         xdgOpen = findExe("xdg-open")

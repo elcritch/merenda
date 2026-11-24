@@ -16,9 +16,7 @@ proc lifetimeBody(context: DirectNode, owner: LifetimeOwner, value: int) =
   inc owner.draws
   context.viewBody:
     Button($value):
-      onAction(owner, value) do(
-        receiver: LifetimeOwner, amount: int, sender: DynamicAgent
-      ):
+      onAction(owner, value) do(this: Button, receiver: LifetimeOwner, amount: int):
         receiver.calls += amount
 
 proc observedLifetime(context: DirectNode, owner: LifetimeOwner, input: Sigil[int]) =

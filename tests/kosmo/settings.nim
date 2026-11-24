@@ -2,9 +2,10 @@ import std/[options, os, strutils, tempfiles, unicode, unittest]
 
 import figdraw
 import merenda/nimkit
+from merenda/nimkit/directviews import DirectView
 import merenda/kosmo/kosmo
 import fixtures/ui
-from ../nimkit/fixtures/widgetflows import clickTab
+from ../nimkit/fixtures/widgetflows import clickTab, clickView
 
 type NimdexSettingsSpy = ref object of Responder
   command: string
@@ -133,6 +134,48 @@ suite "Kosmo settings":
     check "Moe" in info.credits
     check "GPL-3.0" in info.credits
     check ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl) in info.creditLinks
+
+  test "About opens a reusable window and closes with the configured shortcut":
+    let
+      browser = app.recordOpenedUrls()
+      aboutItem = app.mainMenu().menuItemForAction("orderFrontStandardAboutPanel")
+    require not aboutItem.isNil
+    require aboutItem.perform(Responder(app))
+    let about = app.keyWindow()
+    require not about.isNil and about != settingsPanel and about != frontend.window
+    defer:
+      about.close()
+    check about.title == "About " & app.applicationName()
+    check about.contentView() of DirectView
+    var text: seq[string]
+    for node in about.buildRenders()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        text.add node.renderedFigText()
+    check "Version " & KosmoVersion in text
+    check "Build " & KosmoGitHash in text
+    check KosmoMoeUrl in text
+    let creditLink = about.contentView().buttonWithLabel(KosmoMoeUrl)
+    require not creditLink.isNil
+    require about.clickView(creditLink)
+    check browser.openedUrls == @[KosmoMoeUrl]
+    require aboutItem.perform(Responder(app))
+    check app.keyWindow() == about
+
+    let closeItem = app.mainMenu().menuItemForAction(KosmoCloseTabAction)
+    require not closeItem.isNil and closeItem.hasKeyEquivalent()
+    let stroke = closeItem.keyEquivalent()
+    let editorTabCount = frontend.editorView.editor.tabs().len
+    require about.dispatchKeyDown(
+      KeyEvent(
+        key: stroke.key,
+        keyCode: stroke.keyCode,
+        text: stroke.text,
+        modifiers: stroke.modifiers,
+      )
+    )
+    check about.isClosed()
+    check not frontend.window.isClosed()
+    check frontend.editorView.editor.tabs().len == editorTabCount
 
   test "Nimdex settings connect and disconnect using the selected mode":
     let delegate = NimdexSettingsSpy()

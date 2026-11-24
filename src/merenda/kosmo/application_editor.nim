@@ -4308,8 +4308,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       return false
     true
 
-proc localMarkdownLinkPath(pane: KosmoEditorPane, link: string): string =
-  let url = nimkit.initUrl(link)
+proc localMarkdownLinkPath(pane: KosmoEditorPane, url: nimkit.Url): string =
   if not url.isFileUrl() or (not url.hasScheme() and url.host().len > 0):
     return
   let path = url.localFilePath(pane.markdownView.imageBasePath)
@@ -4325,10 +4324,13 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
   ): bool =
     if textView.attachmentAtIndex(int(range.location)).attachment.identifier.len > 0:
       return true
-    let path = pane.localMarkdownLinkPath(link)
-    if path.len == 0:
+    let
+      url = nimkit.initUrl(link)
+      isWebLink = url.isHttpUrl()
+      path = pane.localMarkdownLinkPath(url)
+    if not isWebLink and path.len == 0:
       return link.len > 0
-    if not fileExists(path) and not dirExists(path):
+    if not isWebLink and not fileExists(path) and not dirExists(path):
       return false
     if pane.dockGroup.isNil:
       return false
@@ -4338,6 +4340,8 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
     let controller = group.editorView.tabsDelegate.dockController[]
     if controller.frontend.isNil:
       return false
+    if isWebLink:
+      return controller.frontend[].application.workspace().openUrl(url).succeeded
     controller.frontend[].openPath(path)
 
 proc searchField*(view: KosmoMarkdownView): nimkit.TextField =
