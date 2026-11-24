@@ -1,5 +1,6 @@
 ## Direct typed widget composition with structural slots and keyed siblings.
 import std/[macros, strutils]
+from sigils/selectors import DynamicAgent
 import ../foundation/types
 import ../view/views
 import ../containers/stackviews
@@ -8,6 +9,47 @@ import ../text/textfields
 import ../declarative/actions
 import ./runtime
 export runtime
+
+proc actionExpression(call: NimNode): NimNode =
+  let legacy = newCall(bindSym"viewAction")
+  for i in 1 ..< call.len:
+    legacy.add call[i]
+  let handler = call[^1]
+  if handler.kind notin {nnkDo, nnkLambda} or handler.params.len < 2:
+    return legacy
+  let first = handler.params[1]
+  if first.kind != nnkIdentDefs or first[^2].kind == nnkEmpty or
+      not (first[0].eqIdent("self") or first[0].eqIdent("this")):
+    return legacy
+
+  let
+    self = first[0]
+    senderType = first[^2]
+    sender = ident(genSym(nskParam, "directViewSender").repr)
+    widget = ident"this"
+    body = handler.body
+    adapted = handler.copyNimTree()
+    params = newNimNode(nnkFormalParams).add(handler.params[0])
+  if first.len > 3:
+    let remaining = first.copyNimTree()
+    remaining.del(0)
+    params.add remaining
+  for i in 2 ..< handler.params.len:
+    params.add handler.params[i]
+  params.add newIdentDefs(sender, bindSym"DynamicAgent")
+  adapted.params = params
+  adapted.body = quote:
+    if `sender` of `senderType`:
+      let `self` = `senderType`(`sender`)
+      `body`
+
+  let typed = legacy.copyNimTree()
+  typed[^1] = adapted
+  result = quote:
+    when typeof(`widget`) is `senderType` and not compiles(`legacy`):
+      `typed`
+    else:
+      `legacy`
 
 macro viewBody*(session, body: untyped): untyped =
   var slot = 0
@@ -152,9 +194,7 @@ macro viewBody*(session, body: untyped): untyped =
         result.add copy
       elif item.kind in {nnkCall, nnkCommand} and
           (item[0].eqIdent("onAction") or item[0].eqIdent("onChange")):
-        let action = newCall(bindSym"viewAction")
-        for i in 1 ..< item.len:
-          action.add item[i]
+        let action = actionExpression(item)
         let setter =
           if item[0].eqIdent("onAction"):
             bindSym"setAction"
