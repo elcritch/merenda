@@ -18,12 +18,11 @@ proc actionExpression(call: NimNode): NimNode =
   if handler.kind notin {nnkDo, nnkLambda} or handler.params.len < 2:
     return legacy
   let first = handler.params[1]
-  if first.kind != nnkIdentDefs or first[^2].kind == nnkEmpty or
-      not (first[0].eqIdent("self") or first[0].eqIdent("this")):
+  if first.kind != nnkIdentDefs or first[^2].kind == nnkEmpty:
     return legacy
 
   let
-    self = first[0]
+    widgetName = first[0]
     senderType = first[^2]
     sender = ident(genSym(nskParam, "directViewSender").repr)
     widget = ident"this"
@@ -40,7 +39,7 @@ proc actionExpression(call: NimNode): NimNode =
   adapted.params = params
   adapted.body = quote:
     if `sender` of `senderType`:
-      let `self` = `senderType`(`sender`)
+      let `widgetName` = `senderType`(`sender`)
       `body`
 
   let typed = legacy.copyNimTree()

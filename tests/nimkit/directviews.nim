@@ -573,9 +573,9 @@ suite "direct view composition":
     host.viewBody:
       VStack:
         Button("Add"):
-          onAction(owner, 7) do(self: Button, receiver: DirectController, amount: int):
-            check self.title() == "Add"
-            self.title = "Added"
+          onAction(owner, 7) do(this: Button, receiver: DirectController, amount: int):
+            check this.title() == "Add"
+            this.title = "Added"
             receiver.calls += amount
         TextField:
           onChange(owner) do(this: TextField, receiver: DirectController):

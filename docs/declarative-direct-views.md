@@ -92,10 +92,9 @@ Ordinary block statements run on each structural evaluation. `arrangedSizing`
 sets the parent's sizing policy. Custom factories need no ViewSpec enum case;
 child arrangement currently requires StackView containers.
 
-Use `this` for the typed widget in an inline `onAction` or `onChange` handler,
-followed by the receiver and optional context. The widget parameter also
-accepts the name `self`. Existing handlers can take `DynamicAgent` as their
-last parameter.
+An inline `onAction` or `onChange` handler can take the typed widget first,
+followed by the receiver and optional context. The examples call that parameter
+`this`. Existing handlers can take `DynamicAgent` as their last parameter.
 
 ```nim
 Button("Remove"):
