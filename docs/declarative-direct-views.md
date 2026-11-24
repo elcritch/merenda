@@ -97,6 +97,9 @@ by the receiver and optional context. The examples call the widget parameter
 `this`. Omit the context argument and its matching handler parameter when the
 action only needs a receiver.
 
+The receiver parameter can use the bound object's type or a base type such as
+`Responder` or `DynamicAgent`. The bound object must still be a `Responder`.
+
 ```nim
 Button("Remove"):
   onAction(controller, task.id) do(this: Button, owner: TaskController, id: int):

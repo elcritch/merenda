@@ -10,42 +10,56 @@ import ../declarative/actions
 import ./runtime
 export runtime
 
-proc actionExpression(call: NimNode): NimNode =
-  let handler = call[^1].copyNimTree()
-  if handler.kind notin {nnkDo, nnkLambda} or handler.params.len < 2:
+proc takeActionParameter(params, callback: NimNode): tuple[name, typ: NimNode] =
+  if params.len < 2:
     error(
-      "DirectView handlers take a typed sender, receiver, and optional context", call
+      "DirectView handlers take a typed sender, receiver, and optional context",
+      callback,
     )
-  let params = handler.params
-  let first = params[1]
-  if first.kind != nnkIdentDefs or first[^2].kind == nnkEmpty:
-    error("Specify the widget type for the first DirectView handler parameter", first)
-
-  let
-    senderName = first[0]
-    senderType = first[^2]
-    sender = ident(genSym(nskParam, "directViewSender").repr)
-    widget = ident"this"
-    body = handler.body
-  if first.len == 3:
+  let parameter = params[1]
+  if parameter.kind != nnkIdentDefs or parameter[^2].kind == nnkEmpty:
+    error("Specify a type for the DirectView sender and receiver parameters", parameter)
+  result = (parameter[0], parameter[^2])
+  if parameter.len == 3:
     params.del(1)
   else:
-    first.del(0)
+    parameter.del(0)
+
+proc directAction(widget, receiver, context, callback: NimNode): NimNode =
+  if callback.kind notin {nnkDo, nnkLambda}:
+    error("DirectView handlers require an inline proc", callback)
+  let
+    handler = callback.copyNimTree()
+    params = handler.params
+    (senderName, senderType) = takeActionParameter(params, callback)
+    (receiverName, receiverType) = takeActionParameter(params, callback)
+    sender = ident(genSym(nskParam, "directViewSender").repr)
+    boundReceiver = ident(genSym(nskParam, "directViewReceiver").repr)
+    body = handler.body
+  params.insert(1, newIdentDefs(boundReceiver, receiver.getTypeInst()))
   params.add newIdentDefs(sender, bindSym"DynamicAgent")
   handler.body = quote:
     if `sender` of `senderType`:
-      let `senderName` = `senderType`(`sender`)
+      let
+        `senderName` = `senderType`(`sender`)
+        `receiverName`: `receiverType` = `boundReceiver`
       `body`
 
-  let action = newCall(bindSym"viewAction")
-  for i in 1 ..< call.len - 1:
-    action.add call[i]
+  let action = newCall(bindSym"viewAction", receiver)
+  if context.kind != nnkEmpty:
+    action.add context
   action.add handler
   result = quote:
     when typeof(`widget`) is `senderType`:
       `action`
     else:
       {.error: "The first DirectView handler parameter must have the widget's type".}
+
+macro directViewAction(widget, receiver: typed, handler: untyped): untyped =
+  directAction(widget, receiver, newEmptyNode(), handler)
+
+macro directViewAction(widget, receiver, context: typed, handler: untyped): untyped =
+  directAction(widget, receiver, context, handler)
 
 macro viewBody*(session, body: untyped): untyped =
   var slot = 0
@@ -190,7 +204,9 @@ macro viewBody*(session, body: untyped): untyped =
         result.add copy
       elif item.kind in {nnkCall, nnkCommand} and
           (item[0].eqIdent("onAction") or item[0].eqIdent("onChange")):
-        let action = actionExpression(item)
+        let action = newCall(bindSym"directViewAction", ident"this")
+        for i in 1 ..< item.len:
+          action.add item[i]
         let setter =
           if item[0].eqIdent("onAction"):
             bindSym"setAction"

@@ -30,7 +30,8 @@
 - Use upstream Moe for Kosmo, with the merged POSIX Git process ownership fix.
 
 - DirectView `onAction` and `onChange` handlers take the typed widget first,
-  followed by the receiver and optional context.
+  followed by the receiver and optional context. The receiver parameter can use
+  a base type such as `Responder` or `DynamicAgent`.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

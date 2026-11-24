@@ -108,6 +108,16 @@ static:
   doAssert not compiles(
     block:
       let host = newDirectView()
+      let owner: Responder = DirectController()
+      host.viewBody:
+        Button("Add"):
+          onAction(owner) do(this: Button, receiver: DirectController):
+            inc receiver.calls
+  )
+
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
       host.viewBody:
         Button(title: "Remove")
   )
@@ -575,7 +585,7 @@ suite "direct view composition":
     check old.superview.isNil
     session.close()
 
-  test "sender-first handlers get the typed widget and explicit context":
+  test "sender-first handlers get the typed widget and can use receiver base types":
     let
       owner = DirectController()
       host = newDirectView()
@@ -583,21 +593,27 @@ suite "direct view composition":
     host.viewBody:
       VStack:
         Button("Add"):
-          onAction(owner, 7) do(this: Button, receiver: DirectController, amount: int):
+          onAction(owner, 7) do(this: Button, receiver: DynamicAgent, amount: int):
             check this.title() == "Add"
             this.title = "Added"
-            receiver.calls += amount
+            DirectController(receiver).calls += amount
         TextField:
-          onChange(owner) do(this: TextField, receiver: DirectController):
-            receiver.calls += this.stringValue().len
+          onChange(owner) do(this: TextField, receiver: Responder):
+            receiver.acceptsFirstResponder = this.stringValue().len > 0
     let
       row = StackView(host.arrangedSubviews[0])
       button = Button(row.arrangedSubviews[0])
       field = TextField(row.arrangedSubviews[1])
+    discard
+      button.target().sendLocalIfHandled(button.action(), ActionArgs(sender: field))
+    check button.title() == "Add"
+    check owner.calls == 0
     require button.tryToPerform(performClick(), button)
     check button.title() == "Added"
+    check not owner.acceptsFirstResponder()
     field.stringValue = "new"
-    check owner.calls == 10
+    check owner.calls == 7
+    check owner.acceptsFirstResponder()
 
   test "removed change handlers and expired receivers are inert":
     var observed: BackRef[DirectController]
