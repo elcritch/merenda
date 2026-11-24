@@ -131,89 +131,6 @@ This is [examples/quick_start.nim](examples/quick_start.nim). Run it with:
 nim ic -r examples/quick_start.nim
 ```
 
-### Build a window with DirectView
-
-With the experimental `DirectView` DSL, you can describe a window's layout by
-nesting controls in a `viewBody` macro block.
-
-The `viewBody` macro handles setting up code to automatically create and maintain
-the Views in a declarative fasion. This is similar in spirit to SwiftUI or Kotlin
-Compose, but instead directly creates and syncs state to full NimKit Views. This
-means any NimKit view can be used!
-
-This example puts a label above a button. Click **Open project** to open Merenda's
-project page in your browser:
-
-```nim
-import merenda/nimkit
-import merenda/nimkit/directviews
-
-let
-  app = sharedApplication()
-  window = newWindow("Project links", frame = rect(100, 100, 360, 180))
-  root = newDirectView()
-  url = "https://github.com/elcritch/merenda"
-
-root.viewBody:
-  VStack:
-    this.edgeInsets = insets(24)
-    this.spacing = 12
-    Label(stringValue = "Merenda on GitHub")
-    Button("Open project"):
-      onAction(app, url) do(this: Button, owner: Application, link: string):
-        discard owner.workspace().openUrl(link)
-
-app.runWindow(window, root)
-```
-
-Save this as `examples/project_link.nim` and run `nim ic -r examples/project_link.nim`.
-
-`VStack` places its children from top to bottom. Inside that block, `this` is
-the stack, so `this.spacing` sets the gap between the label and the button.
-
-When the button is clicked the callback setup by `onAction` will be called and passed
-the sender (the button), its responder (the application or controller), and an optional
-context value. The callback proc is created using
-[Nim's `do` syntax](https://nim-lang.org/docs/manual.html#procedures-do-notation).
-
-**Note**: Responder is NimKit's general term for controller or application objects which contain
-the state of your program and views. It's a combination of your data models and often includes
-the actions you can do with your data. In this example, we use the application's workspace
-which knows how to open links.
-
-#### Connect a text field to a task
-
-A text field can show a value from your app and send edits back to it.
-To try this in the same window, add the following imports to
-`examples/project_link.nim`. The example task controller starts with three tasks
-and provides the procedures for reading and editing their titles.
-
-```nim
-import sigils/reactive
-import ./declarative_tasks
-```
-
-Add `let controller = newTaskModelController()` just before `root.viewBody`. Then add
-these controls inside the existing `VStack`, below the project button.
-
-```nim
-    Label(stringValue = "Task title")
-    TextField:
-      bindingScope.bindTextField(
-        "title", controller.tasks.item(1), controller, 1, titleFor, this, editTitle
-      )
-```
-
-Run the app again. The field starts with the title of task 1. Here,
-`"title"` names the binding and `controller.tasks.item(1)` tells it which task to
-watch. The binding calls `titleFor(controller, 1)` to read the title and puts it in
-`this`, the text field. When you type, the field sends the new text to
-`editTitle(controller, 1, text)`. If another part of the app changes that task's
-title, the field picks up the change too.
-
-Try editing and reordering several tasks in the [task list example](examples/direct_views_demo.nim).
-For more on bindings and reusable layouts, see the [DirectView guide](docs/declarative-direct-views.md).
-
 ### A Markdown reader in a handful of lines
 
 NimKit's larger controls handle more of the work for you. This app opens a
@@ -371,7 +288,92 @@ customizing a library object without introducing a subclass for every variation.
 The same pattern works for [view controller loading](examples/viewcontroller_demo.nim)
 and [table delegates](examples/table_demo.nim).
 
-### Slide between panels
+### Build a window with DirectView
+
+With the experimental `DirectView` DSL, you can describe a window's layout by
+nesting controls in a `viewBody` macro block.
+
+The `viewBody` macro handles setting up code to automatically create and maintain
+the Views in a declarative fasion. This is similar in spirit to SwiftUI or Kotlin
+Compose, but instead directly creates and syncs state to full NimKit Views. This
+means any NimKit view can be used!
+
+This example puts a label above a button. Click **Open project** to open Merenda's
+project page in your browser:
+
+```nim
+import merenda/nimkit
+import merenda/nimkit/directviews
+
+let
+  app = sharedApplication()
+  window = newWindow("Project links", frame = rect(100, 100, 360, 180))
+  root = newDirectView()
+  url = "https://github.com/elcritch/merenda"
+
+root.viewBody:
+  VStack:
+    this.edgeInsets = insets(24)
+    this.spacing = 12
+    Label(stringValue = "Merenda on GitHub")
+    Button("Open project"):
+      onAction(app, url) do(this: Button, owner: Application, link: string):
+        discard owner.workspace().openUrl(link)
+
+app.runWindow(window, root)
+```
+
+Save this as `examples/project_link.nim` and run `nim ic -r examples/project_link.nim`.
+
+`VStack` places its children from top to bottom. Inside that block, `this` is
+the stack, so `this.spacing` sets the gap between the label and the button.
+
+When the button is clicked the callback setup by `onAction` will be called and passed
+the sender (the button), its responder (the application or controller), and an optional
+context value. The callback proc is created using
+[Nim's `do` syntax](https://nim-lang.org/docs/manual.html#procedures-do-notation).
+
+**Note**: Responder is NimKit's general term for controller or application objects which contain
+the state of your program and views. It's a combination of your data models and often includes
+the actions you can do with your data. In this example, we use the application's workspace
+which knows how to open links.
+
+#### Connect a text field to a task
+
+A text field can show a value from your app and send edits back to it.
+To try this in the same window, add the following imports to
+`examples/project_link.nim`. The example task controller starts with three tasks
+and provides the procedures for reading and editing their titles.
+
+```nim
+import sigils/reactive
+import ./declarative_tasks
+```
+
+Add `let controller = newTaskModelController()` just before `root.viewBody`. Then add
+these controls inside the existing `VStack`, below the project button.
+
+```nim
+    Label(stringValue = "Task title")
+    TextField:
+      bindingScope.bindTextField(
+        "title", controller.tasks.item(1), controller, 1, titleFor, this, editTitle
+      )
+```
+
+Run the app again. The field starts with the title of task 1. Here,
+`"title"` names the binding and `controller.tasks.item(1)` tells it which task to
+watch. The binding calls `titleFor(controller, 1)` to read the title and puts it in
+`this`, the text field. When you type, the field sends the new text to
+`editTitle(controller, 1, text)`. If another part of the app changes that task's
+title, the field picks up the change too.
+
+Try editing and reordering several tasks in the [task list example](examples/direct_views_demo.nim).
+For more on bindings and reusable layouts, see the [DirectView guide](docs/declarative-direct-views.md).
+
+### More Advanced Examples
+
+#### Slide between panels
 
 An `animationGroup` turns ordinary property assignments into a coordinated
 animation. These two panels slide together over 800 ms with linear motion.
@@ -431,7 +433,7 @@ Run [the carousel example](examples/carousel_demo.nim) with
 and the animation's `finished` signal enables the button for the next transition.
 For more, see [property animations and sequences](examples/animation_demo.nim).
 
-### Blur an overlay's background
+#### Blur an overlay's background
 
 A standard `Box` can blur the content behind its rounded bounds through FigDraw.
 Its child controls stay sharp, and its fill follows the active theme:
@@ -450,7 +452,7 @@ Set `backdropBlurRadius` to zero to restore the ordinary box fill.
 zero to one. This effect is rendered inside the application, independently of
 native window backdrop effects.
 
-### Reusable search controls
+#### Reusable search controls
 
 Add find controls to a text view with `TextSearchController`:
 
@@ -467,6 +469,7 @@ Keep the controller alive while its controls are attached, and call `search.clos
 before releasing it if the host remains alive. Route find shortcuts through
 `search.handleSearchKey(event)` and call `search.refreshSearch()` when the text
 changes. For embedded controls, use a `SearchBar` in your own layout.
+
 
 ## Make it your own
 
