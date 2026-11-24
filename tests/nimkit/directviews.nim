@@ -565,6 +565,30 @@ suite "direct view composition":
     check old.superview.isNil
     session.close()
 
+  test "sender-first handlers get the typed widget and explicit context":
+    let
+      owner = DirectController()
+      host = newDirectView()
+    initResponder(owner)
+    host.viewBody:
+      VStack:
+        Button("Add"):
+          onAction(owner, 7) do(this: Button, receiver: DirectController, amount: int):
+            check this.title() == "Add"
+            this.title = "Added"
+            receiver.calls += amount
+        TextField:
+          onChange(owner) do(this: TextField, receiver: DirectController):
+            receiver.calls += this.stringValue().len
+    let
+      row = StackView(host.arrangedSubviews[0])
+      button = Button(row.arrangedSubviews[0])
+      field = TextField(row.arrangedSubviews[1])
+    require button.tryToPerform(performClick(), button)
+    check button.title() == "Added"
+    field.stringValue = "new"
+    check owner.calls == 10
+
   test "removed change handlers and expired receivers are inert":
     var observed: BackRef[DirectController]
     let session = newDirectViewSession(newStackView())
