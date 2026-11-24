@@ -44,13 +44,13 @@ proc runDirectLifetimes*() =
   toolbar.viewBody:
     HStack:
       Button("Increment"):
-        onAction(controller) do(owner: LifetimeController, sender: DynamicAgent):
+        onAction(controller) do(this: Button, owner: LifetimeController):
           owner.count <- owner.count{} + 1
       Button("Hide and suspend"):
-        onAction(controller) do(owner: LifetimeController, sender: DynamicAgent):
+        onAction(controller) do(this: Button, owner: LifetimeController):
           owner.showContent(false)
       Button("Show and resume"):
-        onAction(controller) do(owner: LifetimeController, sender: DynamicAgent):
+        onAction(controller) do(this: Button, owner: LifetimeController):
           owner.showContent(true)
   let root = newStackView(laVertical)
   root.edgeInsets = insets(12)

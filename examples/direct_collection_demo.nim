@@ -22,7 +22,7 @@ proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: strin
         )
       Button("Remove", acceptsFirstResponder = false):
         onAction(controller, id) do(
-          receiver: ArrayController, key: string, sender: DynamicAgent
+          this: Button, receiver: ArrayController, key: string
         ):
           discard receiver.removeItem(key)
 

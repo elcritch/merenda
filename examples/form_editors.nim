@@ -83,29 +83,29 @@ proc directActions(panel: FormPanel): DirectView =
     VStack:
       HStack:
         Button("Apply", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.apply()
         Button("Undo", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.undo()
         Button("Cancel", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.cancel()
         Button("Async Save accepted", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.saveFile()
         Button("Save / Close", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.save()
       HStack:
         Button("Queue validation", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.queue()
         Button("Complete", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.complete()
         Button("External 99", acceptsFirstResponder = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
+          onAction(panel) do(this: Button, p: FormPanel):
             p.external()
 
 proc specActions(panel: FormPanel): DeclarativeView =

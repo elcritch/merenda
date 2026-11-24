@@ -32,12 +32,12 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
         "Validate", identifier = "validate-" & $task.id, acceptsFirstResponder = false
       ):
         onAction(owner, (owner.generation, task.id)) do(
-          receiver: EditorController, context: EditorContext, sender: DynamicAgent
+          this: Button, receiver: EditorController, context: EditorContext
         ):
           receiver.queue.queueValidation(receiver, context)
       Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
         onAction(owner, (owner.generation, task.id)) do(
-          receiver: EditorController, context: EditorContext, sender: DynamicAgent
+          this: Button, receiver: EditorController, context: EditorContext
         ):
           receiver.removeTask(context)
 
@@ -79,26 +79,26 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       HStack:
         this.distribution = svdNatural
         Button("Reverse", acceptsFirstResponder = false):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.reverseTasks()
         Button("Restore #1", acceptsFirstResponder = false):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.restoreTask(1)
         Button("Undo", acceptsFirstResponder = false):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.undo()
       HStack:
         this.distribution = svdNatural
         Button(
           "Complete queued", identifier = "complete", acceptsFirstResponder = false
         ):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.queue.flushValidation()
         Button("Switch document", acceptsFirstResponder = false):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.switchDocument()
         Button("Close", acceptsFirstResponder = false):
-          onAction(owner) do(receiver: EditorController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: EditorController):
             receiver.closeDocument()
       component(observedRows, owner)
       Label:

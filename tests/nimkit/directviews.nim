@@ -64,9 +64,7 @@ proc counterComponent(context: DirectNode, owner: DirectController, value: int) 
     Button:
       this.identifier = "component-button"
       this.title = $value
-      onAction(owner, value) do(
-        receiver: DirectController, count: int, sender: DynamicAgent
-      ):
+      onAction(owner, value) do(this: Button, receiver: DirectController, count: int):
         receiver.calls += count
 
 proc observedCounter(context: DirectNode, owner: DirectController, value: Sigil[int]) =
@@ -95,6 +93,18 @@ proc observedChangingRoot(
   context.bindBody(value, owner, changingRoot)
 
 static:
+  doAssert not compiles(
+    block:
+      let host = newDirectView()
+      let owner = DirectController()
+      host.viewBody:
+        Button("Add"):
+          onAction(owner, 1) do(
+            receiver: DirectController, amount: int, sender: DynamicAgent
+          ):
+            receiver.calls += amount
+  )
+
   doAssert not compiles(
     block:
       let host = newDirectView()
@@ -178,7 +188,7 @@ suite "direct view composition":
         Button(readTitle(), readFrame(), identifier = "positional"):
           this.identifier = this.title
           onAction(owner, reads) do(
-            receiver: DirectController, count: int, sender: DynamicAgent
+            this: Button, receiver: DirectController, count: int
           ):
             receiver.calls += count
         Button(readTitle())
@@ -488,7 +498,7 @@ suite "direct view composition":
       session.viewBody:
         Button:
           onAction(owner, amount) do(
-            receiver: DirectController, value: int, sender: DynamicAgent
+            this: Button, receiver: DirectController, value: int
           ):
             receiver.calls += value
 
@@ -599,7 +609,7 @@ suite "direct view composition":
       observed.target = owner
       session.viewBody:
         TextField:
-          onChange(owner) do(receiver: DirectController, sender: DynamicAgent):
+          onChange(owner) do(this: TextField, receiver: DirectController):
             inc receiver.calls
       field = TextField(session.host.arrangedSubviews[0])
       field.stringValue = "changed"
@@ -621,7 +631,7 @@ suite "direct view composition":
       session.viewBody:
         Button:
           if enabled:
-            onAction(owner) do(receiver: DirectController, sender: DynamicAgent):
+            onAction(owner) do(this: Button, receiver: DirectController):
               inc receiver.calls
 
     render()
@@ -672,7 +682,7 @@ suite "direct view composition":
       observed.target = owner
       session.viewBody:
         Button:
-          onAction(owner) do(receiver: DirectController, sender: DynamicAgent):
+          onAction(owner) do(this: Button, receiver: DirectController):
             inc receiver.calls
       button = Button(session.host.arrangedSubviews[0])
       discard button.send(performClick(), ActionArgs(sender: button))
@@ -704,7 +714,7 @@ suite "direct view composition":
                 Button:
                   this.identifier = "button-" & id
                   this.title = "Preview"
-                  onAction(owner) do(receiver: DirectController, sender: DynamicAgent):
+                  onAction(owner) do(this: Button, receiver: DirectController):
                     inc receiver.calls
       session.takeDetachedRoot()
 
@@ -875,7 +885,7 @@ suite "direct collection rows":
             Button:
               this.title = controller.itemWithIdentifier(id).title
               onAction(owner, id) do(
-                receiver: DirectController, key: string, sender: DynamicAgent
+                this: Button, receiver: DirectController, key: string
               ):
                 inc receiver.calls
       ,

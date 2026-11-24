@@ -31,9 +31,7 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
             editTitle,
           )
       Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
-        onAction(owner, task.id) do(
-          receiver: TaskController, id: int, sender: DynamicAgent
-        ):
+        onAction(owner, task.id) do(this: Button, receiver: TaskController, id: int):
           receiver.removeTask(id)
 
 proc taskRows(context: DirectNode, tasks: TaskRows, owner: TaskController = nil) =
@@ -74,19 +72,19 @@ proc buildChrome(controller: TaskController): DirectView =
         this.distribution = svdNatural
         this.spacing = 8
         Button("Insert at top", identifier = "insert", acceptsFirstResponder = false):
-          onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
+          onAction(controller) do(this: Button, receiver: TaskController):
             receiver.insertTask()
         Button("Reverse", identifier = "reverse", acceptsFirstResponder = false):
-          onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
+          onAction(controller) do(this: Button, receiver: TaskController):
             receiver.reverseTasks()
         Button("Counter +1", identifier = "counter", acceptsFirstResponder = false):
-          onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
+          onAction(controller) do(this: Button, receiver: TaskController):
             receiver.counter <- receiver.counter{} + 1
         Button("Undo", identifier = "undo", acceptsFirstResponder = false):
-          onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
+          onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performUndo()
         Button("Redo", identifier = "redo", acceptsFirstResponder = false):
-          onAction(controller) do(receiver: TaskController, sender: DynamicAgent):
+          onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performRedo()
       Label:
         this.identifier = "counter-value"

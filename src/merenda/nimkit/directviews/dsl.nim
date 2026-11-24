@@ -11,44 +11,41 @@ import ./runtime
 export runtime
 
 proc actionExpression(call: NimNode): NimNode =
-  let legacy = newCall(bindSym"viewAction")
-  for i in 1 ..< call.len:
-    legacy.add call[i]
-  let handler = call[^1]
+  let handler = call[^1].copyNimTree()
   if handler.kind notin {nnkDo, nnkLambda} or handler.params.len < 2:
-    return legacy
-  let first = handler.params[1]
+    error(
+      "DirectView handlers take a typed sender, receiver, and optional context", call
+    )
+  let params = handler.params
+  let first = params[1]
   if first.kind != nnkIdentDefs or first[^2].kind == nnkEmpty:
-    return legacy
+    error("Specify the widget type for the first DirectView handler parameter", first)
 
   let
-    widgetName = first[0]
+    senderName = first[0]
     senderType = first[^2]
     sender = ident(genSym(nskParam, "directViewSender").repr)
     widget = ident"this"
     body = handler.body
-    adapted = handler.copyNimTree()
-    params = newNimNode(nnkFormalParams).add(handler.params[0])
-  if first.len > 3:
-    let remaining = first.copyNimTree()
-    remaining.del(0)
-    params.add remaining
-  for i in 2 ..< handler.params.len:
-    params.add handler.params[i]
+  if first.len == 3:
+    params.del(1)
+  else:
+    first.del(0)
   params.add newIdentDefs(sender, bindSym"DynamicAgent")
-  adapted.params = params
-  adapted.body = quote:
+  handler.body = quote:
     if `sender` of `senderType`:
-      let `widgetName` = `senderType`(`sender`)
+      let `senderName` = `senderType`(`sender`)
       `body`
 
-  let typed = legacy.copyNimTree()
-  typed[^1] = adapted
+  let action = newCall(bindSym"viewAction")
+  for i in 1 ..< call.len - 1:
+    action.add call[i]
+  action.add handler
   result = quote:
-    when typeof(`widget`) is `senderType` and not compiles(`legacy`):
-      `typed`
+    when typeof(`widget`) is `senderType`:
+      `action`
     else:
-      `legacy`
+      {.error: "The first DirectView handler parameter must have the widget's type".}
 
 macro viewBody*(session, body: untyped): untyped =
   var slot = 0
