@@ -234,6 +234,7 @@ type
     interfaceStyle: KosmoInterfaceStyle
     appearanceObserver: nimkit.NotificationObserverToken
     frontends: seq[KosmoApplication]
+    aboutWindow: nimkit.Window
     cliServer: KosmoCliOpenServer
 
   KosmoWindowLifecycle = ref object of nimkit.Responder

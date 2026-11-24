@@ -3,6 +3,22 @@ import std/unittest
 
 import merenda/nimkit
 
+type UrlOpeningSpy* = ref object of DynamicAgent
+  openedUrls*: seq[string]
+
+protocol UrlOpeningSpyMethods of WorkspaceProviderProtocol:
+  method workspacePerformOperation(
+      spy: UrlOpeningSpy, request: WorkspaceOperationRequest
+  ): WorkspaceOperationResponse =
+    if request.kind == wokOpenUrl:
+      spy.openedUrls.add request.target
+      return WorkspaceOperationResponse(handled: true, succeeded: true)
+
+proc recordOpenedUrls*(app: Application): UrlOpeningSpy =
+  result = UrlOpeningSpy()
+  discard result.withProtocol(UrlOpeningSpyMethods)
+  app.workspace = newWorkspace(result, declaredFeatures = {wfOpenUrls})
+
 proc buttonWithLabel*(view: View, label: string): Button =
   if view of Button and view.accessibilityLabel() == label:
     return Button(view)

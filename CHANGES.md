@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show Kosmo's About information in a NimKit window that closes with Cmd-W.
+- Open web links in Kosmo's Markdown previews in the system default browser.
 - Scroll faster in Quick Open while holding Control.
 - Keep window shortcuts working when the focused control is hidden or removed,
   including the Close Tab shortcut after switching tabs in Kosmo Settings.

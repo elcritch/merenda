@@ -408,6 +408,7 @@ proc refreshInterfaceAppearance(
 proc refreshInterfaceAppearance(manager: KosmoWindowManager) =
   ## Restyle every Kosmo window after the Kosmo or Merenda appearance changed.
   let appearance = manager.interfaceAppearance()
+  manager.aboutWindow.applyInterfaceAppearance(appearance)
   for frontend in manager.frontends:
     if not frontend.xClosed:
       frontend.refreshInterfaceAppearance(appearance)
@@ -1235,6 +1236,17 @@ func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
     if host.window == window:
       return true
 
+proc showAbout(manager: KosmoWindowManager) =
+  if manager.aboutWindow.isNil or manager.aboutWindow.isClosed():
+    manager.aboutWindow = manager.application.newKosmoAboutWindow()
+  manager.aboutWindow.applyInterfaceAppearance(manager.interfaceAppearance())
+  manager.application.activateWindow(manager.aboutWindow)
+
+proc closeAbout(manager: KosmoWindowManager) =
+  if not manager.aboutWindow.isNil:
+    manager.aboutWindow.close()
+    manager.aboutWindow = nil
+
 proc closeKeyAuxiliaryWindow(manager: KosmoWindowManager): bool =
   let window = manager.application.keyWindow()
   if window.isNil:
@@ -1269,6 +1281,9 @@ proc performKosmoMenuAction(
     identifier = $invocation.selector
   invocation.setResult(())
   case identifier
+  of "orderFrontStandardAboutPanel":
+    manager.showAbout()
+    return
   of KosmoQuitAction:
     discard manager.application.terminate()
     return
@@ -1334,13 +1349,14 @@ proc performKosmoMenuAction(
 
 proc installKosmoMenuActions(manager: KosmoWindowManager) =
   for identifier in [
-    KosmoQuitAction, KosmoOpenFileAction, KosmoOpenProjectAction,
-    KosmoShowSettingsAction, KosmoNewFileAction, KosmoQuickOpenAction,
-    KosmoNewTerminalAction, KosmoShowTerminalAction, KosmoShowGitDiffAction,
-    KosmoShowGitHubAction, KosmoSaveAction, KosmoCloseTabAction, KosmoCloseWindowAction,
-    KosmoPreviousTabAction, KosmoNextTabAction, KosmoSplitHorizontalAction,
-    KosmoSplitVerticalAction, KosmoShowFileExplorerAction, KosmoRevealActiveFileAction,
-    KosmoFindInFilesAction, KosmoReplaceInFilesAction, KosmoFocusToolbarAction,
+    "orderFrontStandardAboutPanel", KosmoQuitAction, KosmoOpenFileAction,
+    KosmoOpenProjectAction, KosmoShowSettingsAction, KosmoNewFileAction,
+    KosmoQuickOpenAction, KosmoNewTerminalAction, KosmoShowTerminalAction,
+    KosmoShowGitDiffAction, KosmoShowGitHubAction, KosmoSaveAction, KosmoCloseTabAction,
+    KosmoCloseWindowAction, KosmoPreviousTabAction, KosmoNextTabAction,
+    KosmoSplitHorizontalAction, KosmoSplitVerticalAction, KosmoShowFileExplorerAction,
+    KosmoRevealActiveFileAction, KosmoFindInFilesAction, KosmoReplaceInFilesAction,
+    KosmoFocusToolbarAction,
   ]:
     discard manager.replaceMethod(
       nimkit.actionSelector(identifier), nimkit.DynamicMethod(performKosmoMenuAction)
@@ -1357,6 +1373,8 @@ proc unregister(manager: KosmoWindowManager, frontend: KosmoApplication) =
   let index = manager.frontends.find(frontend)
   if index >= 0:
     manager.frontends.delete(index)
+    if manager.frontends.len == 0:
+      manager.closeAbout()
 
 protocol KosmoWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
   method windowDidClose(lifecycle: KosmoWindowLifecycle, window: nimkit.Window) =
@@ -1496,7 +1514,7 @@ proc managedWindows*(manager: KosmoWindowManager): seq[KosmoApplication] =
     if not frontend.xClosed:
       result.add frontend
 
-proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
+proc configureKosmoApplicationMenu(frontend: KosmoApplication) =
   let mainMenu = frontend.application.mainMenu()
   if mainMenu.isNil or mainMenu.len == 0:
     return
@@ -1511,6 +1529,11 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = manager
+    let aboutAction = nimkit.actionSelector("orderFrontStandardAboutPanel")
+    for item in applicationMenu.items():
+      if item.action().name == aboutAction.name:
+        item.target = manager
+        break
 
 proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
   let mainMenu = frontend.application.mainMenu()
@@ -1866,7 +1889,7 @@ proc newKosmoApplication*(
   )
 
   let frontend = result.unsafeWeakRef()
-  result.configureKosmoSettingsMenu()
+  result.configureKosmoApplicationMenu()
   result.configureKosmoStandardActionMenus()
   result.configureKosmoWorkspaceMenu()
   result.synchronizeKosmoMenuBindings()
@@ -2363,6 +2386,7 @@ proc close*(manager: KosmoWindowManager) =
     adaptiveSession.target = lastKnownSession(nil)
   let frontends = manager.frontends
   manager.frontends.setLen(0)
+  manager.closeAbout()
   for frontend in frontends:
     frontend.close()
   if not manager.cliServer.isNil:

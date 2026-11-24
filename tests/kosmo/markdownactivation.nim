@@ -25,6 +25,48 @@ proc reselectPreview(spy: PreviewReselection) {.slot.} =
         spy.frontend.documentTabs.selectDocumentTabWithIdentifier(spy.identifier)
 
 suite "Kosmo Markdown activation":
+  test "clicking Markdown web links opens them through the system workspace":
+    let
+      root = createTempDir("kosmo-markdown-links-", "")
+      source = root / "preview.md"
+      local = root / "local.md"
+      app = newApplication("Markdown links")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      browser = app.recordOpenedUrls()
+    defer:
+      frontend.close()
+      removeDir(root)
+    const httpsUrl = "https://example.test/docs?section=2&lang=en#details"
+    const httpUrl = "http://example.test/project"
+    writeFile(
+      source,
+      "[Docs](" & httpsUrl & ")\n\n[Project](" & httpUrl & ")\n\n[Local](local.md)\n",
+    )
+    writeFile(local, "# Local document\n")
+    frontend.window.setContentView(frontend.contentView)
+    require frontend.openPath(source)
+    let preview = frontend.editorPane.markdownView
+    require preview.waitForMarkdownRendering()
+    discard frontend.window.buildRenders()
+    require preview.waitForMarkdownLayout()
+    let text = preview.textView()
+
+    for link in [httpsUrl, httpUrl, "local.md"]:
+      var index = 0
+      while index < text.textStorage().len and text.linkAtIndex(index).link != link:
+        inc index
+      require index < text.textStorage().len
+      let glyph = text.characterRect(index)
+      require not glyph.isEmpty
+      let point = text.pointToWindow(
+        initPoint(glyph.minX + glyph.size.width / 4, glyph.minY + glyph.size.height / 2)
+      )
+      require frontend.window.mouseDownAt(point)
+      discard frontend.window.mouseUpAt(point)
+
+    check browser.openedUrls == @[httpsUrl, httpUrl]
+    check frontend.editorView.editor.tabs()[^1].filePath.get() == local
+
   test "switching Markdown tabs preserves selection and scroll position":
     let
       root = createTempDir("kosmo-markdown-activation-", "")

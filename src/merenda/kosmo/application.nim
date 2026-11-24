@@ -22,12 +22,11 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
+    about, applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
     gitdiff, githubviewer, hintsmode, inputtranslation, matterworkers, moe,
-    moehighlighting, panedocuments, panekeys, quickopen, recovery, scrolling,
-    searchbar, settings,
-    shortcutpresentation, shortcuts, terminalsearch, textbackendlogging, viewersearch,
-    updater, workspacefiles,
+    moehighlighting, panedocuments, panekeys, quickopen, recovery, scrolling, searchbar,
+    settings, shortcutpresentation, shortcuts, terminalsearch, textbackendlogging,
+    viewersearch, updater, workspacefiles,
   ]
 
 export
