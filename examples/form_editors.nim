@@ -19,7 +19,7 @@ proc newFormPanel(draft: FormDraft, savePath: string): FormPanel =
   result = FormPanel(draft: draft, savePath: savePath)
   initResponder(result)
 
-proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
+proc configureForm(form: FormView, draft: FormDraft) =
   if form.rows.len == 0:
     let field = newTextField("")
     field.identifier = "amount"
@@ -34,16 +34,16 @@ proc configureForm(form: FormView, scope: BindingScope, draft: FormDraft) =
     form.addRow(newLabel("File save"), newLabel(""))
   let field = TextField(form.rows[0].field)
   let status = Label(form.rows[1].field)
-  scope.bindTextField("number", draft.raw, draft, 0, rawText, field, editText)
-  scope.bindValue("accepted", draft.document.accepted, Label(form.rows[2].field)) do(
+  form.bindTextField("number", draft.raw, draft, 0, rawText, field, editText)
+  form.bindValue("accepted", draft.document.accepted, Label(form.rows[2].field)) do(
     label: Label, value: int
   ):
     label.stringValue = $value
-  scope.bindValue("saveStatus", draft.document.saveStatus, Label(form.rows[3].field)) do(
+  form.bindValue("saveStatus", draft.document.saveStatus, Label(form.rows[3].field)) do(
     label: Label, value: string
   ):
     label.stringValue = value
-  scope.bindValue("status", draft.status, status) do(label: Label, value: string):
+  form.bindValue("status", draft.status, status) do(label: Label, value: string):
     label.stringValue = value
 
 proc newDraftForm*(draft: FormDraft): DirectView =
@@ -51,7 +51,7 @@ proc newDraftForm*(draft: FormDraft): DirectView =
   result = newDirectView()
   result.viewBody:
     FormView:
-      configureForm(this, bindingScope, draft)
+      configureForm(this, draft)
 
 proc apply(panel: FormPanel) =
   discard panel.draft.apply()

@@ -688,6 +688,93 @@ suite "direct view composition":
     check field.stringValue == "1"
     session.close()
 
+  test "form bindings follow the mounted widget and stop when its host expires":
+    let owner = TextOwner(text: newSigil("initial"))
+    initResponder(owner)
+    var host = newDirectView()
+    var form: FormView
+    var scope: BindingScope
+    proc render(showForm: bool) =
+      host.viewBody:
+        if showForm:
+          keyed("entry"):
+            FormView:
+              if this.rows.len == 0:
+                this.addRow(newLabel("Text"), newTextField(""))
+              let field = TextField(this.rows[0].field)
+              this.bindTextField(
+                "text", owner.text, owner, 0, readOwnedText, field, editOwnedText
+              )
+              form = this
+              scope = bindingScope
+        else:
+          keyed("entry"):
+            Label("Replacement")
+
+    render(true)
+    let oldForm = form
+    let oldScope = scope
+    let oldField = TextField(oldForm.rows[0].field)
+    render(true)
+    check form == oldForm
+    check scope == oldScope
+    owner.text <- "before replacement"
+    render(false)
+    discard drainMainThreadWork()
+    check oldField.stringValue == "initial"
+    expect ValueError:
+      oldForm.bindTextField(
+        "text", owner.text, owner, 0, readOwnedText, oldField, editOwnedText
+      )
+
+    render(true)
+    check form != oldForm
+    check scope != oldScope
+    let field = TextField(form.rows[0].field)
+    field.stringValue = "edit"
+    check owner.text{} == "edit"
+    owner.text <- "queued before release"
+    host = nil
+    discard drainMainThreadWork()
+    check field.stringValue == "edit"
+    check not scope.isActive
+    expect ValueError:
+      form.bindTextField(
+        "text", owner.text, owner, 0, readOwnedText, field, editOwnedText
+      )
+    field.stringValue = "late edit"
+    check owner.text{} == "queued before release"
+
+  test "a retained node cannot bind after its session expires":
+    let owner = TextOwner(text: newSigil("initial"))
+    initResponder(owner)
+    let host = newStackView()
+    var session = newDirectViewSession(host)
+    let root = session.beginUpdate()
+    let node = root.child(
+      "field",
+      "textfield",
+      proc(): TextField =
+        newTextField(""),
+    )
+    let field = TextField(node.view)
+    field.bindTextField(
+      "text", owner.text, owner, 0, readOwnedText, field, editOwnedText
+    )
+    session.endUpdate()
+    check field.stringValue == "initial"
+
+    session = nil
+    check host.arrangedSubviews[0] == field
+    check not node.bindingScope.isActive
+    expect ValueError:
+      field.bindTextField(
+        "text", owner.text, owner, 0, readOwnedText, field, editOwnedText
+      )
+    owner.text <- "after release"
+    discard drainMainThreadWork()
+    check field.stringValue == "initial"
+
   test "an expired explicit receiver does not invoke a handler":
     var observed: BackRef[DirectController]
     let session = newDirectViewSession(newStackView())

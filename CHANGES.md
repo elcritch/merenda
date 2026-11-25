@@ -32,6 +32,9 @@
 - DirectView `onAction` and `onChange` handlers take the typed widget first,
   followed by the receiver and optional context. The receiver parameter can use
   a base type such as `Responder` or `DynamicAgent`.
+- Allow helpers to call `bindTextField` and `bindValue` on a mounted DirectView
+  widget to use its existing scope. Bindings stop updating when the owning
+  composition is released.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

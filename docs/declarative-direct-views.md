@@ -133,6 +133,12 @@ These text handoff rules cover `bindTextField` and the DSL's text assignment;
 arbitrary binding setters and independently managed scopes still require callers
 to avoid competing writers.
 
+A helper that receives a widget from a DirectView body can call `bindTextField`
+or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
+the binding in the form's existing scope, so the form can manage a field it
+creates in ordinary Nim code. The operation raises `ValueError` if the widget
+has no active DirectView scope. See the [form editor example](../examples/form_editors.nim).
+
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
 text. Indexed lookup avoids scanning the sequence in every getter. Unchanged rows

@@ -21,6 +21,7 @@ type
     ownedView: View
     hostRef: BackRef[StackView]
     parent: BackRef[DirectNode]
+    compositionOwner: BackRef[Responder]
     bindings*: BindingScope
     bodyBindings: BindingScope
     sizing*: StackViewSizingPolicy
@@ -41,6 +42,7 @@ type
     host*: StackView
     detached*: bool
     root: DirectNode
+    lifetimeOwner: Responder
 
   BodyValue[R, T] = object
     owner: BackRef[R]
@@ -70,8 +72,10 @@ proc fieldChanged(target: DirectTarget, sender: DynamicAgent) {.slot.} =
   if target.active and not target.lifetime.isNil:
     callback.dispatchViewAction(sender)
 
-proc newRoot(host: StackView, detached: bool): DirectNode =
-  result = DirectNode(bindings: newBindingScope(preview = detached), detached: detached)
+proc newRoot(host: StackView, detached: bool, owner: Responder): DirectNode =
+  result = DirectNode(detached: detached)
+  result.compositionOwner.target = owner
+  result.bindings = newBindingScope(preview = detached, owner = result.compositionOwner)
   result.hostRef.target = host
 
 proc newDirectView*(frame = AutoRect, detached = false): DirectView =
@@ -80,12 +84,25 @@ proc newDirectView*(frame = AutoRect, detached = false): DirectView =
   initStackViewFields(result, laVertical, frame)
   result.spacing = 0
   result.distribution = svdNatural
-  result.root = newRoot(result, detached)
+  result.root = newRoot(result, detached, result)
 
 proc newDirectViewSession*(host: StackView, detached = false): DirectViewSession =
   if host.isNil:
     raise newException(ValueError, "direct view host cannot be nil")
-  DirectViewSession(host: host, detached: detached, root: newRoot(host, detached))
+  let owner = Responder()
+  DirectViewSession(
+    host: host,
+    detached: detached,
+    root: newRoot(host, detached, owner),
+    lifetimeOwner: owner,
+  )
+
+proc retireBindings(node: DirectNode) =
+  let widget = node.ownedView
+  if not widget.isNil and widget.xDirectNode{} == Responder(node):
+    widget.xDirectNode.clear()
+  node.bindings.dispose()
+  node.bodyBindings.dispose()
 
 proc retire(node: DirectNode) =
   if node.isNil:
@@ -96,8 +113,7 @@ proc retire(node: DirectNode) =
     node.target.changed = ViewAction()
     if node.view of TextField:
       TextField(node.view).disconnect(textDidChange, node.target, fieldChanged)
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   for child in node.children:
     child.retire()
   if not node.view.isNil:
@@ -111,8 +127,7 @@ proc clearNode(node: DirectNode) =
   for child in node.children:
     child.retire()
   node.children.setLen(0)
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   node.closed = true
 
 proc retireEffects(node: DirectNode) =
@@ -121,8 +136,7 @@ proc retireEffects(node: DirectNode) =
       node.target.active = false
       node.target.callback = ViewAction()
       node.target.changed = ViewAction()
-    node.bindings.dispose()
-    node.bodyBindings.dispose()
+    node.retireBindings()
     for child in node.children:
       child.retireEffects()
 
@@ -141,7 +155,7 @@ proc clear*(view: DirectView) =
     suspended = view.root.suspended
     detached = view.root.detached
   view.root.clearNode()
-  view.root = newRoot(view, detached)
+  view.root = newRoot(view, detached, view)
   if suspended:
     view.root.suspended = true
     view.root.bindings.suspendBindings()
@@ -159,7 +173,7 @@ proc beginChildren*(node: DirectNode) =
   node.children = @[]
 
 proc beginUpdate*(node: DirectNode): DirectNode =
-  if node.closed or node.applying:
+  if node.closed or node.applying or not node.bindings.isActive:
     raise newException(ValueError, "closed or recursively updating direct view context")
   if node.suspended:
     raise newException(ValueError, "cannot update a suspended direct view context")
@@ -258,10 +272,14 @@ proc child*[T: View](
       ownedView: factory(),
       identity: id,
       widgetType: widgetType,
-      bindings: newBindingScope(preview = parent.detached),
+      compositionOwner: parent.compositionOwner,
+      bindings:
+        newBindingScope(preview = parent.detached, owner = parent.compositionOwner),
       detached: parent.detached,
     )
     result.parent.target = parent
+    if not result.ownedView.isNil:
+      result.ownedView.xDirectNode.target = result
   parent.children.add result
   result.sizing = svspAutomatic
 
@@ -298,6 +316,23 @@ proc setAction*(node: DirectNode, button: Button, action: ViewAction) =
 proc bindingScope*(node: DirectNode): BindingScope =
   node.bindings
 
+proc bindingScopeFor(view: View): BindingScope =
+  if not view.isNil:
+    let owner = view.xDirectNode{}
+    if owner of DirectNode:
+      let node = DirectNode(owner)
+      if node.ownedView == view and node.bindings.isActive:
+        return node.bindings
+  raise newException(ValueError, "View has no active DirectView binding scope")
+
+template bindTextField*(view: View, args: varargs[untyped]): untyped =
+  ## Bind a text field using this widget's active DirectView scope.
+  bindTextField(bindingScopeFor(view), args)
+
+template bindValue*(view: View, args: varargs[untyped]): untyped =
+  ## Bind a value using this widget's active DirectView scope.
+  bindValue(bindingScopeFor(view), args)
+
 proc patchText*(node: DirectNode, field: TextField, value: string) =
   ## Preserve provisional editing when an unrelated composition repeats a value.
   if node.bindings.relinquishText(field):
@@ -309,8 +344,7 @@ proc patchText*(node: DirectNode, field: TextField, value: string) =
   node.hasAuthoredText = true
 
 proc disposeBindings(node: DirectNode) =
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   for child in node.children:
     child.disposeBindings()
 
@@ -322,8 +356,7 @@ proc takeRoot(node: DirectNode): View =
   result.removeFromSuperview()
   node.children.setLen(0)
   child.disposeBindings()
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   node.closed = true
 
 proc takeDetachedRoot*(session: DirectViewSession): View =
@@ -421,7 +454,8 @@ proc bindBody*[S; R: Responder, T](
   ## A component-owned structural binding. The body may update its own child
   ## bindings without removing this subscription. Receiver and context are weak.
   if node.bodyBindings.isNil:
-    node.bodyBindings = newBindingScope(preview = node.detached)
+    node.bodyBindings =
+      newBindingScope(preview = node.detached, owner = node.compositionOwner)
     if node.collectingBody:
       node.bodyBindings.beginBindings()
   type Input = tuple[source: S, draw: typeof(draw)]
