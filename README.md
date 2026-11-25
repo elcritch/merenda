@@ -340,7 +340,7 @@ which knows how to open links.
 
 #### Connect a text field to a task
 
-A text field can show a value from your app and send edits back to it.
+A text field can show a value from your app or controller and send edits back to it.
 To try this in the same window, add the following imports to
 `examples/project_link.nim`. The example task controller starts with three tasks
 and provides the procedures for reading and editing their titles.
