@@ -264,7 +264,7 @@ adjustItem.target = newActionTarget(
   proc(sender: DynamicAgent) =
     canvas.openDiameterEditor(),
 )
-discard contextMenu.addItem(adjustItem)
+discard contextMenu.add(adjustItem)
 canvas.menu = contextMenu
 undoButton.target = newActionTarget(
   undoAction,

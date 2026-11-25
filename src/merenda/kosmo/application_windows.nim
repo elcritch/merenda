@@ -577,13 +577,13 @@ proc setTheme(
       return
   result = true
 
-proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuItem =
+proc findNestedMenuItem(menu: nimkit.Menu, identifier: string): nimkit.MenuItem =
   if menu.isNil:
     return
   for item in menu.items():
     if item.identifier() == identifier:
       return item
-    let nested = item.submenu().menuItemWithIdentifier(identifier)
+    let nested = item.submenu().findNestedMenuItem(identifier)
     if not nested.isNil:
       return nested
 
@@ -601,7 +601,7 @@ proc synchronizeKosmoMenuBindings(frontend: KosmoApplication) =
     return
   let menu = frontend.application.mainMenu()
   for action in kosmoActions():
-    let item = menu.menuItemWithIdentifier(action.identifier)
+    let item = menu.findNestedMenuItem(action.identifier)
     if item.isNil:
       continue
     if not action.hasMenuKeyEquivalent():
@@ -1575,7 +1575,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   if windowMenu.isNil:
     return
   let manager = frontend.xWindowManager{}
-  if not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
+  if not windowMenu.findNestedMenuItem(KosmoNextTabAction).isNil:
     proc retarget(menu: nimkit.Menu) =
       for item in menu.items():
         let identifier = item.identifier()
@@ -1596,7 +1596,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
     let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))
     item.identifier = identifier
     item.target = manager
-    discard windowMenu.addItem(item)
+    discard windowMenu.add(item)
 
   windowMenu.addSeparator()
   addAction("Previous Tab", KosmoPreviousTabAction)
@@ -1623,8 +1623,8 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
     )
     item.identifier = identifier
     item.target = manager
-    discard focusMenu.addItem(item)
-  discard windowMenu.addItem(focusMenuItem)
+    discard focusMenu.add(item)
+  discard windowMenu.add(focusMenuItem)
   addAction("Focus Tool Toolbar", KosmoFocusToolbarAction)
 
 proc newKosmoApplication*(
@@ -1745,20 +1745,20 @@ proc newKosmoApplication*(
   closeTabItem.identifier = KosmoCloseTabAction
   closeWindowItem.identifier = KosmoCloseWindowAction
   fileItem.submenu = fileMenu
-  discard fileMenu.addItem(newItem)
-  discard fileMenu.addItem(openItem)
-  discard fileMenu.addItem(openProjectItem)
+  discard fileMenu.add(newItem)
+  discard fileMenu.add(openItem)
+  discard fileMenu.add(openProjectItem)
   fileMenu.addSeparator()
-  discard fileMenu.addItem(quickOpenItem)
-  discard fileMenu.addItem(terminalItem)
-  discard fileMenu.addItem(showTerminalItem)
-  discard fileMenu.addItem(gitDiffItem)
-  discard fileMenu.addItem(gitHubItem)
+  discard fileMenu.add(quickOpenItem)
+  discard fileMenu.add(terminalItem)
+  discard fileMenu.add(showTerminalItem)
+  discard fileMenu.add(gitDiffItem)
+  discard fileMenu.add(gitHubItem)
   fileMenu.addSeparator()
-  discard fileMenu.addItem(saveItem)
+  discard fileMenu.add(saveItem)
   fileMenu.addSeparator()
-  discard fileMenu.addItem(closeTabItem)
-  discard fileMenu.addItem(closeWindowItem)
+  discard fileMenu.add(closeTabItem)
+  discard fileMenu.add(closeWindowItem)
 
   if hasFileBrowser:
     splitView.addPane(

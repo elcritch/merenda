@@ -1063,7 +1063,7 @@ proc newColorChoiceMenuItem(well: PopupColorWell, index: int): MenuItem =
 proc rebuildMenu(well: PopupColorWell) =
   let menu = newMenu("Colors")
   for index in 0 ..< well.xChoices.len:
-    discard menu.addItem(well.newColorChoiceMenuItem(index))
+    discard menu.add(well.newColorChoiceMenuItem(index))
   well.menu = menu
   well.synchronizeChoiceState()
 

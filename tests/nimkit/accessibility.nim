@@ -461,7 +461,7 @@ suite "nimkit accessibility":
       item = newMenuItem("Run")
       button = newPopupMenuButton("Actions", menu)
 
-    discard menu.addItem(item)
+    discard menu.add(item)
 
     check menu.accessibilityRole() == arMenu
     check menu.accessibilityLabel() == "Actions"

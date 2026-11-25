@@ -163,9 +163,6 @@ protocol MenuProtocol {.selectorScope: protocol.} from Menu:
 protocol MenuDataSource {.selectorScope: protocol.}:
   method menuItemCount*(menu: Menu): int {.optional.}
   method menuItemModelAtIndex*(menu: Menu, index: int): MenuItemModel {.optional.}
-  method indexOfMenuItemModelIdentifier*(
-    menu: Menu, identifier: string
-  ): int {.optional.}
 
 protocol MenuEvents:
   proc menuItemDidActivate*(
@@ -725,30 +722,24 @@ proc len*(menu: Menu): int =
 proc `[]`*(menu: Menu, index: Natural): MenuItem =
   menu.xItems[index]
 
-proc menuItemAtIndex*(menu: Menu, index: int): MenuItem =
+proc itemAt*(menu: Menu, index: int): MenuItem =
   if index < 0 or index >= menu.len():
     nil
   else:
     menu.xItems[index]
 
-proc indexOfMenuItemIdentifier*(menu: Menu, identifier: string): int =
+proc find*(menu: Menu, identifier: string): int =
   if identifier.len == 0:
     return -1
-  if not menu.xDataSource.isNil:
-    let found = menu.xDataSource.trySendLocal(
-      indexOfMenuItemModelIdentifier(), (menu: menu, identifier: identifier)
-    )
-    if found.isSome:
-      return found.get()
   for index, item in menu.xItems:
     if not item.isNil and item.identifier() == identifier:
       return index
   -1
 
-proc menuItemWithIdentifier*(menu: Menu, identifier: string): MenuItem =
-  let index = menu.indexOfMenuItemIdentifier(identifier)
+proc `[]`*(menu: Menu, identifier: string): MenuItem =
+  let index = menu.find(identifier)
   if index >= 0:
-    menu.menuItemAtIndex(index)
+    menu.itemAt(index)
   else:
     nil
 
@@ -771,7 +762,7 @@ proc indexOfModelIdentifier(menu: Menu, identifier: string): int =
       return index
   -1
 
-proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
+proc add*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
   if item.isNil:
     return nil
   if menu.xUsesItemModels:
@@ -781,7 +772,7 @@ proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
   syncNativeMainMenu()
   item
 
-proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
+proc add*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
   menu.xUsesItemModels = true
   menu.xItemModels.add model
   if model.hidden:
@@ -793,9 +784,7 @@ proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
   syncNativeMainMenu()
   item
 
-proc insertItem*(
-    menu: Menu, model: MenuItemModel, index: int
-): MenuItem {.discardable.} =
+proc insert*(menu: Menu, model: MenuItemModel, index: int): MenuItem {.discardable.} =
   menu.xUsesItemModels = true
   let modelIndex =
     if menu.xItemModels.len == 0:
@@ -806,7 +795,7 @@ proc insertItem*(
   menu.rebuildMenuItemsFromModels()
   syncNativeMainMenu()
   if model.identifier.len > 0:
-    return menu.menuItemWithIdentifier(model.identifier)
+    return menu[model.identifier]
   if model.hidden:
     return nil
   var visibleIndex = 0
@@ -814,21 +803,21 @@ proc insertItem*(
     if not menu.xItemModels[index].hidden:
       inc visibleIndex
   if visibleIndex >= 0:
-    return menu.menuItemAtIndex(visibleIndex)
+    return menu.itemAt(visibleIndex)
 
-proc addItem*(
+proc add*(
     menu: Menu,
     title: string,
     action: ActionSelector = ActionSelector(),
     keyEquivalent = "",
     modifiers: set[KeyModifier] = {},
 ): MenuItem {.discardable.} =
-  menu.addItem(newMenuItem(title, action, keyEquivalent, modifiers))
+  menu.add(newMenuItem(title, action, keyEquivalent, modifiers))
 
 proc addSeparator*(menu: Menu): MenuItem {.discardable.} =
-  menu.addItem(separatorMenuItem())
+  menu.add(separatorMenuItem())
 
-proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
+proc delete*(menu: Menu, item: MenuItem): bool {.discardable.} =
   if item.isNil:
     return false
   let idx = menu.xItems.find(item)
@@ -848,12 +837,12 @@ proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
   syncNativeMainMenu()
   true
 
-proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardable.} =
+proc delete*(menu: Menu, identifier: string): bool {.discardable.} =
   if identifier.len == 0:
     return false
-  let item = menu.menuItemWithIdentifier(identifier)
+  let item = menu[identifier]
   if not item.isNil:
-    return menu.removeItem(item)
+    return menu.delete(item)
   if menu.xUsesItemModels:
     let modelIndex = menu.indexOfModelIdentifier(identifier)
     if modelIndex >= 0:
@@ -863,7 +852,7 @@ proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardab
       return true
   false
 
-proc removeAllItems*(menu: Menu) =
+proc clear*(menu: Menu) =
   menu.xItemModels.setLen(0)
   menu.xUsesItemModels = false
   menu.clearMenuItems()

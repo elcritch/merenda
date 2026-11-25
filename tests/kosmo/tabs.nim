@@ -268,7 +268,7 @@ suite "Kosmo":
     let
       frontend = newKosmoApplication(newApplication("Kosmo New Tab Test"))
       fileMenu = frontend.application.mainMenu()[1].submenu()
-      newItem = fileMenu.menuItemWithIdentifier(KosmoNewFileAction)
+      newItem = fileMenu[KosmoNewFileAction]
       initialTabCount = frontend.documentTabs.len
     defer:
       frontend.close()

@@ -144,7 +144,7 @@ suite "nimkit menus":
   test "mutable menu items change menu bar intrinsic size without a reload":
     let menu = newMenu("Bar")
     let item = newMenuItem("Short")
-    discard menu.addItem(item)
+    discard menu.add(item)
     let bar = newMenuBar(menu)
     let before = bar.resolvedIntrinsicContentSize()
     item.title = "A considerably longer menu title for intrinsic measurement"
@@ -192,7 +192,7 @@ suite "nimkit menus":
       item.target = newActionTarget(action) do(sender: DynamicAgent):
         discard sender
         inc calls
-      discard menu.addItem(item)
+      discard menu.add(item)
     menu.itemModels = menu.itemModels()
     require menu.items().len == 1
     check menu.items()[0].perform(nil)
@@ -281,12 +281,12 @@ suite "nimkit menus":
     first.validates = false
     disabled.enabled = false
     more.submenu = childMenu
-    discard childMenu.addItem(newMenuItem("Child one"))
-    discard childMenu.addItem(newMenuItem("Child two"))
-    discard menu.addItem(first)
+    discard childMenu.add(newMenuItem("Child one"))
+    discard childMenu.add(newMenuItem("Child two"))
+    discard menu.add(first)
     discard menu.addSeparator()
-    discard menu.addItem(disabled)
-    discard menu.addItem(more)
+    discard menu.add(disabled)
+    discard menu.add(more)
     button.popupPresentation = ppInline
     root.addSubview(button)
     root.addSubview(underlying)
@@ -321,8 +321,8 @@ suite "nimkit menus":
     for title in ["Kosmo", "File", "Edit", "Window", "Help"]:
       let item = newMenuItem(title)
       item.submenu = newMenu(title)
-      discard item.submenu().addItem(newMenuItem(title & " command"))
-      discard mainMenu.addItem(item)
+      discard item.submenu().add(newMenuItem(title & " command"))
+      discard mainMenu.add(item)
     let root = newMenuRootView(mainMenu, newView(), rect(0, 0, 500, 300))
     window.setContentView(root)
     root.layoutSubtreeIfNeeded()
@@ -354,8 +354,8 @@ suite "nimkit menus":
     for title in ["Kosmo", "File", "Edit"]:
       let item = newMenuItem(title)
       item.submenu = newMenu(title)
-      discard item.submenu().addItem(newMenuItem(title & " command"))
-      discard mainMenu.addItem(item)
+      discard item.submenu().add(newMenuItem(title & " command"))
+      discard mainMenu.add(item)
     let root = newMenuRootView(mainMenu, newView(), rect(0, 0, 500, 300))
     window.setContentView(root)
     root.layoutSubtreeIfNeeded()
@@ -401,9 +401,9 @@ suite "nimkit menus":
     items[0].submenu = first
     items[1].submenu = second
     for sub in [first, second]:
-      discard sub.addItem(newMenuItem("One"))
-    discard menu.addItem(items[0])
-    discard menu.addItem(items[1])
+      discard sub.add(newMenuItem("One"))
+    discard menu.add(items[0])
+    discard menu.add(items[1])
     let menuBar = newMenuBar(menu, rect(0, 0, 320, 28))
     root.addSubview(menuBar)
     window.setContentView(root)
@@ -443,8 +443,8 @@ suite "nimkit menus":
         inc underlyingKeys
         true,
     )
-    discard menu.addItem(newMenuItem("One"))
-    discard menu.addItem(newMenuItem("Two"))
+    discard menu.add(newMenuItem("One"))
+    discard menu.add(newMenuItem("Two"))
     button.popupPresentation = ppInline
     root.addSubview(button)
     root.addSubview(underlying)
@@ -473,10 +473,10 @@ suite "nimkit menus":
     items[1].submenu = second
     items[2].submenu = third
     for sub in [first, second, third]:
-      discard sub.addItem(newMenuItem("One"))
-    discard menu.addItem(items[0])
-    discard menu.addItem(items[1])
-    discard menu.addItem(items[2])
+      discard sub.add(newMenuItem("One"))
+    discard menu.add(items[0])
+    discard menu.add(items[1])
+    discard menu.add(items[2])
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     let after = newView(frame = rect(8, 40, 200, 24))
@@ -522,10 +522,10 @@ suite "nimkit menus":
     items[1].submenu = second
     items[2].submenu = third
     for sub in [first, second, third]:
-      discard sub.addItem(newMenuItem("One"))
-    discard menu.addItem(items[0])
-    discard menu.addItem(items[1])
-    discard menu.addItem(items[2])
+      discard sub.add(newMenuItem("One"))
+    discard menu.add(items[0])
+    discard menu.add(items[1])
+    discard menu.add(items[2])
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     window.setContentView(root)
@@ -567,9 +567,9 @@ suite "nimkit menus":
     items[0].submenu = first
     items[1].submenu = second
     for sub in [first, second]:
-      discard sub.addItem(newMenuItem("One"))
-    discard menu.addItem(items[0])
-    discard menu.addItem(items[1])
+      discard sub.add(newMenuItem("One"))
+    discard menu.add(items[0])
+    discard menu.add(items[1])
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     let before = newView(frame = rect(8, 40, 200, 24))
@@ -607,10 +607,10 @@ suite "nimkit menus":
     items[1].submenu = second
     items[2].submenu = third
     for sub in [first, second, third]:
-      discard sub.addItem(newMenuItem("One"))
-    discard menu.addItem(items[0])
-    discard menu.addItem(items[1])
-    discard menu.addItem(items[2])
+      discard sub.add(newMenuItem("One"))
+    discard menu.add(items[0])
+    discard menu.add(items[1])
+    discard menu.add(items[2])
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     window.setContentView(root)
@@ -682,7 +682,7 @@ suite "nimkit menus":
     app.setMainWindow(second)
     check windowsMenu.items()[^2].state() == bsOff
     check windowsMenu.items()[^1].state() == bsOn
-    discard windowsMenu.removeItem(windowsMenu.items()[^1])
+    discard windowsMenu.delete(windowsMenu.items()[^1])
     app.updateWindowsMenu()
     check windowsMenu.items()[^1].representedObject() == DynamicAgent(second)
     second.close()
@@ -800,10 +800,10 @@ suite "nimkit menus":
         discard sender
         inc resetCount
       fileItem.submenu = fileMenu
-      discard fileMenu.addItem(runItem)
-      discard fileMenu.addItem(resetItem)
+      discard fileMenu.add(runItem)
+      discard fileMenu.add(resetItem)
       discard fileMenu.addSeparator()
-      discard mainMenu.addItem(fileItem)
+      discard mainMenu.add(fileItem)
       app.mainMenu = mainMenu
 
       let application = NSApplication.sharedApplication()
@@ -916,7 +916,7 @@ suite "nimkit menus":
         appearance = initAppearance(theme)
 
       actionsItem.submenu = actionsMenu
-      discard mainMenu.addItem(actionsItem)
+      discard mainMenu.add(actionsItem)
       menuBar.appearance = appearance
       menuBar.reload()
       root.addSubview(menuBar)
@@ -1078,7 +1078,7 @@ suite "nimkit menus":
         let item = newMenuItem(title)
         if index == 0:
           item.state = bsOn
-        menu.addItem(item)
+        menu.add(item)
       root.addSubview(button)
       button.popupPresentation = ppInline
       button.openPopup()
@@ -1105,8 +1105,8 @@ suite "nimkit menus":
     item.state = bsOn
     item.subtitle = "Cmd-Shift-X"
     item.submenu = submenu
-    submenu.addItem(newMenuItem("Child"))
-    menu.addItem(item)
+    submenu.add(newMenuItem("Child"))
+    menu.add(item)
     root.addSubview(button)
     window.setContentView(root)
     button.popupPresentation = ppInline
@@ -1179,18 +1179,19 @@ suite "nimkit menus":
     check menu[0.Natural].hasKeyEquivalent()
     check menu[0.Natural].keyEquivalent().text == "r"
     check menu[0.Natural].representedObject() == DynamicAgent(target)
-    check menu.indexOfMenuItemIdentifier("hidden") == -1
-    check menu.menuItemWithIdentifier("off").enabled() == false
+    check menu.find("hidden") == -1
+    check menu.itemAt(-1).isNil
+    check menu["missing"].isNil
+    check menu["off"].enabled() == false
     check menu[2.Natural].isSeparatorItem()
-    let child =
-      menu.menuItemWithIdentifier("more").submenu().menuItemWithIdentifier("child")
+    let child = menu["more"].submenu()["child"]
     check child.title == "Child"
 
     menu.update(target)
     check target.events == @["validate:run"]
-    check not menu.menuItemWithIdentifier("run").enabled()
-    check menu.menuItemWithIdentifier("run").state == bsOn
-    check menu.menuItemWithIdentifier("run").subtitle == "validated"
+    check not menu["run"].enabled()
+    check menu["run"].state == bsOn
+    check menu["run"].subtitle == "validated"
     check not menu.itemModels[0].enabled
     check menu.itemModels[0].state == bsOn
     check menu.itemModels[0].subtitle == "validated"
@@ -1199,8 +1200,10 @@ suite "nimkit menus":
     target.events.setLen(0)
     menu.update(target)
     check target.events == @["validate:run"]
-    check menu.menuItemWithIdentifier("run").enabled()
+    check menu["run"].enabled()
     check menu.itemModels[0].enabled
+    check menu.delete("hidden")
+    check menu.itemModels.len == 4
 
   test "menu item activation signal reports model identifiers":
     let
@@ -1238,9 +1241,9 @@ suite "nimkit menus":
       menu = newMenu("Choices")
       button = newPopupMenuButton("Choices", menu, rect(8, 108, 160, 24))
 
-    discard menu.addItem(newMenuItem("One"))
-    discard menu.addItem(newMenuItem("Two"))
-    discard menu.addItem(newMenuItem("Three"))
+    discard menu.add(newMenuItem("One"))
+    discard menu.add(newMenuItem("Two"))
+    discard menu.add(newMenuItem("Three"))
     button.popupPresentation = ppInline
     root.addSubview(button)
     window.setContentView(root)
@@ -1261,7 +1264,7 @@ suite "nimkit menus":
       menu = newMenu("Choices")
       button = newPopupMenuButton("Choices", menu, rect(8, 8, 96, 24))
 
-    discard menu.addItem(newMenuItem("One"))
+    discard menu.add(newMenuItem("One"))
     button.popupPresentation = ppWindow
     root.addSubview(button)
     window.setContentView(root)
@@ -1306,7 +1309,7 @@ suite "nimkit menus":
       action = actionSelector("contextSpyAction")
       item = newMenuItem("Run", action)
 
-    discard menu.addItem(item)
+    discard menu.add(item)
     target.focusable = true
     target.menu = menu
     root.addSubview(target)
@@ -1357,8 +1360,8 @@ suite "nimkit menus":
           root.addSubview(view)
         window.setContentView(root)
         more.submenu = submenu
-        discard submenu.addItem(newMenuItem("One"))
-        discard menu.addItem(more)
+        discard submenu.add(newMenuItem("One"))
+        discard menu.add(more)
         require window.makeFirstResponder(target)
         let anchor = menu.popUpContextMenu(target, initPoint(5, 5))
         require not anchor.isNil
@@ -1394,7 +1397,7 @@ suite "nimkit menus":
       target = newContextSpyView(rect(20, 20, 80, 40))
       menu = newMenu("Actions")
 
-    discard menu.addItem(newMenuItem("Run"))
+    discard menu.add(newMenuItem("Run"))
     target.menu = menu
     root.addSubview(target)
     window.setContentView(root)

@@ -448,11 +448,16 @@ suite "nimkit model controllers":
     check not menu[1.Natural].enabled
     check menu[2.Natural].isSeparatorItem()
     check menu.itemModels[1].identifier == "two"
-    check menu.indexOfMenuItemIdentifier("two") == 1
+    check menu.find("two") == 1
 
     bindMenu(boundMenu, controller)
     check boundMenu.len == 3
     check boundMenu[0.Natural].identifier == "one"
+    controller.insertItem(modelItem("hidden", hidden = true), 0)
+    boundMenu.reloadData()
+    check boundMenu.find("two") == 1
+    check boundMenu["two"].identifier == "two"
+    check controller.removeItem("hidden")
     controller.addItem(modelItem("three", objectValue = toObj("Three")))
     boundMenu.reloadData()
     check boundMenu.len == 4

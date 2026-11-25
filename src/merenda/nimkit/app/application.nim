@@ -693,7 +693,7 @@ proc `windowsMenu=`*(app: Application, menu: Menu) =
     return
   if not app.xWindowsMenu.isNil:
     for item in app.xDynamicWindowsMenuItems:
-      discard app.xWindowsMenu.removeItem(item)
+      discard app.xWindowsMenu.delete(item)
   app.xDynamicWindowsMenuItems.setLen(0)
   app.xWindowsMenu = menu
   if not menu.isNil:
@@ -715,7 +715,7 @@ proc addStandardMenu(
 ): MenuItem {.discardable.} =
   result = newMenuItem(title)
   result.submenu = submenu
-  discard mainMenu.addItem(result)
+  discard mainMenu.add(result)
 
 proc addStandardApplicationItem(
     menu: Menu,
@@ -725,7 +725,7 @@ proc addStandardApplicationItem(
     keyEquivalent = "",
     modifiers: set[KeyModifier] = {},
 ): MenuItem {.discardable.} =
-  result = menu.addItem(title, action, keyEquivalent, modifiers)
+  result = menu.add(title, action, keyEquivalent, modifiers)
   result.target = app
 
 proc installStandardMainMenu*(app: Application) =
@@ -768,28 +768,27 @@ proc installStandardMainMenu*(app: Application) =
     app, "Quit " & appName, actionSelector("terminate"), "q", shortcut
   )
 
-  discard
-    fileMenu.addItem("Close Window", actionSelector("performClose"), "w", shortcut)
+  discard fileMenu.add("Close Window", actionSelector("performClose"), "w", shortcut)
 
-  discard editMenu.addItem("Undo", actionSelector("undo"), "z", shortcut)
-  discard editMenu.addItem("Redo", actionSelector("redo"), "z", shortcut + {kmShift})
+  discard editMenu.add("Undo", actionSelector("undo"), "z", shortcut)
+  discard editMenu.add("Redo", actionSelector("redo"), "z", shortcut + {kmShift})
   editMenu.addSeparator()
-  discard editMenu.addItem("Cut", actionSelector("cut"), "x", shortcut)
-  discard editMenu.addItem("Copy", actionSelector("copy"), "c", shortcut)
-  discard editMenu.addItem("Paste", actionSelector("paste"), "v", shortcut)
+  discard editMenu.add("Cut", actionSelector("cut"), "x", shortcut)
+  discard editMenu.add("Copy", actionSelector("copy"), "c", shortcut)
+  discard editMenu.add("Paste", actionSelector("paste"), "v", shortcut)
   editMenu.addSeparator()
-  discard editMenu.addItem("Select All", actionSelector("selectAll"), "a", shortcut)
+  discard editMenu.add("Select All", actionSelector("selectAll"), "a", shortcut)
 
   discard
-    windowMenu.addItem("Minimize", actionSelector("performMiniaturize"), "m", shortcut)
-  discard windowMenu.addItem("Zoom", actionSelector("performZoom"))
+    windowMenu.add("Minimize", actionSelector("performMiniaturize"), "m", shortcut)
+  discard windowMenu.add("Zoom", actionSelector("performZoom"))
   windowMenu.addSeparator()
   windowMenu.addStandardApplicationItem(
     app, "Merenda Settings", actionSelector("showMerendaSettings")
   )
   windowMenu.addSeparator()
 
-  discard helpMenu.addItem(appName & " Help", actionSelector("showHelp"))
+  discard helpMenu.add(appName & " Help", actionSelector("showHelp"))
 
   mainMenu.addStandardMenu(appName, applicationMenu)
   mainMenu.addStandardMenu("File", fileMenu)
@@ -962,7 +961,7 @@ proc updateWindowsMenu*(app: Application) =
     return
   let menu = app.xWindowsMenu
   for item in app.xDynamicWindowsMenuItems:
-    discard menu.removeItem(item)
+    discard menu.delete(item)
   app.xDynamicWindowsMenuItems.setLen(0)
   for window in app.xWindows:
     if not window.isNil and not window.isClosed:
@@ -971,7 +970,7 @@ proc updateWindowsMenu*(app: Application) =
       item.representedObject = DynamicAgent(window)
       if window == app.xMainWindow:
         item.state = bsOn
-      discard menu.addItem(item)
+      discard menu.add(item)
       app.xDynamicWindowsMenuItems.add item
 
 proc activateWindow*(app: Application, window: Window) =

@@ -326,12 +326,17 @@ suite "nimkit comboboxes":
     check combo.itemAtIndex(0) == "Apple"
     check combo.itemAtIndex(1) == "Apricot"
     check combo.indexOfOptionIdentifier("banana") == -1
+    check options.find("apricot") == 1
+    check options.optionAt(1).identifier == "apricot"
+    check options.optionAt(-1).identifier == ""
 
     combo.optionFilterText = ""
     check window.makeFirstResponder(combo)
     check window.dispatchKeyDown(KeyEvent(text: "y", key: keyY, keyCode: keyY.ord))
     check combo.selectedOptionIdentifier() == "banana"
     check combo.stringValue == "Banana"
+    check options.delete("banana")
+    check options.sourceLen == 3
 
   test "disabled and separator combo options are not activated":
     let

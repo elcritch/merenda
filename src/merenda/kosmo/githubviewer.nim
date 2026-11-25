@@ -603,15 +603,14 @@ proc newKosmoGitHubPanel(
         "Pull Requests"
       else:
         "Issues & PRs"
-    discard
-      result.kindButton.menu().addItem(newGitHubFilterItem(weakPanel, title, kinds))
+    discard result.kindButton.menu().add(newGitHubFilterItem(weakPanel, title, kinds))
   for state in GitHubState:
     let title =
       case state
       of ghsOpen: "Open"
       of ghsClosed: "Closed"
       of ghsAll: "All States"
-    discard result.stateButton.menu().addItem(
+    discard result.stateButton.menu().add(
         newGitHubFilterItem(weakPanel, title, state = state)
       )
   result.applySnapshot(snapshot)

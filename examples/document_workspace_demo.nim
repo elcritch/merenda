@@ -684,15 +684,15 @@ proc installMainMenu(app: Application, controller: FeatureDocumentController) =
   closeItem.target = controller
 
   fileItem.submenu = fileMenu
-  discard fileMenu.addItem(newItem)
-  discard fileMenu.addItem(openItem)
-  discard fileMenu.addItem(reopenItem)
+  discard fileMenu.add(newItem)
+  discard fileMenu.add(openItem)
+  discard fileMenu.add(reopenItem)
   discard fileMenu.addSeparator()
-  discard fileMenu.addItem(saveItem)
-  discard fileMenu.addItem(revertItem)
+  discard fileMenu.add(saveItem)
+  discard fileMenu.add(revertItem)
   discard fileMenu.addSeparator()
-  discard fileMenu.addItem(closeItem)
-  discard mainMenu.addItem(fileItem)
+  discard fileMenu.add(closeItem)
+  discard mainMenu.add(fileItem)
   app.mainMenu = mainMenu
 
 let
