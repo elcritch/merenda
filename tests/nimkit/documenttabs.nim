@@ -338,7 +338,7 @@ suite "nimkit document tabs":
 
     discard tabs.add(initDocumentTabModel("doc-c", "Gamma"))
     tabs.selectedItem = tabs["doc-c"]
-    let state = tabs.captureState()
+    let state = tabs.snapshot()
     check state.selectedIdentifier == "doc-c"
     check state.orderedIdentifiers == @["doc-a", "doc-b", "doc-c"]
 

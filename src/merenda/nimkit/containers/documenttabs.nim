@@ -972,7 +972,8 @@ proc findModel(tabs: DocumentTabs, identifier: string): int =
       return index
   -1
 
-proc captureState*(tabs: DocumentTabs): DocumentTabsState =
+proc snapshot*(tabs: DocumentTabs): DocumentTabsState =
+  ## Save the displayed tab order and selection for restoreState.
   DocumentTabsState(
     selectedIdentifier: tabs.selectedIdentifier(),
     orderedIdentifiers: tabs.identifiers(),
