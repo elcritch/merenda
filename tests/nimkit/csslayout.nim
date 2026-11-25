@@ -518,7 +518,7 @@ suite "NimKit CSS layout":
 
   test "selection indicator radius reaches the DocumentTabs render consumer":
     let tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
-    discard tabs.addDocumentTabItem(newDocumentTabItem("Selected", "selected"))
+    discard tabs.add(newDocumentTabItem("Selected", "selected"))
     let theme = cssTheme(
       "document-tab:selected { -nimkit-selection-indicator-fill: #f102a3; -nimkit-selection-indicator-size: 6px; -nimkit-selection-indicator-radius: 3px; }"
     )
@@ -624,7 +624,7 @@ suite "NimKit CSS layout":
       constant = 3,
       priority = LayoutPriority(800),
     )
-    .activate()
+      .activate()
     native[atWidth].equalTo(40).activate()
     native[atHeight].equalTo(20).activate()
     root.installCss(

@@ -1,6 +1,6 @@
 ## Kosmo action registry, shortcut profiles, and key-binding configuration.
 
-import std/[json, os, strutils]
+import std/[json, options, os, strutils]
 
 import ../nimkit as nimkit
 
@@ -41,6 +41,37 @@ const
   KosmoHintInsertAction* = "kosmo.hintInsert"
   KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
   KosmoMaxFocusPanelShortcut* = 8
+
+proc nativeEditingCommand*(
+    selector: nimkit.CommandSelector
+): Option[nimkit.CommandSelector] =
+  case $selector.name
+  of KosmoCopyAction, "copy":
+    some(nimkit.copy())
+  of KosmoCutAction, "cut":
+    some(nimkit.cut())
+  of KosmoPasteAction, "paste":
+    some(nimkit.paste())
+  of KosmoSelectAllAction, "selectAll":
+    some(nimkit.selectAll())
+  of KosmoUndoAction, "undo":
+    some(nimkit.undo())
+  of KosmoRedoAction, "redo":
+    some(nimkit.redo())
+  else:
+    none(nimkit.CommandSelector)
+
+# Translate Kosmo's namespaced editing actions to NimKit commands so the
+# focused text field handles them before they reach the underlying editor.
+protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
+  method dispatchCommand(
+      editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
+  ): bool =
+    let selector = args.selector.nativeEditingCommand().get(args.selector)
+    editor.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: args.sender))
+
+proc installKosmoFieldEditorCommands*(editor: nimkit.FieldEditor) =
+  discard editor.withProtocol(KosmoFieldEditorCommandDispatch)
 
 type
   KosmoShortcutProfile* {.pure.} = enum

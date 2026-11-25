@@ -55,8 +55,7 @@ suite "Kosmo synthetic panel shortcuts":
       require frontend.window.dispatchKeyDown(shortcut)
       check frontend.window.firstResponderIs(terminal)
       check groups[1].pane.contentView == View(terminal)
-      check groups[1].pane.documentTabs.selectedDocumentTabItem().identifier ==
-        "show-terminal"
+      check groups[1].pane.documentTabs.selectedItem().identifier == "show-terminal"
       check groups[1].pane.documentTabs.len == tabCount
       check frontend.editorGroups().len == 2
       require frontend.window.dispatchKeyDown(shortcut)
@@ -303,7 +302,7 @@ suite "Kosmo synthetic panel shortcuts":
     # Detach the markdown tab into its own window.
     frontend.contentView.layoutSubtreeIfNeeded()
     let
-      tabRect = frontend.documentTabs.documentTabRect(0)
+      tabRect = frontend.documentTabs.tabRect(0)
       start = frontend.documentTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -660,7 +659,7 @@ suite "Kosmo synthetic panel shortcuts":
     frontend.contentView.layoutSubtreeIfNeeded()
     let
       tabs = frontend.documentTabs
-      tabRect = tabs.documentTabRect(0)
+      tabRect = tabs.tabRect(0)
       start = tabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,

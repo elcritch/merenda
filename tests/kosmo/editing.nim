@@ -109,10 +109,8 @@ suite "Kosmo":
     check frontend.openDocument(document)
     check frontend.documentTabs.len == initialTabCount + 1
     check frontend.editorPane.contentView == content
-    check frontend.documentTabs.selectedDocumentTabItem().title == "README Preview"
-    check frontend.documentTabs.closeDocumentTabAtIndex(
-      frontend.documentTabs.selectedIndex()
-    )
+    check frontend.documentTabs.selectedItem().title == "README Preview"
+    check frontend.documentTabs.closeTab(frontend.documentTabs.selectedItem())
     check closeCount == 1
     check frontend.documentTabs.len == initialTabCount
     check frontend.editorPane.contentView == View(frontend.editorView)
@@ -640,7 +638,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.window.makeFirstResponder(frontend.editorView)
     let
-      originalTab = frontend.editorPane.documentTabs.selectedDocumentTabIdentifier
+      originalTab = frontend.editorPane.documentTabs.selectedIdentifier
       originalTabCount = frontend.editorPane.documentTabs.len
 
     check not frontend.window.dispatchKeyDown(
@@ -652,8 +650,7 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoHelpTabIdentifier
+    check frontend.editorPane.documentTabs.selectedIdentifier == KosmoHelpTabIdentifier
     check frontend.editorPane.contentView of MarkdownView
     let helpView = MarkdownView(frontend.editorPane.contentView)
     check helpView.markdown == frontend.editorView.editor.helpText()
@@ -664,7 +661,8 @@ suite "Kosmo":
     check frontend.editorPane.contentView == View(helpView)
     check helpView.frame().size.width <= 520.0'f32
     check helpView.markdown == frontend.editorView.editor.helpText()
-    check frontend.editorPane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+    frontend.editorPane.documentTabs.selectedIdentifier = originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
     check frontend.editorPane.contentView == View(frontend.editorView)
 
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
@@ -683,13 +681,12 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoHelpTabIdentifier
+    check frontend.editorPane.documentTabs.selectedIdentifier == KosmoHelpTabIdentifier
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier == originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
     check frontend.editorPane.contentView == View(frontend.editorView)
 
   test "config opens a reusable document tab and closes with Moe's quit command":
@@ -700,7 +697,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.window.makeFirstResponder(frontend.editorView)
     let
-      originalTab = frontend.editorPane.documentTabs.selectedDocumentTabIdentifier
+      originalTab = frontend.editorPane.documentTabs.selectedIdentifier
       originalTabCount = frontend.editorPane.documentTabs.len
 
     check not frontend.window.dispatchKeyDown(
@@ -712,13 +709,13 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoConfigTabIdentifier
+    check frontend.editorPane.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     check frontend.editorPane.contentView == View(frontend.editorView)
     check frontend.editorView.editor.configViewerOpen()
     check frontend.editorView.editor.mode() == KosmoEditorMode.Other
 
-    check frontend.editorPane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+    frontend.editorPane.documentTabs.selectedIdentifier = originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
     check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
 
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
@@ -731,14 +728,13 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoConfigTabIdentifier
+    check frontend.editorPane.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
 
-    check frontend.editorPane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+    frontend.editorPane.documentTabs.selectedIdentifier = originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
     check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
-    check frontend.editorPane.documentTabs.selectDocumentTabWithIdentifier(
-      KosmoConfigTabIdentifier
-    )
+    frontend.editorPane.documentTabs.selectedIdentifier = KosmoConfigTabIdentifier
+    check frontend.editorPane.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     check frontend.editorView.editor.mode() == KosmoEditorMode.Other
     check frontend.editorPane.documentTabs.len == originalTabCount + 1
 
@@ -751,7 +747,7 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorPane.documentTabs.len == originalTabCount
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier == originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
     check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
 
     check not frontend.window.dispatchKeyDown(
@@ -762,14 +758,10 @@ suite "Kosmo":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
-    let configIndex = frontend.editorPane.documentTabs.indexOfDocumentTabIdentifier(
-      KosmoConfigTabIdentifier
-    )
-    check configIndex >= 0
-    check frontend.editorPane.documentTabs.closeDocumentTabAtIndex(configIndex)
+    check frontend.editorPane.documentTabs.closeTab(KosmoConfigTabIdentifier)
     check not frontend.editorView.editor.configViewerOpen()
     check frontend.editorPane.documentTabs.len == originalTabCount
-    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier == originalTab
+    check frontend.editorPane.documentTabs.selectedIdentifier == originalTab
 
   test "edit commands select files in Kosmo document tabs":
     let
@@ -790,7 +782,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(firstPath)
     check frontend.window.makeFirstResponder(frontend.editorView)
-    let firstTab = frontend.documentTabs.selectedDocumentTabIdentifier
+    let firstTab = frontend.documentTabs.selectedIdentifier
 
     check not frontend.window.dispatchKeyDown(
       KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
@@ -801,11 +793,13 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.documentTabs.len == 2
-    let secondTab = frontend.documentTabs.selectedDocumentTabIdentifier
+    let secondTab = frontend.documentTabs.selectedIdentifier
     check secondTab != firstTab
     check frontend.editorView.editor.tabs()[^1].filePath.get == secondPath
-    check frontend.documentTabs.selectDocumentTabWithIdentifier(firstTab)
-    check frontend.documentTabs.selectDocumentTabWithIdentifier(secondTab)
+    frontend.documentTabs.selectedIdentifier = firstTab
+    check frontend.documentTabs.selectedIdentifier == firstTab
+    frontend.documentTabs.selectedIdentifier = secondTab
+    check frontend.documentTabs.selectedIdentifier == secondTab
 
     check not frontend.window.dispatchKeyDown(
       KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
@@ -816,7 +810,7 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.documentTabs.len == 2
-    check frontend.documentTabs.selectedDocumentTabIdentifier == secondTab
+    check frontend.documentTabs.selectedIdentifier == secondTab
   test "command bar grows with a larger monospace font":
     let
       app = newApplication("Kosmo Command Bar Font Size Test")
@@ -1338,7 +1332,7 @@ suite "Kosmo":
     view.frame = rect(0, 0, 240, 120)
     check view.previewFile(path)
 
-    var model = view.documentTabs.documentTabModels()[0]
+    var model = view.documentTabs.models()[0]
     let previewStyle = view.documentTabs.effectiveAppearance.resolveTextStyle(
       controlStyle(srDocumentTab, classes = model.styleClasses),
       color(0.0, 0.0, 0.0, 1.0),
@@ -1347,7 +1341,7 @@ suite "Kosmo":
     check previewStyle.fontSlant == fsItalic
 
     check view.openFile(path)
-    model = view.documentTabs.documentTabModels()[0]
+    model = view.documentTabs.models()[0]
     let permanentStyle = view.documentTabs.effectiveAppearance.resolveTextStyle(
       controlStyle(srDocumentTab, classes = model.styleClasses),
       color(0.0, 0.0, 0.0, 1.0),

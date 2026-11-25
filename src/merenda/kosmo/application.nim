@@ -31,8 +31,8 @@ import
 
 export
   cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, githubviewer,
-  hintsmode, moe, moehighlighting, panedocuments, quickopen, settings, shortcuts,
-  terminalsearch
+  hintsmode, moe, moehighlighting, panedocuments, quickopen, settings, terminalsearch
+export shortcuts except nativeEditingCommand, installKosmoFieldEditorCommands
 export applicationassets except configureKosmoApplicationAssets
 export shortcutpresentation except focusPanelNumber
 

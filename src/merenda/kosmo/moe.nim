@@ -1667,10 +1667,20 @@ proc revealLocation*(
   editor.editor.setActiveWindowScreenCursor(window)
   result = true
 
-proc prepareSearch(editor: KosmoEditor, query: string, regularExpression: bool): bool =
+proc prepareSearch(
+    editor: KosmoEditor,
+    query: string,
+    regularExpression: bool,
+    caseSensitive: Option[bool] = none(bool),
+): bool =
   let state = editor.editor.state
   let ignoreCase =
-    shouldIgnoreCase(query, state.input.search.ignorecase, state.input.search.smartcase)
+    if caseSensitive.isSome:
+      not caseSensitive.get
+    else:
+      shouldIgnoreCase(
+        query, state.input.search.ignorecase, state.input.search.smartcase
+      )
   editor.searchState.error = ""
   state.input.search.last.pattern = ""
   state.input.search.hlsearchTempDisabled = true
@@ -1767,13 +1777,14 @@ proc searchFrom*(
     start: KosmoBufferCursor,
     direction = KosmoSearchDirection.Forward,
     regularExpression = false,
+    caseSensitive: Option[bool] = none(bool),
 ): bool {.discardable.} =
   ## Search with literal text or opt-in Reni expressions, centering the result.
   if editor.isNil or editor.editor.isNil or query.len == 0:
     return
   editor.resetBufferSelection()
   if not editor.revealLocation(start.line, start.column) or
-      not editor.prepareSearch(query, regularExpression):
+      not editor.prepareSearch(query, regularExpression, caseSensitive):
     return
   try:
     let match =
@@ -1827,6 +1838,7 @@ proc replaceSearch*(
     query, replacement: string,
     all = false,
     regularExpression = false,
+    caseSensitive: Option[bool] = none(bool),
 ): int =
   ## Replace original matches as one undo transaction. Validate before editing.
   if editor.isNil or editor.editor.isNil or query.len == 0:
@@ -1834,7 +1846,9 @@ proc replaceSearch*(
   let buffer = editor.editor.activeBuffer
   let state = editor.editor.state
   let cursor = editor.editor.cursor
-  if buffer.readOnly or not editor.prepareSearch(query, regularExpression):
+  if buffer.readOnly or not editor.prepareSearch(
+    query, regularExpression, caseSensitive
+  ):
     return
   let matchCursor = editor.searchStart(cursor)
   type Replacement = object
@@ -1907,11 +1921,14 @@ proc replaceSearch*(
     state.statusMessage = state.statusMessage & "; search error: " & error.msg
 
 proc hasSearchMatches*(
-    editor: KosmoEditor, query: string, regularExpression = false
+    editor: KosmoEditor,
+    query: string,
+    regularExpression = false,
+    caseSensitive: Option[bool] = none(bool),
 ): bool =
   if editor.isNil or editor.editor.isNil or query.len == 0:
     return
-  if not editor.prepareSearch(query, regularExpression):
+  if not editor.prepareSearch(query, regularExpression, caseSensitive):
     return
   try:
     for line in 0 ..< editor.editor.activeBuffer.len:

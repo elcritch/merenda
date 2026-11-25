@@ -65,7 +65,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      tabRect = sourceTabs.documentTabRect(0)
+      tabRect = sourceTabs.tabRect(0)
       start = sourceTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -92,8 +92,8 @@ suite "Kosmo":
     let left = groups[0].panel.rectToView(groups[0].panel.bounds(), frontend.dockView)
     let right = groups[1].panel.rectToView(groups[1].panel.bounds(), frontend.dockView)
     check left.maxX <= right.minX
-    check groups[0].pane.documentTabs.selectedDocumentTabItem().title == "second.txt"
-    check groups[1].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
+    check groups[0].pane.documentTabs.selectedItem().title == "second.txt"
+    check groups[1].pane.documentTabs.selectedItem().title == "first.txt"
     check groups[0].editorView.documentTabs.len == 1
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
@@ -118,7 +118,9 @@ suite "Kosmo":
     check groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
     check not groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
 
-    check groups[1].editorView.documentTabs.closeDocumentTabAtIndex(0)
+    check groups[1].editorView.documentTabs.closeTab(
+      groups[1].editorView.documentTabs[0]
+    )
     check frontend.editorGroups().len == 1
     check frontend.dockView.len == 1
     check frontend.dockView.rootView() == groups[0].panel
@@ -150,7 +152,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      sourceTabRect = sourceTabs.documentTabRect(0)
+      sourceTabRect = sourceTabs.tabRect(0)
       sourceStart = sourceTabs.pointToWindow(
         initPoint(
           sourceTabRect.minX + sourceTabRect.size.width * 0.5'f32,
@@ -175,7 +177,7 @@ suite "Kosmo":
     let unrelatedWidth = groups[0].panel.frame().size.width
     let
       movingTabs = groups[0].editorView.documentTabs
-      movingTabRect = movingTabs.documentTabRect(0)
+      movingTabRect = movingTabs.tabRect(0)
       movingStart = movingTabs.pointToWindow(
         initPoint(
           movingTabRect.minX + movingTabRect.size.width * 0.5'f32,
@@ -259,7 +261,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      tabRect = sourceTabs.documentTabRect(0)
+      tabRect = sourceTabs.tabRect(0)
       start = sourceTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -329,7 +331,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(filePath)
     check frontend.window.makeFirstResponder(frontend.editorView)
-    let tabIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+    let tabIdentifier = frontend.documentTabs.selectedIdentifier
     check frontend.documentTabs.len == 1
 
     check not frontend.window.dispatchKeyDown(
@@ -342,7 +344,7 @@ suite "Kosmo":
     )
     check frontend.editorView.editor.mode() == KosmoEditorMode.Other
     check frontend.documentTabs.len == 2
-    check frontend.documentTabs.selectedDocumentTabIdentifier == KosmoConfigTabIdentifier
+    check frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
 
     check not frontend.window.dispatchKeyDown(
       KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
@@ -355,7 +357,7 @@ suite "Kosmo":
 
     check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
     check frontend.documentTabs.len == 1
-    check frontend.documentTabs.selectedDocumentTabIdentifier == tabIdentifier
+    check frontend.documentTabs.selectedIdentifier == tabIdentifier
 
   test "queued pane refreshes preserve grids during clicks and keyboard edits":
     let root = createTempDir("merenda-kosmo-pane-reentry-", "")
@@ -512,8 +514,8 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     let groups = frontend.editorGroups()
     require groups.len == 2
-    check groups[0].pane.documentTabs.selectedDocumentTabIdentifier ==
-      groups[1].pane.documentTabs.selectedDocumentTabIdentifier
+    check groups[0].pane.documentTabs.selectedIdentifier ==
+      groups[1].pane.documentTabs.selectedIdentifier
 
     groups[0].editorView.refresh()
     require editor.revealLocation(0, 1)
@@ -610,7 +612,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      tabRect = sourceTabs.documentTabRect(0)
+      tabRect = sourceTabs.tabRect(0)
       start = sourceTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -632,8 +634,8 @@ suite "Kosmo":
 
     let groups = frontend.editorGroups()
     check groups.len == 2
-    check groups[0].editorView.documentTabs.documentTabModels()[0].title == "second.txt"
-    check groups[1].editorView.documentTabs.documentTabModels()[0].title == "first.txt"
+    check groups[0].editorView.documentTabs.models()[0].title == "second.txt"
+    check groups[1].editorView.documentTabs.models()[0].title == "first.txt"
 
     groups[0].editorView.refresh()
     check groups[0].editorView.keyDown(
@@ -767,7 +769,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      tabRect = sourceTabs.documentTabRect(0)
+      tabRect = sourceTabs.tabRect(0)
       start = sourceTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,

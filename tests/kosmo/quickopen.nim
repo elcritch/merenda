@@ -292,6 +292,33 @@ suite "Kosmo quick open":
       @["src/main.nim", "tests/main_spec.nim"]
     check frontend.quickOpenPanel.highlightedFile() == "src/main.nim"
 
+    discard generalPasteboard().replaceWithPlainText("before copy")
+    frontend.quickOpenPanel.queryField.selectedRange = initTextRange(0, 4)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: shortcutModifiers())
+    )
+    check generalPasteboard().plainText() == "main"
+    discard generalPasteboard().replaceWithPlainText("spec")
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: shortcutModifiers())
+    )
+    check frontend.quickOpenPanel.queryField.text() == "spec"
+    check frontend.quickOpenPanel.filteredFiles() == @["tests/main_spec.nim"]
+
+    let shortcutsPath = root / "shortcuts.json"
+    writeFile(shortcutsPath, """{"kosmo.paste": "primary-alt-v"}""")
+    let loaded = frontend.loadKosmoKeyBindings(shortcutsPath)
+    require loaded.errors.len == 0
+    require loaded.applied == 1
+    frontend.quickOpenPanel.queryField.selectedRange = initTextRange(0, 4)
+    discard generalPasteboard().replaceWithPlainText("main")
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyV, keyCode: keyV.ord, modifiers: shortcutModifiers() + {kmOption}
+      )
+    )
+    check frontend.quickOpenPanel.queryField.text() == "main"
+
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
     )

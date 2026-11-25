@@ -320,8 +320,8 @@ suite "nimkit undo managers":
     tabs.setNextResponder(document)
 
     withUndoRegistrationDisabled(manager):
-      discard tabs.addDocumentTabItem(first)
-      discard tabs.addDocumentTabItem(second)
+      discard tabs.add(first)
+      discard tabs.add(second)
 
     document.documentEdited = false
 
@@ -332,7 +332,7 @@ suite "nimkit undo managers":
     check combo.stringValue == ""
 
     document.documentEdited = false
-    check tabs.moveDocumentTabItem(1, 0)
+    check tabs.move(1, 0)
     check tabs[0] == second
     check document.isDocumentEdited
     check manager.performUndo()

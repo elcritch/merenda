@@ -209,18 +209,19 @@ suite "Kosmo":
     check frontend.openPath(firstPath)
     check frontend.openPath(secondPath)
 
-    let models = frontend.documentTabs.documentTabModels()
+    let models = frontend.documentTabs.models()
     check models.len == 2
     check models[0].title == "first.txt"
     check models[1].title == "second.txt"
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
-    check frontend.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    check frontend.documentTabs.selectedIdentifier == models[1].identifier
+    frontend.documentTabs.selectedIdentifier = models[0].identifier
+    check frontend.documentTabs.selectedIdentifier == models[0].identifier
     check frontend.editorView.editor.tabs()[0].active
-    check frontend.documentTabs.moveDocumentTabItem(0, 1)
+    check frontend.documentTabs.move(0, 1)
     check frontend.editorView.editor.tabs()[1].title == "first.txt"
-    check frontend.documentTabs.closeDocumentTabAtIndex(1)
+    check frontend.documentTabs.closeTab(frontend.documentTabs[1])
     check frontend.editorView.editor.tabs().len == 1
-    check frontend.documentTabs.documentTabModels().len == 1
+    check frontend.documentTabs.models().len == 1
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
 
@@ -278,7 +279,7 @@ suite "Kosmo":
     require not newItem.isNil
     check newItem.perform(Responder(frontend.editorView))
     check frontend.documentTabs.len == initialTabCount + 1
-    check frontend.documentTabs.selectedDocumentTabItem().title == "No Name"
+    check frontend.documentTabs.selectedItem().title == "No Name"
     check frontend.editorView.editor.tabs()[^1].filePath.isNone
     check frontend.editorPane.contentView == View(frontend.editorView)
     check frontend.window.firstResponder() == Responder(frontend.editorView)
@@ -318,9 +319,8 @@ suite "Kosmo":
     check tabs[0].title == "first.txt"
     check tabs[0].temporary
 
-    let tabPoint = frontend.documentTabs.pointToWindow(
-      frontend.documentTabs.documentTabRect(0).center()
-    )
+    let tabPoint =
+      frontend.documentTabs.pointToWindow(frontend.documentTabs.tabRect(0).center())
     check frontend.window.mouseDownAt(tabPoint, clickCount = 2)
     check frontend.window.mouseUpAt(tabPoint, clickCount = 2)
     tabs = frontend.editorView.editor.tabs()
@@ -572,7 +572,7 @@ suite "Kosmo":
     check hasImage(renderedImageId)
     check frontend.documentTabs.len == 1
 
-    check frontend.documentTabs.closeDocumentTabAtIndex(0)
+    check frontend.documentTabs.closeTab(frontend.documentTabs[0])
     check frontend.editorPane.contentView == View(frontend.editorView)
     check frontend.editorPane.markdownView.markdown == ""
     require frontend.editorPane.markdownView.waitForMarkdownParsing()
@@ -730,7 +730,7 @@ suite "Kosmo":
 
     let
       sourceTabs = frontend.documentTabs
-      tabRect = sourceTabs.documentTabRect(0)
+      tabRect = sourceTabs.tabRect(0)
       start = sourceTabs.pointToWindow(
         initPoint(
           tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -799,7 +799,7 @@ proc splitTerminalPane(frontend: KosmoApplication) =
 proc tabCountNamed(frontend: KosmoApplication, title: string): int =
   for group in frontend.editorGroups():
     group.editorView.refresh()
-    for model in group.pane.documentTabs.documentTabModels():
+    for model in group.pane.documentTabs.models():
       if model.title == title:
         inc result
 
@@ -880,8 +880,7 @@ suite "Kosmo pane file ownership":
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
     check frontend.tabCountNamed("target.txt") == 1
-    check frontend.editorGroups()[0].pane.documentTabs.documentTabModels()[0].title ==
-      "No Name"
+    check frontend.editorGroups()[0].pane.documentTabs.models()[0].title == "No Name"
 
   test "editor tabs prefer panes without terminals when enabled":
     let
@@ -904,7 +903,7 @@ suite "Kosmo pane file ownership":
     require frontend.preferEditorPanes()
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(targetPath, fodPermanent)
-    check groups[0].pane.documentTabs.documentTabModels()[0].title == "target.txt"
+    check groups[0].pane.documentTabs.models()[0].title == "target.txt"
     check groups[1].pane.documentTabs.len == 1
     require frontend.window.makeFirstResponder(groups[1].pane.contentView)
     require frontend.newEditorTab()
@@ -915,7 +914,7 @@ suite "Kosmo pane file ownership":
     require frontend.window.makeFirstResponder(groups[1].pane.contentView)
     require frontend.openPath(secondPath)
     check groups[1].pane.documentTabs.len == 2
-    check groups[1].pane.documentTabs.documentTabModels()[^1].title == "second.txt"
+    check groups[1].pane.documentTabs.models()[^1].title == "second.txt"
 
   test "editor tabs fall back to the terminal pane when no other pane exists":
     let frontend = newKosmoApplication(
@@ -946,12 +945,13 @@ suite "Kosmo pane file ownership":
       groups = frontend.editorGroups()
       first = groups[0].pane.documentTabs
       second = groups[1].pane.documentTabs
-      firstEditorId = first.documentTabModels()[0].identifier
+      firstEditorId = first.models()[0].identifier
     require frontend.window.makeFirstResponder(groups[0].editorView)
     require frontend.openDocument(
       newKosmoPaneDocument("first-terminal", "Terminal", newKosmoTerminalView())
     )
-    require first.selectDocumentTabWithIdentifier(firstEditorId)
+    first.selectedIdentifier = firstEditorId
+    require first.selectedIdentifier == firstEditorId
     check groups[0].pane.contentView == View(groups[0].editorView)
     let initialFirstCount = first.len
     require frontend.newEditorTab()
@@ -963,12 +963,13 @@ suite "Kosmo pane file ownership":
     check first.len == initialFirstCount + 2
     check second.len == 1
 
-    require first.selectDocumentTabWithIdentifier("first-terminal")
+    first.selectedIdentifier = "first-terminal"
+    require first.selectedIdentifier == "first-terminal"
     require frontend.window.makeFirstResponder(groups[1].pane.contentView)
     require frontend.newEditorTab()
     check first.len == initialFirstCount + 2
     check second.len == 2
-    check second.documentTabModels()[^1].title == "No Name"
+    check second.models()[^1].title == "No Name"
 
 proc openContextTabs(frontend: KosmoApplication, paths: openArray[string]) =
   frontend.window.setContentView(frontend.contentView)
@@ -997,7 +998,7 @@ suite "Kosmo tab context menu":
 
     let tabs = frontend.editorView.documentTabs
     require tabs.len == 2
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
     require not menu.isNil
@@ -1061,16 +1062,16 @@ suite "Kosmo tab context menu":
 
     let tabs = frontend.editorView.documentTabs
     require tabs.len == 2
-    check tabs.selectedDocumentTabItem().title == "second.txt"
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    check tabs.selectedItem().title == "second.txt"
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
     require not menu.isNil
     require menu.items()[0].perform(frontend.window)
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "second.txt"
-    check tabs.documentTabModels().len == 1
-    check tabs.selectedDocumentTabItem().title == "second.txt"
+    check tabs.models().len == 1
+    check tabs.selectedItem().title == "second.txt"
     # A click outside the popup dismisses it after the close moved the focus.
     discard frontend.window.clickAt(
       tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
@@ -1099,7 +1100,7 @@ suite "Kosmo tab context menu":
 
     let tabs = frontend.editorView.documentTabs
     require tabs.len == 3
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
     require not menu.isNil
@@ -1108,43 +1109,47 @@ suite "Kosmo tab context menu":
     require closeOthers.perform(frontend.window)
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "first.txt"
-    check tabs.documentTabModels().len == 1
-    check tabs.selectedDocumentTabItem().title == "first.txt"
+    check tabs.models().len == 1
+    check tabs.selectedItem().title == "first.txt"
     check frontend.editorView.editor.tabs()[0].active
     discard frontend.window.clickAt(
       tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
     )
     check not frontend.window.hasActiveTransientSession()
 
-  test "the close-others option closes tabs in other splits":
+  test "the close-others option closes only tabs in the clicked split":
     let
       root = createTempDir("kosmo-tab-context-splits-", "")
       firstPath = root / "first.txt"
       secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
     writeFile(firstPath, "first")
     writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
     defer:
       removeFile(firstPath)
       removeFile(secondPath)
+      removeFile(thirdPath)
       removeDir(root)
 
     let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Splits"))
     defer:
       frontend.close()
-    frontend.openContextTabs([firstPath, secondPath])
+    frontend.openContextTabs([firstPath, secondPath, thirdPath])
     require frontend.window.makeFirstResponder(frontend.editorView)
     require frontend.window.sendAction(actionSelector(KosmoSplitHorizontalAction))
     frontend.contentView.layoutSubtreeIfNeeded()
 
     let groups = frontend.editorGroups()
     require groups.len == 2
-    check groups[0].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-    check groups[1].pane.documentTabs.documentTabModels()[0].title == "second.txt"
-
-    # The clicked pane has a single etab, but the other split still has one.
     let tabs = groups[0].editorView.documentTabs
-    require tabs.len == 1
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    let otherTabs = groups[1].editorView.documentTabs
+    require tabs.len == 2
+    require otherTabs.len == 1
+    check tabs[0].title == "first.txt"
+    check tabs[1].title == "second.txt"
+    check otherTabs[0].title == "third.txt"
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
     require not menu.isNil
@@ -1152,17 +1157,19 @@ suite "Kosmo tab context menu":
     require not closeOthers.isNil
     check closeOthers.enabled
     require closeOthers.perform(frontend.window)
-    check frontend.editorGroups().len == 1
-    check groups[0].editorView.editor.tabs().len == 1
-    check groups[0].editorView.editor.tabs()[0].title == "first.txt"
-    check groups[0].editorView.editor.tabs()[0].active
+    check frontend.editorGroups().len == 2
+    require tabs.len == 1
+    require otherTabs.len == 1
+    check tabs[0].title == "first.txt"
+    check otherTabs[0].title == "third.txt"
+    check groups[0].editorView.editor.tabs().len == 2
     # Performing the item leaves the popup open; a click outside dismisses it.
     discard frontend.window.clickAt(
       tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
     )
     check not frontend.window.hasActiveTransientSession()
 
-    # With no other etab left anywhere, the option is no longer active.
+    # The remaining tab in the other split cannot enable the action here.
     require frontend.window.rightMouseDownAt(tabPoint)
     let nextMenu = frontend.contentView.contextMenuIn()
     require not nextMenu.isNil
@@ -1193,8 +1200,8 @@ suite "Kosmo tab context menu":
 
     let tabs = frontend.editorView.documentTabs
     require tabs.len == 2
-    check tabs.selectedDocumentTabItem().title == "second.txt"
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    check tabs.selectedItem().title == "second.txt"
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
     require not menu.isNil
@@ -1211,21 +1218,21 @@ suite "Kosmo tab context menu":
     frontend.contentView.layoutSubtreeIfNeeded()
     var groups = frontend.editorGroups()
     require groups.len == 2
-    check groups[0].pane.documentTabs.documentTabModels().len == 2
-    check groups[1].pane.documentTabs.documentTabModels().len == 1
-    check groups[1].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-    check groups[1].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
-    check groups[0].pane.documentTabs.selectedDocumentTabItem().title == "second.txt"
+    check groups[0].pane.documentTabs.models().len == 2
+    check groups[1].pane.documentTabs.models().len == 1
+    check groups[1].pane.documentTabs.models()[0].title == "first.txt"
+    check groups[1].pane.documentTabs.selectedItem().title == "first.txt"
+    check groups[0].pane.documentTabs.selectedItem().title == "second.txt"
 
     # Duplicating below opens another split of the same etab below its pane.
     require duplicateBelow.perform(frontend.window)
     frontend.contentView.layoutSubtreeIfNeeded()
     groups = frontend.editorGroups()
     require groups.len == 3
-    check groups[0].pane.documentTabs.documentTabModels().len == 2
-    check groups[1].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-    check groups[2].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-    check groups[2].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
+    check groups[0].pane.documentTabs.models().len == 2
+    check groups[1].pane.documentTabs.models()[0].title == "first.txt"
+    check groups[2].pane.documentTabs.models()[0].title == "first.txt"
+    check groups[2].pane.documentTabs.selectedItem().title == "first.txt"
     check frontend.editorView.editor.tabs().len == 2
     discard frontend.window.clickAt(
       tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
@@ -1257,7 +1264,8 @@ suite "Kosmo tab context menu":
     # Select the middle tab and modify it so its close defers to the
     # confirmation.
     require frontend.window.makeFirstResponder(frontend.editorView)
-    require tabs.selectDocumentTabAtIndex(1)
+    tabs.selectedIndex = 1
+    require tabs.selectedIndex == 1
     require frontend.editorView.editor.handleKey("i")
     require frontend.editorView.editor.handleTextInput("!")
     require frontend.editorView.editor.handleKey("Esc")
@@ -1267,7 +1275,7 @@ suite "Kosmo tab context menu":
     # the last tab waits for the batch to resume. Activate the item through
     # the popup's own handling so the popup closes right after the action,
     # exactly like a click on the item.
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let popupButton = frontend.contentView.contextPopupIn()
     require not popupButton.isNil
@@ -1293,7 +1301,7 @@ suite "Kosmo tab context menu":
     check frontend.application.modalSession().isNil
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "keep.txt"
-    check tabs.selectedDocumentTabItem().title == "keep.txt"
+    check tabs.selectedItem().title == "keep.txt"
     check frontend.editorView.editor.tabs()[0].active
     # The menu stays open while the sheet was up; a click outside dismisses it.
     discard frontend.window.clickAt(
@@ -1320,7 +1328,7 @@ suite "Kosmo tab context menu":
     check frontend.application.modalSession().isNil
     check frontend.editorView.editor.tabs().len == 2
     check frontend.editorView.editor.tabs()[1].modified
-    check tabs.selectedDocumentTabItem().title == "dirty.txt"
+    check tabs.selectedItem().title == "dirty.txt"
 
   test "close others keeps a dirty tab when closing is disabled":
     let
@@ -1347,13 +1355,14 @@ suite "Kosmo tab context menu":
     # Select the middle tab and modify it so a close would defer to the
     # confirmation when the tab is eligible.
     require frontend.window.makeFirstResponder(frontend.editorView)
-    require tabs.selectDocumentTabAtIndex(1)
+    tabs.selectedIndex = 1
+    require tabs.selectedIndex == 1
     require frontend.editorView.editor.handleKey("i")
     require frontend.editorView.editor.handleTextInput("!")
     require frontend.editorView.editor.handleKey("Esc")
     check frontend.editorView.editor.tabs()[1].modified
     let dirtyIdentifier = tabs[1].identifier()
-    let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
+    let tabPoint = tabs.pointToWindow(tabs.tabRect(0).center())
 
     # With closing disabled for the strip, the Close menu item is disabled and
     # the popup initially highlights "Close others". Activating it neither
@@ -1384,7 +1393,7 @@ suite "Kosmo tab context menu":
     # highlighted "Close others" keeps every tab because the batch stops at
     # the etab that is not closeable.
     block dirtyTabNotCloseable:
-      let item = tabs.documentTabItemWithIdentifier(dirtyIdentifier)
+      let item = tabs[dirtyIdentifier]
       require not item.isNil
       item.closeable = false
       require frontend.window.rightMouseDownAt(tabPoint)

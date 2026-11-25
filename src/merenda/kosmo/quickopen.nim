@@ -9,6 +9,7 @@ import ../nimkit as nimkit
 import ./scrolling
 import ./workspacefiles
 import ./searchbuttons
+import ./shortcuts
 import ../nimkit/foundation/textsearch
 export workspacefiles.projectFiles
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -656,6 +657,7 @@ proc newQuickOpenPanel*(rootPath = "", files: WorkspaceFiles = nil): QuickOpenPa
   discard editor.withProtocol(QuickOpenEditorMovement)
   discard editor.withProtocol(QuickOpenEditorActivation)
   discard editor.withProtocol(QuickOpenEditorCancellation)
+  editor.installKosmoFieldEditorCommands()
 
   let cell = QuickOpenFieldCell(editor: editor)
   cell.initTextFieldCellFields()

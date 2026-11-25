@@ -102,7 +102,8 @@ proc main() =
     doAssert view.waitForMarkdownLayout(60_000)
   # Verify the baseline retained all three views without keeping references to them.
   for index in 0 ..< 3:
-    doAssert frontend.documentTabs.selectDocumentTabAtIndex(index)
+    frontend.documentTabs.selectedIndex = index
+    doAssert frontend.documentTabs.selectedIndex == index
     let view = frontend.editorPane.markdownView
     doAssert cast[uint](view) == originalViews[index]
     doAssert view.waitForMarkdownParsing(60_000)

@@ -57,7 +57,7 @@ proc doubleClickTableCell(
   window.mouseDownAt(point, clickCount = 2) and window.mouseUpAt(point, clickCount = 2)
 
 proc clickDocumentTab(window: Window, tabs: DocumentTabs, index: int): bool =
-  let rect = tabs.documentTabRect(index)
+  let rect = tabs.tabRect(index)
   if rect.isEmpty:
     return false
   window.clickAt(tabs.pointToWindow(rect.center()))
@@ -333,8 +333,8 @@ suite "nimkit model controllers":
     check outlineView.childIdentifiersForItem("root") == @["child", "second"]
     check outlineView.rowForItem("second") >= 0
     check outlineView
-    .tableCellObjectValue(outlineView.rowForItem("second"), statusColumn)
-    .requireString() == "ready"
+      .tableCellObjectValue(outlineView.rowForItem("second"), statusColumn)
+      .requireString() == "ready"
 
     bindCascadingView(cascadingView, controller)
     let rootChildren = cascadingView.childrenForParent("root")
@@ -362,8 +362,8 @@ suite "nimkit model controllers":
 
     controller.setValue("alan", "active", toObj(true))
     syncDocumentTabs(tabs, controller)
-    check tabs.documentTabModels.len == 3
-    check tabs.documentTabModels[2].identifier == "alan"
+    check tabs.models.len == 3
+    check tabs.models[2].identifier == "alan"
     check filterCalls == 6
 
     controller.setValue("alan", "score", toObj(99))
@@ -466,7 +466,7 @@ suite "nimkit model controllers":
 
     syncDocumentTabs(tabs, controller)
     check tabs.len == 3
-    check tabs.documentTabModels.len == 4
+    check tabs.models.len == 4
     check tabs[0.Natural].identifier == "one"
     check tabs[1.Natural].title == "Second"
     check tabs[2.Natural].identifier == "three"
@@ -484,12 +484,13 @@ suite "nimkit model controllers":
     check tabs[1.Natural].styleId == "secondary"
     check tabs[1.Natural].styleClasses == @["accent"]
     check not tabs[1.Natural].enabled
-    check tabs.documentTabModels[2].hidden
+    check tabs.models[2].hidden
 
     bindDocumentTabs(boundTabs, controller)
     check boundTabs.len == 3
     check boundTabs[2.Natural].identifier == "three"
-    check boundTabs.selectDocumentTabWithIdentifier("three")
+    boundTabs.selectedIdentifier = "three"
+    check boundTabs.selectedIdentifier == "three"
     check controller.selectionController().selectedIdentifier == "three"
 
     syncMatrix(matrix, controller, columns = 2)
@@ -562,7 +563,7 @@ suite "nimkit model controller demo":
     check demo.browser.selectedPath() == @["apps", "preferences"]
 
     check demo.window.clickDocumentTab(demo.tabs, 1)
-    check demo.tabs.selectedDocumentTabItem().identifier == "budget"
+    check demo.tabs.selectedItem().identifier == "budget"
 
     check demo.window.clickComboItem(demo.comboBox, 2)
     check demo.comboBox.stringValue == "High"

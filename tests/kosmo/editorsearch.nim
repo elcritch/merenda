@@ -94,15 +94,22 @@ suite "Kosmo editor search":
       require window.dispatchTextInput("cat")
       let regex = view.buttonWithLabel("Use Reni regular expressions")
       require not regex.isNil
+      let matchCase = view.buttonWithLabel("Match case")
+      require not matchCase.isNil
 
       require window.dispatchKeyDown(tab)
       check window.isFocused(regex)
       require window.dispatchKeyDown(tab)
+      check window.isFocused(matchCase)
+      require window.dispatchKeyDown(tab)
       check window.isFocused(view.replacementField())
+      require window.dispatchKeyDown(backtab)
+      check window.isFocused(matchCase)
       require window.dispatchKeyDown(backtab)
       check window.isFocused(regex)
       require window.dispatchKeyDown(backtab)
       check window.isFocused(view.searchField())
+      require window.dispatchKeyDown(tab)
       require window.dispatchKeyDown(tab)
       require window.dispatchKeyDown(tab)
       require window.dispatchKeyDown(tab)
@@ -133,6 +140,7 @@ suite "Kosmo editor search":
     require view.showSearch(replacing = true)
     let
       regex = view.buttonWithLabel("Use Reni regular expressions")
+      matchCase = view.buttonWithLabel("Match case")
       replace = view.buttonWithLabel("Replace match")
       replaceAll = view.buttonWithLabel("Replace all matches")
       tab = KeyEvent(key: keyTab, keyCode: keyTab.ord)
@@ -141,9 +149,14 @@ suite "Kosmo editor search":
     require window.dispatchKeyDown(tab)
     check window.firstResponder() == regex
     require window.dispatchKeyDown(tab)
+    check window.firstResponder() == matchCase
+    require window.dispatchKeyDown(tab)
     check window.fieldEditorClient() == view.replacementField()
     require window.dispatchKeyDown(backtab)
+    check window.firstResponder() == matchCase
+    require window.dispatchKeyDown(backtab)
     check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
     require window.dispatchKeyDown(tab)
     require window.dispatchKeyDown(tab)
     check window.firstResponder() == replace
@@ -169,8 +182,43 @@ suite "Kosmo editor search":
     require window.dispatchKeyDown(tab)
     check window.firstResponder() == regex
     require window.dispatchKeyDown(tab)
+    check window.firstResponder() == matchCase
+    require window.dispatchKeyDown(tab)
     check window.firstResponder() == view.buttonWithLabel("Close editor text search")
     check editor.bufferText(editor.tabs()[0].id).get == "cat cat"
+
+  test "case sensitivity controls searching and replacement":
+    let editor = newKosmoEditor(text = "cat CAT cat")
+    defer:
+      editor.close()
+    check editor.hasSearchMatches("CAT", caseSensitive = some(true))
+    check editor.replaceSearch("CAT", "dog", all = true, caseSensitive = some(true)) == 1
+    check editor.bufferText(editor.tabs()[0].id).get == "cat dog cat"
+    check editor.replaceSearch("CAT", "x", all = true, caseSensitive = some(false)) == 2
+    check editor.bufferText(editor.tabs()[0].id).get == "x dog x"
+
+  test "match case button controls replacement through the editor search bar":
+    let editor = newKosmoEditor(text = "cat CAT cat")
+    let view = newKosmoEditorView(editor)
+    let window = newWindow("Case search", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      editor.close()
+    window.setContentView(view)
+    view.layoutSubtreeIfNeeded()
+    view.refresh()
+    require view.showSearch(replacing = true)
+    view.searchField().text = "CAT"
+    view.replacementField().text = "dog"
+    let button = view.buttonWithLabel("Match case")
+    require not button.isNil
+    require window.clickAt(button.pointToWindow(initPoint(12, 12)))
+    check view.replaceMatch(all = true) == 1
+    check editor.bufferText(editor.tabs()[0].id).get == "cat dog cat"
+    require window.clickAt(button.pointToWindow(initPoint(12, 12)))
+    view.replacementField().text = "x"
+    check view.replaceMatch(all = true) == 2
+    check editor.bufferText(editor.tabs()[0].id).get == "x dog x"
 
   test "the Moe facade searches, wraps, reverses, and owns highlight state":
     let editor = newKosmoEditor(text = "alpha one\nbeta\nalpha two")

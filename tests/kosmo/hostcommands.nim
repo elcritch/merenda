@@ -39,7 +39,7 @@ suite "Kosmo Moe host commands":
       frontend.editorView.refresh()
       require frontend.newEditorTab()
       let source = frontend.editorView
-      let selectedTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      let selectedTab = frontend.documentTabs.selectedIdentifier
       let originalTabs = frontend.documentTabs.len
 
       require frontend.command(source, scenario[0])
@@ -49,9 +49,9 @@ suite "Kosmo Moe host commands":
       check frontend.dockView.rootView() of SplitView
       check SplitView(frontend.dockView.rootView()).splitAxis == scenario[1]
       check groups[0].pane.documentTabs.len == originalTabs
-      check groups[0].pane.documentTabs.selectedDocumentTabIdentifier == selectedTab
+      check groups[0].pane.documentTabs.selectedIdentifier == selectedTab
       check groups[1].pane.documentTabs.len == 1
-      check groups[1].pane.documentTabs.selectedDocumentTabIdentifier == selectedTab
+      check groups[1].pane.documentTabs.selectedIdentifier == selectedTab
       check groups[1].editorView == KosmoEditorView(frontend.window.firstResponder())
       check editor.tabs().len == originalTabs
       check editor.moeWindowCount() == 1
@@ -82,7 +82,7 @@ suite "Kosmo Moe host commands":
       let
         source = frontend.editorView
         editor = source.editor
-        originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+        originalTab = frontend.documentTabs.selectedIdentifier
       editor.workingDirectory = root
       require editor.revealLocation(1, 3)
       source.refresh()
@@ -90,11 +90,12 @@ suite "Kosmo Moe host commands":
       let groups = frontend.editorGroups()
       require groups.len == 2
       check groups[0].pane.documentTabs.len == 1
-      check groups[0].pane.documentTabs.selectedDocumentTabIdentifier == originalTab
+      check groups[0].pane.documentTabs.selectedIdentifier == originalTab
       check groups[1].pane.documentTabs.len == 1
-      check groups[1].pane.documentTabs.selectedDocumentTabItem().title == "second.txt"
+      check groups[1].pane.documentTabs.selectedItem().title == "second.txt"
       check editor.currentText() == "destination text"
-      require groups[0].pane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+      groups[0].pane.documentTabs.selectedIdentifier = originalTab
+      require groups[0].pane.documentTabs.selectedIdentifier == originalTab
       require frontend.window.makeFirstResponder(groups[0].editorView)
       check editor.currentText() == readFile(firstPath)
       check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 3)
@@ -139,17 +140,18 @@ suite "Kosmo Moe host commands":
       require editor.handleTextInput("unsaved original")
       require editor.handleKey("Esc")
       frontend.editorView.refresh()
-      let originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      let originalTab = frontend.documentTabs.selectedIdentifier
       require frontend.command(frontend.editorView, scenario[0])
       let groups = frontend.editorGroups()
       require groups.len == 2
       check SplitView(frontend.dockView.rootView()).splitAxis == scenario[1]
-      check groups[0].pane.documentTabs.selectedDocumentTabIdentifier == originalTab
-      check groups[1].pane.documentTabs.selectedDocumentTabIdentifier != originalTab
+      check groups[0].pane.documentTabs.selectedIdentifier == originalTab
+      check groups[1].pane.documentTabs.selectedIdentifier != originalTab
       check editor.currentText() == ""
       check editor.tabs().len == 2
       check editor.moeWindowCount() == 1
-      require groups[0].pane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+      groups[0].pane.documentTabs.selectedIdentifier = originalTab
+      require groups[0].pane.documentTabs.selectedIdentifier == originalTab
       require frontend.window.makeFirstResponder(groups[0].editorView)
       check editor.currentText() == "unsaved original"
 
@@ -166,30 +168,29 @@ suite "Kosmo Moe host commands":
     require editor.handleTextInput("source text must stay in its own tab")
     require editor.handleKey("Esc")
     source.refresh()
-    let originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+    let originalTab = frontend.documentTabs.selectedIdentifier
 
     for _ in 0 ..< 3:
       require frontend.command(source, "config")
       check frontend.documentTabs.len == 2
-      check frontend.documentTabs.selectedDocumentTabIdentifier ==
-        KosmoConfigTabIdentifier
+      check frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
       check editor.configViewerFocused()
       check editor.moeWindowCount() == 1
       check editor.tabs().len == 1
       check "source text" notin source.displayedText()
-      require frontend.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+      frontend.documentTabs.selectedIdentifier = originalTab
+      require frontend.documentTabs.selectedIdentifier == originalTab
       check editor.configViewerOpen()
       check not editor.configViewerFocused()
       check editor.currentText() == "source text must stay in its own tab"
       check editor.moeWindowCount() == 1
 
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(
-      KosmoConfigTabIdentifier
-    )
+    frontend.documentTabs.selectedIdentifier = KosmoConfigTabIdentifier
+    require frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     require frontend.command(source, "q")
     check not editor.configViewerOpen()
     check frontend.documentTabs.len == 1
-    check frontend.documentTabs.selectedDocumentTabIdentifier == originalTab
+    check frontend.documentTabs.selectedIdentifier == originalTab
     check editor.currentText() == "source text must stay in its own tab"
     check editor.moeWindowCount() == 1
 
@@ -202,15 +203,15 @@ suite "Kosmo Moe host commands":
     let
       source = frontend.editorView
       editor = source.editor
-      originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      originalTab = frontend.documentTabs.selectedIdentifier
     require frontend.command(source, "config")
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+    frontend.documentTabs.selectedIdentifier = originalTab
+    require frontend.documentTabs.selectedIdentifier == originalTab
     require frontend.command(source, "vsplit")
     let groups = frontend.editorGroups()
     require groups.len == 2
     require frontend.command(groups[1].editorView, "config")
-    check groups[0].pane.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoConfigTabIdentifier
+    check groups[0].pane.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     check groups[0].editorView == KosmoEditorView(frontend.window.firstResponder())
     check editor.configViewerFocused()
     require frontend.window.makeFirstResponder(groups[1].editorView)
@@ -224,10 +225,7 @@ suite "Kosmo Moe host commands":
     )
     check editor.currentText() == "text in the second pane"
     check editor.moeWindowCount() == 1
-    let configIndex =
-      groups[0].pane.documentTabs.indexOfDocumentTabIdentifier(KosmoConfigTabIdentifier)
-    require configIndex >= 0
-    require groups[0].pane.documentTabs.closeDocumentTabAtIndex(configIndex)
+    require groups[0].pane.documentTabs.closeTab(KosmoConfigTabIdentifier)
     check not editor.configViewerOpen()
     check editor.tabs().len == 1
     check editor.currentText() == "text in the second pane"
@@ -264,15 +262,16 @@ suite "Kosmo Moe host commands":
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
     let editor = frontend.editorView.editor
-    let originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+    let originalTab = frontend.documentTabs.selectedIdentifier
     require frontend.command(frontend.editorView, "nmap C-y mode_switch config")
     require frontend.window.dispatchKeyDown(
       KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl})
     )
-    check frontend.documentTabs.selectedDocumentTabIdentifier == KosmoConfigTabIdentifier
+    check frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     check editor.configViewerFocused()
     check editor.moeWindowCount() == 1
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(originalTab)
+    frontend.documentTabs.selectedIdentifier = originalTab
+    require frontend.documentTabs.selectedIdentifier == originalTab
     require frontend.command(frontend.editorView, "nnoremap C-w C-w n")
     require editor.hasWindowKeyMapping()
     require frontend.window.dispatchKeyDown(
@@ -316,7 +315,7 @@ suite "Kosmo Moe host commands":
     )
     check choice.title == "moe (vim)"
     let editor = frontend.editorView.editor
-    let originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
+    let originalTab = frontend.documentTabs.selectedIdentifier
     let originalForceMode = editor.forceInputMode()
     require frontend.command(frontend.editorView, "config")
     require frontend.window.dispatchTextInput("/forceInsertMode")
@@ -330,10 +329,10 @@ suite "Kosmo Moe host commands":
     check choice.title == "moe (vim)"
     check choice.menu()[0].state == bsOn
     check choice.menu()[1].state == bsOff
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(originalTab)
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(
-      KosmoConfigTabIdentifier
-    )
+    frontend.documentTabs.selectedIdentifier = originalTab
+    require frontend.documentTabs.selectedIdentifier == originalTab
+    frontend.documentTabs.selectedIdentifier = KosmoConfigTabIdentifier
+    require frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     require frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
@@ -342,12 +341,11 @@ suite "Kosmo Moe host commands":
     check choice.menu()[0].state == bsOn
     check editor.moeWindowCount() == 1
     require frontend.command(frontend.editorView, "help")
-    check frontend.documentTabs.selectedDocumentTabIdentifier == KosmoHelpTabIdentifier
+    check frontend.documentTabs.selectedIdentifier == KosmoHelpTabIdentifier
     check editor.configViewerOpen()
     check not editor.configViewerFocused()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(
-      KosmoConfigTabIdentifier
-    )
+    frontend.documentTabs.selectedIdentifier = KosmoConfigTabIdentifier
+    require frontend.documentTabs.selectedIdentifier == KosmoConfigTabIdentifier
     check editor.configViewerFocused()
     check editor.moeWindowCount() == 1
 

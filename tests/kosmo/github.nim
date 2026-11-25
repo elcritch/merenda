@@ -519,9 +519,7 @@ suite "Kosmo GitHub Markdown viewer":
     check panel.kindButton.title == "Issues"
     check "Fix" in panel.markdownView.textStorage().stringValue()
     check "Improve rendering" notin panel.markdownView.textStorage().stringValue()
-    let tabIndex =
-      frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitHubTabIdentifier)
-    require frontend.documentTabs.closeDocumentTabAtIndex(tabIndex)
+    require frontend.documentTabs.closeTab(KosmoGitHubTabIdentifier)
     check panel.closed
 
   test "GitHub menu action is registered and can be assigned a shortcut":

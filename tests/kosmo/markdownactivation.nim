@@ -17,12 +17,10 @@ proc reselectPreview(spy: PreviewReselection) {.slot.} =
   if not spy.triggered:
     spy.triggered = true
     if spy.closeInstead:
-      let index = spy.frontend.documentTabs.indexOfDocumentTabIdentifier(spy.identifier)
-      if index >= 0:
-        spy.selected = spy.frontend.documentTabs.closeDocumentTabAtIndex(index)
+      spy.selected = spy.frontend.documentTabs.closeTab(spy.identifier)
     else:
-      spy.selected =
-        spy.frontend.documentTabs.selectDocumentTabWithIdentifier(spy.identifier)
+      spy.frontend.documentTabs.selectedIdentifier = spy.identifier
+      spy.selected = spy.frontend.documentTabs.selectedIdentifier == spy.identifier
 
 suite "Kosmo Markdown activation":
   test "clicking Markdown web links opens them through the system workspace":
@@ -103,14 +101,15 @@ suite "Kosmo Markdown activation":
     let firstScrollOffset = first.scrollView().contentOffset()
     let firstText = first.textStorage().stringValue()
     check firstScrollOffset.y > 0
-    let identifier = frontend.documentTabs.selectedDocumentTabIdentifier
+    let identifier = frontend.documentTabs.selectedIdentifier
     require frontend.openPath(secondPath)
     let second = frontend.editorPane.markdownView
     require second.waitForMarkdownParsing()
     discard buildRenders(second)
     for iteration in 0 ..< 3:
       discard iteration
-      require frontend.documentTabs.selectDocumentTabWithIdentifier(identifier)
+      frontend.documentTabs.selectedIdentifier = identifier
+      require frontend.documentTabs.selectedIdentifier == identifier
       let restored = frontend.editorPane.markdownView
       require restored.waitForMarkdownParsing()
       check restored.textStorage().stringValue() == firstText
@@ -118,12 +117,14 @@ suite "Kosmo Markdown activation":
       check restored.scrollView().contentOffset() == firstScrollOffset
       for tab in frontend.editorView.editor.tabs():
         check not tab.modified
-      require frontend.documentTabs.selectDocumentTabAtIndex(1)
+      frontend.documentTabs.selectedIndex = 1
+      require frontend.documentTabs.selectedIndex == 1
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
       check "Second preview" in
         frontend.editorPane.markdownView.textStorage().stringValue()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(identifier)
-    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    frontend.documentTabs.selectedIdentifier = identifier
+    require frontend.documentTabs.selectedIdentifier == identifier
+    require frontend.documentTabs.closeTab(frontend.documentTabs[0])
     require frontend.editorPane.markdownView.waitForMarkdownParsing()
     check "Second preview" in
       frontend.editorPane.markdownView.textStorage().stringValue()
@@ -168,7 +169,7 @@ suite "Kosmo Markdown activation":
       selected = first.textView().selectedRange()
       offset = first.scrollView().contentOffset()
       style = first.markdownStyle()
-      firstTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      firstTab = frontend.documentTabs.selectedIdentifier
     require offset.y > 0
     require frontend.openPath(secondPath)
     let second = frontend.editorPane.markdownView
@@ -184,7 +185,8 @@ suite "Kosmo Markdown activation":
       second.layoutSubtreeIfNeeded()
       sleep(1)
     check not frontend.isMarkdownPreviewWorkPending()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(firstTab)
+    frontend.documentTabs.selectedIdentifier = firstTab
+    require frontend.documentTabs.selectedIdentifier == firstTab
     let restored = frontend.editorPane.markdownView
     require restored.waitForMarkdownParsing()
     require restored.waitForMarkdownLayout()
@@ -228,8 +230,7 @@ suite "Kosmo Markdown activation":
     let oldView = frontend.editorPane.markdownView
     require oldView.waitForMarkdownParsing()
     let spy = PreviewReselection(
-      frontend: frontend,
-      identifier: frontend.documentTabs.selectedDocumentTabIdentifier,
+      frontend: frontend, identifier: frontend.documentTabs.selectedIdentifier
     )
     oldView.connect(markdownRetainedCostDidChange, spy, reselectPreview)
     defer:
@@ -245,7 +246,7 @@ suite "Kosmo Markdown activation":
     check replacement != oldView
     require replacement.waitForMarkdownParsing()
     check "First document" in replacement.textStorage().stringValue()
-    check frontend.documentTabs.selectedDocumentTabIdentifier == spy.identifier
+    check frontend.documentTabs.selectedIdentifier == spy.identifier
 
   test "refresh respects reentrant tab selection and close":
     for closeInstead in [false, true]:
@@ -267,12 +268,13 @@ suite "Kosmo Markdown activation":
       frontend.contentView.frame = rect(0, 0, 800, 500)
       frontend.contentView.layoutSubtreeIfNeeded()
       require frontend.openPath(firstPath)
-      let firstTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      let firstTab = frontend.documentTabs.selectedIdentifier
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
       require frontend.openPath(secondPath)
-      let secondTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      let secondTab = frontend.documentTabs.selectedIdentifier
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
-      require frontend.documentTabs.selectDocumentTabWithIdentifier(firstTab)
+      frontend.documentTabs.selectedIdentifier = firstTab
+      require frontend.documentTabs.selectedIdentifier == firstTab
       let first = frontend.editorPane.markdownView
       require first.waitForMarkdownParsing()
       let spy = PreviewReselection(
@@ -292,7 +294,7 @@ suite "Kosmo Markdown activation":
         sleep(1)
       require spy.triggered
       require spy.selected
-      require frontend.documentTabs.selectedDocumentTabIdentifier == secondTab
+      require frontend.documentTabs.selectedIdentifier == secondTab
       let second = frontend.editorPane.markdownView
       require second.waitForMarkdownParsing()
       check "Second document" in second.textStorage().stringValue()
@@ -408,7 +410,7 @@ suite "Kosmo Markdown activation":
     require not oldOwner.isNil
     require oldOwner.markdownOwnerRetention().pending
     check frontend.isMarkdownPreviewWorkPending()
-    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    require frontend.documentTabs.closeTab(frontend.documentTabs[0])
     if oldOwner.markdownOwnerRetention().pending:
       check frontend.isMarkdownPreviewWorkPending()
     writeFile(path, "# New content\n\nFresh document.\n")
@@ -510,14 +512,15 @@ suite "Kosmo Markdown activation":
       let path = root / ("preview-" & $index & ".md")
       writeFile(path, "# Preview " & $index & "\n")
       require frontend.openPath(path)
-      identifiers.add frontend.documentTabs.selectedDocumentTabIdentifier
+      identifiers.add frontend.documentTabs.selectedIdentifier
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
     for index in [0, 4, 2, 5, 1, 3, 0]:
-      require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[index])
+      frontend.documentTabs.selectedIdentifier = identifiers[index]
+      require frontend.documentTabs.selectedIdentifier == identifiers[index]
       let preview = frontend.editorPane.markdownView
       require preview.waitForMarkdownParsing()
       check preview.textStorage().stringValue().strip() == "Preview " & $index
-      check frontend.documentTabs.documentTabModels().len == identifiers.len
+      check frontend.documentTabs.models().len == identifiers.len
       for tab in frontend.editorView.editor.tabs():
         check not tab.modified
 
@@ -611,7 +614,7 @@ suite "Kosmo Markdown activation":
     require preview.waitForMarkdownParsing()
     check "Reloaded heading" in preview.textStorage().stringValue()
 
-    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    require frontend.documentTabs.closeTab(frontend.documentTabs[0])
     check editor.bufferContentVersion(id).isNone
     require frontend.openPath(path)
     let reopened = frontend.editorPane.markdownView
