@@ -82,13 +82,17 @@ proc buildChrome(controller: TaskController): DirectView =
             discard receiver.history.performRedo()
       Label:
         this.identifier = "counter-value"
-        bindValue("counter", controller.counter) do(label: Label, value: int):
+        bindValue(id = "counter", input = controller.counter) do(
+          label: Label, value: int
+        ):
           label.stringValue = "Unrelated counter: " & $value
       component(observedTaskRows, controller)
       Label:
         this.identifier = "status"
         this.labelStyle = lsStatus
-        bindValue("status", controller.status) do(label: Label, value: string):
+        bindValue(id = "status", input = controller.status) do(
+          label: Label, value: string
+        ):
           label.stringValue = value
 
 proc newTaskController(): TaskController =

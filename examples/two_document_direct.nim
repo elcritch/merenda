@@ -23,7 +23,7 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
         )
       Label:
         this.identifier = "accepted-" & $task.id
-        bindValue("accepted", owner.tasks.item(task.id)) do(
+        bindValue(id = "accepted", input = owner.tasks.item(task.id)) do(
           label: Label, value: Opt[EditorTask]
         ):
           label.stringValue = "Accepted: " & (if value.isSome: value.get.title else: "")
@@ -71,7 +71,9 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       this.edgeInsets = insets(12)
       Label:
         this.identifier = "document"
-        bindValue("document", owner.documentLabel) do(label: Label, value: string):
+        bindValue(id = "document", input = owner.documentLabel) do(
+          label: Label, value: string
+        ):
           label.stringValue = value
       HStack:
         this.distribution = svdNatural
@@ -100,7 +102,7 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       component(observedRows, owner)
       Label:
         this.identifier = "status"
-        bindValue("status", owner.status) do(label: Label, value: string):
+        bindValue(id = "status", input = owner.status) do(label: Label, value: string):
           label.stringValue = value
 
 proc runTwoDocumentDirect*() =

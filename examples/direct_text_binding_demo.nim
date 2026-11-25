@@ -32,7 +32,14 @@ proc runDirectTextBindingDemo() =
       # Both callbacks receive controller. The empty tuple () means
       # they need no extra context.
       # readText fills the field. editText takes edits back to the controller.
-      bindTextField("text", controller.text, controller, (), readText, editText)
+      bindTextField(
+        id = "text",
+        input = controller.text,
+        receiver = controller,
+        context = (),
+        getter = readText,
+        edit = editText,
+      )
 
   let window = newWindow("DirectView text binding", frame = rect(100, 100, 400, 120))
   sharedApplication().runWindow(window, root)

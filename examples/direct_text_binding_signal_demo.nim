@@ -35,7 +35,14 @@ proc runDirectTextBindingSignalDemo() =
       # Here controller both sends textChanged and receives edits.
       # The callbacks need no extra context, so we pass ().
       # readText fills the field. editText handles edits from the field.
-      bindTextField("text", controller, textChanged, (), readText, editText)
+      bindTextField(
+        id = "text",
+        controller = controller,
+        signal = textChanged,
+        context = (),
+        getter = readText,
+        edit = editText,
+      )
 
   let window =
     newWindow("DirectView text binding with a signal", frame = rect(100, 100, 400, 120))
