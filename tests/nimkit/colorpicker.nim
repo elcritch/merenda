@@ -47,11 +47,10 @@ suite "NimKit color picker":
 
   test "tabbed picker sends palette wheel and CSS colors back to its source well":
     let
-      choices =
-        @[
-          initColorWellChoice("Coral", color(0.92, 0.34, 0.28, 1.0)),
-          initColorWellChoice("Ocean", color(0.12, 0.48, 0.78, 1.0)),
-        ]
+      choices = @[
+        initColorWellChoice("Coral", color(0.92, 0.34, 0.28, 1.0)),
+        initColorWellChoice("Ocean", color(0.12, 0.48, 0.78, 1.0)),
+      ]
       well = newColorWell(choices, choices[0].color, rect(10, 10, 72, 30))
       root = newView(frame = rect(0, 0, 480, 440))
       window = newWindow("Color Well", frame = rect(0, 0, 480, 440))
@@ -96,7 +95,7 @@ suite "NimKit color picker":
     require window.clickTab(picker, "wheel")
     picker.layoutSubtreeIfNeeded()
     let
-      wheelView = picker.selectedTabViewItem().view()
+      wheelView = picker.selectedItem().view()
       wheelPoint = wheelView.pointToWindow(
         initPoint(
           wheelView.bounds().size.width * 0.5'f32,
@@ -143,11 +142,10 @@ suite "NimKit color picker":
 
   test "popup color choices update selection state and send actions":
     let
-      choices =
-        @[
-          initPopupColorChoice("Red", color(0.9, 0.2, 0.2, 1.0)),
-          initPopupColorChoice("Blue", color(0.2, 0.4, 0.9, 1.0)),
-        ]
+      choices = @[
+        initPopupColorChoice("Red", color(0.9, 0.2, 0.2, 1.0)),
+        initPopupColorChoice("Blue", color(0.2, 0.4, 0.9, 1.0)),
+      ]
       well = newPopupColorWell(choices, choices[0].color)
       action = actionSelector("testColorWellAction")
     var actionCount = 0

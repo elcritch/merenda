@@ -241,8 +241,7 @@ suite "Kosmo settings":
     check Button(toggle).toolTip == "Start Nimdex"
     require settingsTabs.selectPage(KosmoTerminalSettingsTabIdentifier)
     require Button(toggle).tryToPerform(performClick(), DynamicAgent(toggle))
-    check settingsTabs.selectedTabViewItem().identifier() ==
-      KosmoNimdexSettingsTabIdentifier
+    check settingsTabs.selectedItem().identifier() == KosmoNimdexSettingsTabIdentifier
     check not frontend.editorView.editor.nimdexRequested()
 
   test "status bar keymode popup switches editing and follows settings":

@@ -342,13 +342,13 @@ suite "nimkit accessibility":
     check tableSpy.notifications == @[anSelectionChanged]
     check tableView.selectedIndex == 1
 
-    discard tabView.addTabViewItem(newTabViewItem("General", newView()))
-    discard tabView.addTabViewItem(newTabViewItem("Advanced", newView()))
+    discard tabView.add(newTabViewItem("General", newView()))
+    discard tabView.add(newTabViewItem("Advanced", newView()))
     tabView.connect(
       accessibilityNotificationPosted, tabSpy, rememberAccessibilityNotification
     )
-    discard tabView.selectTabViewItemAtIndex(1)
-    discard tabView.selectTabViewItemAtIndex(1)
+    discard tabView.select(1)
+    discard tabView.select(1)
     discard buildRenders(tabView)
     check tabSpy.notifications == @[anSelectionChanged]
     check tabView.accessibilityValue() == "Advanced"
@@ -509,9 +509,9 @@ suite "nimkit accessibility":
       source = newAccessibilityTableSource()
       delegate = newAccessibilityTableDelegate()
 
-    discard tabView.addTabViewItem(newTabViewItem("General", newView()))
-    discard tabView.addTabViewItem(newTabViewItem("Advanced", newView()))
-    discard tabView.selectTabViewItemAtIndex(1)
+    discard tabView.add(newTabViewItem("General", newView()))
+    discard tabView.add(newTabViewItem("Advanced", newView()))
+    discard tabView.select(1)
 
     tableListView.rowCount = 2
     tableListView.addColumn(newTableColumn("name", "Name", width = 120.0))

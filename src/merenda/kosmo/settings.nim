@@ -1605,36 +1605,36 @@ proc newKosmoSettingsWindow*(
     nimdexStatusLabel.text = nimdexDelegate.nimdexSettingsStatus()
 
   tabs.identifier = KosmoSettingsTabsIdentifier
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem(
       "Terminal", terminalPage.view, KosmoTerminalSettingsTabIdentifier
     )
   )
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem(
       "Shortcuts", shortcutsPage.view, KosmoShortcutsSettingsTabIdentifier
     )
   )
   for item in result.xInterfaceSettings.tabViewItems():
-    discard tabs.addTabViewItem(item)
+    discard tabs.add(item)
   tabs.delegate = result.xInterfaceSettings.tabViewDelegate()
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem(
       "Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier
     )
   )
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem(
       "Markdown", markdownPage.view, KosmoMarkdownSettingsTabIdentifier
     )
   )
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem(
       "TextMate Grammars", textMateGrammarsPage.view,
       KosmoTextMateGrammarsSettingsTabIdentifier,
     )
   )
-  discard tabs.addTabViewItem(
+  discard tabs.add(
     nimkit.newTabViewItem("LSP", nimdexPage.view, KosmoNimdexSettingsTabIdentifier)
   )
   layout.spacing = 12.0

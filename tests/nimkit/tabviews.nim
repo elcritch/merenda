@@ -104,14 +104,11 @@ proc newTabViewDemoFixture(): TabViewDemoFixture =
   tabView.setHuggingPriority(LayoutPriorityLow, laVertical)
   tabView.setCompressionPriority(LayoutPriorityLow, laVertical)
 
-  discard
-    tabView.addTabViewItem(newTabViewItem("General", newTabViewDemoPane(), "general"))
-  discard
-    tabView.addTabViewItem(newTabViewItem("Editor", newTabViewDemoPane(), "editor"))
-  discard
-    tabView.addTabViewItem(newTabViewItem("Account", newTabViewDemoPane(), "account"))
+  discard tabView.add(newTabViewItem("General", newTabViewDemoPane(), "general"))
+  discard tabView.add(newTabViewItem("Editor", newTabViewDemoPane(), "editor"))
+  discard tabView.add(newTabViewItem("Account", newTabViewDemoPane(), "account"))
   disabledItem.enabled = false
-  discard tabView.addTabViewItem(disabledItem)
+  discard tabView.add(disabledItem)
 
   controls.addArrangedSubview(
     newButton("Previous"), newButton("Next"), newCheckBox("Tabs on bottom")
@@ -149,6 +146,13 @@ suite "nimkit tab views":
       check not files.hidden
       check search.hidden
 
+    tabs.selectedIndex = 1
+    check tabs.selectedIndex == 1
+    check files.hidden
+    check not search.hidden
+    tabs.selectedIndex = -1
+    check tabs.selectedIndex == 1
+
     for focused in [true, false]:
       for button in buttons:
         button.needsDisplay = false
@@ -165,13 +169,13 @@ suite "nimkit tab views":
       first = newTabViewItem("First", firstView, "first")
       second = newTabViewItem("Second", secondView, "second")
 
-    discard tabView.addTabViewItem(first)
-    discard tabView.addTabViewItem(second)
+    discard tabView.add(first)
+    discard tabView.add(second)
 
     check tabView.len == 2
     check tabView[0] == first
     check tabView.selectedIndex == 0
-    check tabView.selectedTabViewItem == first
+    check tabView.selectedItem == first
     check firstView.superview == View(tabView)
     check secondView.superview.isNil
 
@@ -186,15 +190,15 @@ suite "nimkit tab views":
     check firstContent.frame == firstView.bounds
     check not tabView.needsLayout
 
-    check tabView.selectTabViewItem(second)
+    tabView.selectedItem = second
     check tabView.selectedIndex == 1
     check firstView.superview.isNil
     check secondView.superview == View(tabView)
     check secondView.frame == tabView.contentViewRect()
 
-    check tabView.removeTabViewItem(second)
+    check tabView.delete(second)
     check tabView.len == 1
-    check tabView.selectedTabViewItem == first
+    check tabView.selectedItem == first
     check firstView.superview == View(tabView)
     check secondView.superview.isNil
 
@@ -206,17 +210,17 @@ suite "nimkit tab views":
       spy = newTabDelegateSpy()
 
     tabView.delegate = spy
-    discard tabView.addTabViewItem(first)
-    discard tabView.addTabViewItem(second)
+    discard tabView.add(first)
+    discard tabView.add(second)
 
-    check not tabView.selectTabViewItem(second)
-    check tabView.selectedTabViewItem == first
+    tabView.selectedIndex = 1
+    check tabView.selectedItem == first
     check spy.shouldCount == 1
     check spy.didCount == 0
 
     spy.allowSecond = true
-    check tabView.selectTabViewItem(second)
-    check tabView.selectedTabViewItem == second
+    check tabView.select(second)
+    check tabView.selectedItem == second
     check spy.shouldCount == 2
     check spy.didCount == 1
     check spy.lastItem == second
@@ -229,25 +233,25 @@ suite "nimkit tab views":
       third = newTabViewItem("Third", newView())
 
     disabled.enabled = false
-    discard tabView.addTabViewItem(first)
-    discard tabView.addTabViewItem(disabled)
-    discard tabView.addTabViewItem(third)
+    discard tabView.add(first)
+    discard tabView.add(disabled)
+    discard tabView.add(third)
 
     let disabledRect = tabView.tabRect(1)
     check not tabView.clickAt(
       initPoint(disabledRect.origin.x + 6, disabledRect.origin.y + 6)
     )
-    check tabView.selectedTabViewItem == first
+    check tabView.selectedItem == first
 
     check tabView.keyDown(KeyEvent(key: keyArrowRight))
-    check tabView.selectedTabViewItem == third
+    check tabView.selectedItem == third
 
     check tabView.keyDown(KeyEvent(key: keyArrowLeft))
-    check tabView.selectedTabViewItem == first
+    check tabView.selectedItem == first
 
     let thirdRect = tabView.tabRect(2)
     check tabView.clickAt(initPoint(thirdRect.origin.x + 6, thirdRect.origin.y + 6))
-    check tabView.selectedTabViewItem == third
+    check tabView.selectedItem == third
 
   test "arrow keys in selected pane child keep focus in the pane":
     let
@@ -263,8 +267,8 @@ suite "nimkit tab views":
 
     firstPane.addArrangedSubview(firstButton)
     secondPane.addArrangedSubview(secondButton)
-    discard tabView.addTabViewItem(first)
-    discard tabView.addTabViewItem(second)
+    discard tabView.add(first)
+    discard tabView.add(second)
     root.addSubview(tabView)
     window.setContentView(root)
 
@@ -272,7 +276,7 @@ suite "nimkit tab views":
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
     )
-    check tabView.selectedTabViewItem == second
+    check tabView.selectedItem == second
 
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check window.firstResponder == secondButton
@@ -282,7 +286,7 @@ suite "nimkit tab views":
     check not window.dispatchKeyDown(
       KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
     )
-    check tabView.selectedTabViewItem == second
+    check tabView.selectedItem == second
     check window.firstResponder == secondButton
     check secondButton.isFocused
     check secondButton.isFocusVisible
@@ -297,8 +301,8 @@ suite "nimkit tab views":
     defer:
       window.close()
     pane.addSubview(field)
-    discard tabView.addTabViewItem(newTabViewItem("Editor", pane, "editor"))
-    discard tabView.addTabViewItem(newTabViewItem("Preview", newView(), "preview"))
+    discard tabView.add(newTabViewItem("Editor", pane, "editor"))
+    discard tabView.add(newTabViewItem("Preview", newView(), "preview"))
     window.setContentView(tabView)
 
     for frame in [rect(0, 0, 320, 180), rect(0, 0, 480, 260)]:
@@ -343,7 +347,7 @@ suite "nimkit tab views":
     pane.addArrangedSubview(newTextField("ada@example.com"))
     pane.addArrangedSubview(newCheckBox("Sync preferences across devices"))
     pane.addArrangedSubview(newButton("Save Account"))
-    discard tabView.addTabViewItem(newTabViewItem("Account", pane))
+    discard tabView.add(newTabViewItem("Account", pane))
 
     let
       paneHeight = pane
@@ -370,7 +374,7 @@ suite "nimkit tab views":
     layout.distribution = svdNatural
     tabView.setHuggingPriority(LayoutPriorityRequired, laVertical)
     tabView.setCompressionPriority(LayoutPriorityRequired, laVertical)
-    discard tabView.addTabViewItem(newTabViewItem("General", page))
+    discard tabView.add(newTabViewItem("General", page))
     layout.addArrangedSubview(title)
     layout.fillAvailableSpace(tabView)
 
@@ -399,8 +403,8 @@ suite "nimkit tab views":
       widePageSize = widePage.fittingSize()
       tallPageSize = tallPage.fittingSize()
 
-    discard tabView.addTabViewItem(newTabViewItem("Wide", widePage))
-    discard tabView.addTabViewItem(newTabViewItem("Tall", tallPage))
+    discard tabView.add(newTabViewItem("Wide", widePage))
+    discard tabView.add(newTabViewItem("Tall", tallPage))
 
     let tabSize = tabView.fittingSize()
     check tabSize.width >= widePageSize.width + 32.0'f32
@@ -420,12 +424,8 @@ suite "nimkit tab views":
 
     firstStack.addArrangedSubview(newButton("First"))
     secondStack.addArrangedSubview(changingButton)
-    discard tabView.addTabViewItem(
-      newTabViewItem("First", newConstraintWrappedPane(firstStack))
-    )
-    discard tabView.addTabViewItem(
-      newTabViewItem("Second", newConstraintWrappedPane(secondStack))
-    )
+    discard tabView.add(newTabViewItem("First", newConstraintWrappedPane(firstStack)))
+    discard tabView.add(newTabViewItem("Second", newConstraintWrappedPane(secondStack)))
     root.addSubview(tabView)
     root.layoutSubtreeIfNeeded()
     root.needsLayout = false
@@ -447,7 +447,7 @@ suite "nimkit tab views":
       item = newTabViewItem("General", oldView)
 
     replacement.addArrangedSubview(newButton("Replacement"))
-    discard tabView.addTabViewItem(item)
+    discard tabView.add(item)
     check oldView.superview() == View(tabView)
 
     item.view = replacement
@@ -465,7 +465,7 @@ suite "nimkit tab views":
 
     tabView.appearance = initAppearance(initAquaTheme())
     content.background = color(0.20, 0.40, 0.80)
-    discard tabView.addTabViewItem(item)
+    discard tabView.add(item)
 
     let renders = buildRenders(tabView)
     var
@@ -510,7 +510,7 @@ suite "nimkit tab views":
   test "selected tab only rounds the edge away from the pane":
     let tabView = newTabView(frame = rect(0, 0, 320, 180))
     tabView.tabMode = tvmTraditional
-    discard tabView.addTabViewItem(newTabViewItem("General", newView()))
+    discard tabView.add(newTabViewItem("General", newView()))
 
     var topTabFound = false
     for node in buildRenders(tabView)[DefaultDrawLevel].resolvedNodes():

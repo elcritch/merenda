@@ -1522,7 +1522,7 @@ proc newMerendaSettingsWindow*(
 
   tabs.identifier = "settings-tabs"
   for item in result.xTabItems:
-    discard tabs.addTabViewItem(item)
+    discard tabs.add(item)
   tabs.delegate = result.fontPickerController
 
   layout.spacing = 12.0
