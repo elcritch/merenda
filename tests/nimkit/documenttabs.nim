@@ -12,6 +12,7 @@ type
   DocumentTabDelegateSpy = ref object of Responder
     denySelect: string
     denyClose: string
+    onCloseApproval: proc(tabs: DocumentTabs) {.closure.}
     denyMoveTo: int
     shouldSelectCount: int
     didSelectCount: int
@@ -86,9 +87,10 @@ protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
   method shouldCloseDocumentTab(
       spy: DocumentTabDelegateSpy, tabs: DocumentTabs, item: DocumentTabItem, index: int
   ): bool =
-    discard tabs
     discard index
     inc spy.shouldCloseCount
+    if not spy.onCloseApproval.isNil:
+      spy.onCloseApproval(tabs)
     item.identifier != spy.denyClose
 
   method didCloseDocumentTab(
@@ -768,6 +770,64 @@ suite "nimkit document tabs":
     check signals.willCloseCount == 1
     check signals.didCloseCount == 1
     check signals.lastItem == second
+
+  test "close resolves the same tab after delegate reload and reorder":
+    let
+      tabs = newDocumentTabs()
+      first = initDocumentTabModel("first", "First")
+      second = initDocumentTabModel("second", "Second")
+      delegate = newDelegateSpy()
+      signals = newSignalSpy()
+    tabs.documentTabModels = [first, second]
+    tabs.delegate = delegate
+    signals.observeProtocol(tabs, DocumentTabsEvents)
+    delegate.onCloseApproval = proc(strip: DocumentTabs) =
+      strip.documentTabModels = [second, first]
+
+    check tabs.closeDocumentTabAtIndex(1)
+    check tabs.documentTabIdentifiers() == @["first"]
+    check signals.lastIndex == 0
+    check signals.lastItem.identifier == "second"
+    check signals.willCloseCount == 1
+    check signals.didCloseCount == 1
+
+  test "deferred completion closes by identifier without requesting approval again":
+    let
+      tabs = newDocumentTabs()
+      delegate = newDelegateSpy()
+      signals = newSignalSpy()
+    discard tabs.addDocumentTabItem(newDocumentTabItem("First", "first"))
+    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+    tabs.delegate = delegate
+    signals.observeProtocol(tabs, DocumentTabsEvents)
+    delegate.denyClose = "first"
+    check not tabs.closeDocumentTabWithIdentifier("first")
+    check tabs.moveDocumentTabItem(0, 1)
+    check tabs.completeDocumentTabClose("first")
+    check not tabs.completeDocumentTabClose("first")
+    check tabs.documentTabIdentifiers() == @["second"]
+    check delegate.shouldCloseCount == 1
+    check delegate.didCloseCount == 1
+    check signals.willCloseCount == 1
+    check signals.didCloseCount == 1
+
+  test "relative selection honors edges and reports a delegate veto":
+    let
+      tabs = newDocumentTabs()
+      delegate = newDelegateSpy()
+    discard tabs.addDocumentTabItem(newDocumentTabItem("First", "first"))
+    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+    tabs.delegate = delegate
+    check not tabs.selectRelativeDocumentTab(-1)
+    check tabs.selectRelativeDocumentTab(-1, wrap = true)
+    check tabs.selectedDocumentTabIdentifier() == "second"
+    check not tabs.selectRelativeDocumentTab(1)
+    delegate.denySelect = "first"
+    check not tabs.selectRelativeDocumentTab(1, wrap = true)
+    check tabs.selectedDocumentTabIdentifier() == "second"
+    delegate.denySelect = ""
+    check tabs.selectRelativeDocumentTab(1, wrap = true)
+    check tabs.selectedDocumentTabIdentifier() == "first"
 
   test "document tab dragging reports a stable item outside the tab bar":
     let

@@ -1990,10 +1990,8 @@ proc closeTabWithConfirmation(
     proc() =
       let outcome = view.closeTab(id, discardChanges = true)
       if outcome.closed:
-        # The original close was deferred by the confirmation dialog, so the
-        # tab strip has not performed its normal removal and selection step.
-        discard view.documentTabs.removeDocumentTabWithIdentifier(id.tabIdentifier)
-        controller.finishTabClose(view)
+        if not view.documentTabs.completeDocumentTabClose(id.tabIdentifier):
+          controller.finishTabClose(view)
         if not afterClose.isNil:
           afterClose()
     ,
@@ -2419,24 +2417,21 @@ proc handleDocumentTabsKeyEquivalent(
 ): bool =
   ## Tab cycles the etab selection on the focused strip, Return enters the
   ## editor, and arrows navigate the split panes by row and column; every
-  ## other key keeps the standard widget handling. At the first or last etab
-  ## Tab falls through to the window key view traversal. Left and Right move
-  ## between the etabs of a pane holding several etabs and only navigate the
-  ## split panes at the strip edges.
+  ## other key keeps the standard widget handling. When Tab cannot select an
+  ## adjacent tab it falls through to window key view traversal. Left and Right
+  ## try the adjacent tab before navigating between split panes.
   if view.isNil or view.tabsDelegate.isNil:
     return
+  let handler = view.tabsDelegate
+  proc selectKeepingStripFocus(offset: int): bool =
+    let wasKeyboardTabbing = handler.keyboardTabbing
+    handler.keyboardTabbing = true
+    defer:
+      handler.keyboardTabbing = wasKeyboardTabbing
+    tabs.selectRelativeDocumentTab(offset)
+
   if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {}:
-    let next =
-      if nimkit.kmShift in event.modifiers:
-        tabs.selectedIndex() - 1
-      else:
-        tabs.selectedIndex() + 1
-    if next < 0 or next >= tabs.len():
-      return
-    view.tabsDelegate.keyboardTabbing = true
-    tabs.selectDocumentTabAtIndex(next)
-    view.tabsDelegate.keyboardTabbing = false
-    return true
+    return selectKeepingStripFocus(if nimkit.kmShift in event.modifiers: -1 else: 1)
   if event.key == nimkit.keyEnter and event.modifiers == {} and not view.dockGroup.isNil:
     let owner = view.window()
     if owner of nimkit.Window:
@@ -2457,15 +2452,8 @@ proc handleDocumentTabsKeyEquivalent(
         of nimkit.keyArrowRight: kpcFocusRight
         of nimkit.keyArrowUp: kpcFocusAbove
         else: kpcFocusBelow
-    # Left and Right move between the etabs of a pane holding several etabs
-    # before they leave it: only at the first or last etab do they navigate the
-    # split panes, so the spatial navigation between splits stays intact.
     if direction in {kpcFocusLeft, kpcFocusRight}:
-      let next = tabs.selectedIndex() + (if direction == kpcFocusRight: 1 else: -1)
-      if next >= 0 and next < tabs.len():
-        view.tabsDelegate.keyboardTabbing = true
-        tabs.selectDocumentTabAtIndex(next)
-        view.tabsDelegate.keyboardTabbing = false
+      if selectKeepingStripFocus(if direction == kpcFocusRight: 1 else: -1):
         return true
     let neighbor = controller.spatialNeighborGroup(view.dockGroup[], direction)
     if not neighbor.isNil:
@@ -2610,90 +2598,48 @@ proc targetView(handler: KosmoEditorTabsHandler): KosmoEditorView =
   if not handler.editorView.isNil:
     return handler.editorView[]
 
-proc contextPaneTabs(
-    handler: KosmoEditorTabsHandler, view: KosmoEditorView
-): seq[nimkit.DocumentTabs] =
-  ## Tab strips the etab context menu acts on: every pane's strip of the dock
-  ## setup, or only the clicked strip without one.
-  if not handler.dockController.isNil:
-    for group in handler.dockController[].groups:
-      if not group.isNil and not group.editorView.isNil and
-          not group.editorView.documentTabs.isNil:
-        result.add group.editorView.documentTabs
+proc closeTabBatch(handler: KosmoEditorTabsHandler, pending: seq[string]) =
+  ## Close tabs from this pane in order. After confirmed discards, resume with
+  ## the remaining tabs from the same batch.
+  let view = handler.targetView()
+  if view.isNil or view.documentTabs.isNil:
     return
-  if not view.documentTabs.isNil:
-    result.add view.documentTabs
-
-proc otherEditorTabsRemain(
-    handler: KosmoEditorTabsHandler, view: KosmoEditorView, keepIdentifier: string
-): bool =
-  ## True when a pane still shows an etab other than the clicked one.
-  for tabs in contextPaneTabs(handler, view):
-    for identifier in tabs.documentTabIdentifiers():
-      if tabs != view.documentTabs or identifier != keepIdentifier:
-        return true
-
-proc groupForTabStrip(
-    controller: KosmoDockController, tabs: nimkit.DocumentTabs
-): KosmoEditorGroup =
-  for group in controller.groups:
-    if not group.isNil and not group.editorView.isNil and
-        group.editorView.documentTabs == tabs:
-      return group
-
-proc closeTabBatch(
-    handler: KosmoEditorTabsHandler,
-    pending: seq[tuple[tabs: nimkit.DocumentTabs, identifier: string]],
-) =
-  ## Close the given editor tabs in order. A dirty tab defers to the unsaved
-  ## changes confirmation; accepting it closes the tab and resumes the
-  ## remaining tabs, while cancelling keeps them open.
-  if handler.isNil:
-    return
-  let controller = handler.dockController
-  for index, entry in pending:
-    block route:
-      if not controller.isNil:
-        var id: KosmoBufferId
-        if entry.identifier.parseTabIdentifier(id):
+  let
+    tabs = view.documentTabs
+    controller = handler.dockController
+  for index, identifier in pending:
+    if not controller.isNil:
+      var id: KosmoBufferId
+      if identifier.parseTabIdentifier(id):
+        let
+          group = controller[].groupForView(view)
+          item = tabs.documentTabItemWithIdentifier(identifier)
+        if not group.isNil and not view.syncingTabs and tabs.canCloseDocumentTab(item) and
+            not controller[].bufferIsVisibleOutside(group, id) and
+            controller[].bufferHasUnsavedData(id):
           let
-            group = controller[].groupForTabStrip(entry.tabs)
-            item = entry.tabs.documentTabItemWithIdentifier(entry.identifier)
-          if not group.isNil and not group.editorView.isNil and
-              not group.editorView.syncingTabs and entry.tabs.canCloseDocumentTab(item) and
-              not controller[].bufferIsVisibleOutside(group, id) and
-              controller[].bufferHasUnsavedData(id):
-            # The close defers to the unsaved changes confirmation. Accepting
-            # it closes this tab and resumes the remaining tabs, cancelling
-            # keeps them open.
-            let
-              remaining = pending[index + 1 .. ^1]
-              weakHandler = handler.unsafeWeakRef()
-            discard controller[].closeTabWithConfirmation(
-              group.editorView,
-              group,
-              id,
-              proc() =
-                if not weakHandler.isNil:
-                  closeTabBatch(weakHandler[], remaining)
-              ,
-            )
-            return
-      if not entry.tabs.closeDocumentTabWithIdentifier(entry.identifier):
-        return
+            remaining = pending[index + 1 .. ^1]
+            weakHandler = handler.unsafeWeakRef()
+          discard controller[].closeTabWithConfirmation(
+            view,
+            group,
+            id,
+            proc() =
+              if not weakHandler.isNil:
+                closeTabBatch(weakHandler[], remaining)
+            ,
+          )
+          return
+    if not tabs.closeDocumentTabWithIdentifier(identifier):
+      return
 
 proc closeTabsExcept(
     handler: KosmoEditorTabsHandler, view: KosmoEditorView, keepIdentifier: string
 ) =
-  ## Close every other editor tab of every pane, pausing at a deferred
-  ## unsaved-changes confirmation and stopping when the standard close flow
-  ## rejects a tab, for example a cancelled save confirmation.
-  var pending: seq[tuple[tabs: nimkit.DocumentTabs, identifier: string]]
-  for tabs in contextPaneTabs(handler, view):
-    for identifier in tabs.documentTabIdentifiers():
-      if tabs == view.documentTabs and identifier == keepIdentifier:
-        continue
-      pending.add (tabs, identifier)
+  var pending: seq[string]
+  for identifier in view.documentTabs.documentTabIdentifiers():
+    if identifier != keepIdentifier:
+      pending.add identifier
   closeTabBatch(handler, pending)
 
 proc duplicateTabTo(
@@ -2766,7 +2712,7 @@ proc tabContextMenu(
       closeOthersSelector = nimkit.actionSelector("kosmo.editorTabs.closeOthers")
       closeOthersItem = nimkit.newMenuItem("Close others", closeOthersSelector)
     closeOthersItem.validates = false
-    closeOthersItem.enabled = otherEditorTabsRemain(handler, view, identifier)
+    closeOthersItem.enabled = view.documentTabs.documentTabIdentifiers().len > 1
     closeOthersItem.target = nimkit.newActionTarget(closeOthersSelector) do(
       sender: nimkit.DynamicAgent
     ):

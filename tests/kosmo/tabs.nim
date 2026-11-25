@@ -1116,34 +1116,38 @@ suite "Kosmo tab context menu":
     )
     check not frontend.window.hasActiveTransientSession()
 
-  test "the close-others option closes tabs in other splits":
+  test "the close-others option closes only tabs in the clicked split":
     let
       root = createTempDir("kosmo-tab-context-splits-", "")
       firstPath = root / "first.txt"
       secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
     writeFile(firstPath, "first")
     writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
     defer:
       removeFile(firstPath)
       removeFile(secondPath)
+      removeFile(thirdPath)
       removeDir(root)
 
     let frontend = newKosmoApplication(newApplication("Kosmo Tab Context Splits"))
     defer:
       frontend.close()
-    frontend.openContextTabs([firstPath, secondPath])
+    frontend.openContextTabs([firstPath, secondPath, thirdPath])
     require frontend.window.makeFirstResponder(frontend.editorView)
     require frontend.window.sendAction(actionSelector(KosmoSplitHorizontalAction))
     frontend.contentView.layoutSubtreeIfNeeded()
 
     let groups = frontend.editorGroups()
     require groups.len == 2
-    check groups[0].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-    check groups[1].pane.documentTabs.documentTabModels()[0].title == "second.txt"
-
-    # The clicked pane has a single etab, but the other split still has one.
     let tabs = groups[0].editorView.documentTabs
-    require tabs.len == 1
+    let otherTabs = groups[1].editorView.documentTabs
+    require tabs.len == 2
+    require otherTabs.len == 1
+    check tabs[0].title == "first.txt"
+    check tabs[1].title == "second.txt"
+    check otherTabs[0].title == "third.txt"
     let tabPoint = tabs.pointToWindow(tabs.documentTabRect(0).center())
     require frontend.window.rightMouseDownAt(tabPoint)
     let menu = frontend.contentView.contextMenuIn()
@@ -1152,17 +1156,19 @@ suite "Kosmo tab context menu":
     require not closeOthers.isNil
     check closeOthers.enabled
     require closeOthers.perform(frontend.window)
-    check frontend.editorGroups().len == 1
-    check groups[0].editorView.editor.tabs().len == 1
-    check groups[0].editorView.editor.tabs()[0].title == "first.txt"
-    check groups[0].editorView.editor.tabs()[0].active
+    check frontend.editorGroups().len == 2
+    require tabs.len == 1
+    require otherTabs.len == 1
+    check tabs[0].title == "first.txt"
+    check otherTabs[0].title == "third.txt"
+    check groups[0].editorView.editor.tabs().len == 2
     # Performing the item leaves the popup open; a click outside dismisses it.
     discard frontend.window.clickAt(
       tabs.pointToWindow(initPoint(tabs.bounds().maxX - 4.0'f32, 17.0'f32))
     )
     check not frontend.window.hasActiveTransientSession()
 
-    # With no other etab left anywhere, the option is no longer active.
+    # The remaining tab in the other split cannot enable the action here.
     require frontend.window.rightMouseDownAt(tabPoint)
     let nextMenu = frontend.contentView.contextMenuIn()
     require not nextMenu.isNil

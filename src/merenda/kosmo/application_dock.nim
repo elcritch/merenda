@@ -500,19 +500,7 @@ proc selectRelativeTab(
     controller.selectRelativePaneTab(group, offset)
     return
   controller.activateGroup(view)
-  let tabs = view.visibleTabs(view.editor.tabs())
-  if tabs.len == 0:
-    return
-  var selectedIndex = 0
-  if view.selectedBufferId.isSome:
-    for index, tab in tabs:
-      if tab.id == view.selectedBufferId.get:
-        selectedIndex = index
-        break
-  let targetIndex = (selectedIndex + offset + tabs.len) mod tabs.len
-  discard view.documentTabs.selectDocumentTabWithIdentifier(
-    tabs[targetIndex].id.tabIdentifier
-  )
+  discard view.documentTabs.selectRelativeDocumentTab(offset, wrap = true)
 
 proc selectRelativePaneTab(
     controller: KosmoDockController, group: KosmoEditorGroup, offset: int
@@ -520,14 +508,7 @@ proc selectRelativePaneTab(
   if controller.isNil or group.isNil or group.pane.documentTabs.len == 0:
     return
   controller.activeGroup = group
-  var selectedIndex =
-    group.pane.documentTabs.indexOfDocumentTabIdentifier(group.selectedTabIdentifier)
-  if selectedIndex < 0:
-    selectedIndex = 0
-  let targetIndex =
-    (selectedIndex + offset + group.pane.documentTabs.len) mod
-    group.pane.documentTabs.len
-  discard group.pane.documentTabs.selectDocumentTabAtIndex(targetIndex)
+  discard group.pane.documentTabs.selectRelativeDocumentTab(offset, wrap = true)
 
 proc finishPaneTabMove(
     controller: KosmoDockController,

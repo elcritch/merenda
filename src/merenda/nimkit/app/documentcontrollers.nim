@@ -270,9 +270,9 @@ protocol DocumentControllerDocumentTabsDelegate of DocumentTabsDelegate:
     if represented of Document:
       let document = Document(represented)
       if document in controller.xDocuments:
-        if controller.closeDocumentImpl(document, reviewUnsaved = true):
-          tabs.reloadData()
-        return false
+        if not controller.closeDocumentImpl(document, reviewUnsaved = true):
+          return false
+        tabs.reloadData()
     true
 
 protocol DocumentControllerMenuCommands of MenuCommandProtocol:

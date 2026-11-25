@@ -88,6 +88,7 @@ type
 
   DocumentTabs* = ref object of View
     xItems: seq[DocumentTabItem]
+    xClosingTabs: seq[tuple[item: DocumentTabItem, identifier: string]]
     xTabModels: seq[DocumentTabModel]
     xUsesTabModels: bool
     xSelectedIndex: int
@@ -948,6 +949,13 @@ proc indexOfDocumentTabItem*(tabs: DocumentTabs, item: DocumentTabItem): int =
     return -1
   tabs.xItems.find(item)
 
+proc indexOfVisibleTab(tabs: DocumentTabs, identifier: string): int =
+  if identifier.len > 0:
+    for index, item in tabs.xItems:
+      if item.identifier() == identifier:
+        return index
+  -1
+
 proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int =
   if identifier.len == 0:
     return -1
@@ -957,10 +965,7 @@ proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int 
     )
     if found.isSome:
       return found.get()
-  for index, item in tabs.xItems:
-    if item.identifier() == identifier:
-      return index
-  -1
+  tabs.indexOfVisibleTab(identifier)
 
 proc documentTabItemWithIdentifier*(
     tabs: DocumentTabs, identifier: string
@@ -1173,6 +1178,36 @@ proc selectDocumentTabWithIdentifier*(
 ): bool {.discardable.} =
   tabs.selectDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
 
+proc selectRelativeDocumentTab*(
+    tabs: DocumentTabs, offset: int, wrap = false
+): bool {.discardable.} =
+  ## Select a tab by offset from the current selection. Return true when it moves.
+  ## With no selection, start at the first tab for a positive offset or the last
+  ## tab for a negative offset. A disabled tab or delegate veto leaves it in place.
+  let
+    count = tabs.len()
+    selected = tabs.selectedIndex()
+  if count == 0 or offset == 0:
+    return false
+  let target =
+    if selected < 0:
+      if offset > 0:
+        0
+      else:
+        count - 1
+    elif wrap:
+      let distance = offset mod count
+      let index = selected + distance
+      if index < 0:
+        index + count
+      else:
+        index mod count
+    elif offset < -selected or offset >= count - selected:
+      return false
+    else:
+      selected + offset
+  target != selected and tabs.selectDocumentTabAtIndex(target)
+
 proc addDocumentTabItem*(
     tabs: DocumentTabs, item: DocumentTabItem
 ): DocumentTabItem {.discardable.} =
@@ -1281,17 +1316,44 @@ proc removeDocumentTabWithIdentifier*(
 ): bool {.discardable.} =
   tabs.removeDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
 
-proc closeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+proc closingTabIndex(
+    tabs: DocumentTabs, item: DocumentTabItem, identifier: string
+): int =
+  result = tabs.indexOfDocumentTabItem(item)
+  if result < 0:
+    result = tabs.indexOfVisibleTab(identifier)
+
+proc performDocumentTabClose(
+    tabs: DocumentTabs, index: int, consultDelegate: bool
+): bool =
   if index < 0 or index >= tabs.xItems.len:
     return false
-  let item = tabs.xItems[index]
-  if not tabs.shouldClose(item, index):
+  let
+    item = tabs.xItems[index]
+    identifier = item.identifier()
+  for closing in tabs.xClosingTabs:
+    if closing.item == item or (identifier.len > 0 and closing.identifier == identifier):
+      return false
+  tabs.xClosingTabs.add (item, identifier)
+  defer:
+    tabs.xClosingTabs.setLen(tabs.xClosingTabs.len - 1)
+  if consultDelegate and not tabs.shouldClose(item, index):
     return false
-  emit tabs.documentTabWillClose(item, index)
-  discard tabs.removeDocumentTabAtIndex(index)
-  tabs.didClose(item, index)
-  emit tabs.documentTabDidClose(item, index)
+
+  # Approval and will-close observers can rebuild or reorder the strip.
+  let currentIndex = tabs.closingTabIndex(item, identifier)
+  if currentIndex >= 0:
+    emit tabs.documentTabWillClose(item, currentIndex)
+    discard tabs.removeDocumentTabAtIndex(tabs.closingTabIndex(item, identifier))
+  let closedIndex = if currentIndex >= 0: currentIndex else: index
+  tabs.didClose(item, closedIndex)
+  emit tabs.documentTabDidClose(item, closedIndex)
   true
+
+proc closeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+  ## Request approval and close the original tab even if the delegate reloads
+  ## the strip. If approval already removed it, only emit completion.
+  tabs.performDocumentTabClose(index, consultDelegate = true)
 
 proc closeDocumentTab*(
     tabs: DocumentTabs, item: DocumentTabItem
@@ -1301,7 +1363,16 @@ proc closeDocumentTab*(
 proc closeDocumentTabWithIdentifier*(
     tabs: DocumentTabs, identifier: string
 ): bool {.discardable.} =
-  tabs.closeDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
+  tabs.closeDocumentTabAtIndex(tabs.indexOfVisibleTab(identifier))
+
+proc completeDocumentTabClose*(
+    tabs: DocumentTabs, identifier: string
+): bool {.discardable.} =
+  ## Remove a tab after a deferred close has been approved. Emit the usual close
+  ## notifications without requesting delegate approval again.
+  tabs.performDocumentTabClose(
+    tabs.indexOfVisibleTab(identifier), consultDelegate = false
+  )
 
 proc removeAllDocumentTabs*(tabs: DocumentTabs) =
   tabs.xTabModels.setLen(0)
@@ -2048,9 +2119,9 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
   method keyDown(tabs: DocumentTabs, event: KeyEvent): bool =
     case event.key
     of keyArrowLeft:
-      tabs.selectDocumentTabAtIndex(max(tabs.selectedIndex() - 1, 0))
+      tabs.selectRelativeDocumentTab(-1)
     of keyArrowRight:
-      tabs.selectDocumentTabAtIndex(min(tabs.selectedIndex() + 1, tabs.len() - 1))
+      tabs.selectRelativeDocumentTab(1)
     of keyHome:
       tabs.selectDocumentTabAtIndex(0)
     of keyEnd:

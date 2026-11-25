@@ -151,7 +151,7 @@ suite "nimkit documents":
     check tabs.len == 2
 
     second.documentEdited = false
-    check not tabs.closeDocumentTabAtIndex(1)
+    check tabs.closeDocumentTabAtIndex(1)
     check controller.documentCount == 1
     check tabs.len == 1
     check tabs[0.Natural].identifier == first.documentIdentifier

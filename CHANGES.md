@@ -5,6 +5,9 @@
 - Restore clipboard shortcuts in Kosmo Quick Open and show file paths in
   document tab tooltips.
 - Add a match-case control to editor search and replacement.
+- Limit Kosmo's Close Others tab action to the clicked tab's pane.
+- Complete document tab closes by identity after a reload or deferred approval.
+  Share relative tab selection between NimKit and Kosmo.
 - Rename NimKit's `acceptsFirstResponder` property to `focusable`, including in
   DirectView widget arguments and responder protocol overrides.
 - Remove the experimental ViewSpec API. Use DirectView for declarative views.
