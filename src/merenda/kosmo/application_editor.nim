@@ -2312,25 +2312,6 @@ protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
 func isEditingAction(action: string): bool =
   action.kosmoAction().kind == KosmoActionKind.Editing
 
-proc nativeEditingCommand(
-    selector: nimkit.CommandSelector
-): Option[nimkit.CommandSelector] =
-  case $selector.name
-  of KosmoCopyAction, "copy":
-    some(nimkit.copy())
-  of KosmoCutAction, "cut":
-    some(nimkit.cut())
-  of KosmoPasteAction, "paste":
-    some(nimkit.paste())
-  of KosmoSelectAllAction, "selectAll":
-    some(nimkit.selectAll())
-  of KosmoUndoAction, "undo":
-    some(nimkit.undo())
-  of KosmoRedoAction, "redo":
-    some(nimkit.redo())
-  else:
-    none(nimkit.CommandSelector)
-
 proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.handlePendingPaneKey(event):
@@ -3556,15 +3537,6 @@ proc installSidebarKeys(pane: KosmoSidebarPane, target: nimkit.DynamicAgent) =
   for selector in [nimkit.keyDown(), nimkitSelectors.performKeyEquivalent()]:
     discard target.pushMethod(selector, pane.sidebarKeyMethod(selector))
 
-# Translate Kosmo's namespaced editing actions to NimKit commands so the
-# focused text field handles them before they reach the underlying editor.
-protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
-  method dispatchCommand(
-      editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
-  ): bool =
-    let selector = args.selector.nativeEditingCommand().get(args.selector)
-    editor.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: args.sender))
-
 proc installSidebarFieldKeys(pane: KosmoSidebarPane, field: nimkit.TextField) =
   let cell = field.textFieldCell()
   var editor = cell.fieldEditorForView(field)
@@ -3576,7 +3548,7 @@ proc installSidebarFieldKeys(pane: KosmoSidebarPane, field: nimkit.TextField) =
     ) =
       invocation.setResult(fieldEditor)
     discard cell.replaceMethod(nimkit.fieldEditorForView(), editorMethod)
-  discard editor.withProtocol(KosmoFieldEditorCommandDispatch)
+  editor.installKosmoFieldEditorCommands()
   pane.installSidebarKeys(editor)
 
 proc updateSidebarFocus(pane: KosmoSidebarPane) =

@@ -5,11 +5,11 @@ import std/[algorithm, math, monotimes, os, strutils, tables, times]
 import sigils/[core, threads]
 from figdraw import ZLevel
 
-import ../nimkit as nimkit except performKeyEquivalent
-from ../nimkit/foundation/selectors import performKeyEquivalent
+import ../nimkit as nimkit
 import ./scrolling
 import ./workspacefiles
 import ./searchbuttons
+import ./shortcuts
 import ../nimkit/foundation/textsearch
 export workspacefiles.projectFiles
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -352,26 +352,6 @@ protocol QuickOpenEditorCancellation of nimkit.MenuCommandProtocol:
     if not editor.panel.isNil:
       editor.panel[].dismiss(nimkit.tdrEscape)
 
-protocol QuickOpenEditorClipboard of nimkit.ResponderCommandDispatchProtocol:
-  method performKeyEquivalent(
-      editor: QuickOpenFieldEditor, event: nimkit.KeyEvent
-  ): bool =
-    if event.modifiers != nimkit.shortcutModifiers():
-      return
-    let command =
-      case event.key
-      of nimkit.keyC:
-        nimkit.copy()
-      of nimkit.keyX:
-        nimkit.cut()
-      of nimkit.keyV:
-        nimkit.paste()
-      of nimkit.keyA:
-        nimkit.selectAll()
-      else:
-        return
-    editor.sendLocalIfHandled(command, nimkit.ActionArgs(sender: editor))
-
 protocol QuickOpenLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: QuickOpenPanel) =
     let contentFrame = panel.contentRect()
@@ -677,7 +657,7 @@ proc newQuickOpenPanel*(rootPath = "", files: WorkspaceFiles = nil): QuickOpenPa
   discard editor.withProtocol(QuickOpenEditorMovement)
   discard editor.withProtocol(QuickOpenEditorActivation)
   discard editor.withProtocol(QuickOpenEditorCancellation)
-  discard editor.withProtocol(QuickOpenEditorClipboard)
+  editor.installKosmoFieldEditorCommands()
 
   let cell = QuickOpenFieldCell(editor: editor)
   cell.initTextFieldCellFields()

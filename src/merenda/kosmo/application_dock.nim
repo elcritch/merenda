@@ -115,7 +115,7 @@ proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
     result = group.editorView
 
 proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Window) =
-  discard window.fieldEditor().withProtocol(KosmoFieldEditorCommandDispatch)
+  window.fieldEditor().installKosmoFieldEditorCommands()
   var bindings = window.keyBindings()
   for command in kosmoShortcutCommands():
     discard bindings.remove(nimkit.actionSelector(command))
