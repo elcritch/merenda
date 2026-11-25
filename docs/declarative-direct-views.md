@@ -74,7 +74,7 @@ the optional body:
 ```nim
 view.viewBody:
   Button("Remove", identifier = "remove"):
-    this.acceptsFirstResponder = false
+    this.focusable = false
   Label(stringValue = "Ready")
 ```
 

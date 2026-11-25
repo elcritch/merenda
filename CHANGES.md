@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rename NimKit's `acceptsFirstResponder` property to `focusable`, including in
+  DirectView widget arguments and responder protocol overrides.
 - Remove the experimental ViewSpec API. Use DirectView for declarative views.
 
 - Show Kosmo's About information in a NimKit window that closes with Cmd-W.

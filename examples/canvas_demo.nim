@@ -621,7 +621,7 @@ proc newCanvasDrawingView*(stampImage: ImageResource): CanvasDrawingView =
   result.initCanvasViewFields()
   result.backgroundColor = color(0.985, 0.99, 1.0, 1.0)
   result.accessibilityLabel = "Interactive drawing canvas"
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(CanvasDrawingEvents)
 
 proc selectTool(demo: CanvasDemo, tool: CanvasTool) =

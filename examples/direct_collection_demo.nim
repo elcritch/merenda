@@ -19,7 +19,7 @@ proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: strin
         bindTextField(
           "title", controller, arrayControllerDidChange, id, rowTitle, editRowTitle
         )
-      Button("Remove", acceptsFirstResponder = false):
+      Button("Remove", focusable = false):
         onAction(controller, id) do(
           this: Button, receiver: ArrayController, key: string
         ):

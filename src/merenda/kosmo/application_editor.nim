@@ -3728,7 +3728,7 @@ proc newKosmoStatusIconButton(
   result.buttonType = nimkit.btMomentary
   result.accessibilityLabel = title
   result.toolTip = title
-  result.acceptsFirstResponder = false
+  result.focusable = false
   discard result.withProtocol(KosmoStatusIconDrawing)
 
 const KosmoKeyModes = [
@@ -3927,7 +3927,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   choice.styleId = KosmoKeyModeSelectorIdentifier
   choice.accessibilityLabel = "Editor keymode"
   choice.toolTip = "Editor keymode"
-  choice.acceptsFirstResponder = false
+  choice.focusable = false
   for mode in KosmoKeyModes:
     let item = nimkit.newMenuItem(mode.title)
     item.identifier = mode.identifier
@@ -4819,7 +4819,7 @@ proc newEditorPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
   discard pane.withProtocol(EditorPopupDataSource)
   discard pane.withProtocol(EditorPopupDelegate)
   result = nimkit.newPopupListView(dataSource = pane, delegate = pane)
-  result.acceptsFirstResponder = false
+  result.focusable = false
   result.setPopupListRoles(nimkit.srComboBox, nimkit.srComboBoxItem)
 
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =

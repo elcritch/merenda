@@ -157,7 +157,7 @@ suite "Kosmo synthetic panel shortcuts":
         target =
           frontend.contentView.hitTest(frontend.contentView.pointFromWindow(point))
       require not target.isNil
-      require not target.acceptsFirstResponder()
+      require not target.focusable()
       discard frontend.window.mouseDownAt(point)
       discard frontend.window.mouseUpAt(point)
       check frontend.window.firstResponderIs(text)

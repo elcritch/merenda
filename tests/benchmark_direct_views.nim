@@ -75,7 +75,7 @@ proc body(
               )
             Button:
               this.title = "Remove"
-              this.acceptsFirstResponder = false
+              this.focusable = false
               onAction(receiver, task.id) do(
                 this: Button, owner: BenchReceiver, id: int
               ):

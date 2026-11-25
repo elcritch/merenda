@@ -1589,7 +1589,7 @@ suite "nimkit terminal views":
       window = newWindow("Terminal click focus", frame = rect(0, 0, 360, 90))
     session.processOutput("alpha beta")
     discard view.pollSettled()
-    peer.acceptsFirstResponder = true
+    peer.focusable = true
     root.addSubview(view)
     root.addSubview(peer)
     window.setContentView(root)
@@ -2022,7 +2022,7 @@ suite "nimkit terminal views":
         window = newWindow("Terminal focus", frame = rect(0, 0, 360, 120))
       defer:
         view.close()
-      peer.acceptsFirstResponder = true
+      peer.focusable = true
       root.addSubview(view)
       root.addSubview(peer)
       window.setContentView(root)
@@ -2057,7 +2057,7 @@ suite "nimkit terminal views":
         window = newWindow("Terminal cursor focus", frame = rect(0, 0, 360, 120))
       defer:
         view.close()
-      peer.acceptsFirstResponder = true
+      peer.focusable = true
       root.addSubview(view)
       root.addSubview(peer)
       window.setContentView(root)

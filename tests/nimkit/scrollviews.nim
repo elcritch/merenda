@@ -471,7 +471,7 @@ suite "nimkit scroll views":
     defer:
       window.close()
     window.setContentView(scroll)
-    document.acceptsFirstResponder = true
+    document.focusable = true
     require window.makeFirstResponder(document)
     require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
     check scroll.contentOffset().y == 0
@@ -622,7 +622,7 @@ suite "nimkit scroll views":
       window.close()
     host.addSubview(scroll)
     window.setContentView(host)
-    document.acceptsFirstResponder = true
+    document.focusable = true
     var claimsArrow = true
     let handler: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
       invocation.setResult(

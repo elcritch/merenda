@@ -35,9 +35,9 @@ suite "NimKit native window lifecycle":
       window.close()
     root.addSubview(anchor)
     window.setContentView(root)
-    anchor.acceptsFirstResponder = true
-    firstContent.acceptsFirstResponder = true
-    secondContent.acceptsFirstResponder = true
+    anchor.focusable = true
+    firstContent.focusable = true
+    secondContent.focusable = true
     window.makeKeyAndOrderFront()
     window.ensureNativeWindow()
     require window.nativeReady

@@ -698,7 +698,7 @@ proc initTokenFieldFields*(
     ,
   )
 
-  field.acceptsFirstResponder = true
+  field.focusable = true
   field.accessibilityRole = arComboBox
   field.accessibilityLabel = "Token field"
   discard field.withProtocol(DefaultTokenFieldControl)

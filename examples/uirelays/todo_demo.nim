@@ -613,7 +613,7 @@ proc newTodoRelaysView(frame: nimkitTypes.Rect = nimkitTypes.AutoRect): TodoRela
     mousePoint: ui.point(-1, -1),
   )
   initUIRelaysViewFields(result, frame = frame)
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(TodoRelaysDrawing)
   discard result.withProtocol(TodoRelaysEvents)
   discard result.withProtocol(TodoRelaysTextInput)

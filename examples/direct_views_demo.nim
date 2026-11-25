@@ -24,7 +24,7 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
           bindTextField(
             "title", owner.tasks.item(task.id), owner, task.id, titleFor, editTitle
           )
-      Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
+      Button("Remove", identifier = "remove-" & $task.id, focusable = false):
         onAction(owner, task.id) do(this: Button, receiver: TaskController, id: int):
           receiver.removeTask(id)
 
@@ -65,19 +65,19 @@ proc buildChrome(controller: TaskController): DirectView =
       HStack:
         this.distribution = svdNatural
         this.spacing = 8
-        Button("Insert at top", identifier = "insert", acceptsFirstResponder = false):
+        Button("Insert at top", identifier = "insert", focusable = false):
           onAction(controller) do(this: Button, receiver: TaskController):
             receiver.insertTask()
-        Button("Reverse", identifier = "reverse", acceptsFirstResponder = false):
+        Button("Reverse", identifier = "reverse", focusable = false):
           onAction(controller) do(this: Button, receiver: TaskController):
             receiver.reverseTasks()
-        Button("Counter +1", identifier = "counter", acceptsFirstResponder = false):
+        Button("Counter +1", identifier = "counter", focusable = false):
           onAction(controller) do(this: Button, receiver: TaskController):
             receiver.counter <- receiver.counter{} + 1
-        Button("Undo", identifier = "undo", acceptsFirstResponder = false):
+        Button("Undo", identifier = "undo", focusable = false):
           onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performUndo()
-        Button("Redo", identifier = "redo", acceptsFirstResponder = false):
+        Button("Redo", identifier = "redo", focusable = false):
           onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performRedo()
       Label:

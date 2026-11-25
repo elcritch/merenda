@@ -45,22 +45,22 @@ proc formActions(panel: FormPanel): DirectView =
   result.viewBody:
     VStack:
       HStack:
-        Button("Apply", acceptsFirstResponder = false):
+        Button("Apply", focusable = false):
           onAction(panel, apply)
-        Button("Undo", acceptsFirstResponder = false):
+        Button("Undo", focusable = false):
           onAction(panel, undoAccepted)
-        Button("Cancel", acceptsFirstResponder = false):
+        Button("Cancel", focusable = false):
           onAction(panel, cancel)
-        Button("Async Save accepted", acceptsFirstResponder = false):
+        Button("Async Save accepted", focusable = false):
           onAction(panel, saveAccepted)
-        Button("Save / Close", acceptsFirstResponder = false):
+        Button("Save / Close", focusable = false):
           onAction(panel, saveDraftAndClose)
       HStack:
-        Button("Queue validation", acceptsFirstResponder = false):
+        Button("Queue validation", focusable = false):
           onAction(panel, queueValidation)
-        Button("Complete", acceptsFirstResponder = false):
+        Button("Complete", focusable = false):
           onAction(panel, completeValidation)
-        Button("External 99", acceptsFirstResponder = false):
+        Button("External 99", focusable = false):
           onAction(panel, acceptExternalValue)
 
 proc runFormEditorsProcs*() =

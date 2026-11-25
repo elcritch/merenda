@@ -951,7 +951,7 @@ protocol DefaultButtonStyleLayout of ViewLayoutProtocol:
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
-  button.acceptsFirstResponder = true
+  button.focusable = true
   discard button.withProtocol(DefaultButtonStyleLayout)
   discard button.withProtocol(DefaultButtonHover)
   discard button.withProtocol(DefaultButtonDrawing)

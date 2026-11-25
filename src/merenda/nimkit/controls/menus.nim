@@ -1888,7 +1888,7 @@ proc initPopupMenuButtonFields*(
   button.xPopupPresentation = ppAutomatic
   button.background = color(0.0, 0.0, 0.0, 0.0)
   button.menu = menu
-  button.acceptsFirstResponder = true
+  button.focusable = true
   discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
   discard button.withProtocol(PopupMenuButtonStyleLayout)

@@ -18,8 +18,8 @@ suite "NimKit popup hosts":
       dismissReason = tdrProgrammatic
     root.addSubview(anchor)
     window.setContentView(root)
-    anchor.acceptsFirstResponder = true
-    content.acceptsFirstResponder = true
+    anchor.focusable = true
+    content.focusable = true
     let host = newPopupHost(
       window,
       anchor,

@@ -14,7 +14,7 @@ type
   Responder* = ref object of DynamicAgent
     xBackRefs*: BackRefSet[Responder]
     xNextResponderLink: ResponderLink
-    xAcceptsFirstResponder: bool
+    xFocusable: bool
 
   ResponderLink = ref object of DynamicAgent
     targetRef: BackRef[Responder]
@@ -82,10 +82,11 @@ proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent 
       result = DynamicAgent(link.targetRef.target)
 
 protocol ResponderProtocol {.setterStyle: nim.} from Responder:
-  property acceptsFirstResponder -> bool {.field: xAcceptsFirstResponder.}
+  ## `focusable` controls whether a responder can become the first responder.
+  property focusable -> bool {.field: xFocusable.}
 
   method shouldBecomeFirstResponder*(self: Responder): bool =
-    self.acceptsFirstResponder()
+    self.focusable()
 
   method becomeFirstResponder*(self: Responder): bool =
     true

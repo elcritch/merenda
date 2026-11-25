@@ -352,7 +352,7 @@ protocol DefaultTextEditorLayout of ViewLayoutProtocol:
     editor.updateTextEditorLayout()
 
 protocol DefaultTextEditorResponder of ResponderProtocol:
-  method acceptsFirstResponder(editor: TextEditor): bool =
+  method focusable(editor: TextEditor): bool =
     not editor.xTextView.isNil and
       (editor.xTextView.editable() or editor.xTextView.selectable())
 
@@ -666,7 +666,7 @@ proc initTextEditorFields*(
   editor.xMinimumWrappedDocumentWidth = 0.0'f32
   editor.xMinimumDocumentSize =
     initSize(DefaultTextEditorWidth, DefaultTextEditorHeight)
-  editor.acceptsFirstResponder = true
+  editor.focusable = true
   editor.xTextView =
     if textView.isNil:
       newTextView(value)

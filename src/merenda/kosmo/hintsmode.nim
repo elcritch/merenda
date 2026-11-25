@@ -621,7 +621,7 @@ proc handleHintKey(overlay: KosmoHintOverlay, event: nimkit.KeyEvent): bool =
   overlay.handleLabelCharacter(event.labelCharacter())
 
 protocol KosmoHintOverlayResponder of nimkit.ResponderProtocol:
-  method acceptsFirstResponder(overlay: KosmoHintOverlay): bool =
+  method focusable(overlay: KosmoHintOverlay): bool =
     true
 
 protocol KosmoHintOverlayDrawing of nimkit.ViewDrawingProtocol:

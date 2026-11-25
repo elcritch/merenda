@@ -758,7 +758,7 @@ proc initTableBaseChild*(view: View, clipsToBounds: bool) =
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
-  view.acceptsFirstResponder = false
+  view.focusable = false
 
 proc rowTextForSummary*(tableView: TableView, row: int): string =
   let column = tableView.columnAt(0)

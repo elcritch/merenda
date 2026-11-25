@@ -676,7 +676,7 @@ suite "direct view composition":
     initResponder(owner)
     proc updateFocus(sender: Responder, receiver: Responder) =
       if sender of TextField:
-        receiver.acceptsFirstResponder = TextField(sender).stringValue().len > 0
+        receiver.focusable = TextField(sender).stringValue().len > 0
 
     host.viewBody:
       VStack:
@@ -697,10 +697,10 @@ suite "direct view composition":
     check owner.calls == 0
     require button.tryToPerform(performClick(), button)
     check button.title() == "Added"
-    check not owner.acceptsFirstResponder()
+    check not owner.focusable()
     field.stringValue = "new"
     check owner.calls == 7
-    check owner.acceptsFirstResponder()
+    check owner.focusable()
 
   test "selector bindings deliver the widget to a weak protocol receiver":
     let host = newDirectView()

@@ -412,7 +412,7 @@ proc initSliderFields*(
   Control(slider).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrSlider)
   Control(slider).setObjectValue(toObj(slider.xValue))
-  slider.acceptsFirstResponder = true
+  slider.focusable = true
   slider.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   slider.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard slider.withProtocol(DefaultSliderStyleLayout)
