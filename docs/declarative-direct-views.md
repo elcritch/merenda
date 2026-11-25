@@ -22,7 +22,7 @@ import merenda/nimkit/directviews
 proc taskRow(context: DirectNode, task: Task, controller: TaskController) =
   context.viewBody:
     TextField:
-      bindTextField(
+      this.bindTextField(
         "title", controller.tasks.item(task.id), controller, task.id,
         titleFor, editTitle,
       )
@@ -82,14 +82,13 @@ view.viewBody:
 `this.title = value`. It calls the existing typed setter, and the body can override
 the value afterward. Supplying both forms for the same Button is an error;
 positional arguments must precede named properties.
-`TextField(stringValue = value)` also uses the same text patch
-as `this.stringValue = value`, preserving drafts when the model text is unchanged.
 Use actual widget property names; constructor-only parameters can still be supplied
 positionally.
 
-Ordinary block statements run on each structural evaluation. `arrangedSizing`
-sets the parent's sizing policy. Custom factories create actual views. Child
-arrangement currently requires StackView containers.
+Ordinary block statements run on each structural evaluation. Set
+`this.arrangedSizing = svspFillAvailableWidth` in a widget body to tell the
+enclosing stack how to size that widget. Custom factories create actual views.
+Child arrangement currently requires StackView containers.
 
 An inline `onAction` or `onChange` handler takes the typed widget first, followed
 by the receiver and optional context. The examples call the widget parameter
@@ -101,32 +100,43 @@ The receiver parameter can use the bound object's type or a base type such as
 
 ```nim
 Button("Remove"):
-  onAction(controller, task.id) do(this: Button, owner: TaskController, id: int):
+  this.onAction(controller, task.id) do(this: Button, owner: TaskController, id: int):
     this.enabled = false
     owner.removeTask(id)
 ```
 
-Pass a named, non-capturing proc to `onAction(panel, apply)` or
-`onChange(panel, update)` when the handler only needs the sender and receiver.
+Pass a named, non-capturing proc to `this.onAction(panel, apply)` or
+`this.onChange(panel, update)` when the handler only needs the sender and receiver.
 Each parameter can use its concrete type or a base type such as `Responder`.
 See the [named callback form editor](../examples/form_editors_procs.nim).
 
-Use `onAction(receiver, apply())` or `onChange(receiver, textEdited())` to send
-an existing action selector directly to a responder. A protocol method that
+Use `this.onAction(receiver, apply())` or `this.onChange(receiver, textEdited())`
+to send an existing action selector directly to a responder. A protocol method that
 takes `ActionArgs` and returns no value provides an `ActionSelector` through
 its generated accessor, such as `apply()`. The method receives the emitting
 widget in `args.sender`. A variable holding an `ActionSelector` works too. See the
 [protocol form editor](../examples/form_editors_protocol.nim).
 
+Use `this.patchText(modelTitle)` when a field should preserve the user's draft
+across body updates.
+
+```nim
+TextField:
+  this.patchText(modelTitle)
+```
+
+If the model title is `"Ada"` and the user has typed `"Ad"`, rerunning the body
+with `"Ada"` leaves `"Ad"` in the field. If the model title changes to `"Grace"`,
+`patchText` puts `"Grace"` in the field. Assign `this.stringValue` when you want
+to set the text directly, for example to reset a draft.
+
 Property ownership is explicit:
 
 - Ordinary setters run as written. Omitting a setter leaves its previous value.
-- `this.stringValue = value` remembers the authored value to preserve provisional
-  TextField edits when an unchanged model value is repeated.
 - A binding owns updates to the properties its setter writes. Omitting a binding
   disconnects it but leaves its last value; assign a replacement value explicitly.
-- For TextField, an authored `stringValue` assignment retires the previous text
-  binding in that scope before writing, so the handoff cannot invoke its edit
+- For TextField, `patchText` retires the previous text binding in that scope
+  before writing, so the handoff cannot invoke its edit
   command. Returning from bound text resets the authored-value cache, including
   after a pass that omitted both the binding and assignment. A new `bindTextField`
   registration for the same field replaces its previous text owner in that scope.
@@ -140,21 +150,20 @@ GUI thread; `flushBindings` supports deterministic pumping. `bindTextField` adds
 last-model-text tracking, programmatic-echo suppression, and an edit command routed
 through a weak controller. Invalid drafts remain in the editor. External accepted
 model changes replace the draft; a richer conflict/commit policy is future work.
-These text handoff rules cover `bindTextField` and the DSL's text assignment;
+These text handoff rules cover `bindTextField` and `patchText`;
 arbitrary binding setters and independently managed scopes still require callers
 to avoid competing writers.
 
-Inside `TextField:`, call bare `bindTextField(...)`. DirectView supplies the
-current field and its binding scope. Bare `bindValue(...)` supplies the current
-widget and its scope in the same way.
+Call `this.bindTextField(...)` or `this.bindValue(...)` to bind the widget in its
+own scope.
 
 ```nim
 Label:
-  bindValue("status", controller.status) do(label: Label, value: string):
+  this.bindValue("status", controller.status) do(label: Label, value: string):
     label.stringValue = value
 ```
 
-For a writable `Sigil[string]`, `bindTextField(id = "text", source = text)` reads
+For a writable `Sigil[string]`, `this.bindTextField(id = "text", source = text)` reads
 with `text{}` and writes edits back with `text <- value`. When a controller emits
 its own signal, use `controller`, `signal`, and `getter` with either binding.
 The getter takes the controller. For `bindTextField`, the `edit` proc takes the
@@ -166,8 +175,8 @@ and the [explicit signal demo](../examples/direct_text_binding_signal_demo.nim).
 A helper that receives a widget from a DirectView body can call `bindTextField`
 or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
 the binding in the form's existing scope, so the form can manage a field it
-creates in ordinary Nim code. Use `this.bindValue(...)` or `form.bindValue(...)`
-when the widget that owns the scope and the target widget are supplied explicitly.
+creates in ordinary Nim code. Pass the target as an argument when the widget that
+owns the scope and the binding target are different.
 These calls raise `ValueError` if the owner has no active DirectView scope. See
 the [form editor example](../examples/form_editors_protocol.nim).
 

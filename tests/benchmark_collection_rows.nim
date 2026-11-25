@@ -19,7 +19,7 @@ proc buildRow(row: DirectView, controller: ArrayController, id: string) =
       Label:
         this.stringValue = id
       TextField:
-        bindValue(
+        this.bindValue(
           "title", controller, arrayControllerDidChange, controller, id, readTitle,
           applyTitle,
         )

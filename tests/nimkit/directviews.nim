@@ -79,7 +79,9 @@ proc counterComponent(context: DirectNode, owner: DirectController, value: int) 
     Button:
       this.identifier = "component-button"
       this.title = $value
-      onAction(owner, value) do(this: Button, receiver: DirectController, count: int):
+      this.onAction(owner, value) do(
+        this: Button, receiver: DirectController, count: int
+      ):
         receiver.calls += count
 
 proc observedCounter(context: DirectNode, owner: DirectController, value: Sigil[int]) =
@@ -137,7 +139,7 @@ static:
       let owner = DirectController()
       host.viewBody:
         Button("Add"):
-          onAction(owner, 1) do(
+          this.onAction(owner, 1) do(
             receiver: DirectController, amount: int, sender: DynamicAgent
           ):
             receiver.calls += amount
@@ -149,7 +151,7 @@ static:
       let owner: Responder = DirectController()
       host.viewBody:
         Button("Add"):
-          onAction(owner) do(this: Button, receiver: DirectController):
+          this.onAction(owner) do(this: Button, receiver: DirectController):
             inc receiver.calls
   )
 
@@ -186,7 +188,7 @@ suite "direct view composition":
     initResponder(owner)
     owner.host.viewBody:
       Button("Clear", identifier = "clear"):
-        onAction(owner) do(this: Button, receiver: DirectController):
+        this.onAction(owner) do(this: Button, receiver: DirectController):
           inc receiver.calls
           receiver.host.clear()
     let button = Button(owner.host.viewWithIdentifier("clear"))
@@ -232,6 +234,28 @@ suite "direct view composition":
       Button("mounted")
     check weakHost.isNil
 
+  test "a widget setter sets its sizing policy for the current composition":
+    let host = newDirectView()
+
+    proc fillWidth(view: View) =
+      view.arrangedSizing = svspFillAvailableWidth
+
+    host.viewBody:
+      TextField:
+        fillWidth(this)
+    let field = host.arrangedSubviews[0]
+    check host.arrangedSubviewSizingPolicy(field) == svspFillAvailableWidth
+
+    host.viewBody:
+      TextField:
+        this.stringValue = "Updated"
+    check host.arrangedSubviews[0] == field
+    check host.arrangedSubviewSizingPolicy(field) == svspAutomatic
+
+    host.clear()
+    expect ValueError:
+      fillWidth(field)
+
   test "positional button title updates once per evaluation and before the body":
     let host = newDirectView()
     let owner = DirectController()
@@ -250,7 +274,7 @@ suite "direct view composition":
       host.viewBody:
         Button(readTitle(), readFrame(), identifier = "positional"):
           this.identifier = this.title
-          onAction(owner, reads) do(
+          this.onAction(owner, reads) do(
             this: Button, receiver: DirectController, count: int
           ):
             receiver.calls += count
@@ -335,12 +359,13 @@ suite "direct view composition":
     check view.caption == "Second"
     check view.writes == 2
 
-  test "named text preserves drafts on unchanged input and applies new model text":
+  test "patching text preserves drafts on unchanged input and applies new model text":
     let host = newDirectView()
     var value = "Model"
     proc render() =
       host.viewBody:
-        TextField(stringValue = value)
+        TextField:
+          this.patchText(value)
 
     render()
     let field = TextField(host.arrangedSubviews[0])
@@ -361,9 +386,11 @@ suite "direct view composition":
       host.viewBody:
         TextField:
           if mode == 0:
-            this.stringValue = authored
+            this.patchText(authored)
           elif mode == 1:
-            bindTextField("text", owner.text, owner, 0, readOwnedText, editOwnedText)
+            this.bindTextField(
+              "text", owner.text, owner, 0, readOwnedText, editOwnedText
+            )
 
     render()
     let field = TextField(host.arrangedSubviews[0])
@@ -400,7 +427,7 @@ suite "direct view composition":
       host.viewBody:
         TextField:
           if bound:
-            bindTextField(
+            this.bindTextField(
               id = "text",
               input = owner.text,
               receiver = owner,
@@ -408,7 +435,7 @@ suite "direct view composition":
               edit = editOwnedText,
             )
           else:
-            this.stringValue = "plain"
+            this.patchText("plain")
 
     render()
     let field = TextField(host.arrangedSubviews[0])
@@ -428,7 +455,7 @@ suite "direct view composition":
     proc render() =
       host.viewBody:
         TextField:
-          bindTextField("text", input)
+          this.bindTextField("text", input)
 
     render()
     let field = TextField(host.arrangedSubviews[0])
@@ -547,7 +574,7 @@ suite "direct view composition":
           for id in ids:
             keyed(id):
               TextField:
-                this.stringValue = id
+                this.patchText(id)
 
     render()
     let stack = StackView(host.arrangedSubviews[0])
@@ -571,7 +598,7 @@ suite "direct view composition":
           for id in ["same", "same"]:
             keyed(id):
               TextField:
-                this.stringValue = id
+                this.patchText(id)
     session.close()
 
   test "detached construction transfers a fresh root":
@@ -591,7 +618,7 @@ suite "direct view composition":
     proc render() =
       session.viewBody:
         Button:
-          onAction(owner, amount) do(
+          this.onAction(owner, amount) do(
             this: Button, receiver: DirectController, value: int
           ):
             receiver.calls += value
@@ -623,7 +650,7 @@ suite "direct view composition":
           for id in ids:
             keyed(id):
               TextField:
-                this.stringValue = id & "lpha"
+                this.patchText(id & "lpha")
 
     render()
     let stack = StackView(host.arrangedSubviews[0])
@@ -658,7 +685,7 @@ suite "direct view composition":
         else:
           keyed("item"):
             TextField:
-              this.stringValue = "replacement"
+              this.patchText("replacement")
 
     render()
     let old = session.host.arrangedSubviews[0]
@@ -681,12 +708,12 @@ suite "direct view composition":
     host.viewBody:
       VStack:
         Button("Add"):
-          onAction(owner, 7) do(this: Button, receiver: DynamicAgent, amount: int):
+          this.onAction(owner, 7) do(this: Button, receiver: DynamicAgent, amount: int):
             check this.title() == "Add"
             this.title = "Added"
             DirectController(receiver).calls += amount
         TextField:
-          onChange(owner, updateFocus)
+          this.onChange(owner, updateFocus)
     let
       row = StackView(host.arrangedSubviews[0])
       button = Button(row.arrangedSubviews[0])
@@ -714,9 +741,9 @@ suite "direct view composition":
       let changeAction = recordDirectWidget()
       host.viewBody:
         Button("Run"):
-          onAction(owner, recordDirectWidget())
+          this.onAction(owner, recordDirectWidget())
         TextField:
-          onChange(owner, changeAction)
+          this.onChange(owner, changeAction)
       button = Button(host.arrangedSubviews[0])
       let field = TextField(host.arrangedSubviews[1])
       require button.tryToPerform(performClick(), button)
@@ -740,7 +767,7 @@ suite "direct view composition":
       observed.target = owner
       session.viewBody:
         TextField:
-          onChange(owner) do(this: TextField, receiver: DirectController):
+          this.onChange(owner) do(this: TextField, receiver: DirectController):
             inc receiver.calls
       field = TextField(session.host.arrangedSubviews[0])
       field.stringValue = "changed"
@@ -762,7 +789,7 @@ suite "direct view composition":
       session.viewBody:
         Button:
           if enabled:
-            onAction(owner) do(this: Button, receiver: DirectController):
+            this.onAction(owner) do(this: Button, receiver: DirectController):
               inc receiver.calls
 
     render()
@@ -788,7 +815,7 @@ suite "direct view composition":
         if visible:
           keyed("field"):
             TextField:
-              bindValue(
+              this.bindValue(
                 id = "value",
                 controller = model,
                 signal = directChanged,
@@ -809,6 +836,27 @@ suite "direct view composition":
     session.flushBindings()
     check field.stringValue == "1"
     session.close()
+
+  test "a value binding can target a form field and defer its initial update":
+    let host = newDirectView()
+    let model = DirectBindingModel(value: 1)
+    initResponder(model)
+    proc readModel(model: DirectBindingModel): int =
+      model.value
+
+    let field = newTextField("Before signal")
+    host.viewBody:
+      FormView:
+        this.addRow(newLabel("Value"), field)
+        this.bindValue(
+          "value", model, directChanged, readModel, field, writeDirect, false
+        )
+
+    check field.stringValue == "Before signal"
+    model.value = 2
+    emit model.directChanged(0)
+    host.flushBindings()
+    check field.stringValue == "2"
 
   test "form bindings follow the mounted widget and stop when its host expires":
     let owner = TextOwner(text: newSigil("initial"))
@@ -911,7 +959,7 @@ suite "direct view composition":
       observed.target = owner
       session.viewBody:
         Button:
-          onAction(owner, countClick)
+          this.onAction(owner, countClick)
       button = Button(session.host.arrangedSubviews[0])
       discard button.send(performClick(), ActionArgs(sender: button))
       check button.title == "Clicked"
@@ -938,13 +986,13 @@ suite "direct view composition":
                 this{vpDraggable} = true
                 TextField:
                   this.identifier = "field-" & id
-                  bindValue(
+                  this.bindValue(
                     "value", model, directChanged, model, 0, readDirect, writeDirect
                   )
                 Button:
                   this.identifier = "button-" & id
                   this.title = "Preview"
-                  onAction(owner) do(this: Button, receiver: DirectController):
+                  this.onAction(owner) do(this: Button, receiver: DirectController):
                     inc receiver.calls
       session.takeDetachedRoot()
 
@@ -1029,7 +1077,7 @@ suite "direct collection rows":
       proc(row: DirectView, controller: ArrayController, id: string) =
         row.viewBody:
           TextField:
-            this.stringValue = controller.itemWithIdentifier(id).title,
+            this.patchText(controller.itemWithIdentifier(id).title),
     )
     let window = newWindow("Virtual rows", frame = rect(0, 0, 240, 100))
     window.setContentView(collection)
@@ -1109,7 +1157,7 @@ suite "direct collection rows":
         row.viewBody:
           VStack:
             TextField:
-              bindValue(
+              this.bindValue(
                 "value",
                 model,
                 directChanged,
@@ -1121,7 +1169,7 @@ suite "direct collection rows":
               )
             Button:
               this.title = controller.itemWithIdentifier(id).title
-              onAction(owner, id) do(
+              this.onAction(owner, id) do(
                 this: Button, receiver: DirectController, key: string
               ):
                 inc receiver.calls
@@ -1181,7 +1229,9 @@ suite "direct collection rows":
         row.viewBody:
           if id == "0":
             TextField:
-              bindTextField("text", owner.text, owner, 0, readOwnedText, editOwnedText)
+              this.bindTextField(
+                "text", owner.text, owner, 0, readOwnedText, editOwnedText
+              )
           else:
             Label:
               this.stringValue = controller.itemWithIdentifier(id).title,

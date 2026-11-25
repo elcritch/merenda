@@ -12,10 +12,10 @@ proc runDirectTextBindingDemo() =
   root.edgeInsets = insets(16)
   root.viewBody:
     TextField:
-      # The TextField block supplies the field and its binding scope.
+      # Inside TextField, this is the field and it owns the binding.
       # "text" names the binding, and source is the Sigil it watches.
       # The binding reads with text{} and publishes edits with text <- value.
-      bindTextField(id = "text", source = text)
+      this.bindTextField(id = "text", source = text)
 
   let window = newWindow("DirectView text binding", frame = rect(100, 100, 400, 120))
   sharedApplication().runWindow(window, root)

@@ -41,9 +41,14 @@
 - Allow helpers to call `bindTextField` and `bindValue` on a mounted DirectView
   widget to use its existing scope. Bindings stop updating when the owning
   composition is released.
-- Use bare `bindTextField(...)` and `bindValue(...)` in DirectView widget blocks.
-  The block supplies the scope and target. Call `bindValue` on the owning widget
-  to specify a different target.
+- Replace `arrangedSizing(policy)` with `this.arrangedSizing = policy` in the
+  widget body.
+- Use `this.patchText(value)` to preserve text drafts across body updates.
+  `TextField(stringValue = value)` and `this.stringValue = value` can now
+  overwrite a draft when the body reruns.
+- Register DirectView bindings and actions through the widget with
+  `this.bindTextField`, `this.bindValue`, `this.onAction`, and `this.onChange`.
+  Add the widget receiver to existing calls in DirectView bodies.
 - Bind a writable `Sigil[string]` directly with `bindTextField`. Use context-free
   callbacks when text or value bindings only need the controller.
 - Fix DirectView bodies evaluating the host expression twice. A host can be

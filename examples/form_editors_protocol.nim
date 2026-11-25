@@ -48,22 +48,22 @@ proc formActions(panel: FormPanel): DirectView =
     VStack:
       HStack:
         Button("Apply", focusable = false):
-          onAction(panel, apply())
+          this.onAction(panel, apply())
         Button("Undo", focusable = false):
-          onAction(panel, undoAccepted())
+          this.onAction(panel, undoAccepted())
         Button("Cancel", focusable = false):
-          onAction(panel, cancel())
+          this.onAction(panel, cancel())
         Button("Async Save accepted", focusable = false):
-          onAction(panel, saveAccepted())
+          this.onAction(panel, saveAccepted())
         Button("Save / Close", focusable = false):
-          onAction(panel, saveDraftAndClose())
+          this.onAction(panel, saveDraftAndClose())
       HStack:
         Button("Queue validation", focusable = false):
-          onAction(panel, queueValidation())
+          this.onAction(panel, queueValidation())
         Button("Complete", focusable = false):
-          onAction(panel, completeValidation())
+          this.onAction(panel, completeValidation())
         Button("External 99", focusable = false):
-          onAction(panel, acceptExternalValue())
+          this.onAction(panel, acceptExternalValue())
 
 proc runFormEditorsProtocol*() =
   let savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"

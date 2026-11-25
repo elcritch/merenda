@@ -65,18 +65,18 @@ proc body(
               this.stringValue = "#" & $task.id
             TextField:
               this.identifier = "edit-" & $task.id
-              arrangedSizing(svspFillAvailableWidth)
+              this.arrangedSizing = svspFillAvailableWidth
               bindingScope.onSchedule(
                 proc() =
                   discard
               )
-              bindTextField(
+              this.bindTextField(
                 "title", task, titleChanged, task, task.id, readTitle, acceptTitle
               )
             Button:
               this.title = "Remove"
               this.focusable = false
-              onAction(receiver, task.id) do(
+              this.onAction(receiver, task.id) do(
                 this: Button, owner: BenchReceiver, id: int
               ):
                 owner.calls += id + 1

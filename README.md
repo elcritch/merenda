@@ -317,7 +317,7 @@ root.viewBody:
     this.spacing = 12
     Label(stringValue = "Merenda on GitHub")
     Button("Open project"):
-      onAction(app, url) do(this: Button, owner: Application, link: string):
+      this.onAction(app, url) do(this: Button, owner: Application, link: string):
         discard owner.workspace().openUrl(link)
 
 app.runWindow(window, root)
@@ -327,10 +327,10 @@ Save this as `examples/project_link.nim` and run `nim ic -r examples/project_lin
 
 `VStack` places its children from top to bottom. Inside that block, `this` is
 the stack, so `this.spacing` sets the gap between the label and the button.
+Inside `Button`, `this` is the button, so `this.onAction` sets up its click handler.
 
-When the button is clicked the callback setup by `onAction` will be called and passed
-the sender (the button), its responder (the application or controller), and an optional
-context value. The callback proc is created using
+When you click the button, the handler receives the button, the application or
+controller you supplied, and the optional context value. The handler uses
 [Nim's `do` syntax](https://nim-lang.org/docs/manual.html#procedures-do-notation).
 
 **Note**: Responder is NimKit's general term for controller or application objects which contain
@@ -356,7 +356,9 @@ these controls inside the existing `VStack`, below the project button.
 ```nim
     Label(stringValue = "Task title")
     TextField:
-      bindTextField("title", controller.tasks.item(1), controller, 1, titleFor, editTitle)
+      this.bindTextField(
+        "title", controller.tasks.item(1), controller, 1, titleFor, editTitle
+      )
 ```
 
 Run the app again. The field starts with the title of task 1. Here,

@@ -31,10 +31,10 @@ proc runDirectTextBindingSignalDemo() =
   root.edgeInsets = insets(16)
   root.viewBody:
     TextField:
-      # The TextField block supplies the field and owns the binding named "text".
+      # Inside TextField, this is the field and it owns the binding named "text".
       # Here controller both sends textChanged and receives edits.
       # readText fills the field. editText handles edits from the field.
-      bindTextField(
+      this.bindTextField(
         id = "text",
         controller = controller,
         signal = textChanged,

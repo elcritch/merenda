@@ -17,15 +17,17 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
         this.stringValue = "#" & $task.id
       TextField:
         this.identifier = "title-" & $task.id
-        arrangedSizing(svspFillAvailableWidth)
+        this.arrangedSizing = svspFillAvailableWidth
         if owner.isNil:
-          this.stringValue = task.title
+          this.patchText(task.title)
         else:
-          bindTextField(
+          this.bindTextField(
             "title", owner.tasks.item(task.id), owner, task.id, titleFor, editTitle
           )
       Button("Remove", identifier = "remove-" & $task.id, focusable = false):
-        onAction(owner, task.id) do(this: Button, receiver: TaskController, id: int):
+        this.onAction(owner, task.id) do(
+          this: Button, receiver: TaskController, id: int
+        ):
           receiver.removeTask(id)
 
 proc taskRows(context: DirectNode, tasks: TaskRows, owner: TaskController = nil) =
@@ -66,23 +68,23 @@ proc buildChrome(controller: TaskController): DirectView =
         this.distribution = svdNatural
         this.spacing = 8
         Button("Insert at top", identifier = "insert", focusable = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.insertTask()
         Button("Reverse", identifier = "reverse", focusable = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.reverseTasks()
         Button("Counter +1", identifier = "counter", focusable = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.counter <- receiver.counter{} + 1
         Button("Undo", identifier = "undo", focusable = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performUndo()
         Button("Redo", identifier = "redo", focusable = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performRedo()
       Label:
         this.identifier = "counter-value"
-        bindValue(id = "counter", input = controller.counter) do(
+        this.bindValue(id = "counter", input = controller.counter) do(
           label: Label, value: int
         ):
           label.stringValue = "Unrelated counter: " & $value
@@ -90,7 +92,7 @@ proc buildChrome(controller: TaskController): DirectView =
       Label:
         this.identifier = "status"
         this.labelStyle = lsStatus
-        bindValue(id = "status", input = controller.status) do(
+        this.bindValue(id = "status", input = controller.status) do(
           label: Label, value: string
         ):
           label.stringValue = value

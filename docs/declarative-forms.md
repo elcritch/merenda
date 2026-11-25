@@ -1,10 +1,10 @@
 # Form drafts and MVC experiment
 
 Run `nim ic -r examples/form_editors_protocol.nim` to try a form with DirectView buttons
-that send protocol selectors such as `onAction(panel, apply())`.
+that send protocol selectors such as `this.onAction(panel, apply())`.
 
 Run `nim ic -r examples/form_editors_procs.nim` to compare named callbacks such
-as `onAction(panel, apply)`. Both examples use the same layout and actions.
+as `this.onAction(panel, apply)`. Both examples use the same layout and actions.
 Two panels share an editing owner, and a third has an independent draft of the
 same document. All three use DirectView toolbars around DirectView-owned forms.
 
@@ -51,7 +51,7 @@ per-field concurrent merging, draft persistence, native operating-system IME
 coverage or a universal Save/Close policy. It establishes the smaller contracts
 before exposing a toolkit-wide form abstraction.
 
-The two-document examples use `onAction(owner, context)` and ActionTarget's
+The two-document example uses `this.onAction(owner, context)` and ActionTarget's
 existing weak receiver ownership. Their controller methods share one predicate
 that checks the editor and document are open, the captured generation still
 matches, and the task still exists before editing, removing or queuing validation.

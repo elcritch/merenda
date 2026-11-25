@@ -316,22 +316,155 @@ proc setAction*(node: DirectNode, button: Button, action: ViewAction) =
 proc bindingScope*(node: DirectNode): BindingScope =
   node.bindings
 
-proc bindingScopeFor(view: View): BindingScope =
+proc directNodeFor(view: View): DirectNode =
   if not view.isNil:
     let owner = view.xDirectNode{}
     if owner of DirectNode:
       let node = DirectNode(owner)
       if node.ownedView == view and node.bindings.isActive:
-        return node.bindings
-  raise newException(ValueError, "View has no active DirectView binding scope")
+        return node
+
+proc bindingScopeFor(view: View): BindingScope =
+  let node = view.directNodeFor()
+  if node.isNil:
+    raise newException(ValueError, "View has no active DirectView binding scope")
+  node.bindings
+
+proc composingNodeFor(view: View): DirectNode =
+  result = view.directNodeFor()
+  if result.isNil or not result.applying:
+    raise newException(ValueError, "expected an active DirectView widget body")
+
+proc `arrangedSizing=`*(view: View, policy: StackViewSizingPolicy) =
+  ## Set how the enclosing stack sizes this view during its DirectView body.
+  view.composingNodeFor().sizing = policy
+
+proc setAction*(button: Button, action: ViewAction) =
+  button.composingNodeFor().setAction(button, action)
 
 template bindTextField*(view: View, args: varargs[untyped]): untyped =
   ## Bind a text field using this widget's active DirectView scope.
   bindTextField(bindingScopeFor(view), args)
 
+proc bindTextField*(widget: TextField, id: string, source: Sigil[string]) =
+  ## Display and edit the Sigil using this field's DirectView scope.
+  bindTextField(bindingScopeFor(widget), id, source, widget)
+
+template bindTextField*[T; R: Responder](
+    widget: TextField,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver: R,
+    getter: proc(receiver: R): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(bindingScopeFor(target), id, input, receiver, getter, target, edit)
+
+template bindTextField*[T, C; R: Responder](
+    widget: TextField,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver: R,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, input, receiver, context, getter, target, edit
+  )
+
+template bindTextField*[R: Responder](
+    widget: TextField,
+    id: string,
+    controller: R,
+    signal: untyped,
+    getter: proc(receiver: R): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(bindingScopeFor(target), id, controller, signal, getter, target, edit)
+
+template bindTextField*[C; R: Responder](
+    widget: TextField,
+    id: string,
+    controller: R,
+    signal: untyped,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, controller, signal, context, getter, target, edit
+  )
+
+template bindTextField*[C; R: Responder](
+    widget: TextField,
+    id: string,
+    source: Responder,
+    signal: untyped,
+    receiver: R,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, source, signal, receiver, context, getter, target, edit
+  )
+
 template bindValue*(view: View, args: varargs[untyped]): untyped =
   ## Bind a value using this widget's active DirectView scope.
   bindValue(bindingScopeFor(view), args)
+
+template bindValue*[V: View](widget: V, id: string, input, apply: untyped) =
+  ## Apply values to this widget within its active DirectView scope.
+  let target = widget
+  bindValue(bindingScopeFor(target), id, input, target, apply)
+
+template bindValue*[V: View](
+    widget: V,
+    id: string,
+    controller: Responder,
+    signal, getter, setter: untyped,
+    initialApply: bool = true,
+) =
+  let target = widget
+  bindValue(
+    bindingScopeFor(target),
+    id,
+    controller,
+    signal,
+    getter,
+    target,
+    setter,
+    initialApply,
+  )
+
+template bindValue*[V: View](
+    widget: V,
+    id: string,
+    source: Responder,
+    signal: untyped,
+    receiver: Responder,
+    context, getter, setter: untyped,
+    initialApply: bool = true,
+) =
+  let target = widget
+  bindValue(
+    bindingScopeFor(target),
+    id,
+    source,
+    signal,
+    receiver,
+    context,
+    getter,
+    target,
+    setter,
+    initialApply,
+  )
 
 proc patchText*(node: DirectNode, field: TextField, value: string) =
   ## Preserve provisional editing when an unrelated composition repeats a value.
@@ -342,6 +475,10 @@ proc patchText*(node: DirectNode, field: TextField, value: string) =
     field.stringValue = value
   node.authoredText = value
   node.hasAuthoredText = true
+
+proc patchText*(field: TextField, value: string) =
+  ## Apply body text while preserving edits when the declared value repeats.
+  field.composingNodeFor().patchText(field, value)
 
 proc disposeBindings(node: DirectNode) =
   node.retireBindings()
@@ -374,6 +511,9 @@ proc setChange*(node: DirectNode, field: TextField, action: ViewAction) =
     initResponder(node.target)
     field.connect(textDidChange, node.target, fieldChanged)
   node.target.changed = action
+
+proc setChange*(field: TextField, action: ViewAction) =
+  field.composingNodeFor().setChange(field, action)
 
 proc flushBindings*(node: sink DirectNode) =
   ## Keep the node alive when a binding clears or replaces its owning root.
