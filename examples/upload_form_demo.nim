@@ -24,7 +24,7 @@
 ##    thread and passes results back with `showSuggestions`. Results for an older
 ##    query are dropped.
 ## 6. Adding or removing files emits `filesChanged` for the parent to observe.
-import std/[os, strutils]
+import std/[os, sequtils, strutils]
 import sigils/[core, reactive, threadProxies, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
@@ -66,9 +66,14 @@ type
     suggestions*: Sigil[seq[string]]
     choice*: Sigil[CategoryChoice]
     tags*: Sigil[seq[string]]
+    tagController*: TagController
     issues*: array[FileField, Sigil[string]]
 
   TagBackend = ref object of AgentActor
+
+  FileRow* = ref object of StackView ## A list row that selects its file when clicked.
+    store: BackRef[UploadStore]
+    fileId: int
 
   UploadPage* = ref object of Responder
     ## The parent component. It reacts to the upload form's events.
@@ -91,7 +96,7 @@ const
     "press", "product", "public", "quarterly", "release", "review", "summer", "sunset",
     "team", "travel",
   ]
-  SearchLatencyMs = 250
+  SearchLatencyMs = 150
   SamplePaths* = [
     "~/Pictures/sunset-over-lake.jpg", "~/Documents/contract-2026.pdf",
     "~/Pictures/team-offsite.png", "~/Music/podcast-intro.mp3",
@@ -99,7 +104,7 @@ const
   ]
   ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]
   ErrorColor = color(0.85, 0.2, 0.2, 1)
-  SelectedColor = color(0.25, 0.5, 0.95, 0.25)
+  SelectedColor = color(0.3, 0.55, 1.0, 0.22)
   ClearColor = color(0, 0, 0, 0)
   PanelColor = color(0.5, 0.5, 0.5, 0.08)
 
@@ -141,12 +146,21 @@ proc isValid*(file: UploadFile): bool =
     if file.issueFor(field).len > 0:
       return false
 
-proc listTitle(file: UploadFile): string =
-  result = if file.name.strip.len > 0: file.name else: "(unnamed)"
+proc displayName(file: UploadFile): string =
+  if file.name.strip.len > 0: file.name else: "Untitled file"
+
+proc detailLine(file: UploadFile): string =
+  ## A one-line summary under the file name in the list.
+  var parts = @[file.path.splitFile.ext.strip(chars = {'.'}).toUpperAscii]
+  if file.category.len > 0:
+    parts.add file.category &
+      (if file.subcategory.len > 0: " › " & file.subcategory
+      else: "")
   if file.special:
-    result.add "  [special]"
+    parts.add "Special"
   if not file.isValid:
-    result.add "  !"
+    parts.add "Needs details"
+  parts.join("  ·  ")
 
 # The store: the single owner of the file values.
 
@@ -233,6 +247,10 @@ proc addTag*(store: UploadStore, id: int, tag: string) =
     if tag.len > 0 and tag notin file.tags:
       file.tags.add tag
 
+proc setTags*(store: UploadStore, id: int, tags: seq[string]) =
+  store.modifyFile(id, file):
+    file.tags = tags
+
 proc removeTag*(store: UploadStore, id: int, tag: string) =
   store.modifyFile(id, file):
     let index = file.tags.find(tag)
@@ -271,18 +289,39 @@ proc resetSession*(form: FileForm) =
   form.touched <- {}
   form.submitted <- false
   form.tagQuery <- ""
-  form.suggestions <- newSeq[string]()
 
 proc selectionChanged(form: FileForm, attrs: set[SigilAttributes]) {.slot.} =
   ## Rule 1: a different file starts a clean form session.
   form.resetSession()
 
+proc browseTags*(form: FileForm) =
+  ## Ask the parent for every tag, which the dropdown lists before any typing.
+  emit form.tagSearchStarted("")
+
 proc queryChanged(form: FileForm, attrs: set[SigilAttributes]) {.slot.} =
-  ## Rule 5: ask the parent to search. Results arrive through showSuggestions.
+  ## Rule 5: ask the parent to search. Results arrive through showSuggestions;
+  ## until then the dropdown keeps filtering the previous results as you type.
   let query = form.tagQuery{}.strip.toLowerAscii
-  form.suggestions <- newSeq[string]()
-  if query.len > 0:
-    emit form.tagSearchStarted(query)
+  if form.tagController.query != form.tagQuery{}:
+    form.tagController.query = form.tagQuery{}
+  emit form.tagSearchStarted(query)
+
+proc showFileTags(form: FileForm, attrs: set[SigilAttributes]) {.slot.} =
+  ## Load the selected file's tags into the picker. This is not a user edit, so
+  ## it cannot write back into the store.
+  let tags = form.tags{}
+  if form.tagController.selectedIdentifiers != tags:
+    form.tagController.setSelectedTags(tags.mapIt(tagItem(it)))
+
+proc showSuggestedTags(form: FileForm, attrs: set[SigilAttributes]) {.slot.} =
+  form.tagController.setAvailableTags(form.suggestions{}.mapIt(tagItem(it)))
+
+proc tagsEdited(form: FileForm, sender: DynamicAgent) {.slot.} =
+  ## Rule 2: a user edit in the picker updates the selected file.
+  form.store.setTags(form.store.selected{}, form.tagController.selectedIdentifiers)
+
+proc tagQueryEdited(form: FileForm, sender: DynamicAgent) {.slot.} =
+  form.tagQuery <- form.tagController.query
 
 proc newFileForm*(store: UploadStore): FileForm =
   let
@@ -312,11 +351,16 @@ proc newFileForm*(store: UploadStore): FileForm =
       file.get.tags
     else:
       newSeq[string]()
+  result.tagController = newTagController(selected = result.tags{}.mapIt(tagItem(it)))
   for field in FileField:
     result.issues[field] = visibleIssue(files, selected, touched, submitted, field)
   initResponder(result)
   connect(store.selected, change, result, selectionChanged)
   connect(result.tagQuery, change, result, queryChanged)
+  connect(result.tags, change, result, showFileTags)
+  connect(result.suggestions, change, result, showSuggestedTags)
+  connect(result.tagController, tagSelectionDidChange, result, tagsEdited)
+  connect(result.tagController, tagQueryDidChange, result, tagQueryEdited)
 
 proc touch*(form: FileForm, field: FileField) =
   if field notin form.touched{}:
@@ -357,6 +401,9 @@ proc addTag*(form: FileForm, tag: string) =
   form.store.addTag(form.store.selected{}, tag)
   form.tagQuery <- ""
 
+proc setTags*(form: FileForm, tags: seq[string]) =
+  form.store.setTags(form.store.selected{}, tags)
+
 proc removeTag*(form: FileForm, tag: string) =
   form.store.removeTag(form.store.selected{}, tag)
 
@@ -364,12 +411,7 @@ proc showSuggestions*(form: FileForm, query: string, tags: seq[string]) =
   ## Rule 5: show search results. Results for an older query are dropped, which
   ## also covers a selection change, because that clears the query.
   if query == form.tagQuery{}.strip.toLowerAscii:
-    let current = form.tags{}
-    var fresh: seq[string]
-    for tag in tags:
-      if tag notin current:
-        fresh.add tag
-    form.suggestions <- fresh
+    form.suggestions <- tags
 
 proc submit*(form: FileForm): bool =
   ## Upload every file, or select the first invalid one and show its errors.
@@ -445,6 +487,7 @@ proc newUploadPage*(paths: openArray[string] = SamplePaths): UploadPage =
   connect(store, filesChanged, result, onFilesChanged)
   connect(store, uploadRequested, result, onUploadRequested)
   connect(result.form, tagSearchStarted, result, onTagSearchStarted)
+  result.form.browseTags()
   store.addPaths(paths)
 
 proc save*(page: UploadPage) =
@@ -470,24 +513,51 @@ proc chooseFiles*(page: UploadPage) =
 
 # Views. Rows and form fields bind to single files; bodies rebuild structure only.
 
+protocol FileRowEvents of ResponderEventProtocol:
+  method mouseDown(row: FileRow, event: MouseEvent): bool =
+    let store = row.store{}
+    if event.button == mbPrimary and not store.isNil:
+      store.selectFile(row.fileId)
+      result = true
+
+proc newFileRow*(): FileRow =
+  result = FileRow()
+  initStackViewFields(result, laHorizontal)
+  discard result.withProtocol(FileRowEvents)
+
+proc showFile(row: FileRow, store: UploadStore, id: int) =
+  row.store.target = store
+  row.fileId = id
+
 proc fileRow(context: DirectNode, id: int, selected: bool, store: UploadStore) =
   context.viewBody:
-    HStack:
+    FileRow:
       this.identifier = "file-" & $id
+      this.showFile(store, id)
       this.distribution = svdNatural
-      this.spacing = 6
-      this.edgeInsets = insets(4)
+      this.alignment = svaCenter
+      this.spacing = 8
+      this.edgeInsets = insets(6, 10)
       this.backgroundColor = if selected: SelectedColor else: ClearColor
-      Button(identifier = "select-" & $id, focusable = false):
+      VStack:
         this.arrangedSizing = svspFillAvailableWidth
-        this.bindValue("title", store.files.item(id)) do(
-          button: Button, file: Opt[UploadFile]
-        ):
-          if file.isSome:
-            button.title = file.get.listTitle
-        this.onAction(store, id) do(this: Button, receiver: UploadStore, id: int):
-          receiver.selectFile(id)
+        this.distribution = svdNatural
+        this.alignment = svaLeading
+        this.spacing = 2
+        Label(identifier = "name-" & $id):
+          this.bindValue("name", store.files.item(id)) do(
+            label: Label, file: Opt[UploadFile]
+          ):
+            if file.isSome:
+              label.stringValue = file.get.displayName
+        Label(identifier = "detail-" & $id, labelStyle = lsStatus):
+          this.bindValue("detail", store.files.item(id)) do(
+            label: Label, file: Opt[UploadFile]
+          ):
+            if file.isSome:
+              label.stringValue = file.get.detailLine
       Button("×", identifier = "remove-" & $id, focusable = false):
+        this.styleClasses = @["toolbar-button"]
         this.onAction(store, id) do(this: Button, receiver: UploadStore, id: int):
           receiver.removeFile(id)
 
@@ -497,7 +567,7 @@ proc drawFileList(context: DirectNode, store: UploadStore, state: ListState) =
       this.identifier = "files"
       this.distribution = svdNatural
       this.alignment = svaFill
-      this.spacing = 4
+      this.spacing = 2
       for id in state.ids:
         keyed(id):
           component(fileRow, id, id == state.selected, store)
@@ -556,38 +626,6 @@ proc drawChoices(context: DirectNode, form: FileForm, choice: CategoryChoice) =
 proc categoryChoices(context: DirectNode, form: FileForm) =
   context.bindBody(form.choice, form, drawChoices)
 
-proc drawTags(context: DirectNode, form: FileForm, tags: seq[string]) =
-  context.viewBody:
-    HStack:
-      this.identifier = "tags"
-      this.distribution = svdNatural
-      this.spacing = 6
-      if tags.len == 0:
-        Label(stringValue = "No tags yet.")
-      for tag in tags:
-        keyed(tag):
-          Button("#" & tag & "  ×", identifier = "tag-" & tag, focusable = false):
-            this.onAction(form, tag) do(this: Button, receiver: FileForm, tag: string):
-              receiver.removeTag(tag)
-
-proc tagChips(context: DirectNode, form: FileForm) =
-  context.bindBody(form.tags, form, drawTags)
-
-proc drawSuggestions(context: DirectNode, form: FileForm, suggestions: seq[string]) =
-  context.viewBody:
-    HStack:
-      this.identifier = "suggestions"
-      this.distribution = svdNatural
-      this.spacing = 6
-      for tag in suggestions:
-        keyed(tag):
-          Button("+ " & tag, identifier = "suggest-" & tag, focusable = false):
-            this.onAction(form, tag) do(this: Button, receiver: FileForm, tag: string):
-              receiver.addTag(tag)
-
-proc tagSuggestions(context: DirectNode, form: FileForm) =
-  context.bindBody(form.suggestions, form, drawSuggestions)
-
 proc fileFields(context: DirectNode, form: FileForm, id: int) =
   ## Rule 1: this component is keyed by file id, so selecting another file
   ## replaces these widgets and their edit state.
@@ -613,17 +651,8 @@ proc fileFields(context: DirectNode, form: FileForm, id: int) =
       Label(stringValue = "Category")
       component(categoryChoices, form)
       Label(stringValue = "Tags")
-      component(tagChips, form)
-      HStack:
-        this.distribution = svdNatural
-        this.spacing = 6
-        TextField(identifier = "tag-query", placeholder = "Type to search tags"):
-          this.arrangedSizing = svspFillAvailableWidth
-          this.bindTextField(id = "query", source = form.tagQuery)
-        Button("Add tag", identifier = "add-tag", focusable = false):
-          this.onAction(form) do(this: Button, receiver: FileForm):
-            receiver.addTag(receiver.tagQuery{})
-      component(tagSuggestions, form)
+      TagPicker(form.tagController, tlpInline, "Search tags…"):
+        this.identifier = "tags"
       CheckBox(identifier = "special", title = "Special file (only one per upload)"):
         this.bindValue("special", store.files.item(id)) do(
           box: Button, file: Opt[UploadFile]
@@ -666,6 +695,12 @@ proc newUploadView*(page: UploadPage): DirectView =
           this.spacing = 8
           this.edgeInsets = insets(8)
           this.backgroundColor = PanelColor
+          Label(identifier = "file-count", labelStyle = lsStatus):
+            this.bindValue("count", page.store.files.order) do(
+              label: Label, ids: seq[int]
+            ):
+              label.stringValue =
+                (if ids.len == 1: "1 file" else: $ids.len & " files") & " to upload"
           component(fileList, page.store)
           Button(
             "Upload more documents…", identifier = "add-files", focusable = false

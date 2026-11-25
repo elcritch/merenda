@@ -68,6 +68,7 @@ import todo_basic
 import todo_stack_drag
 import todo_table
 import two_document_direct
+import upload_form_demo
 import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo

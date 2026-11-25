@@ -1,4 +1,4 @@
-import std/options
+import std/[options, sets]
 
 import sigils/core
 import sigils/selectors
@@ -570,6 +570,27 @@ proc removeItem*(
     mmkItemsChanged, identifiers = [identifier], index = index
   )
   true
+
+proc setItems*(controller: ArrayController, items: openArray[ModelItem]) =
+  ## Replace every item with one change notification. Selected identifiers that
+  ## are still present stay selected. Duplicate identifiers raise before any
+  ## change is made.
+  var
+    identifiers: seq[string]
+    present: HashSet[string]
+  for item in items:
+    if item.identifier.len > 0:
+      if present.containsOrIncl(item.identifier):
+        raiseModelControllerError("duplicate model item identifier: " & item.identifier)
+      identifiers.add item.identifier
+  var kept: seq[string]
+  for identifier in controller.xSelection.selectedIdentifiers:
+    if identifier in present:
+      kept.add identifier
+  controller.xItems = initItemCollection(items, indexEmptyIdentifiers = true)
+  if kept != controller.xSelection.selectedIdentifiers:
+    controller.xSelection.setSelectedIdentifiers(kept)
+  controller.notifyArrayControllerDidChange(mmkItemsChanged, identifiers = identifiers)
 
 proc moveItem*(controller: ArrayController, identifier: string, toIndex: int): bool =
   let index = controller.xItems.sourceIndexOfIdentifier(identifier)

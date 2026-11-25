@@ -219,7 +219,8 @@ proc onDateRangeChanged(
   controller.dateRange = value
   controller.applyFilters()
 
-proc onTagFieldChanged(controller: FilterDemoController, field: TokenField) =
+proc tagFieldChanged(controller: FilterDemoController, sender: DynamicAgent) {.slot.} =
+  let field = TokenField(sender)
   controller.selectedTags.setLen(0)
   for option in field.selectedOptions:
     controller.selectedTags.add option.identifier
@@ -323,8 +324,7 @@ for tag in DemoTags:
 tagField.options = tagOptions
 for tag in controller.selectedTags:
   discard tagField.selectOptionWithIdentifier(tag, notify = false)
-tagField.onChange = proc(field: TokenField) =
-  controller.onTagFieldChanged(field)
+tagField.connect(tokenFieldDidChange, controller, tagFieldChanged)
 
 let
   modeAction = actionSelector("filterModeChanged")

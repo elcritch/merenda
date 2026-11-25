@@ -20,10 +20,6 @@ export chips
 export comboboxes
 
 type
-  TokenFieldSelectionHandler* = proc(option: ComboBoxOption) {.closure.}
-  TokenFieldRemovalHandler* = proc(option: ComboBoxOption) {.closure.}
-  TokenFieldChangeHandler* = proc(field: TokenField) {.closure.}
-
   TokenField* = ref object of Control
     xOptions: ComboBoxOptionList
     xSelectedOptions: seq[ComboBoxOption]
@@ -40,11 +36,28 @@ type
     xInputStyleId: string
     xInputStyleClasses: seq[string]
     xChipStyleClasses: seq[string]
-    xOnSelect: TokenFieldSelectionHandler
-    xOnRemove: TokenFieldRemovalHandler
-    xOnChange: TokenFieldChangeHandler
+    xDelegate: BackRef[Responder]
 
   MultiSelectComboBox* = TokenField
+
+protocol TokenFieldEvents:
+  proc tokenFieldDidSelect*(field: TokenField, option: ComboBoxOption) {.signal.}
+    ## Sent when a token is added, including programmatic selection.
+
+  proc tokenFieldDidRemove*(field: TokenField, option: ComboBoxOption) {.signal.}
+    ## Sent when a token is removed, including programmatic removal.
+
+  proc tokenFieldDidChange*(field: TokenField, sender: DynamicAgent) {.signal.}
+    ## Sent once per notifying selection change, after the select or remove signal.
+
+  proc tokenQueryDidChange*(field: TokenField, sender: DynamicAgent) {.signal.}
+    ## Sent after the typed query changes, including when it is cleared.
+
+protocol TokenFieldDelegate {.selectorScope: protocol.}:
+  ## Optional decisions about the tokens a user selects.
+  method shouldSelectOption*(
+    field: TokenField, option: ComboBoxOption
+  ): bool {.optional.} ## Return false to keep an option from becoming a token.
 
 const
   TokenFieldDefaultWidth* = 280.0'f32
@@ -256,23 +269,14 @@ proc `chipStyleClasses=`*(field: TokenField, value: openArray[string]) =
   for chip in field.xChips:
     chip.styleClasses = field.xChipStyleClasses
 
-proc onSelect*(field: TokenField): TokenFieldSelectionHandler =
-  field.xOnSelect
+proc delegate*(field: TokenField): Responder =
+  field.xDelegate.target
 
-proc `onSelect=`*(field: TokenField, handler: TokenFieldSelectionHandler) =
-  field.xOnSelect = handler
-
-proc onRemove*(field: TokenField): TokenFieldRemovalHandler =
-  field.xOnRemove
-
-proc `onRemove=`*(field: TokenField, handler: TokenFieldRemovalHandler) =
-  field.xOnRemove = handler
-
-proc onChange*(field: TokenField): TokenFieldChangeHandler =
-  field.xOnChange
-
-proc `onChange=`*(field: TokenField, handler: TokenFieldChangeHandler) =
-  field.xOnChange = handler
+proc `delegate=`*(field: TokenField, delegate: Responder) =
+  ## The delegate is held weakly; its owner must keep it alive.
+  if not delegate.isNil:
+    discard delegate.adopt(TokenFieldDelegate)
+  field.xDelegate.target = delegate
 
 proc popupOpen*(field: TokenField): bool =
   not field.xInput.isNil and field.xInput.popupOpen()
@@ -364,13 +368,11 @@ proc notifyTokenChange(
     field: TokenField, option: ComboBoxOption, selected: bool, notify = true
 ) =
   if selected:
-    if not field.xOnSelect.isNil:
-      field.xOnSelect(option)
-  elif not field.xOnRemove.isNil:
-    field.xOnRemove(option)
+    emit field.tokenFieldDidSelect(option)
+  else:
+    emit field.tokenFieldDidRemove(option)
   if notify:
-    if not field.xOnChange.isNil:
-      field.xOnChange(field)
+    emit field.tokenFieldDidChange(DynamicAgent(field))
     discard field.sendAction()
   field.postAccessibilityNotification(anValueChanged)
 
@@ -378,6 +380,11 @@ proc selectOption(field: TokenField, option: ComboBoxOption, notify = true): boo
   let key = option.tokenOptionKey()
   if not option.tokenOptionSelectable() or
       (not field.xAllowDuplicates and field.selectedIndexForKey(key) >= 0):
+    return false
+  let allowed = field.delegate.asDynamicAgent().trySendLocal(
+      shouldSelectOption(), (field: field, option: option)
+    )
+  if allowed.isSome and not allowed.get:
     return false
   if key notin field.xOriginalEnabled:
     field.xOriginalEnabled[key] = option.enabled
@@ -453,26 +460,30 @@ proc setTokenQuery(field: TokenField, value: string, openPopup = true) =
     if openPopup and not field.xInput.isNil:
       field.xInput.openPopup()
     return
+  let changed = field.xQuery != value
   field.xQuery = value
-  if field.xInput.isNil:
-    return
-  field.xInput.optionFilterText = value
-  field.xInput.text = if value.len > 0: value else: field.xPlaceholder
-  if openPopup and field.xInput.numberOfItems() > 0:
-    field.xInput.openPopup()
-  elif not openPopup:
-    field.xInput.closePopup()
-  field.needsDisplay = true
+  if not field.xInput.isNil:
+    field.xInput.optionFilterText = value
+    field.xInput.text = if value.len > 0: value else: field.xPlaceholder
+    if openPopup and field.xInput.numberOfItems() > 0:
+      field.xInput.openPopup()
+    elif not openPopup:
+      field.xInput.closePopup()
+    field.needsDisplay = true
+  if changed:
+    emit field.tokenQueryDidChange(DynamicAgent(field))
 
 proc clearTokenQuery(field: TokenField) =
+  let changed = field.xQuery.len > 0
   field.xQuery.setLen(0)
-  if field.xInput.isNil:
-    return
-  field.xInput.closePopup()
-  field.xInput.optionFilterText = ""
-  field.xInput.deselectItem()
-  field.xInput.text = field.xPlaceholder
-  field.xInput.needsDisplay = true
+  if not field.xInput.isNil:
+    field.xInput.closePopup()
+    field.xInput.optionFilterText = ""
+    field.xInput.deselectItem()
+    field.xInput.text = field.xPlaceholder
+    field.xInput.needsDisplay = true
+  if changed:
+    emit field.tokenQueryDidChange(DynamicAgent(field))
 
 proc selectInputOption(field: TokenField) =
   if field.xInput.isNil:

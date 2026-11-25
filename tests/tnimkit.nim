@@ -113,6 +113,7 @@ else:
   import nimkit/textviews
   import nimkit/theme
   import nimkit/tokenfields
+  import nimkit/tagpickers
   import nimkit/tooltips
   import nimkit/treeviewdemo
   import nimkit/twodocumenteditors

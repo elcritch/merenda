@@ -1,5 +1,5 @@
 import std/[monotimes, os, times, unittest]
-import sigils/[core, reactive]
+import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/mainthreadwork
@@ -27,6 +27,8 @@ template waitUntil(condition: untyped) =
   block:
     let deadline = getMonoTime() + initDuration(seconds = 60)
     while not (condition) and getMonoTime() < deadline:
+      # Worker results arrive through the Sigils thread queue.
+      discard getCurrentSigilThread().pollAll(NonBlocking)
       discard drainMainThreadWork()
       sleep(1)
     check condition
@@ -116,22 +118,27 @@ suite "upload form demo":
   test "tag queries reach the parent and only current results are shown":
     let page = newUploadPage(["one.png"])
     let recorder = page.newRecorder()
+    let tags = page.form.tagController
     page.store.addTag(1, "night")
+    check tags.selectedIdentifiers == @["night"]
     page.form.tagQuery <- "N"
     check recorder.queries == @["n"]
-    waitUntil(page.form.suggestions{}.len > 0)
-    check page.form.suggestions{} == @["nature", "nim"]
+    waitUntil(page.form.suggestions{} == @["nature", "night", "nim"])
+    var matches: seq[string]
+    for item in tags.matches:
+      matches.add item.identifier
+    check matches == @["nature", "nim"]
 
-    page.form.tagQuery <- "su"
-    check page.form.suggestions{}.len == 0
+    tags.query = "su"
+    check page.form.tagQuery{} == "su"
     page.form.showSuggestions("n", @["nature"])
-    check page.form.suggestions{}.len == 0
+    check page.form.suggestions{} == @["nature", "night", "nim"]
     waitUntil(page.form.suggestions{} == @["summer", "sunset"])
 
-    page.form.addTag("sunset")
+    check tags.addTag(tagItem("sunset"))
     check page.store.files[1].tags == @["night", "sunset"]
-    check page.form.tagQuery{} == ""
-    check page.form.suggestions{}.len == 0
+    check tags.removeTag("night")
+    check page.store.files[1].tags == @["sunset"]
 
   test "adding and removing files notifies the parent":
     let page = newUploadPage(["one.png", "two.pdf", "three.mp3"])

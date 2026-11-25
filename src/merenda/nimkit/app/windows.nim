@@ -442,6 +442,7 @@ proc effectivePopupPresentation*(host: PopupHost): PopupPresentation
 proc presentPopup*(host: PopupHost): bool {.discardable.}
 proc dismissPopup*(host: PopupHost, reason = tdrProgrammatic): bool {.discardable.}
 proc repositionPopup*(host: PopupHost)
+proc resizePopup*(host: PopupHost, size: Size)
 
 proc needsDisplayUpdate*(window: Window): bool
 proc isVisible*(window: Window): bool
@@ -2496,7 +2497,11 @@ proc presentPopup*(host: PopupHost): bool =
     )
     popupWindow.setContentView(host.xContent)
     popupWindow.setInitialFirstResponder(host.xContent)
-    popupWindow.makeKeyAndOrderFront()
+    if host.xFocusContent:
+      popupWindow.makeKeyAndOrderFront()
+    else:
+      # Keep typing in the owner, as a text field's completion list does.
+      popupWindow.orderFront()
     popupWindow.ensureNativeWindow()
     if not popupWindow.nativeReady:
       popupWindow.setPopupDoneHandler(nil)
@@ -2559,6 +2564,30 @@ proc repositionPopup*(host: PopupHost) =
   let parent = host.popupHostInlineParent()
   if not parent.isNil and host.xContent.superview() == parent:
     host.xContent.frame = host.popupHostInlineFrame()
+
+proc resizePopup*(host: PopupHost, size: Size) =
+  ## Resize the popup in place. An open popup keeps its session, window and
+  ## focus, so content such as a filtered list can change length while shown.
+  if host.isNil:
+    return
+  let size = initSize(max(size.width, 1.0'f32), max(size.height, 1.0'f32))
+  if host.xPopupSize == size:
+    return
+  host.xPopupSize = size
+  if not host.xPopupOpen:
+    return
+  if host.xPopupWindow.isNil:
+    host.repositionPopup()
+  else:
+    let anchor = host.xAnchor.rectToWindow(host.xAnchor.bounds())
+    let y =
+      if host.xPlaceAbove:
+        anchor.origin.y - size.height
+      else:
+        anchor.origin.y + anchor.size.height
+    host.xPopupWindow.setFrame(
+      rect(host.xPopupWindow.frame.origin.x, y, size.width, size.height)
+    )
 
 proc mouseDownAt*(
   window: Window,

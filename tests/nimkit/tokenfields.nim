@@ -5,6 +5,37 @@ import sigils/core
 
 import merenda/nimkit
 
+type TokenRecorder = ref object of Agent
+  selected, removed, queries: seq[string]
+  changes: int
+
+proc tokenSelected(recorder: TokenRecorder, option: ComboBoxOption) {.slot.} =
+  recorder.selected.add option.identifier
+
+proc tokenRemoved(recorder: TokenRecorder, option: ComboBoxOption) {.slot.} =
+  recorder.removed.add option.identifier
+
+proc tokensChanged(recorder: TokenRecorder, sender: DynamicAgent) {.slot.} =
+  inc recorder.changes
+
+proc queryChanged(recorder: TokenRecorder, sender: DynamicAgent) {.slot.} =
+  recorder.queries.add TokenField(sender).query
+
+proc record(field: TokenField): TokenRecorder =
+  result = TokenRecorder()
+  field.connect(tokenFieldDidSelect, result, tokenSelected)
+  field.connect(tokenFieldDidRemove, result, tokenRemoved)
+  field.connect(tokenFieldDidChange, result, tokensChanged)
+  field.connect(tokenQueryDidChange, result, queryChanged)
+
+type RejectingDelegate = ref object of Responder
+
+protocol RejectDocs of TokenFieldDelegate:
+  method shouldSelectOption(
+      owner: RejectingDelegate, field: TokenField, option: ComboBoxOption
+  ): bool =
+    option.identifier != "docs"
+
 suite "nimkit token fields":
   test "chips expose removable selection state and accessibility actions":
     let chip = newChip("Backend")
@@ -36,17 +67,7 @@ suite "nimkit token fields":
       placeholder = "Add labels...",
       frame = rect(0, 0, 280, 30),
     )
-    var
-      selected: seq[string]
-      removed: seq[string]
-      changes = 0
-    field.onSelect = proc(option: ComboBoxOption) =
-      selected.add option.identifier
-    field.onRemove = proc(option: ComboBoxOption) =
-      removed.add option.identifier
-    field.onChange = proc(sender: TokenField) =
-      check sender == field
-      inc changes
+    let recorder = field.record()
 
     check field.optionCount == 3
     check field.selectedCount == 0
@@ -70,9 +91,16 @@ suite "nimkit token fields":
     check field.selectedOptionIdentifiers == @["security"]
     check field.chipCount == 1
     check field.optionIsEnabledAtIndex(0)
-    check selected == @["backend", "security"]
-    check removed == @["backend"]
-    check changes == 3
+    check recorder.selected == @["backend", "security"]
+    check recorder.removed == @["backend"]
+    check recorder.changes == 3
+
+    let delegate = RejectingDelegate()
+    initResponder(delegate)
+    discard delegate.withProtocol(RejectDocs)
+    field.delegate = delegate
+    check not field.selectOptionWithIdentifier("docs")
+    check field.selectedOptionIdentifiers == @["security"]
     check field.accessibilityValue() == "Security"
 
   test "token field input opens filtered popup and activates a highlighted option":
@@ -88,12 +116,15 @@ suite "nimkit token fields":
         frame = rect(10, 10, 280, 30),
       )
 
+    let recorder = field.record()
+
     root.addSubview(field)
     window.setContentView(root)
     check window.makeFirstResponder(field.input())
     check window.dispatchTextInput("sec")
     check window.dispatchTextInput("urity")
     check field.query == "security"
+    check recorder.queries == @["sec", "security"]
     check field.popupOpen
     check field.filteredOptionCount == 1
     check field.optionAtIndex(0).identifier == "security"
@@ -104,6 +135,7 @@ suite "nimkit token fields":
     )
     check field.selectedOptionIdentifiers == @["security"]
     check field.query.len == 0
+    check recorder.queries == @["sec", "security", ""]
     check not field.popupOpen
 
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))

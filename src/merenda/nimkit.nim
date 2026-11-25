@@ -20,6 +20,7 @@ import ./nimkit/controls/dialogbuttonboxes
 import ./nimkit/controls/datepickers
 import ./nimkit/controls/daterangepickers
 import ./nimkit/controls/tokenfields
+import ./nimkit/controls/tagpickers
 import ./nimkit/controls/fontpickers
 import ./nimkit/containers/documenttabs
 import ./nimkit/containers/dockviews
@@ -124,6 +125,7 @@ export dialogbuttonboxes
 export datepickers
 export daterangepickers
 export tokenfields
+export tagpickers
 export fontpickers
 export documenttabs
 export dockviews
