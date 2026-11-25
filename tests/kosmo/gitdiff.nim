@@ -1323,7 +1323,7 @@ suite "Kosmo Git diff":
     require not treeChoice.isNil
     check treeChoice.title == "^* Working Tree"
     check treeChoice.state == bsOn
-    check panel.toRevisionButton.menu()["kosmo.gitDiff.to.WORKTREE"].isNil
+    check panel.toRevisionButton.menu(){"kosmo.gitDiff.to.WORKTREE"}.isNil
     let currentBranch =
       panel.toRevisionButton.menu()["kosmo.gitDiff.to.refs/heads/feature"]
     require not currentBranch.isNil

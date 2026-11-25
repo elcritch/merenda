@@ -722,12 +722,12 @@ proc len*(menu: Menu): int =
 proc `[]`*(menu: Menu, index: Natural): MenuItem =
   menu.xItems[index]
 
-proc itemAt*(menu: Menu, index: int): MenuItem =
+proc `{}`*(menu: Menu, index: int): MenuItem =
   ## Return nil if the displayed index is out of range.
-  if index < 0 or index >= menu.len():
-    nil
-  else:
+  if index in 0 ..< menu.len():
     menu.xItems[index]
+  else:
+    nil
 
 proc find*(menu: Menu, identifier: string): int =
   ## Return the displayed index of an item, or -1 if absent.
@@ -738,9 +738,15 @@ proc find*(menu: Menu, identifier: string): int =
       return index
   -1
 
-proc `[]`*(menu: Menu, identifier: string): MenuItem =
+proc `{}`*(menu: Menu, identifier: string): MenuItem =
   ## Return the displayed item for this identifier, or nil if absent.
-  menu.itemAt(menu.find(identifier))
+  menu{menu.find(identifier)}
+
+proc `[]`*(menu: Menu, identifier: string): MenuItem =
+  ## Return the displayed item for this identifier, or raise KeyError if absent.
+  result = menu{identifier}
+  if result.isNil:
+    raise newException(KeyError, "Menu item not found: " & identifier)
 
 proc visibleModelIndex(menu: Menu, visibleIndex: int): int =
   if visibleIndex < 0:
@@ -784,6 +790,8 @@ proc add*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
   item
 
 proc insert*(menu: Menu, model: MenuItemModel, index: int): MenuItem {.discardable.} =
+  ## Inserts at a backing model position, including hidden models. `find` returns
+  ## displayed item indices, which can differ when models are hidden.
   menu.xUsesItemModels = true
   let modelIndex =
     if menu.xItemModels.len == 0:
@@ -794,7 +802,7 @@ proc insert*(menu: Menu, model: MenuItemModel, index: int): MenuItem {.discardab
   menu.rebuildMenuItemsFromModels()
   syncNativeMainMenu()
   if model.identifier.len > 0:
-    return menu[model.identifier]
+    return menu{model.identifier}
   if model.hidden:
     return nil
   var visibleIndex = 0
@@ -802,7 +810,7 @@ proc insert*(menu: Menu, model: MenuItemModel, index: int): MenuItem {.discardab
     if not menu.xItemModels[index].hidden:
       inc visibleIndex
   if visibleIndex >= 0:
-    return menu.itemAt(visibleIndex)
+    return menu{visibleIndex}
 
 proc add*(
     menu: Menu,
@@ -839,7 +847,7 @@ proc delete*(menu: Menu, item: MenuItem): bool {.discardable.} =
 proc delete*(menu: Menu, identifier: string): bool {.discardable.} =
   if identifier.len == 0:
     return false
-  let item = menu[identifier]
+  let item = menu{identifier}
   if not item.isNil:
     return menu.delete(item)
   if menu.xUsesItemModels:

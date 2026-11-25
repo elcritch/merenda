@@ -15,7 +15,8 @@
 - Use shorter collection APIs on `TabView`, `CompactTabView`, `Menu`,
   `ComboBoxOptionList`, `OutlineView`, and `CollectionView`. Set tab selection
   with `selectedIndex=` and use `trySelect` when the result matters. Menu
-  identifier lookup now uses displayed item indices.
+  lookups use displayed item indices: `menu{index}` and `menu{id}` return nil
+  when absent, while `menu[index]` and `menu[id]` require an existing item.
 - Rename NimKit's `acceptsFirstResponder` property to `focusable`, including in
   DirectView widget arguments and responder protocol overrides.
 - Remove the experimental ViewSpec API. Use DirectView for declarative views.

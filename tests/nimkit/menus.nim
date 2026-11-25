@@ -1180,8 +1180,13 @@ suite "nimkit menus":
     check menu[0.Natural].keyEquivalent().text == "r"
     check menu[0.Natural].representedObject() == DynamicAgent(target)
     check menu.find("hidden") == -1
-    check menu.itemAt(-1).isNil
-    check menu["missing"].isNil
+    check menu{-1}.isNil
+    check menu{menu.len}.isNil
+    check menu{0}.identifier == "run"
+    check menu{"missing"}.isNil
+    check menu{"run"}.identifier == "run"
+    expect KeyError:
+      discard menu["missing"]
     check menu["off"].enabled() == false
     check menu[2.Natural].isSeparatorItem()
     let child = menu["more"].submenu()["child"]
