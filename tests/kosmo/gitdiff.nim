@@ -1972,20 +1972,21 @@ diff --git a/second.txt b/second.txt
     check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
     check frontend.gitDiffPanel.snapshot.files.len == 1
-    let diffTabIndex = frontend.documentTabs.find(gitDiffTabIdentifier(root))
-    require diffTabIndex >= 0
-    check frontend.documentTabs.models()[diffTabIndex].title ==
-      "Git Diff · " & root.lastPathPart()
+    let diffTabId = gitDiffTabIdentifier(root)
+    require not frontend.documentTabs[diffTabId].isNil
+    check frontend.documentTabs[diffTabId].title == "Git Diff · " & root.lastPathPart()
     require frontend.showPipedGitDiff("", root)
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.models()[diffTabIndex].title == "Git Diff · stdin"
+    require not frontend.documentTabs[diffTabId].isNil
+    check frontend.documentTabs[diffTabId].title == "Git Diff · stdin"
     require frontend.showGitDiff()
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.models()[diffTabIndex].title ==
-      "Git Diff · " & root.lastPathPart()
+    require not frontend.documentTabs[diffTabId].isNil
+    check frontend.documentTabs[diffTabId].title == "Git Diff · " & root.lastPathPart()
     require frontend.showGitDiff(root / "menu.txt")
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.models()[diffTabIndex].title == "Git Diff · menu.txt"
+    require not frontend.documentTabs[diffTabId].isNil
+    check frontend.documentTabs[diffTabId].title == "Git Diff · menu.txt"
     check frontend.gitDiffPanel.snapshot.scopePath == root / "menu.txt"
     require frontend.showGitDiff()
     require frontend.gitDiffPanel.waitForDiff()
@@ -2335,7 +2336,6 @@ suite "Kosmo editor repository diff":
         $frontend.gitDiffPanel.snapshot.files & " reads=" &
         $frontend.gitDiffPanel.repositoryReadCount()
       check siblingIncluded
-      let index = frontend.documentTabs.find(gitDiffTabIdentifier(root))
-      require index >= 0
-      check frontend.documentTabs.models()[index].title ==
-        "Git Diff · " & root.lastPathPart()
+      let tab = frontend.documentTabs[gitDiffTabIdentifier(root)]
+      require not tab.isNil
+      check tab.title == "Git Diff · " & root.lastPathPart()
