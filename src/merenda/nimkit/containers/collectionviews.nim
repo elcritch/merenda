@@ -154,19 +154,15 @@ proc collectionView*(contentView: CollectionContentView): CollectionView
 proc scrollView*(collectionView: CollectionView): ScrollView
 proc contentView*(collectionView: CollectionView): CollectionContentView
 proc len*(collectionView: CollectionView): int
-proc collectionItemIdentifier*(collectionView: CollectionView, index: int): string
-proc collectionItemIndexForIdentifier*(
-  collectionView: CollectionView, identifier: string
-): int
+proc itemIdentifier*(collectionView: CollectionView, index: int): string
+proc find*(collectionView: CollectionView, identifier: string): int
 
-proc collectionItemObjectValue*(collectionView: CollectionView, index: int): ObjectValue
-proc collectionItemText*(collectionView: CollectionView, index: int): string
-proc collectionItemState*(
-  collectionView: CollectionView, index: int
-): CollectionItemState
+proc itemObjectValue*(collectionView: CollectionView, index: int): ObjectValue
+proc itemText*(collectionView: CollectionView, index: int): string
+proc itemState*(collectionView: CollectionView, index: int): CollectionItemState
 
-proc collectionItemRect*(collectionView: CollectionView, index: int): Rect
-proc collectionItemIndexAtPoint*(collectionView: CollectionView, point: Point): int
+proc itemRect*(collectionView: CollectionView, index: int): Rect
+proc indexAtPoint*(collectionView: CollectionView, point: Point): int
 proc visibleItemIndexes*(collectionView: CollectionView): seq[int]
 proc materializationItemIndexes*(collectionView: CollectionView): seq[int]
 proc reloadData*(collectionView: CollectionView)
@@ -800,9 +796,6 @@ proc len*(collectionView: CollectionView): int =
       return max(count.get(), 0)
   max(collectionView.xItemCount, 0)
 
-proc collectionItemCount*(collectionView: CollectionView): int =
-  collectionView.len()
-
 proc `itemCount=`*(collectionView: CollectionView, count: int) =
   let nextCount = max(count, 0)
   if collectionView.xItemCount == nextCount:
@@ -837,7 +830,7 @@ proc `collectionItemRole=`*(collectionView: CollectionView, role: StyleRole) =
   collectionView.xItemRole = role
   collectionView.needsDisplay = true
 
-proc collectionItemIdentifier*(collectionView: CollectionView, index: int): string =
+proc itemIdentifier*(collectionView: CollectionView, index: int): string =
   if index notin 0 ..< collectionView.len():
     return ""
   let source = collectionView.dataSource()
@@ -849,9 +842,7 @@ proc collectionItemIdentifier*(collectionView: CollectionView, index: int): stri
       return identifier.get()
   $index
 
-proc collectionItemIndexForIdentifier*(
-    collectionView: CollectionView, identifier: string
-): int =
+proc find*(collectionView: CollectionView, identifier: string): int =
   if identifier.len == 0:
     return -1
   let source = collectionView.dataSource()
@@ -863,12 +854,10 @@ proc collectionItemIndexForIdentifier*(
     if index.isSome and index.get() in 0 ..< collectionView.len():
       return index.get()
   let match = items(0 ..< collectionView.len()).findFirst do(index: int) -> bool:
-    collectionView.collectionItemIdentifier(index) == identifier
+    collectionView.itemIdentifier(index) == identifier
   match.get(-1)
 
-proc collectionItemObjectValue*(
-    collectionView: CollectionView, index: int
-): ObjectValue =
+proc itemObjectValue*(collectionView: CollectionView, index: int): ObjectValue =
   if index notin 0 ..< collectionView.len():
     return nilObjectValue()
   let source = collectionView.dataSource()
@@ -885,7 +874,7 @@ proc collectionItemObjectValue*(
       return toObj(text.get())
   emptyObjectValue()
 
-proc collectionItemText*(collectionView: CollectionView, index: int): string =
+proc itemText*(collectionView: CollectionView, index: int): string =
   if index notin 0 ..< collectionView.len():
     return ""
   let source = collectionView.dataSource()
@@ -896,11 +885,11 @@ proc collectionItemText*(collectionView: CollectionView, index: int): string =
     if text.isSome:
       return text.get()
   Control(collectionView).formatObjectValue(
-    collectionView.collectionItemObjectValue(index), ovrLabel
+    collectionView.itemObjectValue(index), ovrLabel
   )
 
 proc collectionItemEnabled(collectionView: CollectionView, index: int): bool =
-  collectionView.collectionItemObjectValue(index).kind != ovValidationFailure
+  collectionView.itemObjectValue(index).kind != ovValidationFailure
 
 proc collectionItemSelectable(collectionView: CollectionView, index: int): bool =
   if index notin 0 ..< collectionView.len():
@@ -908,7 +897,7 @@ proc collectionItemSelectable(collectionView: CollectionView, index: int): bool 
   if not collectionView.collectionItemEnabled(index):
     return false
   let
-    identifier = collectionView.collectionItemIdentifier(index)
+    identifier = collectionView.itemIdentifier(index)
     delegate = collectionView.delegate()
   if not delegate.isNil:
     let selectable = delegate.trySendLocal(
@@ -922,14 +911,12 @@ proc collectionItemSelectable(collectionView: CollectionView, index: int): bool 
 proc selectionContains(collectionView: CollectionView, identifier: string): bool =
   identifier.len > 0 and identifier in collectionView.xSelectedIdentifiers
 
-proc collectionItemState*(
-    collectionView: CollectionView, index: int
-): CollectionItemState =
+proc itemState*(collectionView: CollectionView, index: int): CollectionItemState =
   if index notin 0 ..< collectionView.len():
     return CollectionItemState(index: -1, objectValue: nilObjectValue())
   let
-    identifier = collectionView.collectionItemIdentifier(index)
-    value = collectionView.collectionItemObjectValue(index)
+    identifier = collectionView.itemIdentifier(index)
+    value = collectionView.itemObjectValue(index)
   var states: set[WidgetState] = {}
   if not collectionView.collectionItemEnabled(index):
     states.incl ssDisabled
@@ -945,7 +932,7 @@ proc collectionItemState*(
     index: index,
     identifier: identifier,
     objectValue: value,
-    text: collectionView.collectionItemText(index),
+    text: collectionView.itemText(index),
     rect: collectionView.resolvedContentItemRect(index),
     states: states,
   )
@@ -1169,7 +1156,7 @@ proc retireMissingCollectionItems*(collectionView: CollectionView) =
   var position = 0
   while position < collectionView.xItemSlots.len:
     let slot = collectionView.xItemSlots[position]
-    let index = collectionView.collectionItemIndexForIdentifier(slot.identifier)
+    let index = collectionView.find(slot.identifier)
     if index < 0:
       collectionView.recycleItemSlot(slot, cedRemoved)
       collectionView.xItemSlots.delete(position)
@@ -1325,7 +1312,7 @@ proc makeCollectionItemView(
 ): CollectionItemSlot =
   let
     reuseIdentifier = collectionView.defaultReuseIdentifierForItem(index)
-    identifier = collectionView.collectionItemIdentifier(index)
+    identifier = collectionView.itemIdentifier(index)
     delegate = collectionView.delegate()
   var view: View
   if not delegate.isNil:
@@ -1350,7 +1337,7 @@ proc configureCollectionItemSlot(
 ) =
   if slot.view.isNil:
     return
-  let state = collectionView.collectionItemState(slot.index)
+  let state = collectionView.itemState(slot.index)
   slot.view.frame = state.rect
   collectionView.applyCollectionItemStateToView(state, slot.view)
   let delegate = collectionView.delegate()
@@ -1441,7 +1428,7 @@ proc reconcileCollectionItemSlots(collectionView: CollectionView) =
   # refer to the source order rather than the sorted or filtered presentation.
   var indexes = initTable[string, int]()
   for index in 0 ..< collectionView.len():
-    let identifier = collectionView.collectionItemIdentifier(index)
+    let identifier = collectionView.itemIdentifier(index)
     if identifier in indexes:
       indexes[identifier] = -1
     else:
@@ -1539,12 +1526,12 @@ proc visibleItemSummaries*(
     collectionView: CollectionView
 ): seq[CollectionVisibleItemSummary] =
   for index in collectionView.visibleItemIndexes():
-    let state = collectionView.collectionItemState(index)
+    let state = collectionView.itemState(index)
     result.add CollectionVisibleItemSummary(
       index: index,
       identifier: state.identifier,
       text: state.text,
-      rect: collectionView.collectionItemRect(index),
+      rect: collectionView.itemRect(index),
       states: state.states,
     )
 
@@ -1561,7 +1548,7 @@ proc visibleItemViews*(collectionView: CollectionView): seq[View] =
     if not slot.view.isNil:
       result.add slot.view
 
-proc collectionItemRect*(collectionView: CollectionView, index: int): Rect =
+proc itemRect*(collectionView: CollectionView, index: int): Rect =
   collectionView.tileCollectionContent()
   let contentView = collectionView.contentView()
   let contentRect = collectionView.resolvedContentItemRect(index)
@@ -1571,7 +1558,7 @@ proc collectionItemRect*(collectionView: CollectionView, index: int): Rect =
     collectionView.bounds()
   )
 
-proc collectionItemIndexAtPoint*(collectionView: CollectionView, point: Point): int =
+proc indexAtPoint*(collectionView: CollectionView, point: Point): int =
   collectionView.tileCollectionContent()
   let contentView = collectionView.contentView()
   collectionView.resolvedIndexAtContentPoint(
@@ -1592,16 +1579,13 @@ proc normalizeSelectedIdentifiers(
   if collectionView.xSelectionMode == csmNone:
     return
   for identifier in identifiers:
-    let index = collectionView.collectionItemIndexForIdentifier(identifier)
+    let index = collectionView.find(identifier)
     if index >= 0 and collectionView.collectionItemSelectable(index) and
         identifier notin result:
       result.add identifier
   result.sort(
     proc(left, right: string): int =
-      cmp(
-        collectionView.collectionItemIndexForIdentifier(left),
-        collectionView.collectionItemIndexForIdentifier(right),
-      )
+      cmp(collectionView.find(left), collectionView.find(right))
   )
   if collectionView.xSelectionMode == csmSingle and result.len > 1:
     result.setLen(1)
@@ -1609,7 +1593,7 @@ proc normalizeSelectedIdentifiers(
 proc normalizeSelectionAnchor(
     collectionView: CollectionView, identifier: string
 ): string =
-  if collectionView.collectionItemIndexForIdentifier(identifier) >= 0:
+  if collectionView.find(identifier) >= 0:
     identifier
   else:
     collectionView.xSelectionAnchorIdentifier
@@ -1642,7 +1626,7 @@ proc applySelectedIdentifiers(
   if not selectionChanged:
     collectionView.xSelectionAnchorIdentifier = nextAnchor
     collectionView.xSelectionLeadIdentifier = nextLead
-    let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
+    let leadIndex = collectionView.find(nextLead)
     if leadIndex >= 0 and not collectionView.xSuppressSelectionReveal:
       collectionView.scrollItemToVisible(leadIndex)
     return
@@ -1658,7 +1642,7 @@ proc applySelectedIdentifiers(
   collectionView.xSelectedIdentifiers = nextIdentifiers
   collectionView.xSelectionAnchorIdentifier = nextAnchor
   collectionView.xSelectionLeadIdentifier = nextLead
-  let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
+  let leadIndex = collectionView.find(nextLead)
   if leadIndex >= 0:
     if not collectionView.xSuppressSelectionReveal:
       collectionView.scrollItemToVisible(leadIndex)
@@ -1670,7 +1654,7 @@ proc applySelectedIdentifiers(
   finally:
     endSourceDispatch(source)
   collectionView.postAccessibilityNotification(anSelectionChanged)
-  let selectedIndex = collectionView.collectionItemIndexForIdentifier(nextSelected)
+  let selectedIndex = collectionView.find(nextSelected)
   if selectedIndex >= 0:
     let delegate = collectionView.delegate()
     if not delegate.isNil:
@@ -1695,7 +1679,7 @@ proc selectedIdentifier*(collectionView: CollectionView): string =
 
 proc selectedIndexes*(collectionView: CollectionView): seq[int] =
   for identifier in collectionView.xSelectedIdentifiers:
-    let index = collectionView.collectionItemIndexForIdentifier(identifier)
+    let index = collectionView.find(identifier)
     if index >= 0:
       result.add index
   result.sort()
@@ -1703,13 +1687,13 @@ proc selectedIndexes*(collectionView: CollectionView): seq[int] =
 proc `selectedIndexes=`*(collectionView: CollectionView, indexes: openArray[int]) =
   var identifiers: seq[string]
   for index in indexes:
-    let identifier = collectionView.collectionItemIdentifier(index)
+    let identifier = collectionView.itemIdentifier(index)
     if identifier.len > 0:
       identifiers.add identifier
   collectionView.selectedIdentifiers = identifiers
 
 proc selectedIndex*(collectionView: CollectionView): int =
-  collectionView.collectionItemIndexForIdentifier(collectionView.selectedIdentifier())
+  collectionView.find(collectionView.selectedIdentifier())
 
 proc `selectedIndex=`*(collectionView: CollectionView, index: int) =
   if index < 0:
@@ -1743,19 +1727,19 @@ proc selectItemAtIndex*(collectionView: CollectionView, index: int) =
     return
   if not collectionView.collectionItemSelectable(boundedIndex):
     return
-  let identifier = collectionView.collectionItemIdentifier(boundedIndex)
+  let identifier = collectionView.itemIdentifier(boundedIndex)
   collectionView.applySelectedIdentifiers([identifier], identifier, identifier)
 
 proc identifiersInRange(
     collectionView: CollectionView, anchorIdentifier, leadIdentifier: string
 ): seq[string] =
   let
-    anchor = collectionView.collectionItemIndexForIdentifier(anchorIdentifier)
-    lead = collectionView.collectionItemIndexForIdentifier(leadIdentifier)
+    anchor = collectionView.find(anchorIdentifier)
+    lead = collectionView.find(leadIdentifier)
   if anchor < 0 or lead < 0:
     return
   for index in min(anchor, lead) .. max(anchor, lead):
-    let identifier = collectionView.collectionItemIdentifier(index)
+    let identifier = collectionView.itemIdentifier(index)
     if identifier.len > 0:
       result.add identifier
 
@@ -1767,7 +1751,7 @@ proc extendSelectionToIndex(collectionView: CollectionView, index: int) =
       not collectionView.collectionItemSelectable(index):
     return
   let
-    identifier = collectionView.collectionItemIdentifier(index)
+    identifier = collectionView.itemIdentifier(index)
     anchor =
       if collectionView.xSelectionAnchorIdentifier.len > 0:
         collectionView.xSelectionAnchorIdentifier
@@ -1784,7 +1768,7 @@ proc toggleSelectionAtIndex(collectionView: CollectionView, index: int) =
   if index notin 0 ..< collectionView.len() or
       not collectionView.collectionItemSelectable(index):
     return
-  let identifier = collectionView.collectionItemIdentifier(index)
+  let identifier = collectionView.itemIdentifier(index)
   var next = collectionView.xSelectedIdentifiers
   if identifier in next:
     var filtered: seq[string]
@@ -1821,7 +1805,7 @@ proc activateItemAtIndex*(
     return
   if collectionView.xSelectionMode != csmNone:
     collectionView.selectItemAtIndex(index, modifiers)
-  let identifier = collectionView.collectionItemIdentifier(index)
+  let identifier = collectionView.itemIdentifier(index)
   let delegate = collectionView.delegate()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
@@ -1834,7 +1818,7 @@ proc activateItemAtIndex*(
   discard collectionView.sendAction()
 
 proc highlightedIndex*(collectionView: CollectionView): int =
-  collectionView.collectionItemIndexForIdentifier(collectionView.xHighlightedIdentifier)
+  collectionView.find(collectionView.xHighlightedIdentifier)
 
 proc highlightedIdentifier*(collectionView: CollectionView): string =
   collectionView.xHighlightedIdentifier
@@ -1843,7 +1827,7 @@ proc `highlightedIndex=`*(collectionView: CollectionView, index: int) =
   let identifier =
     if index in 0 ..< collectionView.len() and
         collectionView.collectionItemEnabled(index):
-      collectionView.collectionItemIdentifier(index)
+      collectionView.itemIdentifier(index)
     else:
       ""
   if collectionView.xHighlightedIdentifier == identifier:
@@ -1858,9 +1842,7 @@ proc `highlightedIdentifier=`*(collectionView: CollectionView, identifier: strin
   collectionView.invalidateCollectionItems()
 
 proc selectionLeadIndex(collectionView: CollectionView): int =
-  let lead = collectionView.collectionItemIndexForIdentifier(
-    collectionView.xSelectionLeadIdentifier
-  )
+  let lead = collectionView.find(collectionView.xSelectionLeadIdentifier)
   if lead >= 0:
     lead
   else:
@@ -1935,7 +1917,7 @@ proc defaultCollectionViewMouseDown(
   if owner of Window:
     discard Window(owner).makeFirstResponder(collectionView)
   collectionView.xTrackingItem = true
-  let index = collectionView.collectionItemIndexAtPoint(event.location)
+  let index = collectionView.indexAtPoint(event.location)
   collectionView.highlightedIndex = index
   collectionView.xPressedIdentifier = collectionView.xHighlightedIdentifier
   collectionView.invalidateCollectionItems()
@@ -1945,7 +1927,7 @@ proc defaultCollectionViewMouseDragged(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
   if collectionView.isEnabled() and collectionView.xTrackingItem:
-    let index = collectionView.collectionItemIndexAtPoint(event.location)
+    let index = collectionView.indexAtPoint(event.location)
     collectionView.highlightedIndex = index
     collectionView.xPressedIdentifier = collectionView.xHighlightedIdentifier
     collectionView.invalidateCollectionItems()
@@ -1959,7 +1941,7 @@ proc defaultCollectionViewMouseUp(
     return false
   let index =
     if collectionView.xTrackingItem:
-      collectionView.collectionItemIndexAtPoint(event.location)
+      collectionView.indexAtPoint(event.location)
     else:
       -1
   collectionView.xTrackingItem = false
@@ -2077,11 +2059,11 @@ func collectionDropPositionForItem(location: Point, rect: Rect): DraggingDropPos
 proc defaultDropTargetForLocation(
     collectionView: CollectionView, location: Point
 ): DraggingDropTarget =
-  let index = collectionView.collectionItemIndexAtPoint(location)
+  let index = collectionView.indexAtPoint(location)
   if index >= 0:
     let
-      identifier = collectionView.collectionItemIdentifier(index)
-      rect = collectionView.collectionItemRect(index)
+      identifier = collectionView.itemIdentifier(index)
+      rect = collectionView.itemRect(index)
     var target = initItemDropTarget(identifier, row = index, rect = rect)
     target.position = collectionDropPositionForItem(location, rect)
     return target
@@ -2358,8 +2340,7 @@ protocol DefaultCollectionViewEvents of ResponderEventProtocol:
 
   method mouseMoved(collectionView: CollectionView, event: MouseEvent): bool =
     if collectionView.isEnabled():
-      collectionView.highlightedIndex =
-        collectionView.collectionItemIndexAtPoint(event.location)
+      collectionView.highlightedIndex = collectionView.indexAtPoint(event.location)
       return true
     false
 

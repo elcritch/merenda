@@ -463,15 +463,13 @@ proc localDescendantIdentifiers(
       result.add item.identifier
       result.add outlineView.localDescendantIdentifiers(item.identifier)
 
-proc addOutlineItem*(
-    outlineView: OutlineView, item: OutlineItem
-): bool {.discardable.} =
+proc add*(outlineView: OutlineView, item: OutlineItem): bool {.discardable.} =
   let selectedIdentifiers = outlineView.selectedItemIdentifiers()
   outlineView.xOutlineItems.add item
   outlineView.reloadOutlineDataPreservingSelection(selectedIdentifiers)
   true
 
-proc insertOutlineItem*(
+proc insert*(
     outlineView: OutlineView, item: OutlineItem, index: Natural
 ): bool {.discardable.} =
   let selectedIdentifiers = outlineView.selectedItemIdentifiers()
@@ -480,7 +478,7 @@ proc insertOutlineItem*(
   outlineView.reloadOutlineDataPreservingSelection(selectedIdentifiers)
   true
 
-proc insertOutlineChild*(
+proc insertChild*(
     outlineView: OutlineView,
     item: OutlineItem,
     parentIdentifier: string,
@@ -495,7 +493,7 @@ proc insertOutlineChild*(
   outlineView.reloadOutlineDataPreservingSelection(selectedIdentifiers)
   true
 
-proc removeOutlineItemWithIdentifier*(
+proc deleteSubtree*(
     outlineView: OutlineView, identifier: string
 ): bool {.discardable.} =
   let index = outlineView.itemIndex(identifier)
@@ -517,13 +515,15 @@ proc removeOutlineItemWithIdentifier*(
   outlineView.reloadOutlineDataPreservingSelection(selectedIdentifiers)
   true
 
-proc removeAllOutlineItems*(outlineView: OutlineView) =
+proc clear*(outlineView: OutlineView) =
   outlineView.xOutlineItems.setLen(0)
   outlineView.xExpanded.setLen(0)
   outlineView.reloadOutlineDataPreservingSelection([])
 
-proc moveOutlineItem*(
-    outlineView: OutlineView, identifier, parentIdentifier: string, index: Natural
+proc move*(
+    outlineView: OutlineView,
+    identifier, parentIdentifier: string,
+    siblingIndex: Natural,
 ): bool {.discardable.} =
   let sourceIndex = outlineView.itemIndex(identifier)
   if sourceIndex < 0:
@@ -533,7 +533,7 @@ proc moveOutlineItem*(
   item.parentIdentifier = parentIdentifier
   outlineView.xOutlineItems.delete(sourceIndex)
   let storageIndex =
-    outlineView.localStorageIndexForChildIndex(parentIdentifier, index.int)
+    outlineView.localStorageIndexForChildIndex(parentIdentifier, siblingIndex.int)
   outlineView.xOutlineItems.insert(item, storageIndex)
   outlineView.reloadOutlineDataPreservingSelection(selectedIdentifiers)
   true

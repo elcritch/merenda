@@ -38,7 +38,7 @@ proc clickCollectionItem(
     index: int,
     modifiers: set[KeyModifier] = {},
 ): bool =
-  let rect = collectionView.collectionItemRect(index)
+  let rect = collectionView.itemRect(index)
   if rect.isEmpty:
     return false
   let point = collectionView.pointToWindow(rect.center())
@@ -241,9 +241,9 @@ suite "nimkit collection views":
       source = newCollectionSpy([item("a", "Alpha", 1), item("", "Beta", 2)])
     collection.dataSource = source
 
-    check collection.collectionItemIndexForIdentifier("a") == 0
-    check collection.collectionItemIndexForIdentifier("1") == 1
-    check collection.collectionItemIndexForIdentifier("2") == -1
+    check collection.find("a") == 0
+    check collection.find("1") == 1
+    check collection.find("2") == -1
 
   test "mutable collection layout changes intrinsic size without a reload":
     let collection = newCollectionView(frame = rect(0, 0, 260, 140))
@@ -283,10 +283,10 @@ suite "nimkit collection views":
     discard buildRenders(collectionView)
 
     check collectionView.len == 5
-    check collectionView.collectionItemRect(0) == rect(10.0, 10.0, 60.0, 40.0)
-    check collectionView.collectionItemRect(4) == rect(75.0, 56.0, 60.0, 40.0)
-    check collectionView.collectionItemIndexAtPoint(initPoint(20.0, 20.0)) == 0
-    check collectionView.collectionItemText(2) == "Gamma"
+    check collectionView.itemRect(0) == rect(10.0, 10.0, 60.0, 40.0)
+    check collectionView.itemRect(4) == rect(75.0, 56.0, 60.0, 40.0)
+    check collectionView.indexAtPoint(initPoint(20.0, 20.0)) == 0
+    check collectionView.itemText(2) == "Gamma"
     check collectionView.visibleItemViews().len == 5
 
     let firstView = CollectionItemView(collectionView.itemViewAtIndex(0))
@@ -399,8 +399,8 @@ suite "nimkit collection views":
     discard buildRenders(collectionView)
 
     check collectionView.len == 3
-    check collectionView.collectionItemText(0) == "Ada"
-    check collectionView.collectionItemIdentifier(1) == "grace"
+    check collectionView.itemText(0) == "Ada"
+    check collectionView.itemIdentifier(1) == "grace"
 
     collectionView.selectedIndex = 0
     check controller.selectionController().selectedIdentifier == "ada"
@@ -408,8 +408,8 @@ suite "nimkit collection views":
     controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
     collectionView.reloadData()
 
-    check collectionView.collectionItemIdentifier(0) == "grace"
-    check collectionView.collectionItemIdentifier(1) == "ada"
+    check collectionView.itemIdentifier(0) == "grace"
+    check collectionView.itemIdentifier(1) == "ada"
     check collectionView.selectedIdentifier == "ada"
     check collectionView.selectedIndex == 1
 
@@ -445,7 +445,7 @@ suite "nimkit collection views":
     check drag.pasteboard().stringForType(CollectionPasteboardTypeItems) == "a|c"
 
     let
-      targetPoint = collectionView.collectionItemRect(1).center()
+      targetPoint = collectionView.itemRect(1).center()
       target = collectionView.dropTargetForDraggingLocation(targetPoint)
       info = drag.draggingInfo(targetPoint, DynamicAgent(collectionView)).withDropTarget(
           target
