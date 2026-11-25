@@ -24,6 +24,8 @@ import declarative_views_demo
 import direct_views_demo
 import direct_collection_demo
 import direct_lifetimes_demo
+import direct_text_binding_demo
+import direct_text_binding_signal_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
