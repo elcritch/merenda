@@ -20,7 +20,7 @@ proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: strin
           "title", controller, arrayControllerDidChange, id, rowTitle, editRowTitle
         )
       Button("Remove", focusable = false):
-        onAction(controller, id) do(
+        this.onAction(controller, id) do(
           this: Button, receiver: ArrayController, key: string
         ):
           discard receiver.removeItem(key)
