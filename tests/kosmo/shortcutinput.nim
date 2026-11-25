@@ -56,8 +56,7 @@ proc clickModalButton(window: Window, title: string): bool =
   window.clickAt(button.pointToWindow(button.bounds().rectCenter()))
 
 proc clickSelectedTabClose(frontend: KosmoApplication): bool =
-  let tabRect =
-    frontend.documentTabs.documentTabRect(frontend.documentTabs.selectedIndex)
+  let tabRect = frontend.documentTabs.tabRect(frontend.documentTabs.selectedIndex)
   for x in [tabRect.minX + 15.0'f32, tabRect.maxX - 15.0'f32]:
     discard frontend.window.clickAt(
       frontend.documentTabs.pointToWindow(
@@ -206,7 +205,7 @@ suite "Kosmo synthetic shortcut input":
     require frontend.editorView.editor.handleTextInput("!")
     require frontend.editorView.editor.handleKey("Esc")
     require frontend.editorView.editor.tabs()[0].modified
-    let originalIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+    let originalIdentifier = frontend.documentTabs.selectedIdentifier
 
     check frontend.clickSelectedTabClose()
     let session = frontend.application.modalSession()
@@ -233,7 +232,7 @@ suite "Kosmo synthetic shortcut input":
     check not modifiedFileStillOpen
     check readFile(path) == "original"
     require frontend.documentTabs.len == 1
-    check frontend.documentTabs.selectedDocumentTabIdentifier != originalIdentifier
+    check frontend.documentTabs.selectedIdentifier != originalIdentifier
     check "original" notin frontend.editorView.displayedGridText()
     require frontend.editorView.editor.tabs().len == 1
     let replacement = frontend.editorView.editor.tabs()[0]
@@ -262,9 +261,10 @@ suite "Kosmo synthetic shortcut input":
       require frontend.openPath(path)
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
-    let models = frontend.documentTabs.documentTabModels()
+    let models = frontend.documentTabs.models()
     require models.len == 4
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(models[1].identifier)
+    frontend.documentTabs.selectedIdentifier = models[1].identifier
+    require frontend.documentTabs.selectedIdentifier == models[1].identifier
     require frontend.editorView.editor.handleKey("i")
     require frontend.editorView.editor.handleTextInput("modified ")
     require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
@@ -274,7 +274,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.application.modalSession().window.clickModalButton("Discard")
     check frontend.application.modalSession().isNil
     check frontend.documentTabs.len == 3
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[2].identifier
+    check frontend.documentTabs.selectedIdentifier == models[2].identifier
     check "next" in frontend.editorView.displayedGridText()
     check "modified middle" notin frontend.editorView.displayedGridText()
     check readFile(root / "middle.txt") == "middle"
@@ -330,7 +330,7 @@ suite "Kosmo synthetic shortcut input":
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.window.makeFirstResponder(frontend.editorView)
-    let sourceModels = frontend.documentTabs.documentTabModels()
+    let sourceModels = frontend.documentTabs.models()
     require sourceModels.len == 1
 
     check frontend.window.pressControlKey(keyW)
@@ -342,9 +342,9 @@ suite "Kosmo synthetic shortcut input":
     check groups[0].editorView != groups[1].editorView
     check groups[0].pane.documentTabs.len == 1
     check groups[1].pane.documentTabs.len == 1
-    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+    check groups[0].pane.documentTabs.models()[0].identifier ==
       sourceModels[0].identifier
-    check groups[1].pane.documentTabs.documentTabModels()[0].identifier ==
+    check groups[1].pane.documentTabs.models()[0].identifier ==
       sourceModels[0].identifier
     check frontend.editorView.editor.tabs().len == 1
 
@@ -362,7 +362,7 @@ suite "Kosmo synthetic shortcut input":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(path)
     check frontend.window.makeFirstResponder(frontend.editorView)
-    let sourceModels = frontend.documentTabs.documentTabModels()
+    let sourceModels = frontend.documentTabs.models()
     require sourceModels.len == 1
 
     check frontend.window.pressControlKey(keyW)
@@ -374,16 +374,16 @@ suite "Kosmo synthetic shortcut input":
     require frontend.dockView.rootView() of SplitView
     check SplitView(frontend.dockView.rootView()).splitAxis == laVertical
     check groups[0].editorView != groups[1].editorView
-    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+    check groups[0].pane.documentTabs.models()[0].identifier ==
       sourceModels[0].identifier
-    check groups[1].pane.documentTabs.documentTabModels()[0].identifier ==
+    check groups[1].pane.documentTabs.models()[0].identifier ==
       sourceModels[0].identifier
     check frontend.editorView.editor.tabs().len == 1
 
-    check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
+    check groups[1].pane.documentTabs.closeTab(groups[1].pane.documentTabs[0])
     check frontend.editorGroups().len == 1
     check groups[0].pane.documentTabs.len == 1
-    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+    check groups[0].pane.documentTabs.models()[0].identifier ==
       sourceModels[0].identifier
     check frontend.editorView.editor.tabs().len == 1
 
@@ -422,8 +422,8 @@ suite "Kosmo synthetic shortcut input":
       require groups.len == 2
       require frontend.dockView.rootView() of SplitView
       check SplitView(frontend.dockView.rootView()).splitAxis == scenario.axis
-      check groups[0].pane.documentTabs.documentTabModels()[0].title == "first.txt"
-      check groups[1].pane.documentTabs.documentTabModels()[0].title == "second.txt"
+      check groups[0].pane.documentTabs.models()[0].title == "first.txt"
+      check groups[1].pane.documentTabs.models()[0].title == "second.txt"
       check frontend.window.firstResponder == groups[1].editorView
 
   test "shared prefix sequences perform the command selected by the second key":
@@ -499,8 +499,8 @@ suite "Kosmo synthetic shortcut input":
     )
     let groups = frontend.editorGroups()
     require groups.len == 2
-    check groups[0].pane.documentTabs.documentTabModels()[0].title == "matches.txt"
-    check groups[1].pane.documentTabs.documentTabModels()[0].title == "No Name"
+    check groups[0].pane.documentTabs.models()[0].title == "matches.txt"
+    check groups[1].pane.documentTabs.models()[0].title == "No Name"
     check frontend.window.firstResponder == groups[1].editorView
 
   test "control-W control-W navigates panes and control-W c closes a pane":
@@ -652,7 +652,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.pressPaneKey(keyN, "n", {})
     groups = frontend.editorGroups()
     require groups.len == 4
-    check groups[^1].pane.documentTabs.documentTabModels()[0].title == "No Name"
+    check groups[^1].pane.documentTabs.models()[0].title == "No Name"
 
     require frontend.window.makeFirstResponder(groups[0].pane.markdownView)
     check frontend.window.pressControlKey(keyW)
@@ -743,8 +743,8 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.makeFirstResponder(frontend.editorView)
     check frontend.editorView.editor.tabs()[1].active
     require frontend.window
-    .keyBindings()
-    .match([KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmControl})]).kind ==
+      .keyBindings()
+      .match([KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmControl})]).kind ==
       kbmNone
 
     check frontend.window.pressControlKey(keyW)

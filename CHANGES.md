@@ -8,6 +8,10 @@
 - Limit Kosmo's Close Others tab action to the clicked tab's pane.
 - Complete document tab closes by identity after a reload or deferred approval.
   Share relative tab selection between NimKit and Kosmo.
+- Use collection operations on `DocumentTabs`, including `find`, `add`, `insert`,
+  `delete`, `move`, and `clear`. Look up displayed tabs with `tabs[index]` or
+  `tabs[id]`, select them with `selectedItem=`, and request a close with `closeTab`.
+  Data sources supply models on reload.
 - Rename NimKit's `acceptsFirstResponder` property to `focusable`, including in
   DirectView widget arguments and responder protocol overrides.
 - Remove the experimental ViewSpec API. Use DirectView for declarative views.

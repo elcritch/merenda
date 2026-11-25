@@ -179,8 +179,6 @@ protocol DocumentTabsDataSource {.selectorScope: protocol.}:
 
   method documentTabModelAtIndex*(tabs: DocumentTabs, index: int): DocumentTabModel
 
-  method indexOfDocumentTabModelIdentifier*(tabs: DocumentTabs, identifier: string): int
-
 protocol DocumentTabsEvents:
   proc documentTabSelectionIsChanging*(
     tabs: DocumentTabs, sender: DynamicAgent
@@ -220,34 +218,26 @@ protocol DocumentTabsEvents:
     tabs: DocumentTabs, info: DocumentTabDragInfo
   ) {.signal.}
 
-proc reloadDocumentTabs*(tabs: DocumentTabs)
+proc refreshLayout*(tabs: DocumentTabs)
 proc reloadData*(tabs: DocumentTabs)
 proc clampScrollOffset(tabs: DocumentTabs, offset: float32): float32
 proc maximumScrollOffset*(tabs: DocumentTabs): float32
-proc tabViewportRect*(tabs: DocumentTabs): Rect
-proc documentTabRect*(tabs: DocumentTabs, index: int): Rect
-proc documentTabIndexAtPoint*(tabs: DocumentTabs, point: Point): int
-proc insertDocumentTabItem*(
+proc viewportRect*(tabs: DocumentTabs): Rect
+proc tabRect*(tabs: DocumentTabs, index: int): Rect
+proc tabIndexAtPoint*(tabs: DocumentTabs, point: Point): int
+proc insert*(
   tabs: DocumentTabs, item: DocumentTabItem, index: Natural
 ): DocumentTabItem {.discardable.}
 
-proc documentTabModels*(tabs: DocumentTabs): seq[DocumentTabModel]
-proc `documentTabModels=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel])
-proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.}
-proc moveDocumentTabItem*(
-  tabs: DocumentTabs, fromIndex, toIndex: int
-): bool {.discardable.}
+proc models*(tabs: DocumentTabs): seq[DocumentTabModel]
+proc `models=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel])
+proc delete*(tabs: DocumentTabs, index: int): bool {.discardable.}
+proc move*(tabs: DocumentTabs, fromIndex, toIndex: int): bool {.discardable.}
 
-proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.}
-proc selectedDocumentTabItem*(tabs: DocumentTabs): DocumentTabItem
-proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int
-proc selectDocumentTabWithIdentifier*(
-  tabs: DocumentTabs, identifier: string
-): bool {.discardable.}
+proc trySelect(tabs: DocumentTabs, index: int): bool
+proc selectedItem*(tabs: DocumentTabs): DocumentTabItem
 
-proc drawDocumentTab(
-  tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int
-)
+proc drawTab(tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int)
 
 func styleKeyword*(position: DocumentTabIndicatorPosition): StyleValue =
   styleKeyword(
@@ -338,7 +328,7 @@ proc newDocumentTabItem*(model: DocumentTabModel): DocumentTabItem =
   result.xStyleClasses = model.styleClasses
   result.xUserInfo = model.userInfo
 
-proc documentTabModel*(item: DocumentTabItem): DocumentTabModel =
+proc toModel*(item: DocumentTabItem): DocumentTabModel =
   initDocumentTabModel(
     identifier = item.xIdentifier,
     title = item.xTitle,
@@ -445,6 +435,26 @@ proc items*(tabs: DocumentTabs): lent seq[DocumentTabItem] =
 proc `[]`*(tabs: DocumentTabs, index: Natural): DocumentTabItem =
   tabs.xItems[index]
 
+proc find*(tabs: DocumentTabs, item: DocumentTabItem): int =
+  ## Return the item's index in the tab strip, or -1 if absent.
+  tabs.xItems.find(item)
+
+proc find*(tabs: DocumentTabs, identifier: string): int =
+  ## Return the index of a displayed tab, or -1 for a missing or empty identifier.
+  if identifier.len > 0:
+    for index, item in tabs.xItems:
+      if item.identifier() == identifier:
+        return index
+  -1
+
+proc `[]`*(tabs: DocumentTabs, identifier: string): DocumentTabItem =
+  ## Return the displayed item for this identifier, or nil if absent.
+  let index = tabs.find(identifier)
+  if index >= 0:
+    tabs[index]
+  else:
+    nil
+
 proc delegate*(tabs: DocumentTabs): DynamicAgent =
   tabs.xDelegate
 
@@ -472,23 +482,27 @@ proc selectedIndex*(tabs: DocumentTabs): int =
   tabs.xSelectedIndex
 
 proc `selectedIndex=`*(tabs: DocumentTabs, index: int) =
-  discard tabs.selectDocumentTabAtIndex(index)
+  discard tabs.trySelect(index)
 
-proc selectedDocumentTabIdentifier*(tabs: DocumentTabs): string =
-  let item = tabs.selectedDocumentTabItem()
+proc selectedIdentifier*(tabs: DocumentTabs): string =
+  let item = tabs.selectedItem()
   if item.isNil:
     ""
   else:
     item.identifier()
 
-proc `selectedDocumentTabIdentifier=`*(tabs: DocumentTabs, identifier: string) =
-  discard tabs.selectDocumentTabWithIdentifier(identifier)
+proc `selectedIdentifier=`*(tabs: DocumentTabs, identifier: string) =
+  tabs.selectedIndex = tabs.find(identifier)
 
-proc selectedDocumentTabItem*(tabs: DocumentTabs): DocumentTabItem =
+proc selectedItem*(tabs: DocumentTabs): DocumentTabItem =
   if tabs.xSelectedIndex < 0 or tabs.xSelectedIndex >= tabs.xItems.len:
     nil
   else:
     tabs.xItems[tabs.xSelectedIndex]
+
+proc `selectedItem=`*(tabs: DocumentTabs, item: DocumentTabItem) =
+  ## Select a displayed item if enabled and allowed by the delegate.
+  tabs.selectedIndex = tabs.find(item)
 
 proc allowsClosing*(tabs: DocumentTabs): bool =
   tabs.xAllowsClosing
@@ -497,12 +511,12 @@ proc `allowsClosing=`*(tabs: DocumentTabs, allowed: bool) =
   if tabs.xAllowsClosing == allowed:
     return
   tabs.xAllowsClosing = allowed
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
 
-proc allowsTabReordering*(tabs: DocumentTabs): bool =
+proc allowsReordering*(tabs: DocumentTabs): bool =
   tabs.xAllowsTabReordering
 
-proc `allowsTabReordering=`*(tabs: DocumentTabs, allowed: bool) =
+proc `allowsReordering=`*(tabs: DocumentTabs, allowed: bool) =
   if tabs.xAllowsTabReordering == allowed:
     return
   tabs.xAllowsTabReordering = allowed
@@ -510,10 +524,10 @@ proc `allowsTabReordering=`*(tabs: DocumentTabs, allowed: bool) =
   tabs.xPressedPart = dthNone
   tabs.needsDisplay = true
 
-proc allowsTabDragging*(tabs: DocumentTabs): bool =
+proc allowsDragging*(tabs: DocumentTabs): bool =
   tabs.xAllowsTabDragging
 
-proc `allowsTabDragging=`*(tabs: DocumentTabs, allowed: bool) =
+proc `allowsDragging=`*(tabs: DocumentTabs, allowed: bool) =
   if tabs.xAllowsTabDragging == allowed:
     return
   tabs.xAllowsTabDragging = allowed
@@ -530,7 +544,7 @@ proc `showsScrollButtons=`*(tabs: DocumentTabs, shows: bool) =
   if tabs.xShowsScrollButtons == shows:
     return
   tabs.xShowsScrollButtons = shows
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
 
 proc showsHorizontalScroller*(tabs: DocumentTabs): bool =
   tabs.xShowsHorizontalScroller
@@ -541,14 +555,14 @@ proc `showsHorizontalScroller=`*(tabs: DocumentTabs, shows: bool) =
   tabs.xShowsHorizontalScroller = shows
   tabs.needsDisplay = true
 
-proc defaultTabStyle*(tabs: DocumentTabs): DocumentTabStyle =
+proc defaultStyle*(tabs: DocumentTabs): DocumentTabStyle =
   tabs.xDefaultTabStyle
 
-proc `defaultTabStyle=`*(tabs: DocumentTabs, style: DocumentTabStyle) =
+proc `defaultStyle=`*(tabs: DocumentTabs, style: DocumentTabStyle) =
   if tabs.xDefaultTabStyle == style:
     return
   tabs.xDefaultTabStyle = if style == dtsAutomatic: dtsRounded else: style
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
 
 proc scrollOffset*(tabs: DocumentTabs): float32 =
   tabs.xScrollOffset
@@ -557,7 +571,7 @@ proc `scrollOffset=`*(tabs: DocumentTabs, offset: float32) =
   let clamped = tabs.clampScrollOffset(offset)
   # Keep the geometry used for this request, including scrolling before the
   # first layout, so a later layout only reveals the selection after resizing.
-  tabs.xScrollViewportWidth = tabs.tabViewportRect().size.width
+  tabs.xScrollViewportWidth = tabs.viewportRect().size.width
   if abs(tabs.xScrollOffset - clamped) <= 0.01'f32:
     return
   tabs.xScrollOffset = clamped
@@ -570,7 +584,7 @@ proc lineScroll*(tabs: DocumentTabs): float32 =
 proc `lineScroll=`*(tabs: DocumentTabs, value: float32) =
   tabs.xLineScroll = max(value, 1.0'f32)
 
-proc documentTabAppearance(tabs: DocumentTabs): Appearance =
+proc tabAppearance(tabs: DocumentTabs): Appearance =
   tabs.effectiveAppearance()
 
 proc mergedStyleClasses(
@@ -582,7 +596,7 @@ proc mergedStyleClasses(
   for class in extra:
     result.add class
 
-proc documentTabStyleContext(
+proc tabStyleContext(
     tabs: DocumentTabs, item: DocumentTabItem, states: set[WidgetState] = {}
 ): StyleContext =
   var effectiveStates = states
@@ -596,9 +610,7 @@ proc documentTabStyleContext(
     srDocumentTab, effectiveStates, id = id, classes = tabs.mergedStyleClasses(item)
   )
 
-proc documentTabBarStyleContext(
-    tabs: DocumentTabs, states: set[WidgetState] = {}
-): StyleContext =
+proc barStyleContext(tabs: DocumentTabs, states: set[WidgetState] = {}): StyleContext =
   var effectiveStates = states
   effectiveStates = effectiveStates + tabs.widgetStateSet()
   controlStyle(
@@ -608,7 +620,7 @@ proc documentTabBarStyleContext(
     classes = tabs.mergedStyleClasses(),
   )
 
-proc documentTabButtonStyleContext(
+proc buttonStyleContext(
     tabs: DocumentTabs, states: set[WidgetState] = {}, classes: openArray[string] = []
 ): StyleContext =
   var effectiveStates = states
@@ -620,14 +632,14 @@ proc documentTabButtonStyleContext(
     classes = tabs.mergedStyleClasses(extra = classes),
   )
 
-proc documentTabViewStyle(tabs: DocumentTabs, appearance: Appearance): TabViewStyle =
-  appearance.resolveTabViewStyle(tabs.documentTabStyleContext(nil))
+proc tabViewStyle(tabs: DocumentTabs, appearance: Appearance): TabViewStyle =
+  appearance.resolveTabViewStyle(tabs.tabStyleContext(nil))
 
-proc documentTabViewStyle(tabs: DocumentTabs): TabViewStyle =
-  tabs.documentTabViewStyle(tabs.documentTabAppearance())
+proc tabViewStyle(tabs: DocumentTabs): TabViewStyle =
+  tabs.tabViewStyle(tabs.tabAppearance())
 
-proc documentTabGap(tabs: DocumentTabs): float32 =
-  max(tabs.documentTabViewStyle().tabGap, 0.0'f32)
+proc tabGap(tabs: DocumentTabs): float32 =
+  max(tabs.tabViewStyle().tabGap, 0.0'f32)
 
 func effectiveStyle(tabs: DocumentTabs, item: DocumentTabItem): DocumentTabStyle =
   if not item.isNil and item.xStyle != dtsAutomatic:
@@ -672,7 +684,7 @@ proc tabTextStyle(
 ): TextStyle =
   appearance.resolveTextStyle(styleContext, color, insets(0.0))
 
-func documentTabHorizontalInsets(
+func tabHorizontalInsets(
     viewStyle: TabViewStyle, textStyle: TextStyle
 ): tuple[left, right: float32] =
   (
@@ -686,7 +698,7 @@ func documentTabHorizontalInsets(
     ),
   )
 
-func documentTabTextColor(enabled, selected: bool): Color =
+func tabTextColor(enabled, selected: bool): Color =
   if not enabled:
     color(0.50, 0.52, 0.56, 1.0)
   elif selected:
@@ -694,23 +706,23 @@ func documentTabTextColor(enabled, selected: bool): Color =
   else:
     color(0.18, 0.20, 0.25, 1.0)
 
-proc documentTabWidth(
+proc tabWidth(
     tabs: DocumentTabs, item: DocumentTabItem, states: set[WidgetState]
 ): float32 =
   var effectiveStates = states
   if not item.enabled():
     effectiveStates.incl ssDisabled
   let
-    appearance = tabs.documentTabAppearance()
+    appearance = tabs.tabAppearance()
     style = tabs.effectiveStyle(item)
-    styleContext = tabs.documentTabStyleContext(item, effectiveStates)
+    styleContext = tabs.tabStyleContext(item, effectiveStates)
     viewStyle = appearance.resolveTabViewStyle(styleContext)
     bounds = style.tabWidthBounds(viewStyle)
     textStyle = appearance.tabTextStyle(
-      styleContext, documentTabTextColor(item.enabled(), ssSelected in states)
+      styleContext, tabTextColor(item.enabled(), ssSelected in states)
     )
     titleWidth = textNaturalSize(item.title(), textStyle).width
-    horizontalInsets = documentTabHorizontalInsets(viewStyle, textStyle)
+    horizontalInsets = tabHorizontalInsets(viewStyle, textStyle)
     closeWidth =
       if tabs.allowsClosing() and item.closeable():
         DocumentTabCloseWidth + DocumentTabCloseSpacing
@@ -728,14 +740,14 @@ proc documentTabWidth(
     maximumWidth,
   )
 
-proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
-  max(tabs.documentTabWidth(item, {}), tabs.documentTabWidth(item, {ssSelected}))
+proc tabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
+  max(tabs.tabWidth(item, {}), tabs.tabWidth(item, {ssSelected}))
 
 proc contentWidth*(tabs: DocumentTabs): float32 =
   for index, item in tabs.xItems:
     if index > 0:
-      result += tabs.documentTabGap()
-    result += tabs.documentTabWidth(item)
+      result += tabs.tabGap()
+    result += tabs.tabWidth(item)
 
 proc contentOverflowsFrame(tabs: DocumentTabs): bool =
   tabs.contentWidth() > tabs.bounds().size.width + 0.01'f32
@@ -758,7 +770,7 @@ proc scrollButtonRect*(tabs: DocumentTabs, button: DocumentTabScrollButton): Rec
       bounds.size.height,
     )
 
-proc tabViewportRect*(tabs: DocumentTabs): Rect =
+proc viewportRect*(tabs: DocumentTabs): Rect =
   let
     bounds = tabs.bounds()
     buttonInset =
@@ -774,12 +786,12 @@ proc tabViewportRect*(tabs: DocumentTabs): Rect =
   )
 
 proc maximumScrollOffset*(tabs: DocumentTabs): float32 =
-  max(tabs.contentWidth() - tabs.tabViewportRect().size.width, 0.0'f32)
+  max(tabs.contentWidth() - tabs.viewportRect().size.width, 0.0'f32)
 
 proc clampScrollOffset(tabs: DocumentTabs, offset: float32): float32 =
   max(0.0'f32, min(offset, tabs.maximumScrollOffset()))
 
-proc reloadDocumentTabs*(tabs: DocumentTabs) =
+proc refreshLayout*(tabs: DocumentTabs) =
   tabs.xScrollOffset = tabs.clampScrollOffset(tabs.xScrollOffset)
   tabs.invalidateIntrinsicContentSize()
   tabs.setNeedsLayout()
@@ -789,19 +801,19 @@ proc contentTabRect(tabs: DocumentTabs, index: int): Rect =
   if index < 0 or index >= tabs.xItems.len:
     return
   var x = 0.0'f32
-  let gap = tabs.documentTabGap()
+  let gap = tabs.tabGap()
   for itemIndex in 0 ..< index:
-    x += tabs.documentTabWidth(tabs.xItems[itemIndex]) + gap
+    x += tabs.tabWidth(tabs.xItems[itemIndex]) + gap
   let
     item = tabs.xItems[index]
     style = tabs.effectiveStyle(item)
-    height = style.tabHeight(tabs.documentTabViewStyle())
+    height = style.tabHeight(tabs.tabViewStyle())
     y = max((tabs.bounds().size.height - height) / 2.0'f32, 0.0'f32)
-  rect(x, y, tabs.documentTabWidth(item), height)
+  rect(x, y, tabs.tabWidth(item), height)
 
-proc documentTabRect*(tabs: DocumentTabs, index: int): Rect =
+proc tabRect*(tabs: DocumentTabs, index: int): Rect =
   let
-    viewport = tabs.tabViewportRect()
+    viewport = tabs.viewportRect()
     contentRect = tabs.contentTabRect(index)
   rect(
     viewport.origin.x + contentRect.origin.x - tabs.xScrollOffset,
@@ -810,7 +822,7 @@ proc documentTabRect*(tabs: DocumentTabs, index: int): Rect =
     contentRect.size.height,
   )
 
-func documentTabIndicatorPosition(keyword: string): DocumentTabIndicatorPosition =
+func indicatorPosition(keyword: string): DocumentTabIndicatorPosition =
   case keyword
   of "none": dtipNone
   of "top": dtipTop
@@ -818,16 +830,16 @@ func documentTabIndicatorPosition(keyword: string): DocumentTabIndicatorPosition
   of "right", "trailing": dtipRight
   else: dtipBottom
 
-func documentTabCloseButtonPosition(keyword: string): DocumentTabCloseButtonPosition =
+func closeButtonPosition(keyword: string): DocumentTabCloseButtonPosition =
   case keyword
   of "left", "leading": dtcbLeft
   else: dtcbRight
 
-proc documentTabCloseButtonPosition(
+proc closeButtonPosition(
     tabs: DocumentTabs, item: DocumentTabItem, appearance: Appearance
 ): DocumentTabCloseButtonPosition =
-  let styleContext = tabs.documentTabStyleContext(item)
-  documentTabCloseButtonPosition(
+  let styleContext = tabs.tabStyleContext(item)
+  closeButtonPosition(
     appearance.resolveKeyword(styleContext, StyleCloseButtonPosition, "right")
   )
 
@@ -836,11 +848,11 @@ proc closeRect(tabs: DocumentTabs, index: int, appearance: Appearance): Rect =
     return
   let
     item = tabs.xItems[index]
-    rect = tabs.documentTabRect(index)
+    rect = tabs.tabRect(index)
   if not tabs.allowsClosing() or not item.closeable() or rect.size.width < 44.0'f32:
     return
   let x =
-    case tabs.documentTabCloseButtonPosition(item, appearance)
+    case tabs.closeButtonPosition(item, appearance)
     of dtcbLeft:
       rect.origin.x + DocumentTabCloseSpacing
     of dtcbRight:
@@ -853,13 +865,13 @@ proc closeRect(tabs: DocumentTabs, index: int, appearance: Appearance): Rect =
   )
 
 proc closeRect(tabs: DocumentTabs, index: int): Rect =
-  tabs.closeRect(index, tabs.documentTabAppearance())
+  tabs.closeRect(index, tabs.tabAppearance())
 
 proc scrollTabToVisible(tabs: DocumentTabs, index: int) =
   if index < 0 or index >= tabs.xItems.len:
     return
   let
-    viewport = tabs.tabViewportRect()
+    viewport = tabs.viewportRect()
     contentRect = tabs.contentTabRect(index)
     visibleStart = tabs.xScrollOffset
     visibleStop = tabs.xScrollOffset + viewport.size.width
@@ -868,27 +880,24 @@ proc scrollTabToVisible(tabs: DocumentTabs, index: int) =
   elif contentRect.maxX > visibleStop:
     tabs.scrollOffset = contentRect.maxX - viewport.size.width
 
-proc documentTabIdentifiers*(tabs: DocumentTabs): seq[string] =
+proc identifiers*(tabs: DocumentTabs): seq[string] =
   for item in tabs.xItems:
     if item.identifier().len > 0:
       result.add item.identifier()
 
-proc documentTabModels*(tabs: DocumentTabs): seq[DocumentTabModel] =
+proc models*(tabs: DocumentTabs): seq[DocumentTabModel] =
   if tabs.xUsesTabModels:
     return tabs.xTabModels
   for item in tabs.xItems:
-    result.add item.documentTabModel()
+    result.add item.toModel()
 
-proc clearDocumentTabItems(tabs: DocumentTabs) =
-  tabs.xItems.setLen(0)
-
-proc firstEnabledDocumentTabIndex(tabs: DocumentTabs): int =
+proc firstEnabledIndex(tabs: DocumentTabs): int =
   for index, item in tabs.xItems:
     if item.enabled():
       return index
   -1
 
-proc restoreDocumentTabSelection(tabs: DocumentTabs, identifier: string) =
+proc restoreSelection(tabs: DocumentTabs, identifier: string) =
   var nextIndex = -1
   if identifier.len > 0:
     for index, item in tabs.xItems:
@@ -899,40 +908,40 @@ proc restoreDocumentTabSelection(tabs: DocumentTabs, identifier: string) =
       tabs.xItems[tabs.xSelectedIndex].enabled():
     nextIndex = tabs.xSelectedIndex
   if nextIndex < 0:
-    nextIndex = tabs.firstEnabledDocumentTabIndex()
+    nextIndex = tabs.firstEnabledIndex()
   tabs.xSelectedIndex = nextIndex
   if nextIndex >= 0:
     tabs.scrollTabToVisible(nextIndex)
 
-proc rebuildDocumentTabItemsFromModels(tabs: DocumentTabs, selectedIdentifier = "") =
+proc rebuildItems(tabs: DocumentTabs, selectedIdentifier = "") =
   let selection =
     if selectedIdentifier.len > 0:
       selectedIdentifier
     else:
-      tabs.selectedDocumentTabIdentifier()
-  tabs.clearDocumentTabItems()
+      tabs.selectedIdentifier()
+  tabs.xItems.setLen(0)
   for model in tabs.xTabModels:
     if not model.hidden:
       tabs.xItems.add newDocumentTabItem(model)
-  tabs.restoreDocumentTabSelection(selection)
-  tabs.reloadDocumentTabs()
+  tabs.restoreSelection(selection)
+  tabs.refreshLayout()
 
-proc `documentTabModels=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel]) =
-  let selected = tabs.selectedDocumentTabIdentifier()
+proc `models=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel]) =
+  let selected = tabs.selectedIdentifier()
   tabs.xTabModels = @models
   tabs.xUsesTabModels = true
-  tabs.rebuildDocumentTabItemsFromModels(selected)
+  tabs.rebuildItems(selected)
 
 proc reloadData*(tabs: DocumentTabs) =
   if tabs.xDataSource.isNil:
     if tabs.xUsesTabModels:
-      tabs.rebuildDocumentTabItemsFromModels()
+      tabs.rebuildItems()
     return
 
   let count = tabs.xDataSource.trySendLocal(documentTabCount(), tabs)
   if count.isNone:
     return
-  let selected = tabs.selectedDocumentTabIdentifier()
+  let selected = tabs.selectedIdentifier()
   var models: seq[DocumentTabModel]
   for index in 0 ..< count.get():
     let model = tabs.xDataSource.trySendLocal(
@@ -942,39 +951,7 @@ proc reloadData*(tabs: DocumentTabs) =
       models.add model.get()
   tabs.xTabModels = models
   tabs.xUsesTabModels = true
-  tabs.rebuildDocumentTabItemsFromModels(selected)
-
-proc indexOfDocumentTabItem*(tabs: DocumentTabs, item: DocumentTabItem): int =
-  if item.isNil:
-    return -1
-  tabs.xItems.find(item)
-
-proc indexOfVisibleTab(tabs: DocumentTabs, identifier: string): int =
-  if identifier.len > 0:
-    for index, item in tabs.xItems:
-      if item.identifier() == identifier:
-        return index
-  -1
-
-proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int =
-  if identifier.len == 0:
-    return -1
-  if not tabs.xDataSource.isNil:
-    let found = tabs.xDataSource.trySendLocal(
-      indexOfDocumentTabModelIdentifier(), (tabs: tabs, identifier: identifier)
-    )
-    if found.isSome:
-      return found.get()
-  tabs.indexOfVisibleTab(identifier)
-
-proc documentTabItemWithIdentifier*(
-    tabs: DocumentTabs, identifier: string
-): DocumentTabItem =
-  let index = tabs.indexOfDocumentTabIdentifier(identifier)
-  if index >= 0 and index < tabs.xItems.len:
-    tabs.xItems[index]
-  else:
-    nil
+  tabs.rebuildItems(selected)
 
 proc visibleModelIndex(tabs: DocumentTabs, visibleIndex: int): int =
   if visibleIndex < 0:
@@ -987,7 +964,7 @@ proc visibleModelIndex(tabs: DocumentTabs, visibleIndex: int): int =
       inc current
   -1
 
-proc indexOfModelIdentifier(tabs: DocumentTabs, identifier: string): int =
+proc findModel(tabs: DocumentTabs, identifier: string): int =
   if identifier.len == 0:
     return -1
   for index, model in tabs.xTabModels:
@@ -997,16 +974,16 @@ proc indexOfModelIdentifier(tabs: DocumentTabs, identifier: string): int =
 
 proc captureState*(tabs: DocumentTabs): DocumentTabsState =
   DocumentTabsState(
-    selectedIdentifier: tabs.selectedDocumentTabIdentifier(),
-    orderedIdentifiers: tabs.documentTabIdentifiers(),
+    selectedIdentifier: tabs.selectedIdentifier(),
+    orderedIdentifiers: tabs.identifiers(),
   )
 
-proc reorderDocumentTabItems(tabs: DocumentTabs, identifiers: openArray[string]) =
+proc reorderItems(tabs: DocumentTabs, identifiers: openArray[string]) =
   if identifiers.len == 0:
     return
   var ordered: seq[DocumentTabItem]
   for identifier in identifiers:
-    let index = tabs.indexOfDocumentTabIdentifier(identifier)
+    let index = tabs.find(identifier)
     if index >= 0:
       let item = tabs.xItems[index]
       if item notin ordered:
@@ -1016,14 +993,14 @@ proc reorderDocumentTabItems(tabs: DocumentTabs, identifiers: openArray[string])
       ordered.add item
   tabs.xItems = ordered
 
-proc reorderDocumentTabModels(tabs: DocumentTabs, identifiers: openArray[string]) =
+proc reorderModels(tabs: DocumentTabs, identifiers: openArray[string]) =
   if identifiers.len == 0:
     return
   var
     ordered: seq[DocumentTabModel]
     used: seq[int]
   for identifier in identifiers:
-    let index = tabs.indexOfModelIdentifier(identifier)
+    let index = tabs.findModel(identifier)
     if index >= 0 and index notin used:
       ordered.add tabs.xTabModels[index]
       used.add index
@@ -1034,14 +1011,14 @@ proc reorderDocumentTabModels(tabs: DocumentTabs, identifiers: openArray[string]
 
 proc restoreState*(tabs: DocumentTabs, state: DocumentTabsState) =
   if tabs.xUsesTabModels:
-    tabs.reorderDocumentTabModels(state.orderedIdentifiers)
-    tabs.rebuildDocumentTabItemsFromModels(state.selectedIdentifier)
+    tabs.reorderModels(state.orderedIdentifiers)
+    tabs.rebuildItems(state.selectedIdentifier)
   else:
-    tabs.reorderDocumentTabItems(state.orderedIdentifiers)
-    tabs.restoreDocumentTabSelection(state.selectedIdentifier)
-    tabs.reloadDocumentTabs()
+    tabs.reorderItems(state.orderedIdentifiers)
+    tabs.restoreSelection(state.selectedIdentifier)
+    tabs.refreshLayout()
 
-proc selectedItemAfterRemoval(tabs: DocumentTabs, removedIndex: int): int =
+proc selectionAfterDelete(tabs: DocumentTabs, removedIndex: int): int =
   if tabs.xItems.len == 0:
     return -1
   if tabs.xSelectedIndex == removedIndex:
@@ -1070,13 +1047,13 @@ proc didDoubleClick(tabs: DocumentTabs, item: DocumentTabItem) =
     discard
       delegate.sendLocalIfHandled(didDoubleClickDocumentTab(), (tabs: tabs, item: item))
 
-proc canCloseDocumentTab*(tabs: DocumentTabs, item: DocumentTabItem): bool =
+proc canClose*(tabs: DocumentTabs, item: DocumentTabItem): bool =
   ## Whether the standard close flow would attempt to close the tab item: the
   ## strip allows closing and the item is closeable.
   result = not item.isNil and tabs.xAllowsClosing and item.xCloseable
 
 proc shouldClose(tabs: DocumentTabs, item: DocumentTabItem, index: int): bool =
-  if not tabs.canCloseDocumentTab(item):
+  if not tabs.canClose(item):
     return false
   let delegate = tabs.delegate()
   if delegate.isNil:
@@ -1096,7 +1073,7 @@ proc didClose(tabs: DocumentTabs, item: DocumentTabItem, index: int) =
 proc shouldMove(
     tabs: DocumentTabs, item: DocumentTabItem, fromIndex, toIndex: int
 ): bool =
-  if item.isNil or not tabs.allowsTabReordering():
+  if item.isNil or not tabs.allowsReordering():
     return false
   let delegate = tabs.delegate()
   if delegate.isNil:
@@ -1117,18 +1094,18 @@ proc didMove(tabs: DocumentTabs, item: DocumentTabItem, fromIndex, toIndex: int)
       (tabs: tabs, item: item, fromIndex: fromIndex, toIndex: toIndex),
     )
 
-proc documentTabDragInfo(
+proc tabDragInfo(
     tabs: DocumentTabs, item: DocumentTabItem, location: Point
 ): DocumentTabDragInfo =
   DocumentTabDragInfo(
     item: item,
     initialIndex: tabs.xDragInitialIndex,
-    currentIndex: tabs.indexOfDocumentTabItem(item),
+    currentIndex: tabs.find(item),
     location: location,
   )
 
-proc beginDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
-  let info = tabs.documentTabDragInfo(item, location)
+proc beginTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.tabDragInfo(item, location)
   let delegate = tabs.delegate()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
@@ -1136,22 +1113,22 @@ proc beginDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: P
     )
   emit tabs.documentTabDraggingDidBegin(info)
 
-proc updateDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
-  let info = tabs.documentTabDragInfo(item, location)
+proc updateTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.tabDragInfo(item, location)
   let delegate = tabs.delegate()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(didDragDocumentTab(), (tabs: tabs, info: info))
   emit tabs.documentTabDraggingDidChange(info)
 
-proc endDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
-  let info = tabs.documentTabDragInfo(item, location)
+proc endTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.tabDragInfo(item, location)
   let delegate = tabs.delegate()
   if not delegate.isNil:
     discard
       delegate.sendLocalIfHandled(didEndDraggingDocumentTab(), (tabs: tabs, info: info))
   emit tabs.documentTabDraggingDidEnd(info)
 
-proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+proc trySelect(tabs: DocumentTabs, index: int): bool =
   if index < 0 or index >= tabs.xItems.len:
     return false
   if index == tabs.xSelectedIndex:
@@ -1168,17 +1145,7 @@ proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardab
   emit tabs.documentTabSelectionDidChange(DynamicAgent(tabs))
   true
 
-proc selectDocumentTab*(
-    tabs: DocumentTabs, item: DocumentTabItem
-): bool {.discardable.} =
-  tabs.selectDocumentTabAtIndex(tabs.indexOfDocumentTabItem(item))
-
-proc selectDocumentTabWithIdentifier*(
-    tabs: DocumentTabs, identifier: string
-): bool {.discardable.} =
-  tabs.selectDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
-
-proc selectRelativeDocumentTab*(
+proc selectRelative*(
     tabs: DocumentTabs, offset: int, wrap = false
 ): bool {.discardable.} =
   ## Select a tab by offset from the current selection. Return true when it moves.
@@ -1206,42 +1173,40 @@ proc selectRelativeDocumentTab*(
       return false
     else:
       selected + offset
-  target != selected and tabs.selectDocumentTabAtIndex(target)
+  target != selected and tabs.trySelect(target)
 
-proc addDocumentTabItem*(
-    tabs: DocumentTabs, item: DocumentTabItem
-): DocumentTabItem {.discardable.} =
+proc add*(tabs: DocumentTabs, item: DocumentTabItem): DocumentTabItem {.discardable.} =
   if item.isNil:
     return nil
   let index = tabs.xItems.len
   tabs.findUndoManager().registerCollectionInsert(
     proc(index: int) =
-      discard tabs.removeDocumentTabAtIndex(index),
+      discard tabs.delete(index),
     index,
     "Insert Tab",
   )
   if tabs.xUsesTabModels:
-    tabs.xTabModels.add item.documentTabModel()
+    tabs.xTabModels.add item.toModel()
   tabs.xItems.add item
   if tabs.xSelectedIndex < 0 and item.enabled():
     tabs.xSelectedIndex = tabs.xItems.high
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
   if tabs.xSelectedIndex == tabs.xItems.high:
     tabs.scrollTabToVisible(tabs.xSelectedIndex)
   item
 
-proc addDocumentTabItem*(
+proc add*(
     tabs: DocumentTabs, model: DocumentTabModel
 ): DocumentTabItem {.discardable.} =
   tabs.xUsesTabModels = true
   tabs.xTabModels.add model
-  tabs.rebuildDocumentTabItemsFromModels()
+  tabs.rebuildItems()
   if model.identifier.len > 0:
-    return tabs.documentTabItemWithIdentifier(model.identifier)
+    return tabs[model.identifier]
   if not model.hidden:
     return tabs.xItems[^1]
 
-proc insertDocumentTabItem*(
+proc insert*(
     tabs: DocumentTabs, item: DocumentTabItem, index: Natural
 ): DocumentTabItem {.discardable.} =
   if item.isNil:
@@ -1249,42 +1214,43 @@ proc insertDocumentTabItem*(
   let boundedIndex = min(index.int, tabs.xItems.len)
   tabs.findUndoManager().registerCollectionInsert(
     proc(index: int) =
-      discard tabs.removeDocumentTabAtIndex(index),
+      discard tabs.delete(index),
     boundedIndex,
     "Insert Tab",
   )
   if tabs.xUsesTabModels:
     let visibleIndex = tabs.visibleModelIndex(boundedIndex)
     let modelIndex = if visibleIndex >= 0: visibleIndex else: tabs.xTabModels.len
-    tabs.xTabModels.insert(item.documentTabModel(), modelIndex)
+    tabs.xTabModels.insert(item.toModel(), modelIndex)
   tabs.xItems.insert(item, boundedIndex)
   if tabs.xSelectedIndex >= boundedIndex:
     inc tabs.xSelectedIndex
   elif tabs.xSelectedIndex < 0 and item.enabled():
     tabs.xSelectedIndex = boundedIndex
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
   item
 
-proc insertDocumentTabItem*(
+proc insert*(
     tabs: DocumentTabs, model: DocumentTabModel, index: Natural
 ): DocumentTabItem {.discardable.} =
   tabs.xUsesTabModels = true
   let modelIndex = max(0, min(index.int, tabs.xTabModels.len))
   tabs.xTabModels.insert(model, modelIndex)
-  tabs.rebuildDocumentTabItemsFromModels()
+  tabs.rebuildItems()
   if model.identifier.len > 0:
-    return tabs.documentTabItemWithIdentifier(model.identifier)
+    return tabs[model.identifier]
   if not model.hidden:
     let visibleIndex = max(0, min(index.int, tabs.xItems.high))
     return tabs.xItems[visibleIndex]
 
-proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+proc delete*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+  ## Remove the tab at index, preserving order. Return false for an invalid index.
   if index < 0 or index >= tabs.xItems.len:
     return false
   let item = tabs.xItems[index]
   tabs.findUndoManager().registerCollectionRemove(
     proc(index: int, item: DocumentTabItem) =
-      discard tabs.insertDocumentTabItem(item, index.Natural),
+      discard tabs.insert(item, index.Natural),
     index,
     item,
     "Remove Tab",
@@ -1292,40 +1258,28 @@ proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardab
   if tabs.xUsesTabModels:
     let modelIndex =
       if item.identifier().len > 0:
-        tabs.indexOfModelIdentifier(item.identifier())
+        tabs.findModel(item.identifier())
       else:
         tabs.visibleModelIndex(index)
     if modelIndex >= 0:
       tabs.xTabModels.delete(modelIndex)
   tabs.xItems.delete(index)
-  tabs.xSelectedIndex = tabs.selectedItemAfterRemoval(index)
+  tabs.xSelectedIndex = tabs.selectionAfterDelete(index)
   tabs.xPressedIndex = -1
   tabs.xPressedPart = dthNone
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
   if tabs.xSelectedIndex >= 0:
     tabs.scrollTabToVisible(tabs.xSelectedIndex)
   true
 
-proc removeDocumentTab*(
-    tabs: DocumentTabs, item: DocumentTabItem
-): bool {.discardable.} =
-  tabs.removeDocumentTabAtIndex(tabs.indexOfDocumentTabItem(item))
-
-proc removeDocumentTabWithIdentifier*(
-    tabs: DocumentTabs, identifier: string
-): bool {.discardable.} =
-  tabs.removeDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
-
 proc closingTabIndex(
     tabs: DocumentTabs, item: DocumentTabItem, identifier: string
 ): int =
-  result = tabs.indexOfDocumentTabItem(item)
+  result = tabs.find(item)
   if result < 0:
-    result = tabs.indexOfVisibleTab(identifier)
+    result = tabs.find(identifier)
 
-proc performDocumentTabClose(
-    tabs: DocumentTabs, index: int, consultDelegate: bool
-): bool =
+proc performClose(tabs: DocumentTabs, index: int, consultDelegate: bool): bool =
   if index < 0 or index >= tabs.xItems.len:
     return false
   let
@@ -1344,46 +1298,35 @@ proc performDocumentTabClose(
   let currentIndex = tabs.closingTabIndex(item, identifier)
   if currentIndex >= 0:
     emit tabs.documentTabWillClose(item, currentIndex)
-    discard tabs.removeDocumentTabAtIndex(tabs.closingTabIndex(item, identifier))
+    discard tabs.delete(tabs.closingTabIndex(item, identifier))
   let closedIndex = if currentIndex >= 0: currentIndex else: index
   tabs.didClose(item, closedIndex)
   emit tabs.documentTabDidClose(item, closedIndex)
   true
 
-proc closeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
+proc closeTab*(tabs: DocumentTabs, item: DocumentTabItem): bool {.discardable.} =
   ## Request approval and close the original tab even if the delegate reloads
-  ## the strip. If approval already removed it, only emit completion.
-  tabs.performDocumentTabClose(index, consultDelegate = true)
+  ## the strip. If approval already removed it, emit completion.
+  tabs.performClose(tabs.find(item), consultDelegate = true)
 
-proc closeDocumentTab*(
-    tabs: DocumentTabs, item: DocumentTabItem
-): bool {.discardable.} =
-  tabs.closeDocumentTabAtIndex(tabs.indexOfDocumentTabItem(item))
+proc closeTab*(tabs: DocumentTabs, identifier: string): bool {.discardable.} =
+  tabs.performClose(tabs.find(identifier), consultDelegate = true)
 
-proc closeDocumentTabWithIdentifier*(
-    tabs: DocumentTabs, identifier: string
-): bool {.discardable.} =
-  tabs.closeDocumentTabAtIndex(tabs.indexOfVisibleTab(identifier))
-
-proc completeDocumentTabClose*(
-    tabs: DocumentTabs, identifier: string
-): bool {.discardable.} =
+proc completeClose*(tabs: DocumentTabs, identifier: string): bool {.discardable.} =
   ## Remove a tab after a deferred close has been approved. Emit the usual close
   ## notifications without requesting delegate approval again.
-  tabs.performDocumentTabClose(
-    tabs.indexOfVisibleTab(identifier), consultDelegate = false
-  )
+  tabs.performClose(tabs.find(identifier), consultDelegate = false)
 
-proc removeAllDocumentTabs*(tabs: DocumentTabs) =
+proc clear*(tabs: DocumentTabs) =
   tabs.xTabModels.setLen(0)
   tabs.xUsesTabModels = false
   tabs.xItems.setLen(0)
   tabs.xSelectedIndex = -1
   tabs.xPressedIndex = -1
   tabs.xScrollOffset = 0.0
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
 
-proc moveDocumentTabItem*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
+proc move*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
   if fromIndex < 0 or fromIndex >= tabs.xItems.len:
     return false
   let boundedIndex = max(0, min(toIndex, tabs.xItems.high))
@@ -1395,18 +1338,18 @@ proc moveDocumentTabItem*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
 
   tabs.findUndoManager().registerCollectionMove(
     proc(fromIndex, toIndex: int) =
-      discard tabs.moveDocumentTabItem(fromIndex, toIndex),
+      discard tabs.move(fromIndex, toIndex),
     fromIndex,
     boundedIndex,
     "Move Tab",
   )
   emit tabs.documentTabWillMove(item, fromIndex, boundedIndex)
-  let selectedItem = tabs.selectedDocumentTabItem()
+  let selectedItem = tabs.selectedItem()
   if tabs.xUsesTabModels:
     let
       fromModelIndex =
         if item.identifier().len > 0:
-          tabs.indexOfModelIdentifier(item.identifier())
+          tabs.findModel(item.identifier())
         else:
           tabs.visibleModelIndex(fromIndex)
       toModelIndex = tabs.visibleModelIndex(boundedIndex)
@@ -1416,56 +1359,56 @@ proc moveDocumentTabItem*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
       tabs.xTabModels.insert(model, max(0, min(toModelIndex, tabs.xTabModels.len)))
   tabs.xItems.delete(fromIndex)
   tabs.xItems.insert(item, boundedIndex)
-  tabs.xSelectedIndex = tabs.indexOfDocumentTabItem(selectedItem)
+  tabs.xSelectedIndex = tabs.find(selectedItem)
   tabs.xPressedIndex = boundedIndex
-  tabs.reloadDocumentTabs()
+  tabs.refreshLayout()
   tabs.scrollTabToVisible(boundedIndex)
   tabs.didMove(item, fromIndex, boundedIndex)
   emit tabs.documentTabDidMove(item, fromIndex, boundedIndex)
   true
 
-proc scrollDocumentTabsBy*(tabs: DocumentTabs, delta: float32): bool {.discardable.} =
+proc scrollBy*(tabs: DocumentTabs, delta: float32): bool {.discardable.} =
   if abs(delta) <= 0.01'f32:
     return false
   let before = tabs.xScrollOffset
   tabs.scrollOffset = before + delta
   abs(tabs.xScrollOffset - before) > 0.01'f32
 
-proc scrollDocumentTabsToStart*(tabs: DocumentTabs) =
+proc scrollToStart*(tabs: DocumentTabs) =
   tabs.scrollOffset = 0.0
 
-proc scrollDocumentTabsToEnd*(tabs: DocumentTabs) =
+proc scrollToEnd*(tabs: DocumentTabs) =
   tabs.scrollOffset = tabs.maximumScrollOffset()
 
 proc scrollButtonDelta(tabs: DocumentTabs, button: DocumentTabScrollButton): float32 =
-  let amount = max(tabs.tabViewportRect().size.width * 0.75'f32, 48.0'f32)
+  let amount = max(tabs.viewportRect().size.width * 0.75'f32, 48.0'f32)
   case button
   of dtsbPrevious:
     -amount
   of dtsbNext:
     amount
 
-proc documentTabIndexAtPoint*(tabs: DocumentTabs, point: Point): int =
-  if not tabs.tabViewportRect().contains(point):
+proc tabIndexAtPoint*(tabs: DocumentTabs, point: Point): int =
+  if not tabs.viewportRect().contains(point):
     return -1
   for index in 0 ..< tabs.xItems.len:
-    let rect = tabs.documentTabRect(index)
-    if not rect.intersection(tabs.tabViewportRect()).isEmpty and rect.contains(point):
+    let rect = tabs.tabRect(index)
+    if not rect.intersection(tabs.viewportRect()).isEmpty and rect.contains(point):
       return index
   -1
 
 protocol DocumentTabsToolTips of ViewProtocol:
   method toolTipAtPoint(tabs: DocumentTabs, point: Point): string =
-    let index = tabs.documentTabIndexAtPoint(point)
+    let index = tabs.tabIndexAtPoint(point)
     if index >= 0 and tabs.xItems[index].toolTip().len > 0:
       return tabs.xItems[index].toolTip()
     tabs.toolTip()
 
-proc tabMoveDestinationIndex(tabs: DocumentTabs, point: Point): int =
+proc moveTargetIndex(tabs: DocumentTabs, point: Point): int =
   if tabs.xItems.len == 0:
     return -1
   let
-    viewport = tabs.tabViewportRect()
+    viewport = tabs.viewportRect()
     contentX = point.x - viewport.origin.x + tabs.xScrollOffset
   for index in 0 ..< tabs.xItems.len:
     let rect = tabs.contentTabRect(index)
@@ -1481,7 +1424,7 @@ proc hitPart(
     return (dthPreviousButton, -1)
   if tabs.scrollButtonRect(dtsbNext).contains(point):
     return (dthNextButton, -1)
-  let index = tabs.documentTabIndexAtPoint(point)
+  let index = tabs.tabIndexAtPoint(point)
   if index < 0:
     return
   if tabs.closeRect(index).contains(point):
@@ -1534,7 +1477,7 @@ func tabCornerRadius(style: DocumentTabStyle): float32 =
 func tabHighlightFill(enabled: bool): Fill =
   fill(color(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
 
-proc resolvedDocumentTabAccentColor(
+proc tabAccentColor(
     item: DocumentTabItem, appearance: Appearance, styleContext: StyleContext
 ): Color =
   let configured = item.accentColor()
@@ -1542,12 +1485,12 @@ proc resolvedDocumentTabAccentColor(
     return configured
   appearance.resolveColor(styleContext, StyleMarkColor, color(0.20, 0.45, 0.92, 1.0))
 
-func documentTabSelectionAccentColor(source: Color, modified: bool): Color =
+func selectionAccentColor(source: Color, modified: bool): Color =
   let alphaScale =
     if modified: DocumentTabModifiedAccentAlpha else: DocumentTabAccentAlpha
   color(source.r, source.g, source.b, source.a * alphaScale)
 
-func documentTabSelectionIndicatorRect(
+func selectionIndicatorRect(
     tabRect: Rect,
     position: DocumentTabIndicatorPosition,
     indicatorInsets: EdgeInsets,
@@ -1596,8 +1539,7 @@ proc drawCloseButton(
     states.incl ssHighlighted
     states.incl ssPressed
   let
-    styleContext =
-      tabs.documentTabButtonStyleContext(states, classes = ["document-tab-close"])
+    styleContext = tabs.buttonStyleContext(states, classes = ["document-tab-close"])
     fillColor =
       if pressed:
         color(0.52, 0.56, 0.62, 0.85)
@@ -1661,14 +1603,12 @@ proc drawCloseButton(
     DocumentTabCloseMarkWeight,
   )
 
-proc drawDocumentTab(
-    tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int
-) =
+proc drawTab(tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int) =
   let
     item = tabs.xItems[index]
     style = tabs.effectiveStyle(item)
-    rect = tabs.documentTabRect(index)
-    viewport = tabs.tabViewportRect()
+    rect = tabs.tabRect(index)
+    viewport = tabs.viewportRect()
   if rect.intersection(viewport).isEmpty:
     return
 
@@ -1685,9 +1625,9 @@ proc drawDocumentTab(
     states.incl ssDisabled
 
   let
-    styleContext = tabs.documentTabStyleContext(item, states)
-    accentColor = item.resolvedDocumentTabAccentColor(context.appearance, styleContext)
-    textColor = documentTabTextColor(item.enabled(), selected)
+    styleContext = tabs.tabStyleContext(item, states)
+    accentColor = item.tabAccentColor(context.appearance, styleContext)
+    textColor = tabTextColor(item.enabled(), selected)
     tabTextStyle = context.appearance.tabTextStyle(styleContext, textColor)
     fillFallback = fill(tabFillColor(style, selected, pressed))
     fillValue = context.appearance.resolveFill(styleContext, fillFallback)
@@ -1737,7 +1677,7 @@ proc drawDocumentTab(
 
   if selected:
     let
-      position = documentTabIndicatorPosition(
+      position = indicatorPosition(
         context.appearance.resolveKeyword(
           styleContext, StyleSelectionIndicatorPosition, "bottom"
         )
@@ -1749,10 +1689,10 @@ proc drawDocumentTab(
         styleContext, StyleSelectionIndicatorSize, DocumentTabIndicatorSize
       )
       indicatorRect =
-        rect.documentTabSelectionIndicatorRect(position, indicatorInsets, indicatorSize)
+        rect.selectionIndicatorRect(position, indicatorInsets, indicatorSize)
       indicatorFill = context.appearance.resolveFill(
         styleContext,
-        fill(accentColor.documentTabSelectionAccentColor(item.modified())),
+        fill(accentColor.selectionAccentColor(item.modified())),
         StyleSelectionIndicatorFill,
       )
       indicatorRadius = context.appearance.resolveLength(
@@ -1771,10 +1711,10 @@ proc drawDocumentTab(
 
   let
     close = tabs.closeRect(index, context.appearance)
-    closePosition = tabs.documentTabCloseButtonPosition(item, context.appearance)
+    closePosition = tabs.closeButtonPosition(item, context.appearance)
     modifiedWidth = if item.modified(): 8.0'f32 else: 0.0'f32
     viewStyle = context.appearance.resolveTabViewStyle(styleContext)
-    horizontalInsets = documentTabHorizontalInsets(viewStyle, tabTextStyle)
+    horizontalInsets = tabHorizontalInsets(viewStyle, tabTextStyle)
     baseLeftInset = horizontalInsets.left
     baseRightInset = horizontalInsets.right
     closeReserve =
@@ -1837,9 +1777,8 @@ proc drawScrollButton(
   if not enabled:
     states.incl ssDisabled
   let
-    styleContext = tabs.documentTabButtonStyleContext(
-      states, classes = ["document-tab-scroll-button"]
-    )
+    styleContext =
+      tabs.buttonStyleContext(states, classes = ["document-tab-scroll-button"])
     fillColor =
       if pressed and enabled:
         color(0.70, 0.74, 0.82, 1.0)
@@ -1886,7 +1825,7 @@ proc drawScrollButton(
 proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
   if not tabs.xShowsHorizontalScroller or not tabs.hasOverflow():
     return
-  let viewport = tabs.tabViewportRect()
+  let viewport = tabs.viewportRect()
   if viewport.size.width <= 0.0'f32:
     return
   let
@@ -1935,7 +1874,7 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
   method draw(tabs: DocumentTabs, context: DrawContext) =
     let
       bounds = tabs.bounds()
-      barContext = tabs.documentTabBarStyleContext()
+      barContext = tabs.barStyleContext()
       barFill = context.appearance.resolveFill(barContext, fill(barFillColor()))
       barBorderColor = context.appearance.resolveColor(
         barContext, StyleBorderColor, color(0.58, 0.62, 0.70, 1.0)
@@ -1962,7 +1901,7 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
       barChrome,
       initChromeExtras(barRoot, barRenderRect, cornerRadius = barCornerRadius),
     )
-    let viewport = tabs.tabViewportRect()
+    let viewport = tabs.viewportRect()
     let clipRoot = context.addRenderRectangle(
       context.renderRectFor(viewport),
       fill(color(0.0, 0.0, 0.0, 0.0)),
@@ -1970,9 +1909,9 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
     )
     for index in 0 ..< tabs.xItems.len:
       if index != tabs.xSelectedIndex:
-        tabs.drawDocumentTab(context, clipRoot, index)
+        tabs.drawTab(context, clipRoot, index)
     if tabs.xSelectedIndex >= 0 and tabs.xSelectedIndex < tabs.xItems.len:
-      tabs.drawDocumentTab(context, clipRoot, tabs.xSelectedIndex)
+      tabs.drawTab(context, clipRoot, tabs.xSelectedIndex)
 
     tabs.drawScrollButton(context, dtsbPrevious, tabs.xPressedPart == dthPreviousButton)
     tabs.drawScrollButton(context, dtsbNext, tabs.xPressedPart == dthNextButton)
@@ -1986,12 +1925,12 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
     case hit.part
     of dthPreviousButton:
       tabs.xPressedPart = dthPreviousButton
-      discard tabs.scrollDocumentTabsBy(tabs.scrollButtonDelta(dtsbPrevious))
+      discard tabs.scrollBy(tabs.scrollButtonDelta(dtsbPrevious))
       tabs.needsDisplay = true
       true
     of dthNextButton:
       tabs.xPressedPart = dthNextButton
-      discard tabs.scrollDocumentTabsBy(tabs.scrollButtonDelta(dtsbNext))
+      discard tabs.scrollBy(tabs.scrollButtonDelta(dtsbNext))
       tabs.needsDisplay = true
       true
     of dthTab, dthClose:
@@ -2028,7 +1967,7 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
     if tabs.xPressedIndex < 0:
       return false
     if tabs.xPressedPart != dthTab or
-        not (tabs.allowsTabReordering() or tabs.allowsTabDragging()):
+        not (tabs.allowsReordering() or tabs.allowsDragging()):
       return true
     let
       deltaX = abs(event.location.x - tabs.xDragStartPoint.x)
@@ -2037,15 +1976,15 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       tabs.xDraggingTab = true
       tabs.xDraggedItem = tabs.xItems[tabs.xPressedIndex]
       tabs.xDragInitialIndex = tabs.xPressedIndex
-      if tabs.allowsTabDragging():
-        tabs.beginDocumentTabDrag(tabs.xDraggedItem, event.location)
+      if tabs.allowsDragging():
+        tabs.beginTabDrag(tabs.xDraggedItem, event.location)
     if tabs.xDraggingTab:
-      if tabs.allowsTabReordering() and tabs.tabViewportRect().contains(event.location):
-        let destination = tabs.tabMoveDestinationIndex(event.location)
+      if tabs.allowsReordering() and tabs.viewportRect().contains(event.location):
+        let destination = tabs.moveTargetIndex(event.location)
         if destination >= 0:
-          discard tabs.moveDocumentTabItem(tabs.xPressedIndex, destination)
-      if tabs.allowsTabDragging():
-        tabs.updateDocumentTabDrag(tabs.xDraggedItem, event.location)
+          discard tabs.move(tabs.xPressedIndex, destination)
+      if tabs.allowsDragging():
+        tabs.updateTabDrag(tabs.xDraggedItem, event.location)
       return true
     true
 
@@ -2061,8 +2000,8 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
     tabs.xDraggedItem = nil
 
     if wasDragging:
-      if tabs.allowsTabDragging():
-        tabs.endDocumentTabDrag(draggedItem, event.location)
+      if tabs.allowsDragging():
+        tabs.endTabDrag(draggedItem, event.location)
       tabs.xDragInitialIndex = -1
       tabs.needsDisplay = true
       return true
@@ -2072,9 +2011,9 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       tabs.needsDisplay = true
       true
     of dthTab:
-      if pressed == tabs.documentTabIndexAtPoint(event.location):
+      if pressed == tabs.tabIndexAtPoint(event.location):
         let item = tabs.xItems[pressed]
-        discard tabs.selectDocumentTabAtIndex(pressed)
+        tabs.selectedIndex = pressed
         if event.clickCount >= 2 and pressed >= 0 and pressed < tabs.xItems.len:
           tabs.didDoubleClick(item)
       else:
@@ -2083,7 +2022,7 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
     of dthClose:
       let hit = tabs.hitPart(event.location)
       if not wasDragging and hit.part == dthClose and hit.index == pressed:
-        discard tabs.closeDocumentTabAtIndex(pressed)
+        discard tabs.performClose(pressed, consultDelegate = true)
       else:
         tabs.needsDisplay = true
       true
@@ -2114,28 +2053,28 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
         -event.deltaY * tabs.lineScroll()
       else:
         0.0'f32
-    tabs.scrollDocumentTabsBy(wheelDelta)
+    tabs.scrollBy(wheelDelta)
 
   method keyDown(tabs: DocumentTabs, event: KeyEvent): bool =
     case event.key
     of keyArrowLeft:
-      tabs.selectRelativeDocumentTab(-1)
+      tabs.selectRelative(-1)
     of keyArrowRight:
-      tabs.selectRelativeDocumentTab(1)
+      tabs.selectRelative(1)
     of keyHome:
-      tabs.selectDocumentTabAtIndex(0)
+      tabs.trySelect(0)
     of keyEnd:
-      tabs.selectDocumentTabAtIndex(tabs.len() - 1)
+      tabs.trySelect(tabs.len() - 1)
     else:
       false
 
 protocol DocumentTabsLayout of ViewLayoutProtocol:
   method layoutStyleContext(tabs: DocumentTabs): StyleContext =
-    tabs.documentTabBarStyleContext()
+    tabs.barStyleContext()
 
   method layoutSubviews(tabs: DocumentTabs) =
     let
-      viewportWidth = tabs.tabViewportRect().size.width
+      viewportWidth = tabs.viewportRect().size.width
       viewportChanged = abs(viewportWidth - tabs.xScrollViewportWidth) > 0.01'f32
     tabs.scrollOffset = tabs.xScrollOffset
     if viewportChanged:
@@ -2144,7 +2083,7 @@ protocol DocumentTabsLayout of ViewLayoutProtocol:
       tabs.scrollTabToVisible(tabs.xSelectedIndex)
 
   method layoutIntrinsicContentSize(tabs: DocumentTabs): IntrinsicSize =
-    let viewStyle = tabs.documentTabViewStyle()
+    let viewStyle = tabs.tabViewStyle()
     initIntrinsicSize(
       max(tabs.contentWidth(), 180.0'f32),
       max(DocumentTabBarHeight, viewStyle.tabHeight + 4.0'f32),
@@ -2155,7 +2094,7 @@ protocol DocumentTabsAccessibility of AccessibilityProtocol:
     arTabGroup
 
   method accessibilityValue(tabs: DocumentTabs): string =
-    let item = tabs.selectedDocumentTabItem()
+    let item = tabs.selectedItem()
     if item.isNil:
       ""
     else:

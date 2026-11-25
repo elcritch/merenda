@@ -46,11 +46,10 @@ proc detachDiffViewer(
   frontend.contentView.layoutSubtreeIfNeeded()
   let
     tabs = frontend.documentTabs
-    index =
-      tabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(panel.snapshot.rootPath))
+    index = tabs.find(gitDiffTabIdentifier(panel.snapshot.rootPath))
   require index >= 0
   let
-    bounds = tabs.documentTabRect(index)
+    bounds = tabs.tabRect(index)
     start = tabs.pointToWindow(initPoint(bounds.minX + 30, bounds.minY + 12))
     stop = initPoint(
       frontend.window.frame().size.width + 180 + offset,
@@ -1857,8 +1856,7 @@ suite "Kosmo Git diff":
     require frontend.window.clickAt(point)
     check sameFile(frontend.editorView.editor.tabs()[^1].filePath.get, path)
     check frontend.editorPane.contentView == View(frontend.editorView)
-    check frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root)) >=
-      0
+    check frontend.documentTabs.find(gitDiffTabIdentifier(root)) >= 0
 
   test "file header keyboard navigation visits open buttons in both directions":
     let root = createTempDir("kosmo-diff-open-navigation-", "")
@@ -1971,27 +1969,23 @@ diff --git a/second.txt b/second.txt
     require not frontend.gitDiffPanel.isNil
     require frontend.gitDiffPanel.waitForDiff()
 
-    check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      gitDiffTabIdentifier(root)
+    check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
     check frontend.gitDiffPanel.snapshot.files.len == 1
-    let diffTabIndex =
-      frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
+    let diffTabIndex = frontend.documentTabs.find(gitDiffTabIdentifier(root))
     require diffTabIndex >= 0
-    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+    check frontend.documentTabs.models()[diffTabIndex].title ==
       "Git Diff · " & root.lastPathPart()
     require frontend.showPipedGitDiff("", root)
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
-      "Git Diff · stdin"
+    check frontend.documentTabs.models()[diffTabIndex].title == "Git Diff · stdin"
     require frontend.showGitDiff()
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+    check frontend.documentTabs.models()[diffTabIndex].title ==
       "Git Diff · " & root.lastPathPart()
     require frontend.showGitDiff(root / "menu.txt")
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
-      "Git Diff · menu.txt"
+    check frontend.documentTabs.models()[diffTabIndex].title == "Git Diff · menu.txt"
     check frontend.gitDiffPanel.snapshot.scopePath == root / "menu.txt"
     require frontend.showGitDiff()
     require frontend.gitDiffPanel.waitForDiff()
@@ -2017,8 +2011,7 @@ diff --git a/second.txt b/second.txt
       darkStyle.syntaxTokenColors[stcString]
     check item.perform(frontend.window)
     check frontend.documentTabs.len == originalTabCount
-    check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      gitDiffTabIdentifier(root)
+    check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
     let closeItem =
       app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseTabAction)
@@ -2032,15 +2025,13 @@ diff --git a/second.txt b/second.txt
     )
     require not frontend.gitDiffPanel.isNil
     check frontend.documentTabs.len == originalTabCount
-    check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      gitDiffTabIdentifier(root)
+    check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
 
-    let tabIndex =
-      frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
+    let tabIndex = frontend.documentTabs.find(gitDiffTabIdentifier(root))
     require tabIndex >= 0
     let
-      tabBounds = frontend.documentTabs.documentTabRect(tabIndex)
+      tabBounds = frontend.documentTabs.tabRect(tabIndex)
       dragStart = frontend.documentTabs.pointToWindow(
         initPoint(tabBounds.minX + 30, tabBounds.minY + 12)
       )
@@ -2065,8 +2056,7 @@ diff --git a/second.txt b/second.txt
     check item.perform(frontend.window)
     require not frontend.gitDiffPanel.isNil
     check frontend.gitDiffPanel != detachedPanel
-    check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      gitDiffTabIdentifier(root)
+    check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
 
   test "Git diff tab participates in control-W pane navigation":
@@ -2345,8 +2335,7 @@ suite "Kosmo editor repository diff":
         $frontend.gitDiffPanel.snapshot.files & " reads=" &
         $frontend.gitDiffPanel.repositoryReadCount()
       check siblingIncluded
-      let index =
-        frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
+      let index = frontend.documentTabs.find(gitDiffTabIdentifier(root))
       require index >= 0
-      check frontend.documentTabs.documentTabModels()[index].title ==
+      check frontend.documentTabs.models()[index].title ==
         "Git Diff · " & root.lastPathPart()

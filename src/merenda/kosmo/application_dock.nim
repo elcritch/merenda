@@ -364,7 +364,7 @@ proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView) =
       discard replacement.window.makeFirstResponder(replacement.editorView)
       replacement.editorView.refresh()
     return
-  let selectedItem = view.documentTabs.selectedDocumentTabItem()
+  let selectedItem = view.documentTabs.selectedItem()
   if not selectedItem.isNil:
     controller.activatePaneTab(group, selectedItem.identifier())
     return
@@ -379,10 +379,10 @@ proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGrou
     return
   controller.activeGroup = group
   group.editorView.editor.dismissCommandLine()
-  let index =
-    group.pane.documentTabs.indexOfDocumentTabIdentifier(group.selectedTabIdentifier)
-  if index >= 0:
-    discard group.pane.documentTabs.closeDocumentTabAtIndex(index)
+  let tabs = group.pane.documentTabs
+  let item = tabs[group.selectedTabIdentifier]
+  if not item.isNil:
+    discard tabs.closeTab(item)
   else:
     group.editorView.refresh()
 
@@ -500,7 +500,7 @@ proc selectRelativeTab(
     controller.selectRelativePaneTab(group, offset)
     return
   controller.activateGroup(view)
-  discard view.documentTabs.selectRelativeDocumentTab(offset, wrap = true)
+  discard view.documentTabs.selectRelative(offset, wrap = true)
 
 proc selectRelativePaneTab(
     controller: KosmoDockController, group: KosmoEditorGroup, offset: int
@@ -508,7 +508,7 @@ proc selectRelativePaneTab(
   if controller.isNil or group.isNil or group.pane.documentTabs.len == 0:
     return
   controller.activeGroup = group
-  discard group.pane.documentTabs.selectRelativeDocumentTab(offset, wrap = true)
+  discard group.pane.documentTabs.selectRelative(offset, wrap = true)
 
 proc finishPaneTabMove(
     controller: KosmoDockController,
@@ -537,7 +537,7 @@ proc finishPaneTabMove(
     else:
       source.editorView.lastTabs.setLen(0)
       source.editorView.refresh()
-      let fallback = source.pane.documentTabs.selectedDocumentTabItem()
+      let fallback = source.pane.documentTabs.selectedItem()
       if not fallback.isNil:
         controller.activatePaneTab(source, fallback.identifier(), focus = false)
   controller.activeGroup = target
@@ -553,7 +553,7 @@ proc splitCurrentPaneTab(
 ): bool =
   if controller.isNil or source.isNil or position == nimkit.dpCenter:
     return false
-  let selectedItem = source.pane.documentTabs.selectedDocumentTabItem()
+  let selectedItem = source.pane.documentTabs.selectedItem()
   if selectedItem.isNil:
     return false
   let
@@ -651,7 +651,7 @@ proc splitCurrentBuffer(
     source: KosmoEditorGroup,
     position: nimkit.DockPosition,
 ): bool =
-  let selectedItem = source.pane.documentTabs.selectedDocumentTabItem()
+  let selectedItem = source.pane.documentTabs.selectedItem()
   if selectedItem.isNil:
     return
   var id: KosmoBufferId
@@ -776,9 +776,8 @@ proc handleHostCommand(view: KosmoEditorView, command: KosmoHostCommand): bool =
         not controller.bufferIsVisibleOutside(source, id):
       let outcome = source.editorView.closeTab(id, discardChanges = true)
       if outcome.closed:
-        discard
-          source.pane.documentTabs.removeDocumentTabWithIdentifier(id.tabIdentifier)
-        controller.finishTabClose(source.editorView)
+        if not source.pane.documentTabs.completeClose(id.tabIdentifier):
+          controller.finishTabClose(source.editorView)
         return true
     controller.closeCurrentPaneTab(source)
     return true

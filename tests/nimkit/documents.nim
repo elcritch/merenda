@@ -144,14 +144,14 @@ suite "nimkit documents":
     check tabs[1.Natural].identifier == second.documentIdentifier
     check tabs[1.Natural].title == "Scratch"
     check tabs[1.Natural].modified
-    check tabs.selectedDocumentTabIdentifier == second.documentIdentifier
+    check tabs.selectedIdentifier == second.documentIdentifier
 
-    check not tabs.closeDocumentTabAtIndex(1)
+    check not tabs.closeTab(tabs[1])
     check controller.documentCount == 2
     check tabs.len == 2
 
     second.documentEdited = false
-    check tabs.closeDocumentTabAtIndex(1)
+    check tabs.closeTab(tabs[1])
     check controller.documentCount == 1
     check tabs.len == 1
     check tabs[0.Natural].identifier == first.documentIdentifier

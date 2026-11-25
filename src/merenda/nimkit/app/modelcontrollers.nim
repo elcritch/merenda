@@ -755,7 +755,7 @@ protocol ArrayControllerComboEvents from ArrayController:
       controller: ArrayController, sender: DynamicAgent
   ) {.slot.} =
     if sender of DocumentTabs:
-      let identifier = DocumentTabs(sender).selectedDocumentTabIdentifier()
+      let identifier = DocumentTabs(sender).selectedIdentifier()
       if identifier.len > 0:
         controller.xSelection.setSelectedIdentifiers([identifier])
       else:
@@ -874,20 +874,6 @@ proc documentTabModelForArrayItem(item: ModelItem): DocumentTabModel =
     representedObject = item.representedObject,
   )
 
-proc indexOfArrayDocumentTabIdentifier(
-    controller: ArrayController, identifier: string
-): int =
-  if identifier.len == 0:
-    return -1
-  var visibleIndex = 0
-  for item in controller.arrangedItems:
-    let model = item.documentTabModelForArrayItem()
-    if not model.hidden:
-      if model.identifier == identifier:
-        return visibleIndex
-      inc visibleIndex
-  -1
-
 protocol ArrayControllerDocumentTabsDataSource of DocumentTabsDataSource:
   method documentTabCount(controller: ArrayController, tabs: DocumentTabs): int =
     controller.len()
@@ -896,11 +882,6 @@ protocol ArrayControllerDocumentTabsDataSource of DocumentTabsDataSource:
       controller: ArrayController, tabs: DocumentTabs, index: int
   ): DocumentTabModel =
     controller.itemAt(index).documentTabModelForArrayItem()
-
-  method indexOfDocumentTabModelIdentifier(
-      controller: ArrayController, tabs: DocumentTabs, identifier: string
-  ): int =
-    controller.indexOfArrayDocumentTabIdentifier(identifier)
 
 protocol ArrayControllerMatrixDataSource of MatrixDataSource:
   method matrixItemCount(controller: ArrayController, matrix: Matrix): int =
@@ -999,7 +980,7 @@ proc bindMenu*(menu: Menu, controller: ArrayController) =
 proc bindDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   tabs.dataSource = controller
   if not controller.isNil:
-    tabs.selectedDocumentTabIdentifier = controller.xSelection.selectedIdentifier()
+    tabs.selectedIdentifier = controller.xSelection.selectedIdentifier()
     controller.observeProtocol(tabs, DocumentTabsEvents)
   documenttabs.reloadData(tabs)
 
@@ -1316,13 +1297,13 @@ proc syncMenu*(menu: Menu, controller: ArrayController) =
 
 proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   tabs.dataSource = DynamicAgent(nil)
-  tabs.removeAllDocumentTabs()
+  tabs.clear()
   if controller.isNil:
     return
   var models: seq[DocumentTabModel]
   for item in controller.arrangedItems:
     models.add item.documentTabModelForArrayItem()
-  tabs.documentTabModels = models
+  tabs.models = models
 
 proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
   let columnCount = max(columns, 1)

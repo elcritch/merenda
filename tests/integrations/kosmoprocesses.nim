@@ -133,7 +133,7 @@ suite "Kosmo live terminal clipboard":
       require frontend.newTerminal()
       require frontend.editorPane.contentView of TerminalView
       let firstTerminal = TerminalView(frontend.editorPane.contentView)
-      let firstIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+      let firstIdentifier = frontend.documentTabs.selectedIdentifier
       firstTerminal.session().processOutput(
         "\x1b]7;file://kosmo-test-host" & nested & "\x07"
       )
@@ -144,11 +144,9 @@ suite "Kosmo live terminal clipboard":
       require frontend.newTerminal()
       require frontend.editorPane.contentView of TerminalView
       let secondTerminal = TerminalView(frontend.editorPane.contentView)
-      let secondIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
-      let firstIndex =
-        frontend.documentTabs.indexOfDocumentTabIdentifier(firstIdentifier)
-      let secondIndex =
-        frontend.documentTabs.indexOfDocumentTabIdentifier(secondIdentifier)
+      let secondIdentifier = frontend.documentTabs.selectedIdentifier
+      let firstIndex = frontend.documentTabs.find(firstIdentifier)
+      let secondIndex = frontend.documentTabs.find(secondIdentifier)
       check secondIndex == firstIndex + 1
       let checkDirectoryCommand =
         "if [ \"$PWD\" = " & quoteShell(expectedDirectory) &
@@ -224,7 +222,7 @@ suite "Kosmo terminal split lifecycle":
       let
         terminalView = TerminalView(frontend.editorPane.contentView)
         sourceTabs = frontend.documentTabs
-        tabRect = sourceTabs.documentTabRect(sourceTabs.selectedIndex())
+        tabRect = sourceTabs.tabRect(sourceTabs.selectedIndex())
         start = sourceTabs.pointToWindow(
           initPoint(
             tabRect.minX + tabRect.size.width * 0.5'f32,
@@ -260,9 +258,7 @@ suite "Kosmo terminal split lifecycle":
       check frontend.window.mouseDownAt(terminalPoint)
       check frontend.window.mouseUpAt(terminalPoint)
       check frontend.window.firstResponder() == Responder(terminalView)
-      check groups[1].pane.documentTabs.selectedDocumentTabIdentifier.startsWith(
-        "kosmo.terminal."
-      )
+      check groups[1].pane.documentTabs.selectedIdentifier.startsWith("kosmo.terminal.")
 
       check frontend.window.dispatchKeyDown(
         KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
@@ -282,11 +278,13 @@ suite "Kosmo terminal split lifecycle":
       check terminalView.session().running()
       check duplicatedTerminal.session().running()
 
-      check duplicatedGroup.pane.documentTabs.closeDocumentTabAtIndex(0)
+      check duplicatedGroup.pane.documentTabs.closeTab(
+        duplicatedGroup.pane.documentTabs[0]
+      )
       check frontend.editorGroups().len == 2
       check duplicatedTerminal.session().state() == tssClosed
 
-      check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
+      check groups[1].pane.documentTabs.closeTab(groups[1].pane.documentTabs[0])
       check frontend.editorGroups().len == 1
       check frontend.dockView.len == 1
       check terminalView.session().state() == tssClosed

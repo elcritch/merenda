@@ -68,37 +68,37 @@ proc addTab(demo: DocumentTabsDemo, sender: DynamicAgent) =
   let style = demo.selectedStyle()
   let tab = newDemoTab("Draft " & $demo.nextNumber, "draft-" & $demo.nextNumber, style)
   tab.modified = demo.nextNumber mod 2 == 0
-  discard demo.tabs.addDocumentTabItem(tab)
-  discard demo.tabs.selectDocumentTab(tab)
+  discard demo.tabs.add(tab)
+  demo.tabs.selectedItem = tab
   demo.status.text = "Added " & tab.title
 
 proc closeSelected(demo: DocumentTabsDemo, sender: DynamicAgent) =
   discard sender
-  let item = demo.tabs.selectedDocumentTabItem()
+  let item = demo.tabs.selectedItem()
   if item.isNil:
     demo.status.text = "No selected tab"
   else:
-    discard demo.tabs.closeDocumentTab(item)
+    discard demo.tabs.closeTab(item)
 
 proc moveSelectedLeft(demo: DocumentTabsDemo, sender: DynamicAgent) =
   discard sender
   let index = demo.tabs.selectedIndex()
-  if index > 0 and demo.tabs.moveDocumentTabItem(index, index - 1):
-    discard demo.tabs.selectDocumentTabAtIndex(index - 1)
+  if index > 0 and demo.tabs.move(index, index - 1):
+    demo.tabs.selectedIndex = index - 1
 
 proc moveSelectedRight(demo: DocumentTabsDemo, sender: DynamicAgent) =
   discard sender
   let index = demo.tabs.selectedIndex()
-  if index >= 0 and demo.tabs.moveDocumentTabItem(index, index + 1):
-    discard demo.tabs.selectDocumentTabAtIndex(min(index + 1, demo.tabs.len() - 1))
+  if index >= 0 and demo.tabs.move(index, index + 1):
+    demo.tabs.selectedIndex = min(index + 1, demo.tabs.len() - 1)
 
 proc applyStyle(demo: DocumentTabsDemo, sender: DynamicAgent) =
   discard sender
-  let item = demo.tabs.selectedDocumentTabItem()
+  let item = demo.tabs.selectedItem()
   if item.isNil:
     return
   item.style = demo.selectedStyle()
-  demo.tabs.reloadDocumentTabs()
+  demo.tabs.refreshLayout()
   demo.status.text = "Restyled " & item.title
 
 proc configureFlatDocumentTabs(appearance: var Appearance) =
@@ -232,16 +232,16 @@ layout.edgeInsets = insets(22.0, 24.0)
 
 tabs.setHuggingPriority(LayoutPriorityRequired, laVertical)
 tabs.setCompressionPriority(LayoutPriorityRequired, laVertical)
-tabs.defaultTabStyle = dtsRounded
+tabs.defaultStyle = dtsRounded
 
-discard tabs.addDocumentTabItem(newDemoTab("Project Plan", "pinned", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Budget.xlsx", "budget", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Launch Copy", "copy", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Research Notes", "notes", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Screenshots", "screens", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Bug Triage", "bugs", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Release Notes", "release", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Archive", "archive", dtsRounded))
+discard tabs.add(newDemoTab("Project Plan", "pinned", dtsRounded))
+discard tabs.add(newDemoTab("Budget.xlsx", "budget", dtsRounded))
+discard tabs.add(newDemoTab("Launch Copy", "copy", dtsRounded))
+discard tabs.add(newDemoTab("Research Notes", "notes", dtsRounded))
+discard tabs.add(newDemoTab("Screenshots", "screens", dtsRounded))
+discard tabs.add(newDemoTab("Bug Triage", "bugs", dtsRounded))
+discard tabs.add(newDemoTab("Release Notes", "release", dtsRounded))
+discard tabs.add(newDemoTab("Archive", "archive", dtsRounded))
 tabs[1].modified = true
 tabs[5].modified = true
 

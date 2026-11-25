@@ -152,7 +152,8 @@ suite "Kosmo search synthetic input":
     view.refresh()
     require view.searchVisible()
     check not next.enabled()
-    require view.documentTabs.selectDocumentTabAtIndex(0)
+    view.documentTabs.selectedIndex = 0
+    require view.documentTabs.selectedIndex == 0
     view.refresh()
     check next.enabled()
     check editor.bufferCursor() == originalCursor

@@ -167,7 +167,7 @@ proc newModelControllersDemo*(app = newApplication()): ModelControllersDemo =
   bindTableView(result.tableView, result.buildController)
   bindCascadingView(result.browser, result.treeController)
   syncDocumentTabs(result.tabs, result.tabController)
-  discard result.tabs.selectDocumentTabAtIndex(0)
+  result.tabs.selectedIndex = 0
   bindComboBox(result.comboBox, result.choiceController)
   result.comboBox.selectedIndex = 1
   syncMenu(result.menu, result.choiceController)

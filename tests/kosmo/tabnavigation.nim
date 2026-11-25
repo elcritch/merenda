@@ -54,29 +54,31 @@ suite "Kosmo editor pane tab navigation":
     check frontend.openPath(firstPath)
     check frontend.openPath(secondPath)
 
-    let models = frontend.documentTabs.documentTabModels()
+    let models = frontend.documentTabs.models()
     require models.len == 2
 
     # <tab> from the first etab selects the next etab and keeps focus on the
     # strip instead of entering the editor.
-    check frontend.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    frontend.documentTabs.selectedIdentifier = models[0].identifier
+    check frontend.documentTabs.selectedIdentifier == models[0].identifier
     check frontend.window.makeFirstResponder(frontend.documentTabs)
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
     )
     check frontend.window.firstResponder() == Responder(frontend.documentTabs)
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check frontend.documentTabs.selectedIdentifier == models[1].identifier
 
     # <tab> from the last etab leaves the strip but must not enter the editor.
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
     )
     check frontend.window.firstResponder() != Responder(frontend.editorView)
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check frontend.documentTabs.selectedIdentifier == models[1].identifier
 
     # <shift><tab> from the first etab moves to the previous element and never
     # into the editor.
-    check frontend.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    frontend.documentTabs.selectedIdentifier = models[0].identifier
+    check frontend.documentTabs.selectedIdentifier == models[0].identifier
     check frontend.window.makeFirstResponder(frontend.documentTabs)
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "", modifiers: {kmShift})
@@ -104,7 +106,7 @@ suite "Kosmo editor pane tab navigation":
     check frontend.openPath(firstPath)
     check frontend.openPath(secondPath)
 
-    let models = frontend.documentTabs.documentTabModels()
+    let models = frontend.documentTabs.models()
     require models.len == 2
 
     # <shift><tab> from the second etab selects the previous etab and keeps
@@ -114,14 +116,14 @@ suite "Kosmo editor pane tab navigation":
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "", modifiers: {kmShift})
     )
     check frontend.window.firstResponder() == Responder(frontend.documentTabs)
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[0].identifier
+    check frontend.documentTabs.selectedIdentifier == models[0].identifier
 
     # <tab> cycles forward again from the first etab.
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
     )
     check frontend.window.firstResponder() == Responder(frontend.documentTabs)
-    check frontend.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check frontend.documentTabs.selectedIdentifier == models[1].identifier
 
   test "<return> on an etab enters the editor":
     let
@@ -579,25 +581,26 @@ suite "Kosmo editor pane tab navigation":
       left = panes[0]
       right = panes[1]
 
-    let models = right.documentTabs.documentTabModels()
+    let models = right.documentTabs.models()
     require models.len == 2
 
     # <right> from the first etab selects the next etab and keeps the focus on
     # the strip instead of moving to the left pane.
-    check right.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    right.documentTabs.selectedIdentifier = models[0].identifier
+    check right.documentTabs.selectedIdentifier == models[0].identifier
     check frontend.window.makeFirstResponder(right.documentTabs)
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, text: "")
     )
     check frontend.window.firstResponder() == Responder(right.documentTabs)
-    check right.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check right.documentTabs.selectedIdentifier == models[1].identifier
 
     # <left> moves back to the previous etab on the same strip.
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, text: "")
     )
     check frontend.window.firstResponder() == Responder(right.documentTabs)
-    check right.documentTabs.selectedDocumentTabIdentifier == models[0].identifier
+    check right.documentTabs.selectedIdentifier == models[0].identifier
 
     # <left> at the first etab navigates the split panes: the pane to the left.
     discard frontend.window.dispatchKeyDown(
@@ -612,7 +615,8 @@ suite "Kosmo editor pane tab navigation":
     check frontend.window.firstResponder() == Responder(right.documentTabs)
 
     # <right> at the last etab of the rightmost pane leaves the pane area.
-    check right.documentTabs.selectDocumentTabWithIdentifier(models[1].identifier)
+    right.documentTabs.selectedIdentifier = models[1].identifier
+    check right.documentTabs.selectedIdentifier == models[1].identifier
     check frontend.window.makeFirstResponder(right.documentTabs)
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, text: "")
@@ -653,7 +657,7 @@ suite "Kosmo editor pane tab navigation":
     let
       left = panes[0]
       right = panes[1]
-    require right.documentTabs.documentTabModels().len == 2
+    require right.documentTabs.models().len == 2
 
     # <tab> in the editor's normal mode returns to the pane's own etab strip,
     # not the next split's strip.
@@ -664,14 +668,15 @@ suite "Kosmo editor pane tab navigation":
     check frontend.window.firstResponder() == Responder(right.documentTabs)
 
     # The next <tab> cycles the etab selection on that strip.
-    let models = right.documentTabs.documentTabModels()
-    check right.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    let models = right.documentTabs.models()
+    right.documentTabs.selectedIdentifier = models[0].identifier
+    check right.documentTabs.selectedIdentifier == models[0].identifier
     check frontend.window.makeFirstResponder(right.documentTabs)
     discard frontend.window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, text: "")
     )
     check frontend.window.firstResponder() == Responder(right.documentTabs)
-    check right.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check right.documentTabs.selectedIdentifier == models[1].identifier
 
     # <shift><tab> from the editor returns to the same pane's strip as well.
     check frontend.window.makeFirstResponder(right.editorView)

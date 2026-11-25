@@ -159,18 +159,6 @@ protocol DocumentTabModelDataSourceSpyMethods of DocumentTabsDataSource:
     discard tabs
     spy.models[index]
 
-  method indexOfDocumentTabModelIdentifier(
-      spy: DocumentTabModelDataSourceSpy, tabs: DocumentTabs, identifier: string
-  ): int =
-    discard tabs
-    var visibleIndex = 0
-    for model in spy.models:
-      if not model.hidden:
-        if model.identifier == identifier:
-          return visibleIndex
-        inc visibleIndex
-    -1
-
 protocol DocumentTabSignalSpyEvents from DocumentTabSignalSpy:
   includes DocumentTabsEvents
 
@@ -306,7 +294,7 @@ suite "nimkit document tabs":
   test "mutable tab item changes intrinsic size without a reload":
     let tabs = newDocumentTabs(frame = rect(0, 0, 1200, 48))
     let item = newDocumentTabItem("Short", "doc")
-    discard tabs.addDocumentTabItem(item)
+    discard tabs.add(item)
     let before = tabs.resolvedIntrinsicContentSize()
     item.title = "A considerably longer document tab title for intrinsic measurement"
     check tabs.resolvedIntrinsicContentSize().width > before.width
@@ -317,7 +305,7 @@ suite "nimkit document tabs":
       represented = newResponder()
       accent = color(0.80, 0.12, 0.36, 1.0)
 
-    tabs.documentTabModels = [
+    tabs.models = [
       initDocumentTabModel(
         "doc-a",
         "Alpha",
@@ -333,8 +321,8 @@ suite "nimkit document tabs":
     ]
 
     check tabs.len == 2
-    check tabs.documentTabModels.len == 3
-    check tabs.documentTabIdentifiers() == @["doc-a", "doc-b"]
+    check tabs.models.len == 3
+    check tabs.identifiers() == @["doc-a", "doc-b"]
     check tabs[0.Natural].identifier == "doc-a"
     check tabs[0.Natural].objectValue.requireString() == "alpha"
     check tabs[0.Natural].modified
@@ -342,28 +330,29 @@ suite "nimkit document tabs":
     check tabs[0.Natural].accentColor == accent
     check tabs[0.Natural].toolTip == "Alpha document"
     check tabs[0.Natural].representedObject == DynamicAgent(represented)
-    check tabs.documentTabItemWithIdentifier("hidden").isNil
-    check tabs.indexOfDocumentTabIdentifier("doc-b") == 1
-    check tabs.selectedDocumentTabIdentifier == "doc-a"
-    check not tabs.selectDocumentTabWithIdentifier("doc-b")
+    check tabs["hidden"].isNil
+    check tabs.find("doc-b") == 1
+    check tabs.selectedIdentifier == "doc-a"
+    tabs.selectedIdentifier = "doc-b"
+    check tabs.selectedIdentifier == "doc-a"
 
-    discard tabs.addDocumentTabItem(initDocumentTabModel("doc-c", "Gamma"))
-    check tabs.selectDocumentTabWithIdentifier("doc-c")
+    discard tabs.add(initDocumentTabModel("doc-c", "Gamma"))
+    tabs.selectedItem = tabs["doc-c"]
     let state = tabs.captureState()
     check state.selectedIdentifier == "doc-c"
     check state.orderedIdentifiers == @["doc-a", "doc-b", "doc-c"]
 
-    check tabs.moveDocumentTabItem(2, 0)
-    check tabs.documentTabIdentifiers() == @["doc-c", "doc-a", "doc-b"]
-    check tabs.documentTabModels[0].identifier == "doc-c"
+    check tabs.move(2, 0)
+    check tabs.identifiers() == @["doc-c", "doc-a", "doc-b"]
+    check tabs.models[0].identifier == "doc-c"
 
     tabs.restoreState(state)
-    check tabs.documentTabIdentifiers() == @["doc-a", "doc-b", "doc-c"]
-    check tabs.selectedDocumentTabIdentifier == "doc-c"
+    check tabs.identifiers() == @["doc-a", "doc-b", "doc-c"]
+    check tabs.selectedIdentifier == "doc-c"
 
-    check tabs.removeDocumentTabWithIdentifier("doc-a")
-    check tabs.documentTabItemWithIdentifier("doc-a").isNil
-    for model in tabs.documentTabModels:
+    check tabs.delete(tabs.find("doc-a"))
+    check tabs["doc-a"].isNil
+    for model in tabs.models:
       check model.identifier != "doc-a"
 
   test "document tab style classes can select an italic typeface":
@@ -373,7 +362,7 @@ suite "nimkit document tabs":
     builder[previewSelector, StyleFontSlant] = styleKeyword(fsItalic)
     let appearance = initAppearance(builder.finish())
     tabs.appearance = appearance
-    tabs.documentTabModels =
+    tabs.models =
       [initDocumentTabModel("preview", "Preview", styleClasses = ["preview"])]
 
     let textStyle = appearance.resolveTextStyle(
@@ -383,7 +372,7 @@ suite "nimkit document tabs":
     )
 
     check tabs[0.Natural].styleClasses == @["preview"]
-    check tabs.documentTabModels[0].styleClasses == @["preview"]
+    check tabs.models[0].styleClasses == @["preview"]
     check textStyle.fontSlant == fsItalic
     let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
     check typefaceInfo.italic or typefaceInfo.oblique
@@ -401,20 +390,26 @@ suite "nimkit document tabs":
 
     tabs.dataSource = source
     check tabs.len == 2
-    check tabs.documentTabIdentifiers() == @["draft", "published"]
-    check tabs.indexOfDocumentTabIdentifier("published") == 1
-    check tabs.selectDocumentTabWithIdentifier("published")
+    check tabs.identifiers() == @["draft", "published"]
+    check tabs.find("published") == 1
+    tabs.selectedIdentifier = "published"
+    check tabs.selectedIdentifier == "published"
 
     source.models = @[
       initDocumentTabModel("published", "Published Updated"),
-      initDocumentTabModel("draft", "Draft"),
       initDocumentTabModel("archived", "Archived", hidden = true),
+      initDocumentTabModel("draft", "Draft"),
     ]
+    check tabs.find("published") == 1
     tabs.reloadData()
 
     check tabs.len == 2
+    check tabs.find("published") == 0
+    check tabs.find("archived") == -1
+    check tabs.find("draft") == 1
+    check tabs.find(tabs[1]) == 1
     check tabs[0.Natural].title == "Published Updated"
-    check tabs.selectedDocumentTabIdentifier == "published"
+    check tabs.selectedIdentifier == "published"
     check tabs.selectedIndex == 0
 
   test "document tabs expose dynamic items and selectable styles":
@@ -424,31 +419,29 @@ suite "nimkit document tabs":
         "A very long document title that needs clipping", "long", style = dtsRounded
       )
 
-    discard tabs.addDocumentTabItem(item)
-    let roundedWidth = tabs.documentTabRect(0).size.width
+    discard tabs.add(item)
+    let roundedWidth = tabs.tabRect(0).size.width
 
     item.style = dtsCompact
     item.modified = true
     item.title = "Compact changed title"
-    tabs.reloadDocumentTabs()
+    tabs.refreshLayout()
 
     check tabs.len == 1
     check tabs[0] == item
-    check tabs.selectedDocumentTabItem == item
-    check tabs.documentTabRect(0).size.width < roundedWidth
+    check tabs.selectedItem == item
+    check tabs.tabRect(0).size.width < roundedWidth
     check item.modified
 
-    discard tabs.addDocumentTabItem(
-      newDocumentTabItem("Underline", "underline", style = dtsUnderline)
-    )
-    check tabs.contentWidth() > tabs.documentTabRect(0).size.width
+    discard tabs.add(newDocumentTabItem("Underline", "underline", style = dtsUnderline))
+    check tabs.contentWidth() > tabs.tabRect(0).size.width
 
   test "tab tooltips follow the item under the pointer":
     let tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
     let item = newDocumentTabItem("notes.nim", "notes")
     item.toolTip = "/tmp/notes.nim"
-    discard tabs.addDocumentTabItem(item)
-    let frame = tabs.documentTabRect(0)
+    discard tabs.add(item)
+    let frame = tabs.tabRect(0)
     check tabs.toolTipAtPoint(initPoint(frame.x + 4, frame.y + 4)) == "/tmp/notes.nim"
 
   test "document tabs reserve width for titles and stateful font sizes":
@@ -469,18 +462,18 @@ suite "nimkit document tabs":
       selectedTitleWidth = textNaturalSize(long.title, selectedTextStyle).width
 
     tabs.appearance = appearance
-    discard tabs.addDocumentTabItem(short)
-    discard tabs.addDocumentTabItem(long)
+    discard tabs.add(short)
+    discard tabs.add(long)
 
-    check tabs.documentTabRect(1).size.width > tabs.documentTabRect(0).size.width
-    check tabs.documentTabRect(1).size.width > selectedTitleWidth
+    check tabs.tabRect(1).size.width > tabs.tabRect(0).size.width
+    check tabs.tabRect(1).size.width > selectedTitleWidth
 
   test "document tab rendering ellipsizes titles constrained by theme width":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       title = "A document title much longer than the themed maximum width"
 
-    discard tabs.addDocumentTabItem(newDocumentTabItem(title, "long-title"))
+    discard tabs.add(newDocumentTabItem(title, "long-title"))
 
     let renders = buildRenders(tabs)
     var renderedTitle = ""
@@ -502,15 +495,15 @@ suite "nimkit document tabs":
       second = newDocumentTabItem("Second", "second")
       third = newDocumentTabItem("Third", "third")
 
-    discard tabs.addDocumentTabItem(first)
-    discard tabs.addDocumentTabItem(second)
-    discard tabs.addDocumentTabItem(third)
-    discard tabs.selectDocumentTab(third)
+    discard tabs.add(first)
+    discard tabs.add(second)
+    discard tabs.add(third)
+    tabs.selectedItem = third
 
-    check tabs.moveDocumentTabItem(2, 0)
+    check tabs.move(2, 0)
     check tabs[0] == third
     check tabs[1] == first
-    check tabs.selectedDocumentTabItem == third
+    check tabs.selectedItem == third
     check tabs.selectedIndex() == 0
 
   test "document tab selection accent stays inside the tab":
@@ -524,12 +517,12 @@ suite "nimkit document tabs":
     selected.accentColor = selectedAccent
     modified.accentColor = modifiedAccent
     modified.modified = true
-    discard tabs.addDocumentTabItem(selected)
-    discard tabs.addDocumentTabItem(modified)
+    discard tabs.add(selected)
+    discard tabs.add(modified)
 
     let
       renders = buildRenders(tabs)
-      selectedRect = tabs.documentTabRect(0)
+      selectedRect = tabs.tabRect(0)
       selectedAccentFill =
         fill(color(selectedAccent.r, selectedAccent.g, selectedAccent.b, 0.72))
     var
@@ -559,7 +552,8 @@ suite "nimkit document tabs":
     check modifiedDotFound
     check not modifiedAccentRectFound
 
-    check tabs.selectDocumentTab(modified)
+    tabs.selectedItem = modified
+    check tabs.selectedItem == modified
     let
       modifiedRenders = buildRenders(tabs)
       softenedModifiedAccent =
@@ -579,8 +573,8 @@ suite "nimkit document tabs":
       themeAccent = color(0.90, 0.28, 0.54, 0.94)
 
     modified.modified = true
-    discard tabs.addDocumentTabItem(selected)
-    discard tabs.addDocumentTabItem(modified)
+    discard tabs.add(selected)
+    discard tabs.add(modified)
 
     var builder = initThemeBuilder(initTheme())
     builder["accent"] = themeAccent
@@ -615,7 +609,7 @@ suite "nimkit document tabs":
       indicatorInsets = insets(4.0, 9.0, 5.0, 11.0)
       indicatorSize = 3.0'f32
 
-    discard tabs.addDocumentTabItem(selected)
+    discard tabs.add(selected)
 
     for position in [dtipTop, dtipBottom, dtipLeft, dtipRight, dtipNone]:
       var builder = initThemeBuilder(initTheme())
@@ -627,7 +621,7 @@ suite "nimkit document tabs":
 
       let
         renders = buildRenders(tabs, initAppearance(builder.finish()))
-        tabRect = tabs.documentTabRect(0)
+        tabRect = tabs.tabRect(0)
         available = tabRect.inset(indicatorInsets)
       var indicatorRect: nimkitTypes.Rect
       for node in renders[DefaultDrawLevel].nodes:
@@ -670,7 +664,7 @@ suite "nimkit document tabs":
       tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       selected = newDocumentTabItem("Selected", "selected")
 
-    discard tabs.addDocumentTabItem(selected)
+    discard tabs.add(selected)
 
     proc closeMarkRect(theme: Theme): nimkitTypes.Rect =
       let renders = buildRenders(tabs, initAppearance(theme))
@@ -678,7 +672,7 @@ suite "nimkit document tabs":
         if node.hasDrawableOp(dkLine):
           return node.renderedRect()
 
-    let tabRect = tabs.documentTabRect(0)
+    let tabRect = tabs.tabRect(0)
     for side in [dtcbLeft, dtcbRight]:
       var builder = initThemeBuilder(initTheme())
       builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(side)
@@ -694,11 +688,11 @@ suite "nimkit document tabs":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       selected = newDocumentTabItem("Selected", "selected")
-    discard tabs.addDocumentTabItem(selected)
+    discard tabs.add(selected)
 
     let
       renders = buildRenders(tabs)
-      tabCenter = tabs.documentTabRect(0).center()
+      tabCenter = tabs.tabRect(0).center()
     var
       markRects: seq[nimkitTypes.Rect]
       closeTextFound = false
@@ -727,30 +721,30 @@ suite "nimkit document tabs":
 
     tabs.delegate = delegate
     signals.observeProtocol(tabs, DocumentTabsEvents)
-    discard tabs.addDocumentTabItem(first)
-    discard tabs.addDocumentTabItem(second)
-    discard tabs.addDocumentTabItem(third)
+    discard tabs.add(first)
+    discard tabs.add(second)
+    discard tabs.add(third)
 
     delegate.denySelect = "second"
-    check not tabs.selectDocumentTab(second)
-    check tabs.selectedDocumentTabItem == first
+    tabs.selectedItem = second
+    check tabs.selectedItem == first
     check delegate.shouldSelectCount == 1
     check signals.changedCount == 0
 
     delegate.denySelect = ""
-    check tabs.selectDocumentTab(second)
-    check tabs.selectedDocumentTabItem == second
+    tabs.selectedItem = second
+    check tabs.selectedItem == second
     check delegate.didSelectCount == 1
     check signals.changingCount == 1
     check signals.changedCount == 1
 
     delegate.denyMoveTo = 0
-    check not tabs.moveDocumentTabItem(1, 0)
+    check not tabs.move(1, 0)
     check delegate.shouldMoveCount == 1
     check signals.didMoveCount == 0
 
     delegate.denyMoveTo = -1
-    check tabs.moveDocumentTabItem(1, 2)
+    check tabs.move(1, 2)
     check tabs[2] == second
     check delegate.didMoveCount == 1
     check signals.willMoveCount == 1
@@ -759,12 +753,12 @@ suite "nimkit document tabs":
     check signals.lastToIndex == 2
 
     delegate.denyClose = "second"
-    check not tabs.closeDocumentTab(second)
+    check not tabs.closeTab(second)
     check tabs.len == 3
     check signals.didCloseCount == 0
 
     delegate.denyClose = ""
-    check tabs.closeDocumentTab(second)
+    check tabs.closeTab(second)
     check tabs.len == 2
     check delegate.didCloseCount == 1
     check signals.willCloseCount == 1
@@ -778,14 +772,14 @@ suite "nimkit document tabs":
       second = initDocumentTabModel("second", "Second")
       delegate = newDelegateSpy()
       signals = newSignalSpy()
-    tabs.documentTabModels = [first, second]
+    tabs.models = [first, second]
     tabs.delegate = delegate
     signals.observeProtocol(tabs, DocumentTabsEvents)
     delegate.onCloseApproval = proc(strip: DocumentTabs) =
-      strip.documentTabModels = [second, first]
+      strip.models = [second, first]
 
-    check tabs.closeDocumentTabAtIndex(1)
-    check tabs.documentTabIdentifiers() == @["first"]
+    check tabs.closeTab(tabs[1])
+    check tabs.identifiers() == @["first"]
     check signals.lastIndex == 0
     check signals.lastItem.identifier == "second"
     check signals.willCloseCount == 1
@@ -796,16 +790,16 @@ suite "nimkit document tabs":
       tabs = newDocumentTabs()
       delegate = newDelegateSpy()
       signals = newSignalSpy()
-    discard tabs.addDocumentTabItem(newDocumentTabItem("First", "first"))
-    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+    discard tabs.add(newDocumentTabItem("First", "first"))
+    discard tabs.add(newDocumentTabItem("Second", "second"))
     tabs.delegate = delegate
     signals.observeProtocol(tabs, DocumentTabsEvents)
     delegate.denyClose = "first"
-    check not tabs.closeDocumentTabWithIdentifier("first")
-    check tabs.moveDocumentTabItem(0, 1)
-    check tabs.completeDocumentTabClose("first")
-    check not tabs.completeDocumentTabClose("first")
-    check tabs.documentTabIdentifiers() == @["second"]
+    check not tabs.closeTab("first")
+    check tabs.move(0, 1)
+    check tabs.completeClose("first")
+    check not tabs.completeClose("first")
+    check tabs.identifiers() == @["second"]
     check delegate.shouldCloseCount == 1
     check delegate.didCloseCount == 1
     check signals.willCloseCount == 1
@@ -815,19 +809,19 @@ suite "nimkit document tabs":
     let
       tabs = newDocumentTabs()
       delegate = newDelegateSpy()
-    discard tabs.addDocumentTabItem(newDocumentTabItem("First", "first"))
-    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+    discard tabs.add(newDocumentTabItem("First", "first"))
+    discard tabs.add(newDocumentTabItem("Second", "second"))
     tabs.delegate = delegate
-    check not tabs.selectRelativeDocumentTab(-1)
-    check tabs.selectRelativeDocumentTab(-1, wrap = true)
-    check tabs.selectedDocumentTabIdentifier() == "second"
-    check not tabs.selectRelativeDocumentTab(1)
+    check not tabs.selectRelative(-1)
+    check tabs.selectRelative(-1, wrap = true)
+    check tabs.selectedIdentifier() == "second"
+    check not tabs.selectRelative(1)
     delegate.denySelect = "first"
-    check not tabs.selectRelativeDocumentTab(1, wrap = true)
-    check tabs.selectedDocumentTabIdentifier() == "second"
+    check not tabs.selectRelative(1, wrap = true)
+    check tabs.selectedIdentifier() == "second"
     delegate.denySelect = ""
-    check tabs.selectRelativeDocumentTab(1, wrap = true)
-    check tabs.selectedDocumentTabIdentifier() == "first"
+    check tabs.selectRelative(1, wrap = true)
+    check tabs.selectedIdentifier() == "first"
 
   test "document tab dragging reports a stable item outside the tab bar":
     let
@@ -841,11 +835,11 @@ suite "nimkit document tabs":
     root.addSubview(tabs)
     tabs.delegate = delegate
     signals.observeProtocol(tabs, DocumentTabsEvents)
-    discard tabs.addDocumentTabItem(first)
-    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+    discard tabs.add(first)
+    discard tabs.add(newDocumentTabItem("Second", "second"))
 
     let
-      tabRect = tabs.documentTabRect(0)
+      tabRect = tabs.tabRect(0)
       start = tabs.pointToWindow(tabRect.center())
       outside = tabs.pointToWindow(initPoint(tabRect.center().x + 8.0'f32, 72))
     check window.mouseDownAt(start)
@@ -874,13 +868,13 @@ suite "nimkit document tabs":
     window.setContentView(root)
     root.addSubview(tabs)
     tabs.delegate = delegate
-    discard tabs.addDocumentTabItem(first)
-    discard tabs.addDocumentTabItem(second)
+    discard tabs.add(first)
+    discard tabs.add(second)
 
-    let point = tabs.pointToWindow(tabs.documentTabRect(1).center())
+    let point = tabs.pointToWindow(tabs.tabRect(1).center())
     check window.mouseDownAt(point, clickCount = 2)
     check window.mouseUpAt(point, clickCount = 2)
-    check tabs.selectedDocumentTabItem == second
+    check tabs.selectedItem == second
     check delegate.didSelectCount == 1
     check delegate.didDoubleClickCount == 1
     check delegate.lastItem == second
@@ -893,9 +887,7 @@ suite "nimkit document tabs":
       signals = newSignalSpy()
 
     for index in 0 .. 7:
-      discard tabs.addDocumentTabItem(
-        newDocumentTabItem("Document " & $index, "doc-" & $index)
-      )
+      discard tabs.add(newDocumentTabItem("Document " & $index, "doc-" & $index))
     signals.observeProtocol(tabs, DocumentTabsEvents)
     root.addSubview(tabs)
     window.setContentView(root)
@@ -914,7 +906,7 @@ suite "nimkit document tabs":
     check tabs.scrollOffset() > beforeWheel
     check signals.lastOffset == tabs.scrollOffset()
 
-    tabs.scrollDocumentTabsToEnd()
+    tabs.scrollToEnd()
     let maxOffset = tabs.maximumScrollOffset()
     check tabs.scrollOffset() == maxOffset
 
@@ -927,10 +919,10 @@ suite "nimkit document tabs":
       tabs = newDocumentTabs(frame = rect(0, 0, 100, 34))
       signals = newSignalSpy()
       title = "native_abi.nim"
-    discard tabs.addDocumentTabItem(newDocumentTabItem(title, "native"))
+    discard tabs.add(newDocumentTabItem(title, "native"))
     discard buildRenders(tabs)
     require tabs.hasOverflow()
-    tabs.scrollDocumentTabsToEnd()
+    tabs.scrollToEnd()
     discard buildRenders(tabs)
     require tabs.scrollOffset() > 0.0'f32
     signals.observeProtocol(tabs, DocumentTabsEvents)
@@ -939,8 +931,8 @@ suite "nimkit document tabs":
     let renders = buildRenders(tabs)
     check not tabs.hasOverflow()
     check tabs.scrollOffset() == 0.0'f32
-    check tabs.documentTabRect(0).minX == tabs.tabViewportRect().minX
-    check tabs.documentTabIndexAtPoint(tabs.documentTabRect(0).center()) == 0
+    check tabs.tabRect(0).minX == tabs.viewportRect().minX
+    check tabs.tabIndexAtPoint(tabs.tabRect(0).center()) == 0
     check signals.scrollCount == 1
     check signals.lastOffset == 0.0'f32
 
@@ -955,28 +947,25 @@ suite "nimkit document tabs":
   test "document tabs keep selected headers visible when a pane narrows":
     let tabs = newDocumentTabs(frame = rect(0, 0, 640, 34))
     for index in 0 .. 7:
-      discard tabs.addDocumentTabItem(
-        newDocumentTabItem("Document " & $index, "doc-" & $index)
-      )
-    require tabs.selectDocumentTabAtIndex(7)
+      discard tabs.add(newDocumentTabItem("Document " & $index, "doc-" & $index))
+    tabs.selectedIndex = 7
+    require tabs.selectedIndex == 7
     discard buildRenders(tabs)
 
     tabs.setFrameFromLayout(rect(0, 0, 260, 34))
     discard buildRenders(tabs)
     let
-      selectedRect = tabs.documentTabRect(tabs.selectedIndex())
-      viewport = tabs.tabViewportRect()
+      selectedRect = tabs.tabRect(tabs.selectedIndex())
+      viewport = tabs.viewportRect()
     check rectsClose(selectedRect.intersection(viewport), selectedRect)
-    check tabs.documentTabIndexAtPoint(selectedRect.center()) == 7
+    check tabs.tabIndexAtPoint(selectedRect.center()) == 7
 
   test "document tab layout preserves deliberate scrolling at unchanged width":
     let tabs = newDocumentTabs(frame = rect(0, 0, 260, 34))
     for index in 0 .. 7:
-      discard tabs.addDocumentTabItem(
-        newDocumentTabItem("Document " & $index, "doc-" & $index)
-      )
+      discard tabs.add(newDocumentTabItem("Document " & $index, "doc-" & $index))
     discard buildRenders(tabs)
-    tabs.scrollDocumentTabsToEnd()
+    tabs.scrollToEnd()
     let offset = tabs.scrollOffset()
     require offset > 0.0'f32
 
@@ -987,13 +976,10 @@ suite "nimkit document tabs":
 
   test "document tab rendering includes visible labels and clipped overflow":
     let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
+    discard tabs.add(newDocumentTabItem("Plan", "plan", style = dtsRounded))
+    discard tabs.add(newDocumentTabItem("Budget", "budget", style = dtsPill))
     discard
-      tabs.addDocumentTabItem(newDocumentTabItem("Plan", "plan", style = dtsRounded))
-    discard
-      tabs.addDocumentTabItem(newDocumentTabItem("Budget", "budget", style = dtsPill))
-    discard tabs.addDocumentTabItem(
-      newDocumentTabItem("Long Research Notes", "notes", style = dtsUnderline)
-    )
+      tabs.add(newDocumentTabItem("Long Research Notes", "notes", style = dtsUnderline))
 
     let renders = buildRenders(tabs)
     var
@@ -1026,7 +1012,7 @@ suite "nimkit document tabs":
   test "document tab scroll buttons resolve document tab button theme fill":
     let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
     for index in 0 .. 4:
-      discard tabs.addDocumentTabItem(newDocumentTabItem("Document " & $index))
+      discard tabs.add(newDocumentTabItem("Document " & $index))
     tabs.scrollOffset = 10.0'f32
 
     var builder = initThemeBuilder(initTheme())
@@ -1058,8 +1044,8 @@ suite "nimkit document tabs":
       special = newDocumentTabItem("Special", "special")
 
     special.styleId = "special-doc"
-    discard tabs.addDocumentTabItem(first)
-    discard tabs.addDocumentTabItem(special)
+    discard tabs.add(first)
+    discard tabs.add(special)
 
     var builder = initThemeBuilder(initAquaTheme())
     builder.installChrome(DocumentTabChromeName, newDocumentTabChromeSpy())

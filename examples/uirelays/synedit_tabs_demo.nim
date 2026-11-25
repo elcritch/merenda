@@ -258,15 +258,15 @@ proc newSynEditTabsDemoView(): tuple[root: View, editor: SynEditRelaysView] =
     layout = newStackView(laVertical)
 
   tabs.delegate = demo
-  tabs.defaultTabStyle = dtsRounded
+  tabs.defaultStyle = dtsRounded
   tabs.allowsClosing = false
-  tabs.allowsTabReordering = false
+  tabs.allowsReordering = false
   tabs.setHuggingPriority(LayoutPriorityRequired, laVertical)
   tabs.setCompressionPriority(LayoutPriorityRequired, laVertical)
 
   for buffer in buffers:
-    discard tabs.addDocumentTabItem(buffer.newDemoTab())
-  discard tabs.selectDocumentTabAtIndex(0)
+    discard tabs.add(buffer.newDemoTab())
+  tabs.selectedIndex = 0
 
   editor.setHuggingPriority(LayoutPriorityLow, laVertical)
   editor.setCompressionPriority(LayoutPriorityLow, laVertical)

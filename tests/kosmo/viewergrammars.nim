@@ -174,7 +174,7 @@ suite "Kosmo installed viewer grammars":
       previews.add frontend.editorPane.markdownView
     let
       cachedPreview = frontend.editorPane.markdownView
-      cachedTab = frontend.documentTabs.selectedDocumentTabIdentifier
+      cachedTab = frontend.documentTabs.selectedIdentifier
     let diff = newKosmoGitDiffPanel(
       parseGitDiff(
         "diff --git a/query.sql b/query.sql\n@@ -0,0 +1 @@\n+" & SqlSource & "\n"
@@ -191,7 +191,8 @@ suite "Kosmo installed viewer grammars":
       )
     )
     require diff.waitForDiff()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(cachedTab)
+    frontend.documentTabs.selectedIdentifier = cachedTab
+    require frontend.documentTabs.selectedIdentifier == cachedTab
     require cachedPreview.waitForMarkdownParsing()
     let originalOwner = cachedPreview.markdownDocumentOwner()
     require not originalOwner.isNil
