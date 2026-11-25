@@ -32,6 +32,8 @@
 - DirectView `onAction` and `onChange` handlers take the typed widget first,
   followed by the receiver and optional context. The receiver parameter can use
   a base type such as `Responder` or `DynamicAgent`.
+- Pass an `ActionSelector` or a named sender-first proc directly to DirectView
+  `onAction` and `onChange`, as shown in the form editor examples.
 - Allow helpers to call `bindTextField` and `bindValue` on a mounted DirectView
   widget to use its existing scope. Bindings stop updating when the owning
   composition is released.

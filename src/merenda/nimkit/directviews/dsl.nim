@@ -1,6 +1,7 @@
 ## Direct typed widget composition with structural slots and keyed siblings.
 import std/[macros, strutils]
 from sigils/selectors import DynamicAgent
+from ../foundation/selectors import ActionSelector
 import ../foundation/types
 import ../view/views
 import ../containers/stackviews
@@ -28,7 +29,7 @@ proc takeActionParameter(params, callback: NimNode): tuple[name, typ: NimNode] =
 
 proc directAction(widget, receiver, context, callback: NimNode): NimNode =
   if callback.kind notin {nnkDo, nnkLambda}:
-    error("DirectView handlers require an inline proc", callback)
+    error("DirectView actions with explicit context require an inline proc", callback)
   let
     handler = callback.copyNimTree()
     params = handler.params
@@ -56,8 +57,27 @@ proc directAction(widget, receiver, context, callback: NimNode): NimNode =
     else:
       {.error: "The first DirectView handler parameter must have the widget's type".}
 
+proc bindDirectAction[R: Responder](
+    _: View, receiver: R, action: ActionSelector
+): ViewAction =
+  initViewAction(action, receiver)
+
+proc invokeDirectHandler[W: View, R: Responder, S, O: DynamicAgent](
+    receiver: R, handler: proc(sender: S, owner: O) {.nimcall.}, sender: DynamicAgent
+) {.nimcall.} =
+  if not handler.isNil and sender of W:
+    handler(W(sender), receiver)
+
+proc bindDirectAction[W: View, R: Responder, S, O: DynamicAgent](
+    _: W, receiver: R, handler: proc(sender: S, owner: O) {.nimcall.}
+): ViewAction =
+  viewAction(receiver, handler, invokeDirectHandler[W, R, S, O])
+
 macro directViewAction(widget, receiver: typed, handler: untyped): untyped =
-  directAction(widget, receiver, newEmptyNode(), handler)
+  if handler.kind in {nnkDo, nnkLambda}:
+    directAction(widget, receiver, newEmptyNode(), handler)
+  else:
+    newCall(bindSym"bindDirectAction", widget, receiver, handler)
 
 macro directViewAction(widget, receiver, context: typed, handler: untyped): untyped =
   directAction(widget, receiver, context, handler)

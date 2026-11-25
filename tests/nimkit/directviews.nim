@@ -30,6 +30,14 @@ type
     xCaption: string
     writes: int
 
+protocol DirectSelectorActions from DirectController:
+  method recordDirectWidget(controller: DirectController, args: ActionArgs) =
+    if args.sender of Button:
+      Button(args.sender).title = "Clicked"
+      inc controller.calls
+    elif args.sender of TextField:
+      controller.calls += TextField(args.sender).stringValue.len
+
 proc readOwnedText(owner: TextOwner): string =
   owner.text{}
 
@@ -650,6 +658,10 @@ suite "direct view composition":
       owner = DirectController()
       host = newDirectView()
     initResponder(owner)
+    proc updateFocus(sender: Responder, receiver: Responder) =
+      if sender of TextField:
+        receiver.acceptsFirstResponder = TextField(sender).stringValue().len > 0
+
     host.viewBody:
       VStack:
         Button("Add"):
@@ -658,8 +670,7 @@ suite "direct view composition":
             this.title = "Added"
             DirectController(receiver).calls += amount
         TextField:
-          onChange(owner) do(this: TextField, receiver: Responder):
-            receiver.acceptsFirstResponder = this.stringValue().len > 0
+          onChange(owner, updateFocus)
     let
       row = StackView(host.arrangedSubviews[0])
       button = Button(row.arrangedSubviews[0])
@@ -674,6 +685,34 @@ suite "direct view composition":
     field.stringValue = "new"
     check owner.calls == 7
     check owner.acceptsFirstResponder()
+
+  test "selector bindings deliver the widget to a weak protocol receiver":
+    let host = newDirectView()
+    var observed: BackRef[DirectController]
+    var button: Button
+    block:
+      let owner = DirectController()
+      initResponder(owner)
+      discard owner.withProto()
+      observed.target = owner
+      let changeAction = recordDirectWidget()
+      host.viewBody:
+        Button("Run"):
+          onAction(owner, recordDirectWidget())
+        TextField:
+          onChange(owner, changeAction)
+      button = Button(host.arrangedSubviews[0])
+      let field = TextField(host.arrangedSubviews[1])
+      require button.tryToPerform(performClick(), button)
+      check button.title == "Clicked"
+      check owner.calls == 1
+      field.stringValue = "new"
+      check owner.calls == 4
+
+    check observed.isNil
+    button.title = "Released"
+    discard button.tryToPerform(performClick(), button)
+    check button.title == "Released"
 
   test "removed change handlers and expired receivers are inert":
     var observed: BackRef[DirectController]
@@ -842,7 +881,11 @@ suite "direct view composition":
     discard drainMainThreadWork()
     check field.stringValue == "initial"
 
-  test "an expired explicit receiver does not invoke a handler":
+  test "a named button handler keeps its receiver weak":
+    proc countClick(button: Button, owner: DirectController) =
+      button.title = "Clicked"
+      inc owner.calls
+
     var observed: BackRef[DirectController]
     let session = newDirectViewSession(newStackView())
     var button: Button
@@ -852,13 +895,15 @@ suite "direct view composition":
       observed.target = owner
       session.viewBody:
         Button:
-          onAction(owner) do(this: Button, receiver: DirectController):
-            inc receiver.calls
+          onAction(owner, countClick)
       button = Button(session.host.arrangedSubviews[0])
       discard button.send(performClick(), ActionArgs(sender: button))
+      check button.title == "Clicked"
       check owner.calls == 1
     check observed.isNil
+    button.title = "Released"
     discard button.send(performClick(), ActionArgs(sender: button))
+    check button.title == "Released"
     session.close()
 
   test "detached builders yield fresh Dragology geometry without live effects":

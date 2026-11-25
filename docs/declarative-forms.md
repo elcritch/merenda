@@ -1,9 +1,13 @@
 # Form drafts and MVC experiment
 
-Run `nim ic -r examples/form_editors.nim`. Two panels share an editing owner;
-a third has an independent draft of the same document. The first and third use
-DirectView actions. The second compares ViewSpec actions around the same
-DirectView-owned form: ViewSpec has no custom FormView leaf adapter yet.
+Run `nim ic -r examples/form_editors.nim` to try a form with DirectView buttons
+that send protocol selectors such as `onAction(panel, apply())`.
+
+Run `nim ic -r examples/form_editors_procs.nim` to compare named callbacks such
+as `onAction(panel, apply)`.
+Two panels share an editing owner, and a third has an independent draft of the
+same document. The first and third use DirectView toolbars. The second uses a
+ViewSpec toolbar around the same DirectView-owned form.
 
 The example deliberately uses ordinary helpers instead of introducing a public
 form DSL. `newDraftForm` composes an actual FormView whose rows are created through

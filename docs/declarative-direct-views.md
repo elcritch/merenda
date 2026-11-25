@@ -107,6 +107,18 @@ Button("Remove"):
     owner.removeTask(id)
 ```
 
+Pass a named, non-capturing proc to `onAction(panel, apply)` or
+`onChange(panel, update)` when the handler only needs the sender and receiver.
+Each parameter can use its concrete type or a base type such as `Responder`.
+See the [named callback form editor](../examples/form_editors_procs.nim).
+
+Use `onAction(receiver, apply())` or `onChange(receiver, textEdited())` to send
+an existing action selector directly to a responder. A protocol method that
+takes `ActionArgs` and returns no value provides an `ActionSelector` through
+its generated accessor, such as `apply()`. The method receives the emitting
+widget in `args.sender`. A variable holding an `ActionSelector` works too. See the
+[protocol form editor](../examples/form_editors.nim).
+
 Property ownership is explicit:
 
 - Ordinary setters run as written. Omitting a setter leaves its previous value.

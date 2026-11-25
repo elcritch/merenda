@@ -1,23 +1,14 @@
-## FormView is an ordinary leaf composed alongside either declarative host.
-## Async Save writes only accepted data into a private temporary directory.
-## Save / Close is the separate in-memory draft checkpoint.
+## Run `nim ic -r examples/form_editors.nim` to try form actions
+## registered as protocol selectors.
 import std/[os, tempfiles]
-import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/declarative
 import merenda/nimkit/directviews
 import ./form_drafts
 
 type FormPanel = ref object of Responder
   draft: FormDraft
   savePath: string
-  scope: BindingScope
-  form: FormView
   pending: FormValidation
-
-proc newFormPanel(draft: FormDraft, savePath: string): FormPanel =
-  result = FormPanel(draft: draft, savePath: savePath)
-  initResponder(result)
 
 proc configureForm(form: FormView, draft: FormDraft) =
   if form.rows.len == 0:
@@ -47,128 +38,80 @@ proc configureForm(form: FormView, draft: FormDraft) =
     label.stringValue = value
 
 proc newDraftForm*(draft: FormDraft): DirectView =
-  ## The FormView node owns its subscriptions; the draft outlives this widget.
+  ## The FormView node owns the subscriptions, and the draft outlives the widget.
   result = newDirectView()
   result.viewBody:
     FormView:
       configureForm(this, draft)
 
-proc apply(panel: FormPanel) =
-  discard panel.draft.apply()
+protocol FormEditorActions from FormPanel:
+  method apply(panel: FormPanel, args: ActionArgs) =
+    discard panel.draft.apply()
 
-proc cancel(panel: FormPanel) =
-  panel.draft.cancel()
+  method undoAccepted(panel: FormPanel, args: ActionArgs) =
+    discard panel.draft.document.undoManagerFor().performUndo()
 
-proc queue(panel: FormPanel) =
-  panel.pending = panel.draft.requestValidation()
+  method cancel(panel: FormPanel, args: ActionArgs) =
+    panel.draft.cancel()
 
-proc complete(panel: FormPanel) =
-  discard panel.pending.complete()
+  method saveAccepted(panel: FormPanel, args: ActionArgs) =
+    discard panel.draft.document.startSave(panel.savePath)
 
-proc external(panel: FormPanel) =
-  panel.draft.document.accept(99)
+  method saveDraftAndClose(panel: FormPanel, args: ActionArgs) =
+    discard panel.draft.saveAndClose()
 
-proc undo(panel: FormPanel) =
-  discard panel.draft.document.undoManagerFor().performUndo()
+  method queueValidation(panel: FormPanel, args: ActionArgs) =
+    panel.pending = panel.draft.requestValidation()
 
-proc saveFile(panel: FormPanel) =
-  discard panel.draft.document.startSave(panel.savePath)
+  method completeValidation(panel: FormPanel, args: ActionArgs) =
+    discard panel.pending.complete()
 
-proc save(panel: FormPanel) =
-  discard panel.draft.saveAndClose()
+  method acceptExternalValue(panel: FormPanel, args: ActionArgs) =
+    panel.draft.document.accept(99)
 
-proc directActions(panel: FormPanel): DirectView =
+proc formActions(panel: FormPanel): DirectView =
   result = newDirectView()
   result.viewBody:
-    VStack:
-      HStack:
-        Button("Apply", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.apply()
-        Button("Undo", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.undo()
-        Button("Cancel", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.cancel()
-        Button("Async Save accepted", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.saveFile()
-        Button("Save / Close", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.save()
-      HStack:
-        Button("Queue validation", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.queue()
-        Button("Complete", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.complete()
-        Button("External 99", acceptsFirstResponder = false):
-          onAction(panel) do(this: Button, p: FormPanel):
-            p.external()
-
-proc specActions(panel: FormPanel): DeclarativeView =
-  let body = viewBody:
-    VStack:
-      HStack:
-        Button("Apply", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.apply()
-        Button("Undo", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.undo()
-        Button("Cancel", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.cancel()
-        Button("Async Save accepted", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.saveFile()
-        Button("Save / Close", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.save()
-      HStack:
-        Button("Queue validation", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.queue()
-        Button("Complete", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.complete()
-        Button("External 99", focusable = false):
-          onAction(panel) do(p: FormPanel, sender: DynamicAgent):
-            p.external()
-  newDeclarativeView(body)
+    HStack:
+      Button("Apply", acceptsFirstResponder = false):
+        onAction(panel, apply())
+      Button("Undo", acceptsFirstResponder = false):
+        onAction(panel, undoAccepted())
+      Button("Cancel", acceptsFirstResponder = false):
+        onAction(panel, cancel())
+      Button("Async Save accepted", acceptsFirstResponder = false):
+        onAction(panel, saveAccepted())
+      Button("Save / Close", acceptsFirstResponder = false):
+        onAction(panel, saveDraftAndClose())
+    HStack:
+      Button("Queue validation", acceptsFirstResponder = false):
+        onAction(panel, queueValidation())
+      Button("Complete", acceptsFirstResponder = false):
+        onAction(panel, completeValidation())
+      Button("External 99", acceptsFirstResponder = false):
+        onAction(panel, acceptExternalValue())
 
 proc runFormEditors*() =
-  let savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"
-  let document = newFormDocument(12)
-  # Use the same draft here for shared edits; make a second draft for local edits.
-  let shared = newFormDraft(document)
-  let first = newFormPanel(shared, savePath)
-  let second = newFormPanel(shared, savePath)
-  let local = newFormPanel(newFormDraft(document), savePath)
+  let
+    document = newFormDocument(12)
+    draft = newFormDraft(document)
+    savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"
+    panel = FormPanel(draft: draft, savePath: savePath)
+  initResponder(panel)
+  discard panel.withProto()
+
   let root = newStackView(laVertical)
   root.spacing = 12
   root.edgeInsets = insets(12)
-  root.addArrangedSubview(newLabel("Async Save writes accepted data to: " & savePath))
   root.addArrangedSubview(
-    newLabel("Shared draft: DirectView"),
-    newDraftForm(first.draft),
-    directActions(first),
-  )
-  root.addArrangedSubview(
-    newLabel("Shared draft: ViewSpec toolbar + DirectView form"),
-    newDraftForm(second.draft),
-    specActions(second),
-  )
-  root.addArrangedSubview(
-    newLabel("Independent local draft"), newDraftForm(local.draft), directActions(local)
+    newLabel("Async Save writes accepted data to: " & savePath),
+    newDraftForm(draft),
+    formActions(panel),
   )
   sharedApplication().runWindow(
-    newWindow("Form drafts", frame = rect(80, 80, 850, 650)), root
+    newWindow("Form editor protocol", frame = rect(80, 80, 800, 330)), root
   )
-  shared.dispose()
-  local.draft.dispose()
+  draft.dispose()
 
 when isMainModule and not defined(merendaTests):
   runFormEditors()
