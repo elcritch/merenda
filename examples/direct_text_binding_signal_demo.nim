@@ -13,12 +13,12 @@ proc textChanged(controller: TextController) {.signal.}
 
 # The binding calls readText to fill the field when it first appears
 # and to refresh it after the controller signals a change.
-proc readText(controller: TextController, _: tuple[]): string =
+proc readText(controller: TextController): string =
   controller.text
 
 # When you type, the field sends its text to editText. The check keeps
 # repeated values from triggering another write and notification.
-proc editText(controller: TextController, _: tuple[], text: string) =
+proc editText(controller: TextController, text: string) =
   if controller.text != text:
     controller.text = text
     emit controller.textChanged()
@@ -33,13 +33,11 @@ proc runDirectTextBindingSignalDemo() =
     TextField:
       # The TextField block supplies the field and owns the binding named "text".
       # Here controller both sends textChanged and receives edits.
-      # The callbacks need no extra context, so we pass ().
       # readText fills the field. editText handles edits from the field.
       bindTextField(
         id = "text",
         controller = controller,
         signal = textChanged,
-        context = (),
         getter = readText,
         edit = editText,
       )

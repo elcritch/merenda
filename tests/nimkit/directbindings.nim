@@ -210,7 +210,13 @@ suite "direct owned bindings":
     let model = Model(text: "initial")
     let field = newTextField()
     let scope = newBindingScope()
-    scope.bindTextField("text", model, changed, model, 0, readText, field, editText)
+    proc readModel(model: Model): string =
+      readText(model, 0)
+
+    proc applyEdit(model: Model, text: string) =
+      editText(model, 0, text)
+
+    scope.bindTextField("text", model, changed, readModel, field, applyEdit)
     check field.stringValue == "initial"
     field.stringValue = "provisional"
     emit model.changed(0)

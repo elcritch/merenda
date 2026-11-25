@@ -143,6 +143,15 @@ Label:
     label.stringValue = value
 ```
 
+For a writable `Sigil[string]`, `bindTextField(id = "text", source = text)` reads
+with `text{}` and writes edits back with `text <- value`. When a controller emits
+its own signal, use `controller`, `signal`, and `getter` with either binding.
+The getter takes the controller. For `bindTextField`, the `edit` proc takes the
+controller and the edited string. For `bindValue`, the `setter` takes the widget
+and the value. Pass `context` with the full binding form when a callback needs
+extra data such as a task ID. See the [Sigil demo](../examples/direct_text_binding_demo.nim)
+and the [explicit signal demo](../examples/direct_text_binding_signal_demo.nim).
+
 A helper that receives a widget from a DirectView body can call `bindTextField`
 or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
 the binding in the form's existing scope, so the form can manage a field it

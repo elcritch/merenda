@@ -70,17 +70,26 @@ macro directViewBindTextField(
   result = newCall(bindSym"bindTextField", scope)
   for i in 0 ..< args.len - 1:
     result.add args[i]
-  let edit = args[^1]
-  if edit.kind == nnkExprEqExpr:
-    result.add edit
+  let last = args[^1]
+  if args.len == 2 or last.kind == nnkExprEqExpr:
+    result.add last
   else:
-    result.add newTree(nnkExprEqExpr, ident"edit", edit)
+    result.add newTree(nnkExprEqExpr, ident"edit", last)
   result.add newTree(nnkExprEqExpr, ident"field", field)
 
 template directViewBindValue(
     scope: BindingScope, widget: typed, id: string, input, apply: untyped
 ) =
   bindValue(scope, id, input, widget, apply)
+
+template directViewBindValue(
+    scope: BindingScope,
+    widget: typed,
+    id: string,
+    controller, signal, getter, setter: untyped,
+    initialApply = true,
+) =
+  bindValue(scope, id, controller, signal, getter, widget, setter, initialApply)
 
 template directViewBindValue(
     scope: BindingScope,

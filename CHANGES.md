@@ -38,6 +38,8 @@
 - Use bare `bindTextField(...)` and `bindValue(...)` in DirectView widget blocks.
   The block supplies the scope and target. Call `bindValue` on the owning widget
   to specify a different target.
+- Bind a writable `Sigil[string]` directly with `bindTextField`. Use context-free
+  callbacks when text or value bindings only need the controller.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

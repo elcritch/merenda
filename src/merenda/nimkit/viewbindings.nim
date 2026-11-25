@@ -393,6 +393,38 @@ template bindValue*(
     false,
   )
 
+proc readWithGetter[R: Responder, T](
+    receiver: R, getter: proc(receiver: R): T {.nimcall.}
+): T {.nimcall.} =
+  getter(receiver)
+
+template bindValue*(
+    scope: BindingScope,
+    id: string,
+    controller: Responder,
+    signal: untyped,
+    getter, target, setter: untyped,
+    initialApply: bool = true,
+) =
+  ## Observe a controller signal and read from that controller without extra context.
+  block:
+    let owner = controller
+    type Receiver = typeof(owner)
+    type Value = typeof(getter(owner))
+    let read: proc(receiver: Receiver): Value {.nimcall.} = getter
+    bindValue(
+      scope,
+      id,
+      owner,
+      signal,
+      owner,
+      read,
+      readWithGetter[Receiver, Value],
+      target,
+      setter,
+      initialApply,
+    )
+
 template bindSigilValueImpl(
     scope: BindingScope,
     id: string,
@@ -571,3 +603,76 @@ template bindTextField*[T](
     if not scope.preview:
       installTextEdit(binding, receiver, context, field, edit)
     binding.applyOrDefer()
+
+type TextCallbacks[R] = object
+  read: proc(receiver: R): string {.nimcall.}
+  write: proc(receiver: R, text: string) {.nimcall.}
+
+proc readReceiverText[R](receiver: R, callbacks: TextCallbacks[R]): string {.nimcall.} =
+  callbacks.read(receiver)
+
+proc editReceiverText[R](
+    receiver: R, callbacks: TextCallbacks[R], text: string
+) {.nimcall.} =
+  callbacks.write(receiver, text)
+
+template bindTextField*(
+    scope: BindingScope,
+    id: string,
+    controller: Responder,
+    signal: untyped,
+    getter, field, edit: untyped,
+) =
+  ## Use a controller's change signal and read and edit procs without extra context.
+  block:
+    let owner = controller
+    type Receiver = typeof(owner)
+    let callbacks = TextCallbacks[Receiver](read: getter, write: edit)
+    bindTextField(
+      scope,
+      id,
+      owner,
+      signal,
+      callbacks,
+      readReceiverText[Receiver],
+      field,
+      editReceiverText[Receiver],
+    )
+
+template bindTextField*[T](
+    scope: BindingScope,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver, getter, field, edit: untyped,
+) =
+  ## Observe a Sigil and use read and edit procs without extra context.
+  block:
+    let owner = receiver
+    type Receiver = typeof(owner)
+    let callbacks = TextCallbacks[Receiver](read: getter, write: edit)
+    bindTextField(
+      scope,
+      id,
+      input,
+      owner,
+      callbacks,
+      readReceiverText[Receiver],
+      field,
+      editReceiverText[Receiver],
+    )
+
+proc bindTextField*(
+    scope: BindingScope, id: string, source: Sigil[string], field: TextField
+) =
+  ## Display a writable string Sigil and publish field edits back to it.
+  if source.isNil:
+    raise newException(ValueError, "Text binding requires a string Sigil")
+
+  proc readInput(_: TextField, input: Sigil[string]): string {.nimcall.} =
+    unBindSigilEvents:
+      result = input{}
+
+  proc editInput(_: TextField, input: Sigil[string], text: string) {.nimcall.} =
+    input <- text
+
+  bindTextField(scope, id, source, field, source, readInput, field, editInput)

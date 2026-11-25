@@ -30,12 +30,18 @@ type
     xCaption: string
     writes: int
 
-proc readOwnedText(owner: TextOwner, context: int): string =
+proc readOwnedText(owner: TextOwner): string =
   owner.text{}
 
-proc editOwnedText(owner: TextOwner, context: int, value: string) =
+proc readOwnedText(owner: TextOwner, context: int): string =
+  owner.readOwnedText()
+
+proc editOwnedText(owner: TextOwner, value: string) =
   inc owner.edits
   owner.text <- value
+
+proc editOwnedText(owner: TextOwner, context: int, value: string) =
+  owner.editOwnedText(value)
 
 proc directChanged(model: DirectBindingModel, value: int) {.signal.}
 proc readDirect(model: DirectBindingModel, context: int): int =
@@ -371,7 +377,11 @@ suite "direct view composition":
         TextField:
           if bound:
             bindTextField(
-              "text", owner.text, owner, 0, readOwnedText, edit = editOwnedText
+              id = "text",
+              input = owner.text,
+              receiver = owner,
+              getter = readOwnedText,
+              edit = editOwnedText,
             )
           else:
             this.stringValue = "plain"
@@ -385,6 +395,35 @@ suite "direct view composition":
     check field.stringValue == "plain"
     check owner.text{} == "queued"
     check owner.edits == 0
+
+  test "direct string Sigil bindings read and write the current source":
+    let first = newSigil("initial")
+    let second = newSigil("replacement")
+    let host = newDirectView()
+    var input = first
+    proc render() =
+      host.viewBody:
+        TextField:
+          bindTextField("text", input)
+
+    render()
+    let field = TextField(host.arrangedSubviews[0])
+    check field.stringValue == "initial"
+    field.stringValue = "edit"
+    check first{} == "edit"
+    first <- "from model"
+    host.flushBindings()
+    check field.stringValue == "from model"
+
+    first <- "queued from old source"
+    input = second
+    render()
+    discard drainMainThreadWork()
+    check host.arrangedSubviews[0] == field
+    check field.stringValue == "replacement"
+    field.stringValue = "new edit"
+    check second{} == "new edit"
+    check first{} == "queued from old source"
 
   test "omitting a component body binding retires its old subscription":
     let host = newDirectView()
@@ -686,13 +725,20 @@ suite "direct view composition":
     initResponder(model)
     let session = newDirectViewSession(newStackView())
     var visible = true
+    proc readModel(model: DirectBindingModel): int =
+      model.value
+
     proc render() =
       session.viewBody:
         if visible:
           keyed("field"):
             TextField:
               bindValue(
-                "value", model, directChanged, model, 0, readDirect, writeDirect
+                id = "value",
+                controller = model,
+                signal = directChanged,
+                getter = readModel,
+                setter = writeDirect,
               )
 
     render()
