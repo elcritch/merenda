@@ -116,7 +116,7 @@ an existing action selector directly to a responder. A protocol method that
 takes `ActionArgs` and returns no value provides an `ActionSelector` through
 its generated accessor, such as `apply()`. The method receives the emitting
 widget in `args.sender`. A variable holding an `ActionSelector` works too. See the
-[protocol form editor](../examples/form_editors.nim).
+[protocol form editor](../examples/form_editors_protocol.nim).
 
 Property ownership is explicit:
 
@@ -169,7 +169,7 @@ the binding in the form's existing scope, so the form can manage a field it
 creates in ordinary Nim code. Use `this.bindValue(...)` or `form.bindValue(...)`
 when the widget that owns the scope and the target widget are supplied explicitly.
 These calls raise `ValueError` if the owner has no active DirectView scope. See
-the [form editor example](../examples/form_editors.nim).
+the [form editor example](../examples/form_editors_protocol.nim).
 
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
@@ -480,7 +480,7 @@ without that explicit policy continues to leave its bindings active.
 
 See the executable coverage in
 [directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in
-[form_editors.nim](../examples/form_editors.nim).
+[form_editors_protocol.nim](../examples/form_editors_protocol.nim).
 
 ## Dragology previews
 

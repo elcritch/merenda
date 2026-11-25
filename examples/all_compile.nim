@@ -29,7 +29,7 @@ import documenttabs_demo
 import document_workspace_demo
 import filter_row
 import font_fallback_demo
-import form_editors
+import form_editors_protocol
 import form_editors_procs
 import grid_preferences
 import hello

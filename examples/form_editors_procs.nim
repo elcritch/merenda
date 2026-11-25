@@ -1,19 +1,15 @@
-## Run `nim ic -r examples/form_editors_procs.nim` to see named callbacks
-## in DirectView toolbars around FormView panels.
-## Async Save writes only accepted data into a private temporary directory.
-## Save / Close is the separate in-memory draft checkpoint.
+## Run `nim ic -r examples/form_editors_procs.nim` to try named callbacks.
+## Async Save writes accepted data to a private temporary directory.
+## Save / Close is a separate in-memory draft checkpoint.
 import std/[os, tempfiles]
-import sigils/[core, reactive]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import ./form_drafts
-from ./form_editors import newDraftForm
+import ./form_editors_shared
 
 type FormPanel = ref object of Responder
   draft: FormDraft
   savePath: string
-  scope: BindingScope
-  form: FormView
   pending: FormValidation
 
 proc newFormPanel(draft: FormDraft, savePath: string): FormPanel =
@@ -23,28 +19,28 @@ proc newFormPanel(draft: FormDraft, savePath: string): FormPanel =
 proc apply(_: Responder, panel: FormPanel) =
   discard panel.draft.apply()
 
+proc undoAccepted(_: Responder, panel: FormPanel) =
+  discard panel.draft.document.undoManagerFor().performUndo()
+
 proc cancel(_: Responder, panel: FormPanel) =
   panel.draft.cancel()
 
-proc queue(_: Responder, panel: FormPanel) =
-  panel.pending = panel.draft.requestValidation()
-
-proc complete(_: Responder, panel: FormPanel) =
-  discard panel.pending.complete()
-
-proc external(_: Responder, panel: FormPanel) =
-  panel.draft.document.accept(99)
-
-proc undo(_: Responder, panel: FormPanel) =
-  discard panel.draft.document.undoManagerFor().performUndo()
-
-proc saveFile(_: Responder, panel: FormPanel) =
+proc saveAccepted(_: Responder, panel: FormPanel) =
   discard panel.draft.document.startSave(panel.savePath)
 
-proc save(_: Responder, panel: FormPanel) =
+proc saveDraftAndClose(_: Responder, panel: FormPanel) =
   discard panel.draft.saveAndClose()
 
-proc directActions(panel: FormPanel): DirectView =
+proc queueValidation(_: Responder, panel: FormPanel) =
+  panel.pending = panel.draft.requestValidation()
+
+proc completeValidation(_: Responder, panel: FormPanel) =
+  discard panel.pending.complete()
+
+proc acceptExternalValue(_: Responder, panel: FormPanel) =
+  panel.draft.document.accept(99)
+
+proc formActions(panel: FormPanel): DirectView =
   result = newDirectView()
   result.viewBody:
     VStack:
@@ -52,51 +48,38 @@ proc directActions(panel: FormPanel): DirectView =
         Button("Apply", acceptsFirstResponder = false):
           onAction(panel, apply)
         Button("Undo", acceptsFirstResponder = false):
-          onAction(panel, undo)
+          onAction(panel, undoAccepted)
         Button("Cancel", acceptsFirstResponder = false):
           onAction(panel, cancel)
         Button("Async Save accepted", acceptsFirstResponder = false):
-          onAction(panel, saveFile)
+          onAction(panel, saveAccepted)
         Button("Save / Close", acceptsFirstResponder = false):
-          onAction(panel, save)
+          onAction(panel, saveDraftAndClose)
       HStack:
         Button("Queue validation", acceptsFirstResponder = false):
-          onAction(panel, queue)
+          onAction(panel, queueValidation)
         Button("Complete", acceptsFirstResponder = false):
-          onAction(panel, complete)
+          onAction(panel, completeValidation)
         Button("External 99", acceptsFirstResponder = false):
-          onAction(panel, external)
+          onAction(panel, acceptExternalValue)
 
 proc runFormEditorsProcs*() =
   let savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"
   let document = newFormDocument(12)
-  # Use the same draft here for shared edits; make a second draft for local edits.
   let shared = newFormDraft(document)
+  let local = newFormDraft(document)
+  # Button actions refer to these panels weakly. The locals own them while the window runs.
   let first = newFormPanel(shared, savePath)
   let second = newFormPanel(shared, savePath)
-  let local = newFormPanel(newFormDraft(document), savePath)
-  let root = newStackView(laVertical)
-  root.spacing = 12
-  root.edgeInsets = insets(12)
-  root.addArrangedSubview(newLabel("Async Save writes accepted data to: " & savePath))
-  root.addArrangedSubview(
-    newLabel("Shared draft: DirectView"),
-    newDraftForm(first.draft),
-    directActions(first),
-  )
-  root.addArrangedSubview(
-    newLabel("Shared draft: second panel"),
-    newDraftForm(second.draft),
-    directActions(second),
-  )
-  root.addArrangedSubview(
-    newLabel("Independent local draft"), newDraftForm(local.draft), directActions(local)
+  let third = newFormPanel(local, savePath)
+  let root = newFormEditorsLayout(
+    savePath, shared, local, formActions(first), formActions(second), formActions(third)
   )
   sharedApplication().runWindow(
-    newWindow("Form drafts", frame = rect(80, 80, 850, 650)), root
+    newWindow("Form drafts: procs", frame = rect(80, 80, 850, 650)), root
   )
   shared.dispose()
-  local.draft.dispose()
+  local.dispose()
 
 when isMainModule and not defined(merendaTests):
   runFormEditorsProcs()
