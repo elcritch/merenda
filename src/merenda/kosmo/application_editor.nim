@@ -908,6 +908,7 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
             view.searchBar.hasMatches = view.editor.hasSearchMatches(
               view.searchBar.query(),
               regularExpression = view.searchBar.regularExpression,
+              caseSensitive = some(view.searchBar.caseSensitive),
             )
           view.searchBar.errorMessage = view.editor.searchError()
 
@@ -2183,6 +2184,7 @@ proc refreshEditorSearch(
       start.get(view.editor.bufferCursor()),
       direction,
       regularExpression = view.searchBar.regularExpression,
+      caseSensitive = some(view.searchBar.caseSensitive),
     )
     view.searchBar.errorMessage = view.editor.searchError()
   view.refresh()
@@ -2210,13 +2212,16 @@ proc replaceMatch*(view: KosmoEditorView, all = false): int {.discardable.} =
     view.searchBar.replacementField().text(),
     all,
     regularExpression = view.searchBar.regularExpression,
+    caseSensitive = some(view.searchBar.caseSensitive),
   )
   view.searchOrigin = view.editor.bufferCursor()
   if view.editor.searchError().len > 0:
     view.searchBar.errorMessage = "Replacement error: " & view.editor.searchError()
   else:
     view.searchBar.hasMatches = view.editor.hasSearchMatches(
-      view.searchBar.query(), regularExpression = view.searchBar.regularExpression
+      view.searchBar.query(),
+      regularExpression = view.searchBar.regularExpression,
+      caseSensitive = some(view.searchBar.caseSensitive),
     )
     view.searchBar.errorMessage = view.editor.searchError()
   view.refresh()
@@ -3115,6 +3120,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.searchBar =
     newKosmoSearchBar("editor text", onQueryChanged, onPrevious, onNext, onClose)
   result.searchBar.enableExpressions()
+  result.searchBar.enableCaseSensitivity()
   result.searchBar.enableReplacement(
     proc() =
       if not searchOwner.isNil:

@@ -1383,6 +1383,13 @@ proc documentTabIndexAtPoint*(tabs: DocumentTabs, point: Point): int =
       return index
   -1
 
+protocol DocumentTabsToolTips of ViewProtocol:
+  method toolTipAtPoint(tabs: DocumentTabs, point: Point): string =
+    let index = tabs.documentTabIndexAtPoint(point)
+    if index >= 0 and tabs.xItems[index].toolTip().len > 0:
+      return tabs.xItems[index].toolTip()
+    tabs.toolTip()
+
 proc tabMoveDestinationIndex(tabs: DocumentTabs, point: Point): int =
   if tabs.xItems.len == 0:
     return -1
@@ -2110,6 +2117,7 @@ proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   tabs.clipsToBounds = true
   tabs.focusable = true
   discard tabs.withProtocol(DocumentTabsDrawing)
+  discard tabs.withProtocol(DocumentTabsToolTips)
   discard tabs.withProtocol(DocumentTabsEventsProtocol)
   discard tabs.withProtocol(DocumentTabsLayout)
   discard tabs.withProtocol(DocumentTabsAccessibility)

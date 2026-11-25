@@ -32,8 +32,8 @@ type
     xReplacementField: TextField
     xReplacementVisible: bool
     disclosureButton: Button
-    expressionButton: Button
-    xRegularExpression, xHasMatches: bool
+    expressionButton, caseButton: Button
+    xRegularExpression, xCaseSensitive, xHasMatches: bool
     errorLabel: Label
     xErrorMessage: string
     replaceButton, replaceAllButton: Button
@@ -282,6 +282,28 @@ proc enableExpressions*(bar: SearchBar) =
   bar.expressionButton.action = actionSelector("nimkit.searchExpressions")
   bar.bindSearchTarget(bar.expressionButton, bar.expressionButton.action)
 
+func caseSensitive*(bar: SearchBar): bool =
+  bar.xCaseSensitive
+
+proc `caseSensitive=`*(bar: SearchBar, enabled: bool) =
+  bar.xCaseSensitive = enabled
+  if not bar.caseButton.isNil:
+    bar.caseButton.state = if enabled: bsOn else: bsOff
+  if not bar.onQueryChanged.isNil:
+    bar.onQueryChanged(bar.query())
+
+proc enableCaseSensitivity*(bar: SearchBar) =
+  if not bar.caseButton.isNil:
+    return
+  bar.caseButton = newSearchButton("Aa")
+  bar.caseButton.buttonType = btToggle
+  bar.caseButton.state = if bar.xCaseSensitive: bsOn else: bsOff
+  bar.caseButton.accessibilityLabel = "Match case"
+  bar.caseButton.toolTip = "Match case"
+  bar.queryRow.addArrangedSubview(bar.caseButton)
+  bar.caseButton.action = actionSelector("nimkit.searchCaseSensitive")
+  bar.bindSearchTarget(bar.caseButton, bar.caseButton.action)
+
 func replacementVisible*(bar: SearchBar): bool =
   bar.xReplacementVisible
 
@@ -384,6 +406,11 @@ proc searchBarAction(self: DynamicAgent, invocation: var Invocation) =
       bar.regularExpression = bar.expressionButton.state == bsOn
     else:
       bar.replacementVisible = not bar.replacementVisible
+    let owner = bar.window()
+    if owner of Window:
+      discard Window(owner).makeFirstResponder(bar.xQueryField)
+  of "nimkit.searchCaseSensitive":
+    bar.caseSensitive = bar.caseButton.state == bsOn
     let owner = bar.window()
     if owner of Window:
       discard Window(owner).makeFirstResponder(bar.xQueryField)

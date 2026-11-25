@@ -441,6 +441,14 @@ suite "nimkit document tabs":
     )
     check tabs.contentWidth() > tabs.documentTabRect(0).size.width
 
+  test "tab tooltips follow the item under the pointer":
+    let tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+    let item = newDocumentTabItem("notes.nim", "notes")
+    item.toolTip = "/tmp/notes.nim"
+    discard tabs.addDocumentTabItem(item)
+    let frame = tabs.documentTabRect(0)
+    check tabs.toolTipAtPoint(initPoint(frame.x + 4, frame.y + 4)) == "/tmp/notes.nim"
+
   test "document tabs reserve width for titles and stateful font sizes":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 1200, 48))
