@@ -135,7 +135,7 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.} =
   if frontend.isNil or not frontend.hasFileBrowser() or frontend.sidebarTabs.isNil or
       frontend.fileTree.isNil:
     return
-  if not frontend.sidebarTabs.select(0):
+  if not frontend.sidebarTabs.trySelect(0):
     return
   frontend.splitView.setPaneCollapsed(0, false)
   frontend.syncSidebarButtons()
@@ -172,7 +172,7 @@ proc showFindInFiles*(
       frontend.searchPanel.isNil:
     return
   frontend.searchPanel.rootPaths = frontend.fileTree.rootPaths
-  if not frontend.sidebarTabs.select(1):
+  if not frontend.sidebarTabs.trySelect(1):
     return
   frontend.splitView.setPaneCollapsed(0, false)
   frontend.syncSidebarButtons()

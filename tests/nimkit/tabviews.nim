@@ -219,7 +219,7 @@ suite "nimkit tab views":
     check spy.didCount == 0
 
     spy.allowSecond = true
-    check tabView.select(second)
+    check tabView.trySelect(second)
     check tabView.selectedItem == second
     check spy.shouldCount == 2
     check spy.didCount == 1

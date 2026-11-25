@@ -63,7 +63,7 @@ template checkVisibleIn*(view, container: View) =
 proc selectPage*(tabs: TabView, identifier: string): bool =
   for index in 0 ..< tabs.len:
     if tabs[index].identifier == identifier:
-      return tabs.select(index)
+      return tabs.trySelect(index)
 
 proc menuItemForAction*(menu: Menu, action: string): MenuItem =
   for item in menu.items():
