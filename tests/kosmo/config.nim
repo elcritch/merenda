@@ -111,7 +111,7 @@ suite "Kosmo configuration":
       newAction = app.mainMenu().menuItemForAction(KosmoNewFileAction)
       quitAction = app.mainMenu().menuItemForAction(KosmoQuitAction)
       settingsAction = app.mainMenu().menuItemForAction(KosmoShowSettingsAction)
-      workspaceAction = app.windowsMenu().menuItemWithIdentifier(KosmoNextTabAction)
+      workspaceAction = app.windowsMenu()[KosmoNextTabAction]
     require not newAction.isNil and not quitAction.isNil and not settingsAction.isNil
     require not workspaceAction.isNil
     for item in [newAction, quitAction, settingsAction, workspaceAction]:
@@ -197,7 +197,7 @@ suite "Kosmo configuration":
     let firstTarget = firstAction.target()
     let second = newKosmoApplication(app, monitorsGitStatus = false)
     let secondAction = app.mainMenu().menuItemForAction(KosmoNewFileAction)
-    let workspaceAction = app.windowsMenu().menuItemWithIdentifier(KosmoNextTabAction)
+    let workspaceAction = app.windowsMenu()[KosmoNextTabAction]
     let quitAction = app.mainMenu().menuItemForAction(KosmoQuitAction)
     require not secondAction.isNil and not workspaceAction.isNil and not quitAction.isNil
     check secondAction.target() != firstTarget

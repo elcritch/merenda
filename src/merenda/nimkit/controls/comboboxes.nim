@@ -363,10 +363,10 @@ proc `filterText=`*(list: ComboBoxOptionList, text: string) =
   list.xFilterText = text
   list.xIndexCache.invalidateOptionIndex(corpusChanged = false)
 
-proc optionListItemAtIndex*(list: ComboBoxOptionList, index: int): ComboBoxOption =
+proc optionAt*(list: ComboBoxOptionList, index: int): ComboBoxOption =
   result = list.xIndexCache.optionAtVisibleIndex(list.xOptions, index, list.xFilterText)
 
-proc optionListIndexOfIdentifier*(list: ComboBoxOptionList, identifier: string): int =
+proc find*(list: ComboBoxOptionList, identifier: string): int =
   list.xIndexCache.indexOfVisibleOptionIdentifier(
     list.xOptions, identifier, list.xFilterText
   )
@@ -405,25 +405,6 @@ proc clear*(list: ComboBoxOptionList) =
   list.xOptions.setLen(0)
   list.xIndexCache.invalidateOptionIndex()
 
-proc addOptionListItem*(list: ComboBoxOptionList, option: ComboBoxOption) =
-  list.add(option)
-
-proc insertOptionListItem*(
-    list: ComboBoxOptionList, option: ComboBoxOption, index: int
-) =
-  list.insert(option, index)
-
-proc removeOptionListItemAtIndex*(list: ComboBoxOptionList, index: int) =
-  list.delete(index)
-
-proc removeOptionListItemWithIdentifier*(
-    list: ComboBoxOptionList, identifier: string
-): bool {.discardable.} =
-  list.delete(identifier)
-
-proc removeAllOptionListItems*(list: ComboBoxOptionList) =
-  list.clear()
-
 protocol ComboBoxOptionListDataSource of ComboBoxDataSource:
   method itemCount(list: ComboBoxOptionList, comboBox: ComboBox): int =
     list.len()
@@ -431,12 +412,12 @@ protocol ComboBoxOptionListDataSource of ComboBoxDataSource:
   method comboBoxOptionAtIndex(
       list: ComboBoxOptionList, comboBox: ComboBox, index: int
   ): ComboBoxOption =
-    list.optionListItemAtIndex(index)
+    list.optionAt(index)
 
   method indexOfComboBoxOptionIdentifier(
       list: ComboBoxOptionList, comboBox: ComboBox, identifier: string
   ): int =
-    list.optionListIndexOfIdentifier(identifier)
+    list.find(identifier)
 
   method setComboBoxOptionFilterText(
       list: ComboBoxOptionList, comboBox: ComboBox, text: string

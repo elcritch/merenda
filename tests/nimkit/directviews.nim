@@ -1297,7 +1297,7 @@ suite "direct collection rows":
     checkEditor()
 
     # Selecting a row with the pointer deliberately transfers focus out of the editor.
-    let itemRect = collection.collectionItemRect(1)
+    let itemRect = collection.itemRect(1)
     require not itemRect.isEmpty
     let point = collection.pointToWindow(
       initPoint(

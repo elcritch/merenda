@@ -74,10 +74,10 @@ suite "Kosmo synthetic panel shortcuts":
     # A menu key equivalent performs unconditionally through the window's menu
     # and would consume F5 even for a focused terminal with no toolbar. The
     # action must route only through the window's binding table.
-    let item = app.windowsMenu().menuItemWithIdentifier(KosmoFocusToolbarAction)
+    let item = app.windowsMenu()[KosmoFocusToolbarAction]
     require not item.isNil
     check not item.hasKeyEquivalent()
-    let tabItem = app.windowsMenu().menuItemWithIdentifier(KosmoPreviousTabAction)
+    let tabItem = app.windowsMenu()[KosmoPreviousTabAction]
     require not tabItem.isNil
     check tabItem.hasKeyEquivalent()
 

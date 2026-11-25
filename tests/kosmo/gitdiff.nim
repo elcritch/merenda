@@ -1319,17 +1319,13 @@ suite "Kosmo Git diff":
     check panel.toHistoryButton.title == "^*"
     check panel.toHistoryButton.enabled
     check panel.toHistoryButton.menu().len == 5
-    let treeChoice =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^*")
+    let treeChoice = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^*"]
     require not treeChoice.isNil
     check treeChoice.title == "^* Working Tree"
     check treeChoice.state == bsOn
-    check panel.toRevisionButton
-      .menu()
-      .menuItemWithIdentifier("kosmo.gitDiff.to.WORKTREE").isNil
-    let currentBranch = panel.toRevisionButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.to.refs/heads/feature"
-      )
+    check panel.toRevisionButton.menu(){"kosmo.gitDiff.to.WORKTREE"}.isNil
+    let currentBranch =
+      panel.toRevisionButton.menu()["kosmo.gitDiff.to.refs/heads/feature"]
     require not currentBranch.isNil
     check currentBranch.state == bsOn
     require currentBranch.perform(window)
@@ -1345,7 +1341,7 @@ suite "Kosmo Git diff":
     for item in fromMenu.items():
       check '^' notin item.title
       check '~' notin item.title
-    let mainItem = fromMenu.menuItemWithIdentifier("kosmo.gitDiff.from.refs/heads/main")
+    let mainItem = fromMenu["kosmo.gitDiff.from.refs/heads/main"]
     require not mainItem.isNil
     check mainItem.perform(window)
     require panel.waitForDiff()
@@ -1357,9 +1353,7 @@ suite "Kosmo Git diff":
     check panel.snapshot.files[0].path == "feature.txt"
     check panel.snapshot.files[1].path == "working.txt"
 
-    let otherItem = panel.toRevisionButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.to.refs/heads/other"
-      )
+    let otherItem = panel.toRevisionButton.menu()["kosmo.gitDiff.to.refs/heads/other"]
     require not otherItem.isNil
     check otherItem.perform(window)
     require panel.waitForDiff()
@@ -1373,13 +1367,11 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check "+feature" in panel.snapshot.files[0].patch
 
-    let workingItem =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^*")
+    let workingItem = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^*"]
     require not workingItem.isNil
     check workingItem.perform(window)
     require panel.waitForDiff()
-    let headItem =
-      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD")
+    let headItem = panel.fromRevisionButton.menu()["kosmo.gitDiff.from.HEAD"]
     require not headItem.isNil
     check headItem.perform(window)
     require panel.waitForDiff()
@@ -1392,11 +1384,9 @@ suite "Kosmo Git diff":
     require panel.requestFilePatch(0)
     require panel.waitForDiff()
     check "+working" in panel.snapshot.files[0].patch
-    check panel.toRevisionButton
-      .menu()
-      .menuItemWithIdentifier("kosmo.gitDiff.to.refs/heads/feature").state == bsOn
-    let tip =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.-")
+    check panel.toRevisionButton.menu()["kosmo.gitDiff.to.refs/heads/feature"].state ==
+      bsOn
+    let tip = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.-"]
     require not tip.isNil
     require tip.perform(window)
     require panel.waitForDiff()
@@ -1404,12 +1394,10 @@ suite "Kosmo Git diff":
     check panel.snapshot.comparison.toRevision == "HEAD"
     check panel.toHistoryButton.title == "-"
     check panel.snapshot.files.len == 0
-    let tree =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^*")
+    let tree = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^*"]
     require tree.perform(window)
     require panel.waitForDiff()
-    let parent =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^")
+    let parent = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^"]
     require parent.perform(window)
     require panel.waitForDiff()
     check panel.snapshot.comparison.toRevision == "HEAD^"
@@ -1460,23 +1448,18 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    let mainBranch = panel.fromRevisionButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.from.refs/heads/main"
-      )
+    let mainBranch =
+      panel.fromRevisionButton.menu()["kosmo.gitDiff.from.refs/heads/main"]
     require not mainBranch.isNil
     require mainBranch.perform(window)
     require panel.waitForDiff()
-    let mainParent = panel.fromHistoryButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.from.history.^"
-      )
+    let mainParent = panel.fromHistoryButton.menu()["kosmo.gitDiff.from.history.^"]
     require not mainParent.isNil
     check mainParent.perform(window)
     require panel.waitForDiff()
     check panel.fromRevisionButton.title == "main"
     check panel.fromHistoryButton.title == "^"
-    let mainTip = panel.toRevisionButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.to.refs/heads/main"
-      )
+    let mainTip = panel.toRevisionButton.menu()["kosmo.gitDiff.to.refs/heads/main"]
     require not mainTip.isNil
     check mainTip.perform(window)
     require panel.waitForDiff()
@@ -1486,25 +1469,21 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check "+main change" in panel.snapshot.files[0].patch
 
-    let headParent =
-      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD")
+    let headParent = panel.fromRevisionButton.menu()["kosmo.gitDiff.from.HEAD"]
     require not headParent.isNil
     check headParent.perform(window)
     require panel.waitForDiff()
     check panel.snapshot.comparison.fromRevision == "HEAD^"
     check panel.fromRevisionButton.title == "feature"
     check panel.fromHistoryButton.title == "^"
-    let headTip =
-      panel.toRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.HEAD")
+    let headTip = panel.toRevisionButton.menu()["kosmo.gitDiff.to.HEAD"]
     require not headTip.isNil
     check headTip.perform(window)
     require panel.waitForDiff()
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "feature.txt"
 
-    let secondAncestor = panel.fromHistoryButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.from.history.^2"
-      )
+    let secondAncestor = panel.fromHistoryButton.menu()["kosmo.gitDiff.from.history.^2"]
     require not secondAncestor.isNil
     require secondAncestor.perform(window)
     require panel.waitForDiff()
@@ -1517,8 +1496,7 @@ suite "Kosmo Git diff":
       check "^2" in panel.fromHistoryButton.renderedControlText()
     check panel.snapshot.errorMessage == ""
     check panel.snapshot.files.len == 2
-    let toParent =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^")
+    let toParent = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^"]
     require not toParent.isNil
     require toParent.perform(window)
     require panel.waitForDiff()
@@ -1528,16 +1506,13 @@ suite "Kosmo Git diff":
     check panel.toHistoryButton.title == "^"
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "main.txt"
-    let workingTree =
-      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^*")
+    let workingTree = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^*"]
     require not workingTree.isNil
     require workingTree.perform(window)
     require panel.waitForDiff()
     check panel.toHistoryButton.title == "^*"
     check panel.toHistoryButton.enabled
-    let current = panel.fromHistoryButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.from.history.-"
-      )
+    let current = panel.fromHistoryButton.menu()["kosmo.gitDiff.from.history.-"]
     require not current.isNil
     require current.perform(window)
     require panel.waitForDiff()
@@ -1563,9 +1538,7 @@ suite "Kosmo Git diff":
       require panel.waitForDiff()
       check panel.toHistoryButton.title == "^*"
       check panel.toHistoryButton.enabled
-      let item = panel.toHistoryButton.menu().menuItemWithIdentifier(
-          "kosmo.gitDiff.to.history.^*"
-        )
+      let item = panel.toHistoryButton.menu()["kosmo.gitDiff.to.history.^*"]
       require not item.isNil
       check item.state == bsOn
       check item.enabled
@@ -1958,8 +1931,7 @@ diff --git a/second.txt b/second.txt
     frontend.contentView.frame = rect(0, 0, 1000, 700)
     frontend.contentView.layoutSubtreeIfNeeded()
     app.activateWindow(frontend.window)
-    let item =
-      app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoShowGitDiffAction)
+    let item = app.mainMenu()[1].submenu()[KosmoShowGitDiffAction]
     require not item.isNil
     check item.title == "Show Git Diff"
     check item.keyEquivalent().key == keyD
@@ -2014,8 +1986,7 @@ diff --git a/second.txt b/second.txt
     check frontend.documentTabs.len == originalTabCount
     check frontend.documentTabs.selectedIdentifier == gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
-    let closeItem =
-      app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseTabAction)
+    let closeItem = app.mainMenu()[1].submenu()[KosmoCloseTabAction]
     check closeItem.perform(frontend.window)
     check frontend.gitDiffPanel.isNil
     check not frontend.window.isClosed()

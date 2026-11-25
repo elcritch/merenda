@@ -53,4 +53,4 @@ proc clickTab*(window: Window, tabs: TabView, identifier: string): bool =
     if item.identifier == identifier:
       return
         window.clickRect(tabs, tabs.tabRect(index)) and
-        tabs.selectedTabViewItem().identifier == identifier
+        tabs.selectedItem().identifier == identifier

@@ -602,10 +602,10 @@ doneContextItem.target = newActionTarget(
     discard sender
     controller.markSelectedState("Done"),
 )
-discard tableContextMenu.addItem(inspectContextItem)
+discard tableContextMenu.add(inspectContextItem)
 discard tableContextMenu.addSeparator()
-discard tableContextMenu.addItem(runningContextItem)
-discard tableContextMenu.addItem(doneContextItem)
+discard tableContextMenu.add(runningContextItem)
+discard tableContextMenu.add(doneContextItem)
 table.menu = tableContextMenu
 
 var tableAppearance = initAppearance()

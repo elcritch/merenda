@@ -97,9 +97,8 @@ suite "Kosmo quick open":
     defer:
       frontend.close()
 
-    let quickOpenItem = frontend.application.mainMenu()[1]
-      .submenu()
-      .menuItemWithIdentifier(KosmoQuickOpenAction)
+    let quickOpenItem =
+      frontend.application.mainMenu()[1].submenu()[KosmoQuickOpenAction]
     require not quickOpenItem.isNil
     check quickOpenItem.keyEquivalent().key == keyP
     check quickOpenItem.modifierMask() == shortcutModifiers()

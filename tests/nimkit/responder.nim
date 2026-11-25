@@ -409,8 +409,8 @@ suite "nimkit responder":
       button = newPopupMenuButton("Actions", popupMenu, rect(10, 50, 100, 30))
     defer:
       window.close()
-    discard mainMenu.addItem("Run", trackingCommand(), "g", shortcutModifiers())
-    discard popupMenu.addItem("Run", trackingCommand())
+    discard mainMenu.add("Run", trackingCommand(), "g", shortcutModifiers())
+    discard popupMenu.add("Run", trackingCommand())
     app.mainMenu = mainMenu
     button.popupPresentation = ppInline
     control.focusable = true

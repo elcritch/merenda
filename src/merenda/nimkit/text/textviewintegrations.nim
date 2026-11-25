@@ -50,15 +50,15 @@ proc contextualMenuForText*(textView: TextView, point = AutoPoint): Menu =
   if request.link.len > 0:
     let link = textView.linkAtIndex(request.characterIndex)
     textView.selectedRange = link.range
-    let item = result.addItem("Open Link", openLink())
+    let item = result.add("Open Link", openLink())
     item.target = DynamicAgent(textView)
     result.addSeparator()
-  discard result.addItem("Cut", actionSelector("cut"))
-  discard result.addItem("Copy", actionSelector("copy"))
-  discard result.addItem("Paste", actionSelector("paste"))
+  discard result.add("Cut", actionSelector("cut"))
+  discard result.add("Copy", actionSelector("copy"))
+  discard result.add("Paste", actionSelector("paste"))
   result.addSeparator()
-  discard result.addItem("Select All", actionSelector("selectAll"))
-  discard result.addItem("Complete", actionSelector("complete"))
+  discard result.add("Select All", actionSelector("selectAll"))
+  discard result.add("Complete", actionSelector("complete"))
 
 proc popUpTextContextMenu*(
     textView: TextView, event: MouseEvent

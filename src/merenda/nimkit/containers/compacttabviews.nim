@@ -37,7 +37,7 @@ type
     xTabBarHeight: float32
     xTabWidth: float32
 
-proc selectCompactTabAtIndex*(tabs: CompactTabView, index: int): bool {.discardable.}
+proc trySelect*(tabs: CompactTabView, index: int): bool
 
 func initCompactTabItem*(
     identifier, title: string, icon: SvgMtsdfResource, view: View
@@ -251,8 +251,9 @@ protocol CompactTabViewAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(tabs: CompactTabView): bool =
     true
 
-proc selectCompactTabAtIndex*(tabs: CompactTabView, index: int): bool =
-  ## Select a utility tab and show only its associated view.
+proc trySelect*(tabs: CompactTabView, index: int): bool =
+  ## Select an enabled utility tab and show its content. Return false for an
+  ## invalid index or a disabled tab.
   if tabs.isNil or index notin 0 ..< tabs.xItems.len or not tabs.xItems[index].xEnabled:
     return
   tabs.xSelectedIndex = index
@@ -265,7 +266,10 @@ proc selectCompactTabAtIndex*(tabs: CompactTabView, index: int): bool =
   tabs.needsDisplay = true
   true
 
-proc addCompactTabItem*(tabs: CompactTabView, item: CompactTabItem) =
+proc `selectedIndex=`*(tabs: CompactTabView, index: int) =
+  discard tabs.trySelect(index)
+
+proc add*(tabs: CompactTabView, item: CompactTabItem) =
   ## Add a utility tab and its content view.
   if tabs.isNil or item.xView.isNil:
     return
@@ -285,7 +289,7 @@ proc addCompactTabItem*(tabs: CompactTabView, item: CompactTabItem) =
     proc(sender: DynamicAgent) =
       discard sender
       if not weakTabs.isNil:
-        discard weakTabs[].selectCompactTabAtIndex(index)
+        weakTabs[].selectedIndex = index
     ,
   )
   button.action = action
@@ -295,7 +299,7 @@ proc addCompactTabItem*(tabs: CompactTabView, item: CompactTabItem) =
   tabs.addSubview(button, positioned = svpAbove)
   button.hidden = tabs.xTabBarHeight == 0.0'f32
   if tabs.xSelectedIndex < 0:
-    discard tabs.selectCompactTabAtIndex(0)
+    tabs.selectedIndex = 0
   else:
     item.xView.hidden = true
   tabs.setNeedsLayout()
@@ -316,5 +320,5 @@ proc newCompactTabView*(
   discard result.withProtocol(CompactTabViewDrawing)
   discard result.withProtocol(CompactTabViewAccessibility)
   for item in items:
-    result.addCompactTabItem(item)
+    result.add(item)
   result.applyInitialFrame(frame)

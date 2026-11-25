@@ -809,9 +809,9 @@ proc initColorPickerFields*(picker: ColorPicker, source: ColorWell, frame = Auto
   picker.xWheelView = wheel
   picker.xValuesView = values
   picker.accessibilityLabel = "Color picker"
-  discard picker.addTabViewItem(newTabViewItem("Palette", palette, "palette"))
-  discard picker.addTabViewItem(newTabViewItem("Wheel", wheel, "wheel"))
-  discard picker.addTabViewItem(newTabViewItem("Values", values, "values"))
+  discard picker.add(newTabViewItem("Palette", palette, "palette"))
+  discard picker.add(newTabViewItem("Wheel", wheel, "wheel"))
+  discard picker.add(newTabViewItem("Values", values, "values"))
   picker.xOkayButton = picker.newColorPickerOkayButton()
   picker.addSubview(picker.xOkayButton)
   discard picker.withProtocol(ColorPickerPopupDrawing)
@@ -1063,7 +1063,7 @@ proc newColorChoiceMenuItem(well: PopupColorWell, index: int): MenuItem =
 proc rebuildMenu(well: PopupColorWell) =
   let menu = newMenu("Colors")
   for index in 0 ..< well.xChoices.len:
-    discard menu.addItem(well.newColorChoiceMenuItem(index))
+    discard menu.add(well.newColorChoiceMenuItem(index))
   well.menu = menu
   well.synchronizeChoiceState()
 

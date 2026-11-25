@@ -2703,7 +2703,7 @@ proc tabContextMenu(
         let view = weakHandler[].targetView()
         if not view.isNil:
           discard view.documentTabs.closeTab(identifier)
-    discard result.addItem(closeItem)
+    discard result.add(closeItem)
   block:
     let
       closeOthersSelector = nimkit.actionSelector("kosmo.editorTabs.closeOthers")
@@ -2718,7 +2718,7 @@ proc tabContextMenu(
         let view = weakHandler[].targetView()
         if not view.isNil:
           closeTabsExcept(weakHandler[], view, identifier)
-    discard result.addItem(closeOthersItem)
+    discard result.add(closeOthersItem)
   let duplicatesEnabled = not handler.dockController.isNil and not view.dockGroup.isNil
   discard result.addSeparator()
   block:
@@ -2735,7 +2735,7 @@ proc tabContextMenu(
         let view = weakHandler[].targetView()
         if not view.isNil:
           duplicateTabTo(weakHandler[], view, identifier, nimkit.dpRight)
-    discard result.addItem(rightItem)
+    discard result.add(rightItem)
   block:
     let
       belowSelector = nimkit.actionSelector("kosmo.editorTabs.duplicateBelow")
@@ -2750,7 +2750,7 @@ proc tabContextMenu(
         let view = weakHandler[].targetView()
         if not view.isNil:
           duplicateTabTo(weakHandler[], view, identifier, nimkit.dpBottom)
-    discard result.addItem(belowItem)
+    discard result.add(belowItem)
   let target = view.tabRichTextThemeTarget(identifier)
   if target.isSome and not view.dockGroup.isNil:
     let
@@ -2770,7 +2770,7 @@ proc tabContextMenu(
         let view = weakHandler[].targetView()
         if not view.isNil and not view.dockGroup.isNil:
           view.dockGroup[].pane.markdownControls.toggleReaderColorMode(target.get)
-    discard result.addItem(colorItem)
+    discard result.add(colorItem)
 
 protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
   method didSelectDocumentTab(
@@ -3852,7 +3852,7 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   for mode in KosmoKeyModes:
     let item = nimkit.newMenuItem(mode.title)
     item.identifier = mode.identifier
-    menu.addItem(item)
+    menu.add(item)
   result = KosmoStatusBar(
     label: label,
     keyModeChoice: choice,

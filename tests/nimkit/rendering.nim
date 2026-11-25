@@ -824,11 +824,11 @@ suite "nimkit rendering":
       button = newPopupMenuButton("Actions", menu, rect(10, 4, 100, 30))
     defer:
       window.close()
-    discard menu.addItem(
+    discard menu.add(
       newMenuItem("Run Menu Action", keyEquivalent = "r", modifiers = {kmCommand})
     )
     discard menu.addSeparator()
-    discard menu.addItem(newMenuItem("Reset Count"))
+    discard menu.add(newMenuItem("Reset Count"))
     root.addSubview(button)
     window.setContentView(root)
     button.popupPresentation = ppInline
@@ -853,7 +853,7 @@ suite "nimkit rendering":
       actionsItem = newMenuItem("Actions")
 
     actionsItem.submenu = actionsMenu
-    discard mainMenu.addItem(actionsItem)
+    discard mainMenu.add(actionsItem)
     root.addSubview(newMenuBar(mainMenu, rect(0, 0, 240, 28)))
 
     let renders = buildRenders(root)
@@ -881,7 +881,7 @@ suite "nimkit rendering":
       menuBar = newMenuBar(mainMenu, rect(0, 0, 240, 28))
 
     actionsItem.submenu = actionsMenu
-    discard mainMenu.addItem(actionsItem)
+    discard mainMenu.add(actionsItem)
     menuBar.reload()
     root.addSubview(menuBar)
     root.layoutSubtreeIfNeeded()
@@ -1407,8 +1407,8 @@ suite "nimkit rendering":
       window.close()
 
     item.submenu = first
-    discard first.addItem(newMenuItem("One"))
-    discard menu.addItem(item)
+    discard first.add(newMenuItem("One"))
+    discard menu.add(item)
     let menuBar = newMenuBar(menu, rect(0, 0, 220, 28))
     root.addSubview(menuBar)
     window.setContentView(root)

@@ -64,7 +64,7 @@ protocol TabViewItemEvents:
   ) {.signal.}
 
 proc syncSelectedContent(tabView: TabView)
-proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable.}
+proc trySelect*(tabView: TabView, index: int): bool
 proc tabIndexAtBarPoint(tabView: TabView, point: Point): int
 proc tabDragDestinationIndex(tabView: TabView, point: Point): int
 proc moveTabViewItem(tabView: TabView, fromIndex, toIndex: int): bool {.discardable.}
@@ -173,7 +173,7 @@ proc `allowsTabDragging=`*(tabView: TabView, allowed: bool) =
     tabView.xPressedIndex = -1
   tabView.xTabBar.needsDisplay = true
 
-proc selectedTabViewItem*(tabView: TabView): TabViewItem =
+proc selectedItem*(tabView: TabView): TabViewItem =
   let index = tabView.xSelectedIndex
   if index < 0 or index >= tabView.xItems.len:
     return nil
@@ -356,7 +356,7 @@ proc tabDragDestinationIndex(tabView: TabView, point: Point): int =
       return index
   tabView.xItems.high
 
-proc indexOfTabViewItem*(tabView: TabView, item: TabViewItem): int =
+proc find*(tabView: TabView, item: TabViewItem): int =
   if item.isNil:
     return -1
   tabView.xItems.find(item)
@@ -368,12 +368,12 @@ proc moveTabViewItem(tabView: TabView, fromIndex, toIndex: int): bool =
   if fromIndex == boundedIndex:
     return false
   let
-    selectedItem = tabView.selectedTabViewItem()
+    selectedItem = tabView.selectedItem()
     item = tabView.xItems[fromIndex]
   tabView.xItems.delete(fromIndex)
   tabView.xItems.insert(item, boundedIndex)
   tabView.xPressedIndex = boundedIndex
-  tabView.xSelectedIndex = tabView.indexOfTabViewItem(selectedItem)
+  tabView.xSelectedIndex = tabView.find(selectedItem)
   tabView.syncSelectedContent()
   tabView.setNeedsLayout()
   tabView.needsDisplay = true
@@ -381,7 +381,7 @@ proc moveTabViewItem(tabView: TabView, fromIndex, toIndex: int): bool =
   true
 
 proc selectedContentView(tabView: TabView): View =
-  let item = tabView.selectedTabViewItem()
+  let item = tabView.selectedItem()
   if item.isNil:
     nil
   else:
@@ -523,7 +523,8 @@ proc didSelect(tabView: TabView, item: TabViewItem) =
       didSelectTabViewItem(), (tabView: tabView, item: item)
     )
 
-proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable.} =
+proc trySelect*(tabView: TabView, index: int): bool =
+  ## Return true if the tab was already selected or the change was accepted.
   if index < 0 or index >= tabView.xItems.len:
     return
   if index == tabView.xSelectedIndex:
@@ -531,7 +532,7 @@ proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   let item = tabView.xItems[index]
   if not tabView.shouldSelect(item):
     return
-  let oldItem = tabView.selectedTabViewItem()
+  let oldItem = tabView.selectedItem()
   tabView.detachItemView(oldItem)
   tabView.xSelectedIndex = index
   tabView.syncSelectedContent()
@@ -540,10 +541,13 @@ proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   true
 
 proc `selectedIndex=`*(tabView: TabView, index: int) =
-  discard tabView.selectTabViewItemAtIndex(index)
+  discard tabView.trySelect(index)
 
-proc selectTabViewItem*(tabView: TabView, item: TabViewItem): bool {.discardable.} =
-  tabView.selectTabViewItemAtIndex(tabView.indexOfTabViewItem(item))
+proc trySelect*(tabView: TabView, item: TabViewItem): bool =
+  tabView.trySelect(tabView.find(item))
+
+proc `selectedItem=`*(tabView: TabView, item: TabViewItem) =
+  discard tabView.trySelect(item)
 
 proc selectableIndexFrom(tabView: TabView, start, delta: int): int =
   if tabView.xItems.len == 0 or delta == 0:
@@ -571,15 +575,15 @@ proc lastSelectableIndex(tabView: TabView): int =
       return index
   -1
 
-proc selectNextTabViewItem*(tabView: TabView): bool {.discardable.} =
+proc selectNext*(tabView: TabView): bool {.discardable.} =
   let next = tabView.selectableIndexFrom(tabView.selectedIndex(), 1)
-  tabView.selectTabViewItemAtIndex(next)
+  tabView.trySelect(next)
 
-proc selectPreviousTabViewItem*(tabView: TabView): bool {.discardable.} =
+proc selectPrevious*(tabView: TabView): bool {.discardable.} =
   let previous = tabView.selectableIndexFrom(tabView.selectedIndex(), -1)
-  tabView.selectTabViewItemAtIndex(previous)
+  tabView.trySelect(previous)
 
-proc addTabViewItem*(tabView: TabView, item: TabViewItem): TabViewItem {.discardable.} =
+proc add*(tabView: TabView, item: TabViewItem): TabViewItem {.discardable.} =
   if item.isNil:
     return nil
   tabView.xItems.add item
@@ -592,7 +596,7 @@ proc addTabViewItem*(tabView: TabView, item: TabViewItem): TabViewItem {.discard
     tabView.needsDisplay = true
   item
 
-proc insertTabViewItem*(
+proc insert*(
     tabView: TabView, item: TabViewItem, index: Natural
 ): TabViewItem {.discardable.} =
   if item.isNil:
@@ -609,14 +613,14 @@ proc insertTabViewItem*(
   tabView.needsDisplay = true
   item
 
-proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable.} =
+proc delete*(tabView: TabView, index: int): bool {.discardable.} =
   if index < 0 or index >= tabView.xItems.len:
     return
   let removingSelected = index == tabView.xSelectedIndex
   let removedItem = tabView.xItems[index]
   tabView.detachItemView(removedItem)
   tabView.xItems.delete(index)
-  if tabView.indexOfTabViewItem(removedItem) < 0:
+  if tabView.find(removedItem) < 0:
     tabView.unobserveItem(removedItem)
   tabView.invalidateIntrinsicContentSize()
   if tabView.xItems.len == 0:
@@ -630,8 +634,8 @@ proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   tabView.syncSelectedContent()
   true
 
-proc removeTabViewItem*(tabView: TabView, item: TabViewItem): bool {.discardable.} =
-  tabView.removeTabViewItemAtIndex(tabView.indexOfTabViewItem(item))
+proc delete*(tabView: TabView, item: TabViewItem): bool {.discardable.} =
+  tabView.delete(tabView.find(item))
 
 proc tabTextRect(rect: Rect, insets: EdgeInsets): Rect =
   rect.inset(insets)
@@ -830,7 +834,7 @@ protocol TabBarEvents of ResponderEventProtocol:
       tabBar.needsDisplay = true
       return true
     if pressed == tabView.tabIndexAtBarPoint(event.location):
-      discard tabView.selectTabViewItemAtIndex(pressed)
+      tabView.selectedIndex = pressed
     else:
       tabBar.needsDisplay = true
     true
@@ -913,19 +917,19 @@ protocol TabViewEvents of ResponderEventProtocol:
     of keyArrowRight, keyArrowDown:
       if not tabView.canHandleTabKeyNavigation():
         return false
-      return tabView.selectNextTabViewItem()
+      return tabView.selectNext()
     of keyArrowLeft, keyArrowUp:
       if not tabView.canHandleTabKeyNavigation():
         return false
-      return tabView.selectPreviousTabViewItem()
+      return tabView.selectPrevious()
     of keyHome:
       if not tabView.canHandleTabKeyNavigation():
         return false
-      return tabView.selectTabViewItemAtIndex(tabView.firstSelectableIndex())
+      return tabView.trySelect(tabView.firstSelectableIndex())
     of keyEnd:
       if not tabView.canHandleTabKeyNavigation():
         return false
-      return tabView.selectTabViewItemAtIndex(tabView.lastSelectableIndex())
+      return tabView.trySelect(tabView.lastSelectableIndex())
     else:
       false
 
@@ -934,7 +938,7 @@ protocol TabViewAccessibility of AccessibilityProtocol:
     arTabGroup
 
   method accessibilityValue(tabView: TabView): string =
-    let item = tabView.selectedTabViewItem()
+    let item = tabView.selectedItem()
     if item.isNil:
       ""
     else:

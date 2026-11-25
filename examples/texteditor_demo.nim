@@ -328,10 +328,10 @@ proc configureActions(demo: TextEditorDemo) =
     demo.toggleWrapFromMenu(sender)
   contextResetItem.target = newActionTarget(resetAction) do(sender: DynamicAgent):
     demo.resetText(sender)
-  discard demo.contextMenu.addItem(contextStyleItem)
-  discard demo.contextMenu.addItem(contextWrapItem)
+  discard demo.contextMenu.add(contextStyleItem)
+  discard demo.contextMenu.add(contextWrapItem)
   discard demo.contextMenu.addSeparator()
-  discard demo.contextMenu.addItem(contextResetItem)
+  discard demo.contextMenu.add(contextResetItem)
 
   demo.wrapCheck.target = newActionTarget(wrapAction) do(sender: DynamicAgent):
     demo.toggleWrap(sender)

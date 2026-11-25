@@ -473,7 +473,7 @@ suite "nimkit application":
     window.setContentView(root)
     app.addWindow(window)
     app.mainMenu = menu
-    discard menu.addItem(item)
+    discard menu.add(item)
 
     check window.makeFirstResponder(target)
     menu.update(target)
@@ -862,7 +862,7 @@ suite "nimkit application":
       inc actionCount
 
     item.target = newActionTarget(action, onAction)
-    discard menu.addItem(item)
+    discard menu.add(item)
     button.popupPresentation = ppInline
     bar.addSubview(button)
     root.addSubview(bar)
@@ -899,13 +899,13 @@ suite "nimkit application":
     checked.state = bsOn
     mixed.state = bsMixed
     leaf.target = newActionTarget(leafAction, onLeaf)
-    discard submenu.addItem(leaf)
+    discard submenu.add(leaf)
     more.submenu = submenu
-    discard menu.addItem(disabled)
+    discard menu.add(disabled)
     discard menu.addSeparator()
-    discard menu.addItem(checked)
-    discard menu.addItem(mixed)
-    discard menu.addItem(more)
+    discard menu.add(checked)
+    discard menu.add(mixed)
+    discard menu.add(more)
 
     button.popupPresentation = ppInline
     root.addSubview(button)
@@ -1024,8 +1024,8 @@ suite "nimkit application":
 
     item.target = newActionTarget(action, onAction)
     actionsItem.submenu = actionsMenu
-    discard actionsMenu.addItem(item)
-    discard mainMenu.addItem(actionsItem)
+    discard actionsMenu.add(item)
+    discard mainMenu.add(actionsItem)
     menuBar.reload()
     window.setPopupPresentation(ppInline)
     root.addSubview(menuBar)
@@ -1048,7 +1048,7 @@ suite "nimkit application":
       menuBar = newMenuBar(mainMenu, rect(0, 0, 320, 28))
 
     actionsItem.submenu = actionsMenu
-    discard mainMenu.addItem(actionsItem)
+    discard mainMenu.add(actionsItem)
     menuBar.reload()
     root.addSubview(menuBar)
     window.setContentView(root)
@@ -1078,10 +1078,10 @@ suite "nimkit application":
 
     actionsItem.submenu = actionsMenu
     editItem.submenu = editMenu
-    discard actionsMenu.addItem(newMenuItem("Run"))
-    discard editMenu.addItem(newMenuItem("Copy"))
-    discard mainMenu.addItem(actionsItem)
-    discard mainMenu.addItem(editItem)
+    discard actionsMenu.add(newMenuItem("Run"))
+    discard editMenu.add(newMenuItem("Copy"))
+    discard mainMenu.add(actionsItem)
+    discard mainMenu.add(editItem)
     menuBar.reload()
     root.addSubview(menuBar)
     window.setContentView(root)

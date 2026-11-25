@@ -425,7 +425,7 @@ suite "NimKit OutlineView":
     check state.selectedRowIdentifiers == @["child"]
     check outlineView.selectedItemIdentifier == "child"
 
-    check outlineView.insertOutlineChild(initOutlineItem("first", "First"), "root", 0)
+    check outlineView.insertChild(initOutlineItem("first", "First"), "root", 0)
     check outlineView.childIdentifiersForItem("root") == @["first", "disabled", "child"]
     check outlineView.selectedItemIdentifier == "child"
     check outlineView.rowForItem("child") == 3
@@ -437,9 +437,9 @@ suite "NimKit OutlineView":
     outlineView.restoreState(state)
     check outlineView.selectedItemIdentifier == "child"
 
-    check outlineView.removeOutlineItemWithIdentifier("disabled")
+    check outlineView.deleteSubtree("disabled")
     check outlineView.childIdentifiersForItem("root") == @["first", "child"]
-    check outlineView.moveOutlineItem("child", "", 1)
+    check outlineView.move("child", "", 1)
     check outlineView.parentIdentifierForItem("child") == ""
     check outlineView.rowForItem("child") == 2
 

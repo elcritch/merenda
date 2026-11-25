@@ -47,13 +47,13 @@ resetItem.target = resetTarget
 contextRunItem.target = runTarget
 contextResetItem.target = resetTarget
 actionsItem.submenu = actionsMenu
-discard actionsMenu.addItem(runItem)
+discard actionsMenu.add(runItem)
 discard actionsMenu.addSeparator()
-discard actionsMenu.addItem(resetItem)
-discard mainMenu.addItem(actionsItem)
-discard contextMenu.addItem(contextRunItem)
+discard actionsMenu.add(resetItem)
+discard mainMenu.add(actionsItem)
+discard contextMenu.add(contextRunItem)
 discard contextMenu.addSeparator()
-discard contextMenu.addItem(contextResetItem)
+discard contextMenu.add(contextResetItem)
 app.mainMenu = mainMenu
 
 button.target = runTarget

@@ -415,7 +415,7 @@ suite "nimkit settings":
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let
       interfaceView =
         settings.contentView().viewWithIdentifier("settings-ui-font-button")
@@ -469,7 +469,7 @@ suite "nimkit settings":
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let
       fontPickerView = settings.contentView().viewWithIdentifier("settings-font-picker")
       onlyMonospaceFontsView =
@@ -597,7 +597,7 @@ suite "nimkit settings":
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let
       monospaceFontView =
         settings.contentView().viewWithIdentifier("settings-monospace-font-button")
@@ -649,7 +649,7 @@ suite "nimkit settings":
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let fontPickerView =
       settings.contentView().viewWithIdentifier("settings-font-picker")
     require not fontPickerView.isNil
@@ -783,7 +783,7 @@ suite "nimkit settings":
     let tabsView = settingsPanel.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let
       fontPickerView =
         settingsPanel.contentView().viewWithIdentifier("settings-font-picker")
@@ -845,7 +845,7 @@ suite "nimkit settings":
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     settings.fontPickerController.selectionHandler(TestSelectedFont())
     let applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
     require not applyFontView.isNil
@@ -870,7 +870,7 @@ suite "nimkit settings":
       settings.window().close()
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    check TabView(tabsView).trySelect(1)
     let applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
     require not applyFontView.isNil
     require applyFontView of Button

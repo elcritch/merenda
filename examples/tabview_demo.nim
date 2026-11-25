@@ -102,7 +102,7 @@ let
   modeAction = actionSelector("selectTabMode")
 
 proc updateStatus() =
-  let item = tabView.selectedTabViewItem()
+  let item = tabView.selectedItem()
   if item.isNil:
     status.text = "No selected tab"
   else:
@@ -110,12 +110,12 @@ proc updateStatus() =
 
 proc selectPrevious(sender: DynamicAgent) =
   discard sender
-  discard tabView.selectPreviousTabViewItem()
+  discard tabView.selectPrevious()
   updateStatus()
 
 proc selectNext(sender: DynamicAgent) =
   discard sender
-  discard tabView.selectNextTabViewItem()
+  discard tabView.selectNext()
   updateStatus()
 
 proc toggleTabPosition(sender: DynamicAgent) =
@@ -152,12 +152,12 @@ controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
 tabView.setHuggingPriority(LayoutPriorityLow, laVertical)
 tabView.setCompressionPriority(LayoutPriorityRequired, laVertical)
 
-discard tabView.addTabViewItem(newTabViewItem("General", generalPane(), "general"))
-discard tabView.addTabViewItem(newTabViewItem("Editor", editorPane(), "editor"))
-discard tabView.addTabViewItem(newTabViewItem("Account", accountPane(), "account"))
+discard tabView.add(newTabViewItem("General", generalPane(), "general"))
+discard tabView.add(newTabViewItem("Editor", editorPane(), "editor"))
+discard tabView.add(newTabViewItem("Account", accountPane(), "account"))
 let disabledItem = newTabViewItem("Disabled", paneStack(), "disabled")
 disabledItem.enabled = false
-discard tabView.addTabViewItem(disabledItem)
+discard tabView.add(disabledItem)
 tabView.delegate = newTabDemoDelegate(status)
 
 previousButton.target = newActionTarget(previousAction, selectPrevious)

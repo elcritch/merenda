@@ -791,11 +791,6 @@ protocol ArrayControllerMenuDataSource of MenuDataSource:
   ): MenuItemModel =
     controller.itemAt(index).menuItemModelForArrayItem()
 
-  method indexOfMenuItemModelIdentifier(
-      controller: ArrayController, menu: Menu, identifier: string
-  ): int =
-    controller.indexOfIdentifier(identifier)
-
 func documentTabStyleFromValue(value: ObjectValue): DocumentTabStyle =
   case value.kind
   of ovString:

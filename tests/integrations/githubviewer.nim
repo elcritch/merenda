@@ -515,8 +515,7 @@ suite "GitHub CLI document integration":
       app.addWindow(frontend.window)
       frontend.window.setContentView(frontend.contentView)
       app.activateWindow(frontend.window)
-      let item =
-        app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoShowGitHubAction)
+      let item = app.mainMenu()[1].submenu()[KosmoShowGitHubAction]
       require not item.isNil
       require item.perform(frontend.window)
       let panel = frontend.gitHubPanel
@@ -561,8 +560,7 @@ suite "GitHub CLI document integration":
       check panel.markdownView.markdownStyle().backgroundColor ==
         expectedStyle.backgroundColor
       check panel.markdownView.markdownStyle().textColor == expectedStyle.textColor
-      let closeItem =
-        app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseTabAction)
+      let closeItem = app.mainMenu()[1].submenu()[KosmoCloseTabAction]
       require closeItem.perform(frontend.window)
       check panel.closed
       check frontend.gitHubPanel.isNil

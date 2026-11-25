@@ -1412,7 +1412,7 @@ proc syncHistoryControl(
     menu = button.menu()
     selectedSuffix = panel.selectedHistorySuffix(side)
     workingTree = side == gdrsTo and panel.comparison.selectedToRevision().workingTree
-  menu.removeAllItems()
+  menu.clear()
   for choice in GitDiffHistoryChoices:
     let item = newGitDiffHistoryMenuItem(
       panel.unsafeWeakRef(), side, choice.title, choice.suffix
@@ -1421,7 +1421,7 @@ proc syncHistoryControl(
     if not workingTree and choice.suffix == selectedSuffix:
       item.state = nimkit.bsOn
       button.title = choice.title
-    discard menu.addItem(item)
+    discard menu.add(item)
   if side == gdrsTo and panel.snapshot.source == gdsRepository:
     let item = newGitDiffHistoryMenuItem(
       panel.unsafeWeakRef(),
@@ -1433,7 +1433,7 @@ proc syncHistoryControl(
     if workingTree:
       item.state = nimkit.bsOn
       button.title = GitDiffWorkingTreeSymbol
-    discard menu.addItem(item)
+    discard menu.add(item)
     button.enabled = true
     button.toolTip = "Select a commit offset or the working tree (^*)"
   else:
@@ -1461,17 +1461,16 @@ proc syncComparisonControls(panel: KosmoGitDiffPanel) =
     toMenu = panel.toRevisionButton.menu()
   if fromMenu.isNil or toMenu.isNil:
     return
-  fromMenu.removeAllItems()
-  toMenu.removeAllItems()
+  fromMenu.clear()
+  toMenu.clear()
   if panel.snapshot.source == gdsRepository:
     for choice in panel.snapshot.revisions:
       if choice.revision.splitHistoryRevision().suffix.len == 0:
-        discard fromMenu.addItem(
+        discard fromMenu.add(
           newGitDiffRevisionMenuItem(panel.unsafeWeakRef(), gdrsFrom, choice)
         )
-        discard toMenu.addItem(
-          newGitDiffRevisionMenuItem(panel.unsafeWeakRef(), gdrsTo, choice)
-        )
+        discard
+          toMenu.add(newGitDiffRevisionMenuItem(panel.unsafeWeakRef(), gdrsTo, choice))
   let
     fromRevision = panel.comparison.selectedFromRevision()
     toSelection = panel.comparison.selectedToRevision()

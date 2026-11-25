@@ -506,7 +506,7 @@ suite "NimKit CSS layout":
     let menu = newMenu("Main")
     let item = newMenuItem("File")
     item.submenu = newMenu("File")
-    discard menu.addItem(item)
+    discard menu.add(item)
     let bar = newMenuBar(menu, rect(0, 0, 200, 28))
     root.addSubview(bar)
     root.installCss("menu-bar { width: 240px; } menu-bar-item { width: 999px; }")

@@ -564,7 +564,7 @@ proc itemContextMenu*(tree: FileTree, path: string): nimkit.Menu =
           weakTree[].onItemAction(path, action)
 
     item.target = makeTarget(action, selector)
-    discard result.addItem(item)
+    discard result.add(item)
 
 protocol FileTreeEvents of nimkit.ResponderEventProtocol:
   method keyDown(tree: FileTree, event: nimkit.KeyEvent): bool =
@@ -947,7 +947,7 @@ proc branchMenuItem(
 
 proc updateBranches(panel: FileBrowserPanel) =
   let menu = panel.branchButton.menu()
-  menu.removeAllItems()
+  menu.clear()
   var repositories = 0
   var current = ""
   for root in panel.fileTree.rootPaths:
@@ -965,7 +965,7 @@ proc updateBranches(panel: FileBrowserPanel) =
           root.lastPathPart() & ": " & branch
         else:
           branch
-      discard menu.addItem(
+      discard menu.add(
         branchMenuItem(
           panel.unsafeWeakRef(), root, branch, label, branch == snapshot.branch
         )
@@ -1335,7 +1335,7 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
 
   let closeAction = nimkit.actionSelector(FileTreeCloseFilterAction)
   for mode in FileTreeDisplayMode:
-    discard scopeMenu.addItem(newScopeMenuItem(panel, mode))
+    discard scopeMenu.add(newScopeMenuItem(panel, mode))
   closeFilterButton.target = nimkit.newActionTarget(closeAction) do(
     sender: nimkit.DynamicAgent
   ):

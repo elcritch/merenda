@@ -33,48 +33,41 @@ proc onOff(button: Button): string =
 
 proc newPreferencesController(): PreferencesController =
   result = PreferencesController(
-    rows:
-      @[
-        PreferenceRow(
-          name: "Open recent documents",
-          area: "General",
-          value: "Enabled",
-          restart: "No",
-        ),
-        PreferenceRow(
-          name: "Default launch view",
-          area: "General",
-          value: "Documents",
-          restart: "No",
-        ),
-        PreferenceRow(
-          name: "Accent intensity", area: "Appearance", value: "62%", restart: "No"
-        ),
-        PreferenceRow(
-          name: "Reduce transparency",
-          area: "Appearance",
-          value: "Disabled",
-          restart: "No",
-        ),
-        PreferenceRow(
-          name: "Sync interval", area: "Accounts", value: "15 minutes", restart: "No"
-        ),
-        PreferenceRow(
-          name: "Offline cache budget", area: "Accounts", value: "4 GB", restart: "No"
-        ),
-        PreferenceRow(
-          name: "Developer diagnostics",
-          area: "Advanced",
-          value: "Verbose",
-          restart: "Yes",
-        ),
-        PreferenceRow(
-          name: "Experimental rendering path",
-          area: "Advanced",
-          value: "Off",
-          restart: "Yes",
-        ),
-      ]
+    rows: @[
+      PreferenceRow(
+        name: "Open recent documents", area: "General", value: "Enabled", restart: "No"
+      ),
+      PreferenceRow(
+        name: "Default launch view", area: "General", value: "Documents", restart: "No"
+      ),
+      PreferenceRow(
+        name: "Accent intensity", area: "Appearance", value: "62%", restart: "No"
+      ),
+      PreferenceRow(
+        name: "Reduce transparency",
+        area: "Appearance",
+        value: "Disabled",
+        restart: "No",
+      ),
+      PreferenceRow(
+        name: "Sync interval", area: "Accounts", value: "15 minutes", restart: "No"
+      ),
+      PreferenceRow(
+        name: "Offline cache budget", area: "Accounts", value: "4 GB", restart: "No"
+      ),
+      PreferenceRow(
+        name: "Developer diagnostics",
+        area: "Advanced",
+        value: "Verbose",
+        restart: "Yes",
+      ),
+      PreferenceRow(
+        name: "Experimental rendering path",
+        area: "Advanced",
+        value: "Off",
+        restart: "Yes",
+      ),
+    ]
   )
   initResponder(result)
 
@@ -272,10 +265,10 @@ advancedPage.stack.addFlexibleSpacer()
 
 tabView.tabMode = tvmInset
 tabView.allowsTabDragging = true
-tabView.addTabViewItem(newTabViewItem("General", generalPage.view, "general"))
-tabView.addTabViewItem(newTabViewItem("Appearance", appearancePage.view, "appearance"))
-tabView.addTabViewItem(newTabViewItem("Accounts", accountsPage.view, "accounts"))
-tabView.addTabViewItem(newTabViewItem("Advanced", advancedPage.view, "advanced"))
+tabView.add(newTabViewItem("General", generalPage.view, "general"))
+tabView.add(newTabViewItem("Appearance", appearancePage.view, "appearance"))
+tabView.add(newTabViewItem("Accounts", accountsPage.view, "accounts"))
+tabView.add(newTabViewItem("Advanced", advancedPage.view, "advanced"))
 
 proc chooseUpdateChannel(index: int) =
   stableRadio.state = if index == 0: bsOn else: bsOff
