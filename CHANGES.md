@@ -35,6 +35,9 @@
 - Allow helpers to call `bindTextField` and `bindValue` on a mounted DirectView
   widget to use its existing scope. Bindings stop updating when the owning
   composition is released.
+- Use bare `bindTextField(...)` and `bindValue(...)` in DirectView widget blocks.
+  The block supplies the scope and target. Call `bindValue` on the owning widget
+  to specify a different target.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

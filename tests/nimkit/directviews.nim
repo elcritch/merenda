@@ -95,6 +95,29 @@ proc observedChangingRoot(
 static:
   doAssert not compiles(
     block:
+      let owner = TextOwner(text: newSigil("text"))
+      let host = newDirectView()
+      host.viewBody:
+        TextField:
+          bindingScope.bindTextField(
+            "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
+          )
+  )
+
+  doAssert not compiles(
+    block:
+      let owner = TextOwner(text: newSigil("text"))
+      let host = newDirectView()
+      host.viewBody:
+        Label:
+          bindingScope.bindValue("text", owner.text, this) do(
+            label: Label, value: string
+          ):
+            label.stringValue = value
+  )
+
+  doAssert not compiles(
+    block:
       let host = newDirectView()
       let owner = DirectController()
       host.viewBody:
@@ -310,9 +333,7 @@ suite "direct view composition":
           if mode == 0:
             this.stringValue = authored
           elif mode == 1:
-            bindingScope.bindTextField(
-              "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
-            )
+            bindTextField("text", owner.text, owner, 0, readOwnedText, editOwnedText)
 
     render()
     let field = TextField(host.arrangedSubviews[0])
@@ -349,8 +370,8 @@ suite "direct view composition":
       host.viewBody:
         TextField:
           if bound:
-            bindingScope.bindTextField(
-              "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
+            bindTextField(
+              "text", owner.text, owner, 0, readOwnedText, edit = editOwnedText
             )
           else:
             this.stringValue = "plain"
@@ -670,8 +691,8 @@ suite "direct view composition":
         if visible:
           keyed("field"):
             TextField:
-              bindingScope.bindValue(
-                "value", model, directChanged, model, 0, readDirect, this, writeDirect
+              bindValue(
+                "value", model, directChanged, model, 0, readDirect, writeDirect
               )
 
     render()
@@ -810,9 +831,8 @@ suite "direct view composition":
                 this{vpDraggable} = true
                 TextField:
                   this.identifier = "field-" & id
-                  bindingScope.bindValue(
-                    "value", model, directChanged, model, 0, readDirect, this,
-                    writeDirect,
+                  bindValue(
+                    "value", model, directChanged, model, 0, readDirect, writeDirect
                   )
                 Button:
                   this.identifier = "button-" & id
@@ -982,8 +1002,15 @@ suite "direct collection rows":
         row.viewBody:
           VStack:
             TextField:
-              bindingScope.bindValue(
-                "value", model, directChanged, model, 0, readDirect, this, writeDirect
+              bindValue(
+                "value",
+                model,
+                directChanged,
+                model,
+                0,
+                readDirect,
+                writeDirect,
+                initialApply = true,
               )
             Button:
               this.title = controller.itemWithIdentifier(id).title
@@ -1047,9 +1074,7 @@ suite "direct collection rows":
         row.viewBody:
           if id == "0":
             TextField:
-              bindingScope.bindTextField(
-                "text", owner.text, owner, 0, readOwnedText, this, editOwnedText
-              )
+              bindTextField("text", owner.text, owner, 0, readOwnedText, editOwnedText)
           else:
             Label:
               this.stringValue = controller.itemWithIdentifier(id).title,

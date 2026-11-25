@@ -7,6 +7,7 @@ import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
 import ../declarative/actions
+from ../viewbindings import BindingScope, bindTextField, bindValue
 import ./runtime
 export runtime
 
@@ -61,8 +62,40 @@ macro directViewAction(widget, receiver: typed, handler: untyped): untyped =
 macro directViewAction(widget, receiver, context: typed, handler: untyped): untyped =
   directAction(widget, receiver, context, handler)
 
+macro directViewBindTextField(
+    scope: BindingScope, field: TextField, args: varargs[untyped]
+): untyped =
+  if args.len == 0:
+    error("bindTextField requires binding arguments", field)
+  result = newCall(bindSym"bindTextField", scope)
+  for i in 0 ..< args.len - 1:
+    result.add args[i]
+  let edit = args[^1]
+  if edit.kind == nnkExprEqExpr:
+    result.add edit
+  else:
+    result.add newTree(nnkExprEqExpr, ident"edit", edit)
+  result.add newTree(nnkExprEqExpr, ident"field", field)
+
+template directViewBindValue(
+    scope: BindingScope, widget: typed, id: string, input, apply: untyped
+) =
+  bindValue(scope, id, input, widget, apply)
+
+template directViewBindValue(
+    scope: BindingScope,
+    widget: typed,
+    id: string,
+    source, signal, receiver, context, getter, setter: untyped,
+    initialApply = true,
+) =
+  bindValue(
+    scope, id, source, signal, receiver, context, getter, widget, setter, initialApply
+  )
+
 macro viewBody*(session, body: untyped): untyped =
   var slot = 0
+  let root = genSym(nskLet, "root")
   proc statements(body, parent, key: NimNode): NimNode
   proc statements(body, parent, key: NimNode): NimNode =
     result = newStmtList()
@@ -192,6 +225,37 @@ macro viewBody*(session, body: untyped): untyped =
         if item.len != 2:
           error("arrangedSizing requires one sizing policy", item)
         result.add newAssignment(newDotExpr(parent, ident"sizing"), item[1])
+      elif item.kind in {nnkCall, nnkCommand} and
+          (item[0].eqIdent("bindTextField") or item[0].eqIdent("bindValue")):
+        let text = item[0].eqIdent("bindTextField")
+        if parent == root:
+          error(
+            if text:
+              "bindTextField requires a TextField block"
+            else:
+              "bindValue requires a widget block",
+            item,
+          )
+        let binder =
+          if text:
+            bindSym"directViewBindTextField"
+          else:
+            bindSym"directViewBindValue"
+        let binding = newCall(binder, newDotExpr(parent, ident"bindings"), ident"this")
+        for i in 1 ..< item.len:
+          binding.add item[i]
+        result.add binding
+      elif item.kind in {nnkCall, nnkCommand} and item[0].kind == nnkDotExpr and
+          item[0][0].eqIdent("bindingScope"):
+        if item[0][1].eqIdent("bindTextField"):
+          error(
+            "Use bare bindTextField inside TextField and omit the field argument", item
+          )
+        elif item[0][1].eqIdent("bindValue"):
+          error(
+            "Use bare bindValue for this widget or call bindValue on its owner", item
+          )
+        result.add item.copyNimTree()
       elif item.kind in {nnkForStmt, nnkBlockStmt}:
         let copy = item.copyNimTree()
         copy[^1] = statements(item[^1], parent, key)
@@ -216,7 +280,6 @@ macro viewBody*(session, body: untyped): untyped =
       else:
         result.add item.copyNimTree()
 
-  let root = genSym(nskLet, "root")
   let content = statements(body, root, newEmptyNode())
   result = quote:
     block:

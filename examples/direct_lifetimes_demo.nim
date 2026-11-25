@@ -21,7 +21,7 @@ proc newLifetimeController*(): LifetimeController =
   result.content.viewBody:
     Label:
       this.identifier = "observed-count"
-      bindingScope.bindValue("count", source, this) do(label: Label, value: int):
+      bindValue("count", source) do(label: Label, value: int):
         label.stringValue = "Latest count: " & $value
   result.connect(didDisappear, result, pauseContent)
   result.connect(willAppear, result, resumeContent)

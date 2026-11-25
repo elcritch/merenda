@@ -16,9 +16,8 @@ proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: strin
         this.stringValue = "#" & id
       TextField:
         arrangedSizing(svspFillAvailableWidth)
-        bindingScope.bindTextField(
-          "title", controller, arrayControllerDidChange, id, rowTitle, this,
-          editRowTitle,
+        bindTextField(
+          "title", controller, arrayControllerDidChange, id, rowTitle, editRowTitle
         )
       Button("Remove", acceptsFirstResponder = false):
         onAction(controller, id) do(

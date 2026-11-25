@@ -23,9 +23,9 @@ import merenda/nimkit/directviews
 proc taskRow(context: DirectNode, task: Task, controller: TaskController) =
   context.viewBody:
     TextField:
-      bindingScope.bindTextField(
+      bindTextField(
         "title", controller.tasks.item(task.id), controller, task.id,
-        titleFor, this, editTitle,
+        titleFor, editTitle,
       )
 
 let view = newDirectView()
@@ -133,11 +133,23 @@ These text handoff rules cover `bindTextField` and the DSL's text assignment;
 arbitrary binding setters and independently managed scopes still require callers
 to avoid competing writers.
 
+Inside `TextField:`, call bare `bindTextField(...)`. DirectView supplies the
+current field and its binding scope. Bare `bindValue(...)` supplies the current
+widget and its scope in the same way.
+
+```nim
+Label:
+  bindValue("status", controller.status) do(label: Label, value: string):
+    label.stringValue = value
+```
+
 A helper that receives a widget from a DirectView body can call `bindTextField`
 or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
 the binding in the form's existing scope, so the form can manage a field it
-creates in ordinary Nim code. The operation raises `ValueError` if the widget
-has no active DirectView scope. See the [form editor example](../examples/form_editors.nim).
+creates in ordinary Nim code. Use `this.bindValue(...)` or `form.bindValue(...)`
+when the widget that owns the scope and the target widget are supplied explicitly.
+These calls raise `ValueError` if the owner has no active DirectView scope. See
+the [form editor example](../examples/form_editors.nim).
 
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's

@@ -21,14 +21,8 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
         if owner.isNil:
           this.stringValue = task.title
         else:
-          bindingScope.bindTextField(
-            "title",
-            owner.tasks.item(task.id),
-            owner,
-            task.id,
-            titleFor,
-            this,
-            editTitle,
+          bindTextField(
+            "title", owner.tasks.item(task.id), owner, task.id, titleFor, editTitle
           )
       Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
         onAction(owner, task.id) do(this: Button, receiver: TaskController, id: int):
@@ -61,7 +55,7 @@ proc buildChrome(controller: TaskController): DirectView =
       this.spacing = 14
       this.distribution = svdNatural
       this.edgeInsets = insets(16)
-      bindingScope.bindPreview(controller)
+      this.bindPreview(controller)
       Label:
         this.stringValue = "Direct views + MVC bindings"
         this.labelStyle = lsHeading
@@ -88,17 +82,13 @@ proc buildChrome(controller: TaskController): DirectView =
             discard receiver.history.performRedo()
       Label:
         this.identifier = "counter-value"
-        bindingScope.bindValue("counter", controller.counter, this) do(
-          label: Label, value: int
-        ):
+        bindValue("counter", controller.counter) do(label: Label, value: int):
           label.stringValue = "Unrelated counter: " & $value
       component(observedTaskRows, controller)
       Label:
         this.identifier = "status"
         this.labelStyle = lsStatus
-        bindingScope.bindValue("status", controller.status, this) do(
-          label: Label, value: string
-        ):
+        bindValue("status", controller.status) do(label: Label, value: string):
           label.stringValue = value
 
 proc newTaskController(): TaskController =

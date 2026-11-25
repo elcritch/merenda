@@ -356,15 +356,13 @@ these controls inside the existing `VStack`, below the project button.
 ```nim
     Label(stringValue = "Task title")
     TextField:
-      bindingScope.bindTextField(
-        "title", controller.tasks.item(1), controller, 1, titleFor, this, editTitle
-      )
+      bindTextField("title", controller.tasks.item(1), controller, 1, titleFor, editTitle)
 ```
 
 Run the app again. The field starts with the title of task 1. Here,
 `"title"` names the binding and `controller.tasks.item(1)` tells it which task to
 watch. The binding calls `titleFor(controller, 1)` to read the title and puts it in
-`this`, the text field. When you type, the field sends the new text to
+the field from the `TextField:` block. When you type, the field sends the new text to
 `editTitle(controller, 1, text)`. If another part of the app changes that task's
 title, the field picks up the change too.
 

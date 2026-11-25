@@ -70,8 +70,8 @@ proc body(
                 proc() =
                   discard
               )
-              bindingScope.bindTextField(
-                "title", task, titleChanged, task, task.id, readTitle, this, acceptTitle
+              bindTextField(
+                "title", task, titleChanged, task, task.id, readTitle, acceptTitle
               )
             Button:
               this.title = "Remove"

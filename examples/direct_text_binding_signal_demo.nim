@@ -31,14 +31,11 @@ proc runDirectTextBindingSignalDemo() =
   root.edgeInsets = insets(16)
   root.viewBody:
     TextField:
-      # The view's bindingScope owns the connection named "text".
+      # The TextField block supplies the field and owns the binding named "text".
       # Here controller both sends textChanged and receives edits.
       # The callbacks need no extra context, so we pass ().
-      # readText supplies the value for this, the field we're building.
-      # editText handles edits from that field.
-      bindingScope.bindTextField(
-        "text", controller, textChanged, (), readText, this, editText
-      )
+      # readText fills the field. editText handles edits from the field.
+      bindTextField("text", controller, textChanged, (), readText, editText)
 
   let window =
     newWindow("DirectView text binding with a signal", frame = rect(100, 100, 400, 120))

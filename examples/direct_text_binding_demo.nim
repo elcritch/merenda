@@ -27,15 +27,12 @@ proc runDirectTextBindingDemo() =
   root.edgeInsets = insets(16)
   root.viewBody:
     TextField:
-      # The view's bindingScope owns this connection. "text" names it
-      # within that scope, and controller.text is the Sigil it watches.
+      # The TextField block supplies the field and its binding scope.
+      # "text" names the binding, and controller.text is the Sigil it watches.
       # Both callbacks receive controller. The empty tuple () means
       # they need no extra context.
-      # readText supplies the text for this, the field we're building.
-      # editText takes edits from that same field back to the controller.
-      bindingScope.bindTextField(
-        "text", controller.text, controller, (), readText, this, editText
-      )
+      # readText fills the field. editText takes edits back to the controller.
+      bindTextField("text", controller.text, controller, (), readText, editText)
 
   let window = newWindow("DirectView text binding", frame = rect(100, 100, 400, 120))
   sharedApplication().runWindow(window, root)

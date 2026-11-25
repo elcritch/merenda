@@ -13,18 +13,17 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
       TextField:
         this.identifier = "title-" & $task.id
         arrangedSizing(svspFillAvailableWidth)
-        bindingScope.bindTextField(
+        bindTextField(
           "title",
           owner.tasks.item(task.id),
           owner,
           (owner.generation, task.id),
           taskTitle,
-          this,
           editTask,
         )
       Label:
         this.identifier = "accepted-" & $task.id
-        bindingScope.bindValue("accepted", owner.tasks.item(task.id), this) do(
+        bindValue("accepted", owner.tasks.item(task.id)) do(
           label: Label, value: Opt[EditorTask]
         ):
           label.stringValue = "Accepted: " & (if value.isSome: value.get.title else: "")
@@ -72,9 +71,7 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       this.edgeInsets = insets(12)
       Label:
         this.identifier = "document"
-        bindingScope.bindValue("document", owner.documentLabel, this) do(
-          label: Label, value: string
-        ):
+        bindValue("document", owner.documentLabel) do(label: Label, value: string):
           label.stringValue = value
       HStack:
         this.distribution = svdNatural
@@ -103,9 +100,7 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       component(observedRows, owner)
       Label:
         this.identifier = "status"
-        bindingScope.bindValue("status", owner.status, this) do(
-          label: Label, value: string
-        ):
+        bindValue("status", owner.status) do(label: Label, value: string):
           label.stringValue = value
 
 proc runTwoDocumentDirect*() =
