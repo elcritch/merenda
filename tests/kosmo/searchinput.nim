@@ -450,8 +450,8 @@ suite "Kosmo search synthetic input":
     require window.pressSearchKey(keyTab, {nimkit.kmShift})
     window.checkSearchTextRendering(field, " λ ensureArrangement ")
     check frontend.editorView.editor
-    .bufferText(frontend.editorView.editor.tabs()[0].id)
-    .get() == ""
+      .bufferText(frontend.editorView.editor.tabs()[0].id)
+      .get() == ""
 
   for inFiles in [false, true]:
     let panelName = if inFiles: "file search" else: "editor search"
@@ -466,9 +466,6 @@ suite "Kosmo search synthetic input":
           window = frontend.window
           query = frontend.openSearchInput(inFiles, replacing)
           bufferId = frontend.editorView.editor.tabs()[0].id
-        if replacing:
-          require window.pressSearchKey(keyTab)
-          require window.pressSearchKey(keyTab)
         let field =
           if not replacing:
             query
@@ -476,7 +473,9 @@ suite "Kosmo search synthetic input":
             frontend.searchPanel.replacementField
           else:
             frontend.editorView.replacementField()
-        require window.fieldEditorClient() == field
+        if replacing:
+          require window.tabToSearchControl(field)
+        require window.searchFieldFocused(field)
         window.typeSearchText("prefix ")
         withSearchClipboard:
           require pasteboard.replaceWithPlainText(" λ needle ")
@@ -505,9 +504,6 @@ suite "Kosmo search synthetic input":
           query = frontend.openSearchInput(inFiles, replacing)
           modifiers = frontend.shortcutProfile().primaryModifiers()
           bufferId = frontend.editorView.editor.tabs()[0].id
-        if replacing:
-          require window.pressSearchKey(keyTab)
-          require window.pressSearchKey(keyTab)
         let field =
           if not replacing:
             query
@@ -515,7 +511,9 @@ suite "Kosmo search synthetic input":
             frontend.searchPanel.replacementField
           else:
             frontend.editorView.replacementField()
-        require window.fieldEditorClient() == field
+        if replacing:
+          require window.tabToSearchControl(field)
+        require window.searchFieldFocused(field)
         window.typeSearchText("λ needle")
         withSearchClipboard:
           require pasteboard.replaceWithPlainText("previous clipboard")
@@ -573,8 +571,8 @@ suite "Kosmo search synthetic input":
         require window.pressSearchKey(keyTab)
         check query.text() == "needle"
         if expanding:
-          require window.pressSearchKey(keyTab)
-          check window.fieldEditorClient() == replacement
+          require window.tabToSearchControl(replacement)
+          require window.searchFieldFocused(replacement)
           check query.text() == "needle"
         require window.pressSearchKey(keyTab, {nimkit.kmShift})
         check query.text() == "needle"
