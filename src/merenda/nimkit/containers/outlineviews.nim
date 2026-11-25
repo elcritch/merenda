@@ -496,6 +496,7 @@ proc insertChild*(
 proc deleteSubtree*(
     outlineView: OutlineView, identifier: string
 ): bool {.discardable.} =
+  ## Delete the local item and all of its descendants. Return false if absent.
   let index = outlineView.itemIndex(identifier)
   if index < 0:
     return false

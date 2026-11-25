@@ -723,12 +723,14 @@ proc `[]`*(menu: Menu, index: Natural): MenuItem =
   menu.xItems[index]
 
 proc itemAt*(menu: Menu, index: int): MenuItem =
+  ## Return nil if the displayed index is out of range.
   if index < 0 or index >= menu.len():
     nil
   else:
     menu.xItems[index]
 
 proc find*(menu: Menu, identifier: string): int =
+  ## Return the displayed index of an item, or -1 if absent.
   if identifier.len == 0:
     return -1
   for index, item in menu.xItems:
@@ -737,11 +739,8 @@ proc find*(menu: Menu, identifier: string): int =
   -1
 
 proc `[]`*(menu: Menu, identifier: string): MenuItem =
-  let index = menu.find(identifier)
-  if index >= 0:
-    menu.itemAt(index)
-  else:
-    nil
+  ## Return the displayed item for this identifier, or nil if absent.
+  menu.itemAt(menu.find(identifier))
 
 proc visibleModelIndex(menu: Menu, visibleIndex: int): int =
   if visibleIndex < 0:
