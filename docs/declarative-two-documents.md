@@ -1,14 +1,11 @@
 # Two-document editor experiment
 
-This experiment compares direct views (P7) with ViewSpec (P0) using the same
-document, draft, undo, and delayed-validation policy. Direct views remain the
-main candidate; ViewSpec remains the comparison baseline.
+This experiment uses DirectView with document, draft, undo, and delayed-validation policy.
 
-Run either example from the repository root with the existing Atlas dependencies:
+Run the example from the repository root with the existing Atlas dependencies:
 
 ```sh
 nim ic -r examples/two_document_direct.nim
-nim ic -r examples/two_document_spec.nim
 ```
 
 Each window contains two instances of the same editor. Edit a draft, press its
@@ -70,30 +67,9 @@ not a per-row conflict-resolution policy. Invalidated requests remain queued
 until delivery and are discarded then; the prototype does not cancel external
 worker or network operations.
 
-## Comparing the renderers
-
-| Concern | Direct views | ViewSpec |
-| --- | --- | --- |
-| Reusable row | Ordinary `DirectNode` builder, composed with `component` | Ordinary helper returning a `ViewSpec` |
-| Property access | Typed widget setters and scoped bindings inline | Description fields plus typed binding recipes |
-| Structural changes | Independently observed row component | Rebuilds the affected editor host's description |
-| Draft/accepted text change | Item bindings update the field and label | The same item bindings update the field and label |
-| Second editor | Separate owned view tree | Separate owned mount tree |
-| Domain policy | Shared document/controller implementation | The identical implementation |
-
-The experiment's domain protections belong to MVC and the binding layer. They
-do not require eliminating ViewSpec. Direct views avoid an additional property
-description vocabulary and make nested observation explicit; ViewSpec retains
-its inspectable structural description and duplicate-key preflight.
-
 ## Acceptance checks and limits
 
-The implementation in `5ed1d43c` passes five paired tests per renderer in the
-shared NimKit suite (1,577 tests). The full `nim integration` task passes, including
-NimKit, Kosmo, integration, and Tekton tests. The full example bundle also compiles.
-The property handoff fix is recorded separately in `071572ef`.
-
-The same checks run for both renderers in
+The shared NimKit suite checks the editor in
 [twodocumenteditors.nim](../tests/nimkit/twodocumenteditors.nim), imported by the
 shared NimKit runner:
 
@@ -108,12 +84,6 @@ shared NimKit runner:
 - Pending requests that do not retain a retired controller.
 - Attempted navigation to a closed document leaving the current editor usable.
 
-Both examples were also run as native macOS windows with development control,
-using background presentation. Screenshots verified matching layouts and the
-results of text input, validated commit, undo, delivery after switching, and
-closing one document while the other stayed usable. This smoke check used the
-ordinary control actions; it did not simulate native IME composition.
-
 The tests pump GUI work against observable conditions with monotonic deadlines.
 Marked-text coverage exercises NimKit's field editor APIs headlessly; it does not
 establish native operating-system IME behavior. Validation is manually delivered
@@ -123,6 +93,6 @@ Rows remain eager, removed-row drafts remain retained for the document lifetime,
 and undo/publication still uses collection snapshots. The experiment does not
 establish virtualization, bounded history storage, general formatted-field
 conflicts, undo grouping, arbitrary observer exception recovery, or native input
-latency. It is a behavioral comparison, not a new performance benchmark.
+latency. It is a behavioral experiment, not a performance benchmark.
 The sample documents are in memory; file persistence and save-review UI are
 outside this experiment.

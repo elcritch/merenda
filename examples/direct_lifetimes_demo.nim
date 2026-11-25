@@ -21,7 +21,7 @@ proc newLifetimeController*(): LifetimeController =
   result.content.viewBody:
     Label:
       this.identifier = "observed-count"
-      bindingScope.bindValue("count", source, this) do(label: Label, value: int):
+      this.bindValue(id = "count", input = source) do(label: Label, value: int):
         label.stringValue = "Latest count: " & $value
   result.connect(didDisappear, result, pauseContent)
   result.connect(willAppear, result, resumeContent)
@@ -44,13 +44,13 @@ proc runDirectLifetimes*() =
   toolbar.viewBody:
     HStack:
       Button("Increment"):
-        onAction(controller) do(this: Button, owner: LifetimeController):
+        this.onAction(controller) do(this: Button, owner: LifetimeController):
           owner.count <- owner.count{} + 1
       Button("Hide and suspend"):
-        onAction(controller) do(this: Button, owner: LifetimeController):
+        this.onAction(controller) do(this: Button, owner: LifetimeController):
           owner.showContent(false)
       Button("Show and resume"):
-        onAction(controller) do(this: Button, owner: LifetimeController):
+        this.onAction(controller) do(this: Button, owner: LifetimeController):
           owner.showContent(true)
   let root = newStackView(laVertical)
   root.edgeInsets = insets(12)

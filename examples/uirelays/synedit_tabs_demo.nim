@@ -232,7 +232,7 @@ proc newSynEditRelaysView(
   result = SynEditRelaysView()
   result.initUIRelaysViewFields(frame = frame)
   result.buffers = @buffers
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(SynEditRelaysDrawing)
   discard result.withProtocol(SynEditRelaysEvents)
   discard result.withProtocol(SynEditRelaysTextInput)

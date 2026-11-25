@@ -1,12 +1,13 @@
 ## Direct typed widget composition with structural slots and keyed siblings.
 import std/[macros, strutils]
 from sigils/selectors import DynamicAgent
+from ../foundation/selectors import ActionSelector
 import ../foundation/types
 import ../view/views
 import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
-import ../declarative/actions
+import ./actions
 import ./runtime
 export runtime
 
@@ -27,7 +28,7 @@ proc takeActionParameter(params, callback: NimNode): tuple[name, typ: NimNode] =
 
 proc directAction(widget, receiver, context, callback: NimNode): NimNode =
   if callback.kind notin {nnkDo, nnkLambda}:
-    error("DirectView handlers require an inline proc", callback)
+    error("DirectView actions with explicit context require an inline proc", callback)
   let
     handler = callback.copyNimTree()
     params = handler.params
@@ -55,14 +56,52 @@ proc directAction(widget, receiver, context, callback: NimNode): NimNode =
     else:
       {.error: "The first DirectView handler parameter must have the widget's type".}
 
+proc bindDirectAction[R: Responder](
+    _: View, receiver: R, action: ActionSelector
+): ViewAction =
+  initViewAction(action, receiver)
+
+proc invokeDirectHandler[W: View, R: Responder, S, O: DynamicAgent](
+    receiver: R, handler: proc(sender: S, owner: O) {.nimcall.}, sender: DynamicAgent
+) {.nimcall.} =
+  if not handler.isNil and sender of W:
+    handler(W(sender), receiver)
+
+proc bindDirectAction[W: View, R: Responder, S, O: DynamicAgent](
+    _: W, receiver: R, handler: proc(sender: S, owner: O) {.nimcall.}
+): ViewAction =
+  viewAction(receiver, handler, invokeDirectHandler[W, R, S, O])
+
 macro directViewAction(widget, receiver: typed, handler: untyped): untyped =
-  directAction(widget, receiver, newEmptyNode(), handler)
+  if handler.kind in {nnkDo, nnkLambda}:
+    directAction(widget, receiver, newEmptyNode(), handler)
+  else:
+    newCall(bindSym"bindDirectAction", widget, receiver, handler)
 
 macro directViewAction(widget, receiver, context: typed, handler: untyped): untyped =
   directAction(widget, receiver, context, handler)
 
+template onAction*(button: Button, receiver: typed, handler: untyped) =
+  ## Register a selector or sender-first handler during DirectView composition.
+  let widget = button
+  widget.setAction(directViewAction(widget, receiver, handler))
+
+template onAction*(button: Button, receiver, context: typed, handler: untyped) =
+  let widget = button
+  widget.setAction(directViewAction(widget, receiver, context, handler))
+
+template onChange*(field: TextField, receiver: typed, handler: untyped) =
+  ## Register a selector or sender-first text change handler during composition.
+  let widget = field
+  widget.setChange(directViewAction(widget, receiver, handler))
+
+template onChange*(field: TextField, receiver, context: typed, handler: untyped) =
+  let widget = field
+  widget.setChange(directViewAction(widget, receiver, context, handler))
+
 macro viewBody*(session, body: untyped): untyped =
   var slot = 0
+  let root = genSym(nskLet, "root")
   proc statements(body, parent, key: NimNode): NimNode
   proc statements(body, parent, key: NimNode): NimNode =
     result = newStmtList()
@@ -185,13 +224,15 @@ macro viewBody*(session, body: untyped): untyped =
             let bindingScope {.inject.} = `node`.bindings
             composeBody(`node`, `context`):
               `nested`
-      elif item.kind == nnkAsgn and item[0].kind == nnkDotExpr and
-          item[0][0].eqIdent("this") and item[0][1].eqIdent("stringValue"):
-        result.add newCall(bindSym"patchText", parent, ident"this", item[1])
-      elif item.kind in {nnkCall, nnkCommand} and item[0].eqIdent("arrangedSizing"):
-        if item.len != 2:
-          error("arrangedSizing requires one sizing policy", item)
-        result.add newAssignment(newDotExpr(parent, ident"sizing"), item[1])
+      elif item.kind in {nnkCall, nnkCommand} and item[0].kind == nnkDotExpr and
+          item[0][0].eqIdent("bindingScope"):
+        if item[0][1].eqIdent("bindTextField"):
+          error(
+            "Call this.bindTextField for this field or bindTextField on its owner", item
+          )
+        elif item[0][1].eqIdent("bindValue"):
+          error("Call this.bindValue for this widget or bindValue on its owner", item)
+        result.add item.copyNimTree()
       elif item.kind in {nnkForStmt, nnkBlockStmt}:
         let copy = item.copyNimTree()
         copy[^1] = statements(item[^1], parent, key)
@@ -202,21 +243,9 @@ macro viewBody*(session, body: untyped): untyped =
         for i in start ..< copy.len:
           copy[i][^1] = statements(item[i][^1], parent, key)
         result.add copy
-      elif item.kind in {nnkCall, nnkCommand} and
-          (item[0].eqIdent("onAction") or item[0].eqIdent("onChange")):
-        let action = newCall(bindSym"directViewAction", ident"this")
-        for i in 1 ..< item.len:
-          action.add item[i]
-        let setter =
-          if item[0].eqIdent("onAction"):
-            bindSym"setAction"
-          else:
-            bindSym"setChange"
-        result.add newCall(setter, parent, ident"this", action)
       else:
         result.add item.copyNimTree()
 
-  let root = genSym(nskLet, "root")
   let content = statements(body, root, newEmptyNode())
   result = quote:
     block:

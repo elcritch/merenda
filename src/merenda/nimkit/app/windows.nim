@@ -1536,7 +1536,7 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
       return true
 
   if not responder.isNil:
-    if not responder.acceptsFirstResponder():
+    if not responder.focusable():
       return false
     if not responder.shouldBecomeFirstResponder():
       return false
@@ -3142,7 +3142,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
       )
       window.xMousePolicyStopResponder = hitPolicy.responder
     window.xMouseCaptureView = target
-    if target.acceptsFirstResponder():
+    if target.focusable():
       discard window.setFirstResponder(target, focusVisible = false)
   else:
     target = window.xMouseCaptureView

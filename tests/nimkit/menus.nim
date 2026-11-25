@@ -264,7 +264,7 @@ suite "nimkit menus":
     defer:
       window.close()
     var underlyingKeys, activations: int
-    underlying.acceptsFirstResponder = true
+    underlying.focusable = true
     discard underlying.addMethod(
       keyDown(),
       proc(_: View, event: KeyEvent): bool =
@@ -435,7 +435,7 @@ suite "nimkit menus":
     defer:
       window.close()
     var underlyingKeys = 0
-    underlying.acceptsFirstResponder = true
+    underlying.focusable = true
     discard underlying.addMethod(
       keyDown(),
       proc(_: View, event: KeyEvent): bool =
@@ -480,7 +480,7 @@ suite "nimkit menus":
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     let after = newView(frame = rect(8, 40, 200, 24))
-    after.acceptsFirstResponder = true
+    after.focusable = true
     root.addSubview(after)
     window.setContentView(root)
     root.layoutSubtreeIfNeeded()
@@ -573,7 +573,7 @@ suite "nimkit menus":
     let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
     root.addSubview(menuBar)
     let before = newView(frame = rect(8, 40, 200, 24))
-    before.acceptsFirstResponder = true
+    before.focusable = true
     root.addSubview(before)
     window.setContentView(root)
     root.layoutSubtreeIfNeeded()
@@ -960,8 +960,8 @@ suite "nimkit menus":
     let delegate = PopupTestHost()
     discard delegate.withProtocol(TestPopupDelegate)
     let popup = newPopupListView(delegate = delegate, frame = rect(8, 40, 100, 24))
-    previous.acceptsFirstResponder = true
-    following.acceptsFirstResponder = true
+    previous.focusable = true
+    following.focusable = true
     for view in [previous, View(popup), following]:
       root.addSubview(view)
     window.setContentView(root)
@@ -1307,7 +1307,7 @@ suite "nimkit menus":
       item = newMenuItem("Run", action)
 
     discard menu.addItem(item)
-    target.acceptsFirstResponder = true
+    target.focusable = true
     target.menu = menu
     root.addSubview(target)
     window.setContentView(root)
@@ -1353,7 +1353,7 @@ suite "nimkit menus":
           window.close()
         window.setPopupPresentation(ppInline)
         for view in [previous, target, following]:
-          view.acceptsFirstResponder = true
+          view.focusable = true
           root.addSubview(view)
         window.setContentView(root)
         more.submenu = submenu

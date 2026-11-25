@@ -195,7 +195,7 @@ suite "Kosmo view clipboard commands":
           require frontend.pressClipboardKey(keyC)
           check pasteboard.plainText() == "keep empty selection"
 
-        if viewer != "Git diff hunk" and container.acceptsFirstResponder():
+        if viewer != "Git diff hunk" and container.focusable():
           require window.makeFirstResponder(container)
           require window.sendAction(actionSelector(KosmoSelectAllAction))
           require window.sendAction(actionSelector(KosmoCopyAction))

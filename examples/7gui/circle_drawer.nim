@@ -113,7 +113,7 @@ proc newCircleCanvas(): CircleCanvas =
   initViewFields(result)
   result.accessibilityRole = arGroup
   result.accessibilityLabel = "Circle canvas"
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(CircleCanvasDrawing)
   discard result.withProtocol(CircleCanvasEvents)
 

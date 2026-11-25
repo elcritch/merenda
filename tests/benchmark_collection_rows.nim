@@ -19,9 +19,9 @@ proc buildRow(row: DirectView, controller: ArrayController, id: string) =
       Label:
         this.stringValue = id
       TextField:
-        bindingScope.bindValue(
+        this.bindValue(
           "title", controller, arrayControllerDidChange, controller, id, readTitle,
-          this, applyTitle,
+          applyTitle,
         )
       Button:
         this.title = "Remove"

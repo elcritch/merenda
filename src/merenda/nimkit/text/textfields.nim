@@ -164,7 +164,7 @@ protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
       textField.xFlags.incl(tfEditable)
     else:
       textField.xFlags.excl(tfEditable)
-    textField.acceptsFirstResponder = editable or textField.isSelectable()
+    textField.focusable = editable or textField.isSelectable()
     textField.invalidateIntrinsicContentSize()
 
   method isSelectable*(textField: TextField): bool =
@@ -177,7 +177,7 @@ protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
       textField.xFlags.incl(tfSelectable)
     else:
       textField.xFlags.excl(tfSelectable)
-    textField.acceptsFirstResponder = selectable or textField.isEditable
+    textField.focusable = selectable or textField.isEditable
     textField.invalidateIntrinsicContentSize()
 
   method isEditing*(textField: TextField): bool =
@@ -1125,7 +1125,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.xLayoutStorage = newTextStorage(value)
   textField.xLayoutManager = newTextLayoutManager(textField.xLayoutStorage)
   Control(textField).setObjectValue(toObj(value))
-  textField.acceptsFirstResponder = true
+  textField.focusable = true
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)
   discard textField.withProtocol(DefaultTextFieldCommands)

@@ -329,7 +329,7 @@ proc newDeclarativeDragView*[T](
     xModel: model, xOptions: options, xChoice: -1, clicked: clicked
   )
   initViewFields(result, frame)
-  result.acceptsFirstResponder = true
+  result.focusable = true
   result.clipsToBounds = true
   result.build = proc(host: DragHost, env: DragEnvironment): DragPreview =
     profileViewPhase(vppDragPreview)

@@ -3595,7 +3595,7 @@ proc newKosmoGitDiffPanel(
     result.addSubview(view)
   result.search.bar.removeFromSuperview()
   result.addSubview(result.search.bar)
-  result.acceptsFirstResponder = true
+  result.focusable = true
   result.syncComparisonControls()
   let panel = result.unsafeWeakRef()
   let refreshAction = nimkit.actionSelector("kosmo.refreshGitDiff")

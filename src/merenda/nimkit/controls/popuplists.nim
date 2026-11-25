@@ -633,7 +633,7 @@ proc initPopupListViewFields*(
   popupList.usesThemedRootBackground = false
   popupList.dataSource = dataSource
   popupList.delegate = delegate
-  popupList.acceptsFirstResponder = true
+  popupList.focusable = true
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)
   discard popupList.withProtocol(DefaultPopupListKeyCommands)

@@ -10,6 +10,7 @@ import ./text/textfields
 type
   BindingScope* = ref object of Responder
     bindings: Table[string, Binding]
+    owner: BackRef[Responder]
     preview: bool
     disposed: bool
     schedule: proc() {.closure.}
@@ -48,6 +49,11 @@ type
     skipUnchanged, hasLast: bool
     lastValue: T
 
+proc isActive*(scope: BindingScope): bool {.inline.} =
+  ## A standalone scope stays active until disposal. An owned scope also needs its owner.
+  not scope.isNil and not scope.disposed and
+    (scope.owner == nil or not scope.owner.isNil)
+
 proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
   profileViewPhase(vppBindingUpdate)
   let binding = ValueBinding[R, C, V, T](base)
@@ -59,7 +65,7 @@ proc applyValue[R: Responder, C; V: Responder, T](base: Binding) =
     let scope = binding.scope{}
     if not binding.active or binding.generation != generation:
       return
-    if scope.isNil or scope.disposed:
+    if not scope.isActive:
       return
     if scope.suspended:
       binding.pending = true
@@ -85,7 +91,7 @@ proc textEdited(editor: EditBinding, sender: DynamicAgent) {.slot.} =
   let owner = editor.owner{}
   if not owner.isNil and owner.active and not owner.updating:
     let scope = owner.scope{}
-    if not scope.isNil and not scope.disposed:
+    if scope.isActive:
       editor.invoke(editor)
 
 proc invokeEdit[R: Responder, C](base: EditBinding) =
@@ -102,6 +108,10 @@ proc setBoundText(field: TextField, value: string) {.nimcall.} =
 proc newBindingScope*(preview = false): BindingScope =
   BindingScope(preview: preview)
 
+proc newBindingScope*(owner: BackRef[Responder], preview = false): BindingScope =
+  ## Stop applying bindings when the weak owner expires.
+  BindingScope(preview: preview, owner: owner)
+
 proc onSchedule*(scope: BindingScope, callback: proc() {.closure.}) =
   ## Called on the GUI thread when the first pending update needs a flush.
   scope.schedule = callback
@@ -110,7 +120,7 @@ proc flushBindings*(scope: BindingScope)
 
 proc invalidate(binding: Binding) {.slot.} =
   let scope = binding.scope{}
-  if binding.active and not scope.isNil and not scope.disposed:
+  if binding.active and scope.isActive:
     binding.pending = true
     if not scope.suspended and not scope.scheduled:
       scope.scheduled = true
@@ -124,22 +134,21 @@ proc invalidate(binding: Binding) {.slot.} =
         scheduleMainThreadWork(
           proc(): bool =
             let current = weakScope{}
-            if not current.isNil and not current.disposed and current.scheduled and
-                current.ticket == ticket:
+            if current.isActive and current.scheduled and current.ticket == ticket:
               current.flushBindings()
             false
         )
 
 proc suspendBindings*(scope: BindingScope) =
   ## Keep subscriptions and ownership, while deferring source reads and writes.
-  if not scope.isNil and not scope.disposed and not scope.suspended:
+  if scope.isActive and not scope.suspended:
     scope.suspended = true
     scope.scheduled = false
     inc scope.ticket
 
 proc resumeBindings*(scope: BindingScope, flush = true) =
   ## Re-enable a scope and, by default, apply its pending current values.
-  if not scope.isNil and not scope.disposed and scope.suspended:
+  if scope.isActive and scope.suspended:
     scope.suspended = false
     if flush:
       scope.flushBindings()
@@ -179,7 +188,7 @@ proc removeBinding*(scope: BindingScope, id: string) =
 
 proc ownsText*(scope: BindingScope, field: TextField): bool =
   ## Whether this scope has a bindTextField owner for the field.
-  if not scope.isNil and not scope.disposed:
+  if scope.isActive:
     for binding in scope.bindings.values:
       if binding.textTarget{} == field:
         return true
@@ -189,7 +198,7 @@ proc relinquishTextExcept(
 ): bool =
   ## Transfer ownership before another writer changes the field. Omission alone
   ## uses endBindings and leaves the current field value intact.
-  if not scope.isNil and not scope.disposed:
+  if scope.isActive:
     var removed: seq[string]
     for id, binding in scope.bindings:
       if (not keepId or id != exceptId) and binding.textTarget{} == field:
@@ -220,7 +229,7 @@ proc flushBindings*(scope: BindingScope) =
   ## A failed binding remains pending for an explicit flush or a new source
   ## notification; other bindings in the batch are still delivered.
   ## The first callback error is re-raised after the batch has been attempted.
-  if scope.isNil or scope.disposed or scope.suspended:
+  if not scope.isActive or scope.suspended:
     return
   scope.scheduled = false
   inc scope.ticket
@@ -232,7 +241,7 @@ proc flushBindings*(scope: BindingScope) =
   var failure: ref CatchableError
   for item in pending:
     if item.binding.active and item.binding.generation == item.generation:
-      if scope.disposed:
+      if not scope.isActive:
         break
       if scope.suspended:
         item.binding.pending = true
@@ -241,7 +250,7 @@ proc flushBindings*(scope: BindingScope) =
           item.binding.applyValue(item.binding)
         except CatchableError as error:
           if item.binding.active and item.binding.generation == item.generation and
-              not scope.disposed:
+              scope.isActive:
             item.binding.pending = true
           if failure.isNil:
             failure = error
@@ -250,7 +259,7 @@ proc flushBindings*(scope: BindingScope) =
 
 proc applyOrDefer(binding: Binding) =
   let scope = binding.scope{}
-  if not scope.isNil and not scope.disposed:
+  if scope.isActive:
     if scope.suspended:
       binding.pending = true
     else:
@@ -268,8 +277,8 @@ proc createValueBinding[R: Responder, C; V: Responder, T](
     signalKey: string,
     textBinding: bool,
 ): ValueBinding[R, C, V, T] =
-  if scope.isNil or scope.disposed:
-    raise newException(ValueError, "Binding scope is disposed")
+  if not scope.isActive:
+    raise newException(ValueError, "Binding scope is inactive")
   if scope.collecting:
     scope.seen[id] = true
   if scope.bindings.hasKey(id) and scope.bindings[id] of ValueBinding[R, C, V, T]:
@@ -384,6 +393,38 @@ template bindValue*(
     false,
   )
 
+proc readWithGetter[R: Responder, T](
+    receiver: R, getter: proc(receiver: R): T {.nimcall.}
+): T {.nimcall.} =
+  getter(receiver)
+
+template bindValue*(
+    scope: BindingScope,
+    id: string,
+    controller: Responder,
+    signal: untyped,
+    getter, target, setter: untyped,
+    initialApply: bool = true,
+) =
+  ## Observe a controller signal and read from that controller without extra context.
+  block:
+    let owner = controller
+    type Receiver = typeof(owner)
+    type Value = typeof(getter(owner))
+    let read: proc(receiver: Receiver): Value {.nimcall.} = getter
+    bindValue(
+      scope,
+      id,
+      owner,
+      signal,
+      owner,
+      read,
+      readWithGetter[Receiver, Value],
+      target,
+      setter,
+      initialApply,
+    )
+
 template bindSigilValueImpl(
     scope: BindingScope,
     id: string,
@@ -432,7 +473,7 @@ template bindSigilValue*(
   )
 
 proc hasPendingBindings*(scope: BindingScope): bool =
-  if not scope.isNil and not scope.disposed:
+  if scope.isActive:
     for binding in scope.bindings.values:
       if binding.pending:
         return true
@@ -562,3 +603,76 @@ template bindTextField*[T](
     if not scope.preview:
       installTextEdit(binding, receiver, context, field, edit)
     binding.applyOrDefer()
+
+type TextCallbacks[R] = object
+  read: proc(receiver: R): string {.nimcall.}
+  write: proc(receiver: R, text: string) {.nimcall.}
+
+proc readReceiverText[R](receiver: R, callbacks: TextCallbacks[R]): string {.nimcall.} =
+  callbacks.read(receiver)
+
+proc editReceiverText[R](
+    receiver: R, callbacks: TextCallbacks[R], text: string
+) {.nimcall.} =
+  callbacks.write(receiver, text)
+
+template bindTextField*(
+    scope: BindingScope,
+    id: string,
+    controller: Responder,
+    signal: untyped,
+    getter, field, edit: untyped,
+) =
+  ## Use a controller's change signal and read and edit procs without extra context.
+  block:
+    let owner = controller
+    type Receiver = typeof(owner)
+    let callbacks = TextCallbacks[Receiver](read: getter, write: edit)
+    bindTextField(
+      scope,
+      id,
+      owner,
+      signal,
+      callbacks,
+      readReceiverText[Receiver],
+      field,
+      editReceiverText[Receiver],
+    )
+
+template bindTextField*[T](
+    scope: BindingScope,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver, getter, field, edit: untyped,
+) =
+  ## Observe a Sigil and use read and edit procs without extra context.
+  block:
+    let owner = receiver
+    type Receiver = typeof(owner)
+    let callbacks = TextCallbacks[Receiver](read: getter, write: edit)
+    bindTextField(
+      scope,
+      id,
+      input,
+      owner,
+      callbacks,
+      readReceiverText[Receiver],
+      field,
+      editReceiverText[Receiver],
+    )
+
+proc bindTextField*(
+    scope: BindingScope, id: string, source: Sigil[string], field: TextField
+) =
+  ## Display a writable string Sigil and publish field edits back to it.
+  if source.isNil:
+    raise newException(ValueError, "Text binding requires a string Sigil")
+
+  proc readInput(_: TextField, input: Sigil[string]): string {.nimcall.} =
+    unBindSigilEvents:
+      result = input{}
+
+  proc editInput(_: TextField, input: Sigil[string], text: string) {.nimcall.} =
+    input <- text
+
+  bindTextField(scope, id, source, field, source, readInput, field, editInput)

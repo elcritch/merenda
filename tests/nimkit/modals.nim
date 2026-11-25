@@ -247,7 +247,7 @@ suite "NimKit modal lifetimes":
       anchor = newView(frame = rect(8, 8, 120, 24))
     root.addSubview(anchor)
     parent.setContentView(root)
-    anchor.acceptsFirstResponder = true
+    anchor.focusable = true
     app.addWindow(parent)
     parent.makeKeyAndOrderFront()
     parent.addChildWindow(dialog)
@@ -270,7 +270,7 @@ suite "NimKit modal lifetimes":
       anchor = newView(frame = rect(8, 8, 120, 24))
     root.addSubview(anchor)
     dialog.setContentView(root)
-    anchor.acceptsFirstResponder = true
+    anchor.focusable = true
     app.addWindow(parent)
     parent.makeKeyAndOrderFront()
     parent.addChildWindow(dialog)

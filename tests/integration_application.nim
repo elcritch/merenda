@@ -394,7 +394,7 @@ suite "nimkit application":
       root = newView(frame = rect(0, 0, 240, 160))
       focusView = newView(frame = rect(20, 20, 120, 32))
 
-    focusView.acceptsFirstResponder = true
+    focusView.focusable = true
     root.addSubview(focusView)
 
     check app.showWindow(window, root) == window
@@ -413,8 +413,8 @@ suite "nimkit application":
       firstView = newView(frame = rect(20, 20, 80, 32))
       explicitFocus = newView(frame = rect(20, 64, 80, 32))
 
-    firstView.acceptsFirstResponder = true
-    explicitFocus.acceptsFirstResponder = true
+    firstView.focusable = true
+    explicitFocus.focusable = true
     explicitRoot.addSubview(firstView)
     explicitRoot.addSubview(explicitFocus)
 
@@ -439,7 +439,7 @@ suite "nimkit application":
       inc actionCount
       actionSender = sender
 
-    child.acceptsFirstResponder = true
+    child.focusable = true
     root.addSubview(child)
     window.setContentView(root)
     window.bindKey("k", {kmCommand}, action)
@@ -465,7 +465,7 @@ suite "nimkit application":
     initViewFields(target, rect(10, 10, 80, 30))
     discard target.withProtocol(MenuSpyActions)
     discard target.withProtocol(MenuSpyValidation)
-    target.acceptsFirstResponder = true
+    target.focusable = true
 
     menuSpyEvents = @[]
     menuSpyValidate = true

@@ -570,7 +570,7 @@ proc setBoundsOriginFromLayout*(view: View, origin: Point) =
   view.markRenderStructureChanged()
 
 proc viewCanBecomeKeyView*(view: View): bool =
-  view.acceptsFirstResponder() and not view.isHiddenOrHasHiddenAncestor()
+  view.focusable() and not view.isHiddenOrHasHiddenAncestor()
 
 proc hasAppearance*(view: View): bool =
   view.xHasAppearance

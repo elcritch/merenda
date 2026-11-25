@@ -35,7 +35,9 @@ proc newKosmoAboutWindow*(app: Application): Window =
                 break
             if url.len > 0:
               Button(line):
-                onAction(app, url) do(this: Button, owner: Application, link: string):
+                this.onAction(app, url) do(
+                  this: Button, owner: Application, link: string
+                ):
                   discard owner.workspace().openUrl(link)
             else:
               Label(stringValue = line)

@@ -1016,7 +1016,7 @@ proc initCascadingTableView(view: CascadingView): TableView =
   result.addColumn(column)
   `hasHorizontalScroller=`(result.scrollView(), false)
   result.autoresizingMaskConstraints = false
-  result.acceptsFirstResponder = true
+  result.focusable = true
 
 proc focusedColumnTable(view: CascadingView): TableView =
   let owner = view.window()
@@ -1779,7 +1779,7 @@ proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   view.xScrollView.horizontalLineScroll = view.xColumnWidth
   view.xScrollView.autoresizingMaskConstraints = false
   view.addSubview(view.xScrollView)
-  view.acceptsFirstResponder = false
+  view.focusable = false
   discard view.withProto()
   discard view.withProtocol(CascadingTableDataSource)
   discard view.withProtocol(CascadingTableDelegate)

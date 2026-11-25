@@ -2108,7 +2108,7 @@ proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   tabs.xLineScroll = DocumentTabDefaultLineScroll
   tabs.background = color(0.0, 0.0, 0.0, 0.0)
   tabs.clipsToBounds = true
-  tabs.acceptsFirstResponder = true
+  tabs.focusable = true
   discard tabs.withProtocol(DocumentTabsDrawing)
   discard tabs.withProtocol(DocumentTabsEventsProtocol)
   discard tabs.withProtocol(DocumentTabsLayout)

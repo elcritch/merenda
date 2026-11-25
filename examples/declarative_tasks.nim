@@ -1,4 +1,4 @@
-## Shared domain/controller policy for the ViewSpec and direct-view comparisons.
+## Domain and controller policy for the direct-view task demo.
 import std/[algorithm, strutils]
 import sigils/[core, reactive]
 import merenda/nimkit
@@ -130,9 +130,10 @@ proc createPreview*(
     frame = rect(0, 0, 470, 330),
   )
 
-proc bindPreview*(scope: BindingScope, controller: TaskController) =
+proc bindPreview*[B: BindingScope | View](owner: B, controller: TaskController) =
+  mixin bindValue
   if not controller.preview.isNil:
-    scope.bindValue("preview", controller.tasks, controller.preview) do(
+    owner.bindValue("preview", controller.tasks, controller.preview) do(
       preview: DeclarativeDragView[TaskRows], value: TaskRows
     ):
       if preview.model != value:

@@ -165,7 +165,7 @@ proc cancelEditing*(editor: FieldEditor): bool =
   editor.finishEditing(terCancel)
 
 protocol DefaultFieldEditorResponder of ResponderProtocol:
-  method acceptsFirstResponder(editor: FieldEditor): bool =
+  method focusable(editor: FieldEditor): bool =
     true
 
   method shouldResignFirstResponder(editor: FieldEditor): bool =
@@ -385,7 +385,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   editor.selectable = true
   editor.richText = true
   editor.fieldEditor = true
-  editor.acceptsFirstResponder = true
+  editor.focusable = true
   discard editor.withProtocol(DefaultFieldEditorResponder)
   discard editor.withProtocol(DefaultFieldEditorView)
   discard editor.withProtocol(DefaultFieldEditorEvents)

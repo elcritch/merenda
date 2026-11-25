@@ -372,8 +372,8 @@ suite "nimkit comboboxes":
           following = newView(frame = rect(8, 72, 100, 24))
         defer:
           window.close()
-        previous.acceptsFirstResponder = true
-        following.acceptsFirstResponder = true
+        previous.focusable = true
+        following.focusable = true
         combo.editable = editable
         combo.popupPresentation = ppInline
         combo.selectedIndex = 0

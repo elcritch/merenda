@@ -47,7 +47,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xScrollView.clipView().connect(
     geometryDidChange, tableView, tableViewportGeometryChanged
   )
-  tableView.acceptsFirstResponder = true
+  tableView.focusable = true
   tableView.clipsToBounds = true
   tableView.addSubview(tableView.xScrollView)
   tableView.syncTableScrollChrome()

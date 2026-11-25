@@ -956,7 +956,7 @@ proc `editable=`*(view: MonoTextView, editable: bool) =
   if view.xEditable == editable:
     return
   view.xEditable = editable
-  view.acceptsFirstResponder = editable or view.xForwardedRawEvents != {}
+  view.focusable = editable or view.xForwardedRawEvents != {}
 
 proc forwardsRawEvents*(view: MonoTextView): bool =
   view.xForwardedRawEvents != {}
@@ -971,7 +971,7 @@ proc `forwardsRawEvents=`*(view: MonoTextView, value: bool) =
       return
     view.xForwardedRawEvents = {}
     view.xCapturedRawEvents = {}
-  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
+  view.focusable = view.xEditable or view.xForwardedRawEvents != {}
 
 proc rawEventPolicy*(view: MonoTextView): MonoTextRawEventPolicy =
   MonoTextRawEventPolicy(
@@ -981,7 +981,7 @@ proc rawEventPolicy*(view: MonoTextView): MonoTextRawEventPolicy =
 proc `rawEventPolicy=`*(view: MonoTextView, policy: MonoTextRawEventPolicy) =
   view.xForwardedRawEvents = policy.forwardedEvents + policy.capturedEvents
   view.xCapturedRawEvents = policy.capturedEvents
-  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
+  view.focusable = view.xEditable or view.xForwardedRawEvents != {}
 
 proc forwardedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
   view.xForwardedRawEvents
@@ -989,7 +989,7 @@ proc forwardedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
 proc `forwardedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
   view.xForwardedRawEvents = events
   view.xCapturedRawEvents = view.xCapturedRawEvents * events
-  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
+  view.focusable = view.xEditable or view.xForwardedRawEvents != {}
 
 proc capturedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
   view.xCapturedRawEvents
@@ -997,7 +997,7 @@ proc capturedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
 proc `capturedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
   view.xCapturedRawEvents = events
   view.xForwardedRawEvents = view.xForwardedRawEvents + events
-  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
+  view.focusable = view.xEditable or view.xForwardedRawEvents != {}
 
 proc rawEventHandler*(view: MonoTextView): MonoTextRawEventHandler =
   view.xRawEventHandler
@@ -2048,7 +2048,7 @@ proc initMonoTextViewFields*(
   discard view.withProtocol(DefaultMonoTextViewKeyEquivalents)
   discard view.withProtocol(DefaultMonoTextViewInput)
   discard view.withProtocol(DefaultMonoTextViewAccessibility)
-  view.acceptsFirstResponder = editable
+  view.focusable = editable
   view.stringValue = value
   view.applyInitialFrame(frame)
 

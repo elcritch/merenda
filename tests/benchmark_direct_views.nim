@@ -1,4 +1,4 @@
-## P7 diagnostic timings; compare on the same machine with benchmark_declarative_views.
+## DirectView diagnostic timings.
 ## nim ic -d:release -o:deps/benchmark_direct_views tests/benchmark_direct_views.nim
 import std/[algorithm, math, monotimes, os, strformat, strutils, times]
 import sigils/[core, reactive]
@@ -65,18 +65,18 @@ proc body(
               this.stringValue = "#" & $task.id
             TextField:
               this.identifier = "edit-" & $task.id
-              arrangedSizing(svspFillAvailableWidth)
+              this.arrangedSizing = svspFillAvailableWidth
               bindingScope.onSchedule(
                 proc() =
                   discard
               )
-              bindingScope.bindTextField(
-                "title", task, titleChanged, task, task.id, readTitle, this, acceptTitle
+              this.bindTextField(
+                "title", task, titleChanged, task, task.id, readTitle, acceptTitle
               )
             Button:
               this.title = "Remove"
-              this.acceptsFirstResponder = false
-              onAction(receiver, task.id) do(
+              this.focusable = false
+              this.onAction(receiver, task.id) do(
                 this: Button, owner: BenchReceiver, id: int
               ):
                 owner.calls += id + 1

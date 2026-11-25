@@ -1825,7 +1825,7 @@ proc initComboBoxFields*(
 ) =
   initControlFields(comboBox, frame, newComboBoxCell())
   comboBox.xPopupHighlightedIndex = -1
-  comboBox.acceptsFirstResponder = true
+  comboBox.focusable = true
   discard comboBox.withProto()
   comboBox.installComboBoxTextSelectors()
   discard comboBox.withProtocol(DefaultComboBoxStyleLayout)

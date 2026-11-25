@@ -12,31 +12,28 @@ proc taskRow(context: DirectNode, task: EditorTask, owner: EditorController) =
       this.spacing = 8
       TextField:
         this.identifier = "title-" & $task.id
-        arrangedSizing(svspFillAvailableWidth)
-        bindingScope.bindTextField(
+        this.arrangedSizing = svspFillAvailableWidth
+        this.bindTextField(
           "title",
           owner.tasks.item(task.id),
           owner,
           (owner.generation, task.id),
           taskTitle,
-          this,
           editTask,
         )
       Label:
         this.identifier = "accepted-" & $task.id
-        bindingScope.bindValue("accepted", owner.tasks.item(task.id), this) do(
+        this.bindValue(id = "accepted", input = owner.tasks.item(task.id)) do(
           label: Label, value: Opt[EditorTask]
         ):
           label.stringValue = "Accepted: " & (if value.isSome: value.get.title else: "")
-      Button(
-        "Validate", identifier = "validate-" & $task.id, acceptsFirstResponder = false
-      ):
-        onAction(owner, (owner.generation, task.id)) do(
+      Button("Validate", identifier = "validate-" & $task.id, focusable = false):
+        this.onAction(owner, (owner.generation, task.id)) do(
           this: Button, receiver: EditorController, context: EditorContext
         ):
           receiver.queue.queueValidation(receiver, context)
-      Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
-        onAction(owner, (owner.generation, task.id)) do(
+      Button("Remove", identifier = "remove-" & $task.id, focusable = false):
+        this.onAction(owner, (owner.generation, task.id)) do(
           this: Button, receiver: EditorController, context: EditorContext
         ):
           receiver.removeTask(context)
@@ -72,38 +69,36 @@ proc newDirectEditor*(owner: EditorController, queue: ValidationQueue): DirectVi
       this.edgeInsets = insets(12)
       Label:
         this.identifier = "document"
-        bindingScope.bindValue("document", owner.documentLabel, this) do(
+        this.bindValue(id = "document", input = owner.documentLabel) do(
           label: Label, value: string
         ):
           label.stringValue = value
       HStack:
         this.distribution = svdNatural
-        Button("Reverse", acceptsFirstResponder = false):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Reverse", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.reverseTasks()
-        Button("Restore #1", acceptsFirstResponder = false):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Restore #1", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.restoreTask(1)
-        Button("Undo", acceptsFirstResponder = false):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Undo", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.undo()
       HStack:
         this.distribution = svdNatural
-        Button(
-          "Complete queued", identifier = "complete", acceptsFirstResponder = false
-        ):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Complete queued", identifier = "complete", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.queue.flushValidation()
-        Button("Switch document", acceptsFirstResponder = false):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Switch document", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.switchDocument()
-        Button("Close", acceptsFirstResponder = false):
-          onAction(owner) do(this: Button, receiver: EditorController):
+        Button("Close", focusable = false):
+          this.onAction(owner) do(this: Button, receiver: EditorController):
             receiver.closeDocument()
       component(observedRows, owner)
       Label:
         this.identifier = "status"
-        bindingScope.bindValue("status", owner.status, this) do(
+        this.bindValue(id = "status", input = owner.status) do(
           label: Label, value: string
         ):
           label.stringValue = value

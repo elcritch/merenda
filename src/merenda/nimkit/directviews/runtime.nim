@@ -7,7 +7,7 @@ import ../controls/buttons
 import ../text/textfields
 import ../responder/actiontargets
 import ../foundation/[selectors, types]
-import ../declarative/actions
+import ./actions
 import ./bindings
 
 type
@@ -21,6 +21,7 @@ type
     ownedView: View
     hostRef: BackRef[StackView]
     parent: BackRef[DirectNode]
+    compositionOwner: BackRef[Responder]
     bindings*: BindingScope
     bodyBindings: BindingScope
     sizing*: StackViewSizingPolicy
@@ -41,6 +42,7 @@ type
     host*: StackView
     detached*: bool
     root: DirectNode
+    lifetimeOwner: Responder
 
   BodyValue[R, T] = object
     owner: BackRef[R]
@@ -70,8 +72,10 @@ proc fieldChanged(target: DirectTarget, sender: DynamicAgent) {.slot.} =
   if target.active and not target.lifetime.isNil:
     callback.dispatchViewAction(sender)
 
-proc newRoot(host: StackView, detached: bool): DirectNode =
-  result = DirectNode(bindings: newBindingScope(preview = detached), detached: detached)
+proc newRoot(host: StackView, detached: bool, owner: Responder): DirectNode =
+  result = DirectNode(detached: detached)
+  result.compositionOwner.target = owner
+  result.bindings = newBindingScope(preview = detached, owner = result.compositionOwner)
   result.hostRef.target = host
 
 proc newDirectView*(frame = AutoRect, detached = false): DirectView =
@@ -80,12 +84,25 @@ proc newDirectView*(frame = AutoRect, detached = false): DirectView =
   initStackViewFields(result, laVertical, frame)
   result.spacing = 0
   result.distribution = svdNatural
-  result.root = newRoot(result, detached)
+  result.root = newRoot(result, detached, result)
 
 proc newDirectViewSession*(host: StackView, detached = false): DirectViewSession =
   if host.isNil:
     raise newException(ValueError, "direct view host cannot be nil")
-  DirectViewSession(host: host, detached: detached, root: newRoot(host, detached))
+  let owner = Responder()
+  DirectViewSession(
+    host: host,
+    detached: detached,
+    root: newRoot(host, detached, owner),
+    lifetimeOwner: owner,
+  )
+
+proc retireBindings(node: DirectNode) =
+  let widget = node.ownedView
+  if not widget.isNil and widget.xDirectNode{} == Responder(node):
+    widget.xDirectNode.clear()
+  node.bindings.dispose()
+  node.bodyBindings.dispose()
 
 proc retire(node: DirectNode) =
   if node.isNil:
@@ -96,8 +113,7 @@ proc retire(node: DirectNode) =
     node.target.changed = ViewAction()
     if node.view of TextField:
       TextField(node.view).disconnect(textDidChange, node.target, fieldChanged)
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   for child in node.children:
     child.retire()
   if not node.view.isNil:
@@ -111,8 +127,7 @@ proc clearNode(node: DirectNode) =
   for child in node.children:
     child.retire()
   node.children.setLen(0)
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   node.closed = true
 
 proc retireEffects(node: DirectNode) =
@@ -121,8 +136,7 @@ proc retireEffects(node: DirectNode) =
       node.target.active = false
       node.target.callback = ViewAction()
       node.target.changed = ViewAction()
-    node.bindings.dispose()
-    node.bodyBindings.dispose()
+    node.retireBindings()
     for child in node.children:
       child.retireEffects()
 
@@ -141,7 +155,7 @@ proc clear*(view: DirectView) =
     suspended = view.root.suspended
     detached = view.root.detached
   view.root.clearNode()
-  view.root = newRoot(view, detached)
+  view.root = newRoot(view, detached, view)
   if suspended:
     view.root.suspended = true
     view.root.bindings.suspendBindings()
@@ -159,7 +173,7 @@ proc beginChildren*(node: DirectNode) =
   node.children = @[]
 
 proc beginUpdate*(node: DirectNode): DirectNode =
-  if node.closed or node.applying:
+  if node.closed or node.applying or not node.bindings.isActive:
     raise newException(ValueError, "closed or recursively updating direct view context")
   if node.suspended:
     raise newException(ValueError, "cannot update a suspended direct view context")
@@ -258,10 +272,14 @@ proc child*[T: View](
       ownedView: factory(),
       identity: id,
       widgetType: widgetType,
-      bindings: newBindingScope(preview = parent.detached),
+      compositionOwner: parent.compositionOwner,
+      bindings:
+        newBindingScope(preview = parent.detached, owner = parent.compositionOwner),
       detached: parent.detached,
     )
     result.parent.target = parent
+    if not result.ownedView.isNil:
+      result.ownedView.xDirectNode.target = result
   parent.children.add result
   result.sizing = svspAutomatic
 
@@ -298,6 +316,156 @@ proc setAction*(node: DirectNode, button: Button, action: ViewAction) =
 proc bindingScope*(node: DirectNode): BindingScope =
   node.bindings
 
+proc directNodeFor(view: View): DirectNode =
+  if not view.isNil:
+    let owner = view.xDirectNode{}
+    if owner of DirectNode:
+      let node = DirectNode(owner)
+      if node.ownedView == view and node.bindings.isActive:
+        return node
+
+proc bindingScopeFor(view: View): BindingScope =
+  let node = view.directNodeFor()
+  if node.isNil:
+    raise newException(ValueError, "View has no active DirectView binding scope")
+  node.bindings
+
+proc composingNodeFor(view: View): DirectNode =
+  result = view.directNodeFor()
+  if result.isNil or not result.applying:
+    raise newException(ValueError, "expected an active DirectView widget body")
+
+proc `arrangedSizing=`*(view: View, policy: StackViewSizingPolicy) =
+  ## Set how the enclosing stack sizes this view during its DirectView body.
+  view.composingNodeFor().sizing = policy
+
+proc setAction*(button: Button, action: ViewAction) =
+  button.composingNodeFor().setAction(button, action)
+
+template bindTextField*(view: View, args: varargs[untyped]): untyped =
+  ## Bind a text field using this widget's active DirectView scope.
+  bindTextField(bindingScopeFor(view), args)
+
+proc bindTextField*(widget: TextField, id: string, source: Sigil[string]) =
+  ## Display and edit the Sigil using this field's DirectView scope.
+  bindTextField(bindingScopeFor(widget), id, source, widget)
+
+template bindTextField*[T; R: Responder](
+    widget: TextField,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver: R,
+    getter: proc(receiver: R): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(bindingScopeFor(target), id, input, receiver, getter, target, edit)
+
+template bindTextField*[T, C; R: Responder](
+    widget: TextField,
+    id: string,
+    input: Sigil[T] | CollectionValue[T],
+    receiver: R,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, input, receiver, context, getter, target, edit
+  )
+
+template bindTextField*[R: Responder](
+    widget: TextField,
+    id: string,
+    controller: R,
+    signal: untyped,
+    getter: proc(receiver: R): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(bindingScopeFor(target), id, controller, signal, getter, target, edit)
+
+template bindTextField*[C; R: Responder](
+    widget: TextField,
+    id: string,
+    controller: R,
+    signal: untyped,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, controller, signal, context, getter, target, edit
+  )
+
+template bindTextField*[C; R: Responder](
+    widget: TextField,
+    id: string,
+    source: Responder,
+    signal: untyped,
+    receiver: R,
+    context: C,
+    getter: proc(receiver: R, context: C): string {.nimcall.},
+    edit: untyped,
+) =
+  let target = widget
+  bindTextField(
+    bindingScopeFor(target), id, source, signal, receiver, context, getter, target, edit
+  )
+
+template bindValue*(view: View, args: varargs[untyped]): untyped =
+  ## Bind a value using this widget's active DirectView scope.
+  bindValue(bindingScopeFor(view), args)
+
+template bindValue*[V: View](widget: V, id: string, input, apply: untyped) =
+  ## Apply values to this widget within its active DirectView scope.
+  let target = widget
+  bindValue(bindingScopeFor(target), id, input, target, apply)
+
+template bindValue*[V: View](
+    widget: V,
+    id: string,
+    controller: Responder,
+    signal, getter, setter: untyped,
+    initialApply: bool = true,
+) =
+  let target = widget
+  bindValue(
+    bindingScopeFor(target),
+    id,
+    controller,
+    signal,
+    getter,
+    target,
+    setter,
+    initialApply,
+  )
+
+template bindValue*[V: View](
+    widget: V,
+    id: string,
+    source: Responder,
+    signal: untyped,
+    receiver: Responder,
+    context, getter, setter: untyped,
+    initialApply: bool = true,
+) =
+  let target = widget
+  bindValue(
+    bindingScopeFor(target),
+    id,
+    source,
+    signal,
+    receiver,
+    context,
+    getter,
+    target,
+    setter,
+    initialApply,
+  )
+
 proc patchText*(node: DirectNode, field: TextField, value: string) =
   ## Preserve provisional editing when an unrelated composition repeats a value.
   if node.bindings.relinquishText(field):
@@ -308,9 +476,12 @@ proc patchText*(node: DirectNode, field: TextField, value: string) =
   node.authoredText = value
   node.hasAuthoredText = true
 
+proc patchText*(field: TextField, value: string) =
+  ## Apply body text while preserving edits when the declared value repeats.
+  field.composingNodeFor().patchText(field, value)
+
 proc disposeBindings(node: DirectNode) =
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   for child in node.children:
     child.disposeBindings()
 
@@ -322,8 +493,7 @@ proc takeRoot(node: DirectNode): View =
   result.removeFromSuperview()
   node.children.setLen(0)
   child.disposeBindings()
-  node.bindings.dispose()
-  node.bodyBindings.dispose()
+  node.retireBindings()
   node.closed = true
 
 proc takeDetachedRoot*(session: DirectViewSession): View =
@@ -341,6 +511,9 @@ proc setChange*(node: DirectNode, field: TextField, action: ViewAction) =
     initResponder(node.target)
     field.connect(textDidChange, node.target, fieldChanged)
   node.target.changed = action
+
+proc setChange*(field: TextField, action: ViewAction) =
+  field.composingNodeFor().setChange(field, action)
 
 proc flushBindings*(node: sink DirectNode) =
   ## Keep the node alive when a binding clears or replaces its owning root.
@@ -421,7 +594,8 @@ proc bindBody*[S; R: Responder, T](
   ## A component-owned structural binding. The body may update its own child
   ## bindings without removing this subscription. Receiver and context are weak.
   if node.bodyBindings.isNil:
-    node.bodyBindings = newBindingScope(preview = node.detached)
+    node.bodyBindings =
+      newBindingScope(preview = node.detached, owner = node.compositionOwner)
     if node.collectingBody:
       node.bodyBindings.beginBindings()
   type Input = tuple[source: S, draw: typeof(draw)]

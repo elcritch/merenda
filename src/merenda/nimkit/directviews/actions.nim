@@ -1,5 +1,4 @@
 ## Declarative event bindings use NimKit's existing target ownership rules.
-import std/macros
 import ../responder/[actiontargets, responders]
 import ../foundation/selectors
 
@@ -13,25 +12,19 @@ proc initViewAction*[T: Responder](selector: ActionSelector, target: T): ViewAct
   result.target{} = target
 
 proc dispatchViewAction*(action: ViewAction, sender: DynamicAgent) =
-  ## Internal bridge used by mounts; not exported through the declarative facade.
+  ## Internal bridge used by DirectView.
   let target = action.target{}
   if not target.isNil:
     discard target.sendLocalIfHandled(action.selector, ActionArgs(sender: sender))
 
-macro viewAction*(receiver: typed, handler: untyped): untyped =
+template viewAction*(receiver: typed, handler: untyped): ViewAction =
   ## Bind a receiver using newActionTarget's non-capturing handler contract.
-  let selector = newCall(bindSym"actionSelector", newLit("declarativeViewEvent"))
-  result = newCall(
-    bindSym"initViewAction",
-    selector,
-    newCall(bindSym"newActionTarget", selector, receiver, handler),
-  )
+  block:
+    let selector = actionSelector("declarativeViewEvent")
+    initViewAction(selector, newActionTarget(selector, receiver, handler))
 
-macro viewAction*(receiver, context: typed, handler: untyped): untyped =
+template viewAction*(receiver, context: typed, handler: untyped): ViewAction =
   ## Bind explicit row context alongside the weak receiver.
-  let selector = newCall(bindSym"actionSelector", newLit("declarativeViewEvent"))
-  result = newCall(
-    bindSym"initViewAction",
-    selector,
-    newCall(bindSym"newActionTarget", selector, receiver, context, handler),
-  )
+  block:
+    let selector = actionSelector("declarativeViewEvent")
+    initViewAction(selector, newActionTarget(selector, receiver, context, handler))

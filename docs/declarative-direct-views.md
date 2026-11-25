@@ -11,10 +11,9 @@ recovery from interrupted updates, and native application validation.
 
 ## Current prototype: collections and owned components
 
-Run `nim ic -r examples/direct_views_demo.nim`. Both demos now share
-`examples/declarative_tasks.nim`: the same collection, validation, undo/redo,
-commands, and stale-drag rejection. Their differences are in view construction
-and the scope of structural rebuilding, not domain behavior.
+Run `nim ic -r examples/direct_views_demo.nim`. The demo uses the task controller
+in `examples/declarative_tasks.nim` for collection updates, validation, undo and
+redo, and rejecting stale drag proposals.
 
 ```nim
 import merenda/nimkit
@@ -23,9 +22,9 @@ import merenda/nimkit/directviews
 proc taskRow(context: DirectNode, task: Task, controller: TaskController) =
   context.viewBody:
     TextField:
-      bindingScope.bindTextField(
+      this.bindTextField(
         "title", controller.tasks.item(task.id), controller, task.id,
-        titleFor, this, editTitle,
+        titleFor, editTitle,
       )
 
 let view = newDirectView()
@@ -75,7 +74,7 @@ the optional body:
 ```nim
 view.viewBody:
   Button("Remove", identifier = "remove"):
-    this.acceptsFirstResponder = false
+    this.focusable = false
   Label(stringValue = "Ready")
 ```
 
@@ -83,14 +82,13 @@ view.viewBody:
 `this.title = value`. It calls the existing typed setter, and the body can override
 the value afterward. Supplying both forms for the same Button is an error;
 positional arguments must precede named properties.
-`TextField(stringValue = value)` also uses the same text patch
-as `this.stringValue = value`, preserving drafts when the model text is unchanged.
 Use actual widget property names; constructor-only parameters can still be supplied
 positionally.
 
-Ordinary block statements run on each structural evaluation. `arrangedSizing`
-sets the parent's sizing policy. Custom factories need no ViewSpec enum case;
-child arrangement currently requires StackView containers.
+Ordinary block statements run on each structural evaluation. Set
+`this.arrangedSizing = svspFillAvailableWidth` in a widget body to tell the
+enclosing stack how to size that widget. Custom factories create actual views.
+Child arrangement currently requires StackView containers.
 
 An inline `onAction` or `onChange` handler takes the typed widget first, followed
 by the receiver and optional context. The examples call the widget parameter
@@ -102,20 +100,43 @@ The receiver parameter can use the bound object's type or a base type such as
 
 ```nim
 Button("Remove"):
-  onAction(controller, task.id) do(this: Button, owner: TaskController, id: int):
+  this.onAction(controller, task.id) do(this: Button, owner: TaskController, id: int):
     this.enabled = false
     owner.removeTask(id)
 ```
 
+Pass a named, non-capturing proc to `this.onAction(panel, apply)` or
+`this.onChange(panel, update)` when the handler only needs the sender and receiver.
+Each parameter can use its concrete type or a base type such as `Responder`.
+See the [named callback form editor](../examples/form_editors_procs.nim).
+
+Use `this.onAction(receiver, apply())` or `this.onChange(receiver, textEdited())`
+to send an existing action selector directly to a responder. A protocol method that
+takes `ActionArgs` and returns no value provides an `ActionSelector` through
+its generated accessor, such as `apply()`. The method receives the emitting
+widget in `args.sender`. A variable holding an `ActionSelector` works too. See the
+[protocol form editor](../examples/form_editors_protocol.nim).
+
+Use `this.patchText(modelTitle)` when a field should preserve the user's draft
+across body updates.
+
+```nim
+TextField:
+  this.patchText(modelTitle)
+```
+
+If the model title is `"Ada"` and the user has typed `"Ad"`, rerunning the body
+with `"Ada"` leaves `"Ad"` in the field. If the model title changes to `"Grace"`,
+`patchText` puts `"Grace"` in the field. Assign `this.stringValue` when you want
+to set the text directly, for example to reset a draft.
+
 Property ownership is explicit:
 
 - Ordinary setters run as written. Omitting a setter leaves its previous value.
-- `this.stringValue = value` remembers the authored value to preserve provisional
-  TextField edits when an unchanged model value is repeated.
 - A binding owns updates to the properties its setter writes. Omitting a binding
   disconnects it but leaves its last value; assign a replacement value explicitly.
-- For TextField, an authored `stringValue` assignment retires the previous text
-  binding in that scope before writing, so the handoff cannot invoke its edit
+- For TextField, `patchText` retires the previous text binding in that scope
+  before writing, so the handoff cannot invoke its edit
   command. Returning from bound text resets the authored-value cache, including
   after a pass that omitted both the binding and assignment. A new `bindTextField`
   registration for the same field replaces its previous text owner in that scope.
@@ -129,9 +150,35 @@ GUI thread; `flushBindings` supports deterministic pumping. `bindTextField` adds
 last-model-text tracking, programmatic-echo suppression, and an edit command routed
 through a weak controller. Invalid drafts remain in the editor. External accepted
 model changes replace the draft; a richer conflict/commit policy is future work.
-These text handoff rules cover `bindTextField` and the DSL's text assignment;
+These text handoff rules cover `bindTextField` and `patchText`;
 arbitrary binding setters and independently managed scopes still require callers
 to avoid competing writers.
+
+Call `this.bindTextField(...)` or `this.bindValue(...)` to bind the widget in its
+own scope.
+
+```nim
+Label:
+  this.bindValue("status", controller.status) do(label: Label, value: string):
+    label.stringValue = value
+```
+
+For a writable `Sigil[string]`, `this.bindTextField(id = "text", source = text)` reads
+with `text{}` and writes edits back with `text <- value`. When a controller emits
+its own signal, use `controller`, `signal`, and `getter` with either binding.
+The getter takes the controller. For `bindTextField`, the `edit` proc takes the
+controller and the edited string. For `bindValue`, the `setter` takes the widget
+and the value. Pass `context` with the full binding form when a callback needs
+extra data such as a task ID. See the [Sigil demo](../examples/direct_text_binding_demo.nim)
+and the [explicit signal demo](../examples/direct_text_binding_signal_demo.nim).
+
+A helper that receives a widget from a DirectView body can call `bindTextField`
+or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
+the binding in the form's existing scope, so the form can manage a field it
+creates in ordinary Nim code. Pass the target as an argument when the widget that
+owns the scope and the binding target are different.
+These calls raise `ValueError` if the owner has no active DirectView scope. See
+the [form editor example](../examples/form_editors_protocol.nim).
 
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
@@ -239,10 +286,9 @@ flowchart LR
   A --> R[Create, reuse, or rebind actual rows]
 ```
 
-No layer needs a complete `ViewSpec` tree. Some metadata remains necessary:
-child keys/type compatibility, binding identity, connections, and selected last
-authored values. That metadata describes ownership and synchronization rather than
-every property and child in a second view representation.
+Composition tracks child keys, widget types, binding identities, connections, and
+selected last-authored values. It uses that metadata to reuse widgets and keep
+their bindings current.
 
 ## The direct-view execution contract
 
@@ -275,7 +321,7 @@ ownership, rather than leaving an accidental stale value.
 
 Direct execution changes validation possibilities. For the first list prototype,
 obtain and validate the complete sibling-ID sequence from the model before changing
-its views. Arbitrary nested declarations cannot promise P0's whole-description
+its views. Arbitrary nested declarations cannot promise whole-description
 duplicate-key validation before any mutation merely by checking keys as they run.
 That broader guarantee needs a structural preflight/staging contract, or must remain
 a reported compatibility gap. Setter failures likewise do not imply rollback.
@@ -401,7 +447,6 @@ unrelated model notification must not push old text back into an active editor.
 Echoing the user's accepted value must preserve selection and marked text; conflicting
 external changes need a stated policy. Selected last-authored-value storage can
 provide this without retaining an entire view description.
-[Existing text patch policy](../src/merenda/nimkit/declarative/mounts.nim),
 [TextField behavior](../src/merenda/nimkit/text/textfields.nim).
 
 Keep inline ActionTarget handlers for local behavior and named controller commands
@@ -444,13 +489,11 @@ without that explicit policy continues to leave its bindings active.
 
 See the executable coverage in
 [directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in
-[form_editors.nim](../examples/form_editors.nim).
+[form_editors_protocol.nim](../examples/form_editors_protocol.nim).
 
-## Dragology does not require ViewSpec
+## Dragology previews
 
-`newDeclarativeDragView` already accepts a builder returning `View`. The current
-demo happens to call `buildDetachedView(ViewSpec)` inside that callback, but this
-is one way to satisfy the API, not a requirement of Dragology.
+`newDeclarativeDragView` accepts a builder returning `View`.
 [Drag controller](../src/merenda/nimkit/interaction/dragcontrollers.nim).
 
 Use the same direct-view layout/configuration code against a fresh detached scope
@@ -464,31 +507,6 @@ This still creates widgets and performs layout/capture. It does not eliminate th
 solver budget or full-candidate cost. Preserve capture-validity checks and commit
 accepted operations against current model state, so a preview cannot restore an
 outdated unrelated value. Sharing live widgets or editors with candidates is excluded.
-
-## First experiment and evidence required
-
-Keep P0 as the reference. Implement P7 in logical steps, with a commit after each:
-
-1. Direct typed creation/reuse and removal for a small eager keyed list. Retain the
-   existing editor identity tests and document structural validation limitations.
-2. Owned bindings: one Sigil counter, one controller-signaled row title, explicit
-   row-ID context, coalesced flush, and teardown/reuse with queued work.
-3. Controller commands and editing: validation rejection, accepted-edit undo,
-   programmatic echo, external changes, and action context after reordering.
-4. The same layout code constructing isolated Dragology candidates from snapshots.
-5. A table/collection adapter, measured separately with a fixed viewport after the
-   relevant shared cell/item identity behavior is corrected.
-
-Measure against the same semantic contract and workload, including layout. Count
-body/binding executions, handler creations, connections and retained memory; measure
-actual allocations before characterizing them as expensive. No-op updates, repeated
-source switching, and long-lived row recycling must not grow subscription counts.
-Then assess authoring complexity and compile-time diagnostics as well as timings.
-
-The main hypothesis is that real-view composition plus MVC-owned bindings provides
-the needed expressiveness with less intermediate representation and narrower update
-work. Whether it is faster, simpler, and more robust than P0/P2 remains the result
-this experiment must establish.
 
 ## Experimental virtualized rows
 

@@ -15,13 +15,12 @@ proc buildCollectionRow*(row: DirectView, controller: ArrayController, id: strin
       Label:
         this.stringValue = "#" & id
       TextField:
-        arrangedSizing(svspFillAvailableWidth)
-        bindingScope.bindTextField(
-          "title", controller, arrayControllerDidChange, id, rowTitle, this,
-          editRowTitle,
+        this.arrangedSizing = svspFillAvailableWidth
+        this.bindTextField(
+          "title", controller, arrayControllerDidChange, id, rowTitle, editRowTitle
         )
-      Button("Remove", acceptsFirstResponder = false):
-        onAction(controller, id) do(
+      Button("Remove", focusable = false):
+        this.onAction(controller, id) do(
           this: Button, receiver: ArrayController, key: string
         ):
           discard receiver.removeItem(key)

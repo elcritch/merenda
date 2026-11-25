@@ -301,7 +301,7 @@ proc initSwitchButtonFields*(
 ) =
   initControlFields(switchButton, frame, newSwitchButtonCell())
   switchButton.state = (if on: bsOn else: bsOff)
-  switchButton.acceptsFirstResponder = true
+  switchButton.focusable = true
   switchButton.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
   switchButton.setCompressionPriority(LayoutPriorityRequired, laHorizontal)
   discard switchButton.withProtocol(DefaultSwitchStyleLayout)

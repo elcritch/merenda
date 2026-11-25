@@ -452,7 +452,7 @@ proc initDatePickerFields*(
   picker.xHasTrackingDate = false
   picker.xDisplayedMonth =
     initCalendarDate(picker.xSelectedDate.year, picker.xSelectedDate.month, 1)
-  picker.acceptsFirstResponder = true
+  picker.focusable = true
   picker.accessibilityRole = arGroup
   picker.accessibilityLabel = "Date picker"
   discard picker.withProtocol(DatePickerDrawing)
@@ -1126,7 +1126,7 @@ proc initTimePickerFields*(
   picker.xEditingPart = tppHour
   picker.xHasTrackingPart = false
   picker.xTrackingDone = false
-  picker.acceptsFirstResponder = true
+  picker.focusable = true
   picker.accessibilityRole = arGroup
   picker.accessibilityLabel = "Time picker"
   discard picker.withProtocol(TimePickerDrawing)
@@ -1677,7 +1677,7 @@ proc initDateTimePickerFields*(
   picker.xTimePicker.onSelect = proc(time: TimeOfDay) =
     if not pickerRef.isNil:
       pickerRef[].dateTimePickerTimeDidConfirm(time)
-  picker.acceptsFirstResponder = true
+  picker.focusable = true
   picker.accessibilityRole = arGroup
   picker.accessibilityLabel = "Date and time picker"
   discard picker.withProtocol(DateTimePickerLayout)

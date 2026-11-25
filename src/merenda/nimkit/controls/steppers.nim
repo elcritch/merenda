@@ -533,7 +533,7 @@ proc initStepperFields*(
   Control(stepper).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrStepper)
   Control(stepper).setObjectValue(toObj(stepper.xValue))
-  stepper.acceptsFirstResponder = true
+  stepper.focusable = true
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard stepper.withProtocol(DefaultStepperStyleLayout)

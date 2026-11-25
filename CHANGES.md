@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Rename NimKit's `acceptsFirstResponder` property to `focusable`, including in
+  DirectView widget arguments and responder protocol overrides.
+- Remove the experimental ViewSpec API. Use DirectView for declarative views.
+
 - Show Kosmo's About information in a NimKit window that closes with Cmd-W.
 - Open web links in Kosmo's Markdown previews in the system default browser.
 - Scroll faster in Quick Open while holding Control.
@@ -32,6 +36,21 @@
 - DirectView `onAction` and `onChange` handlers take the typed widget first,
   followed by the receiver and optional context. The receiver parameter can use
   a base type such as `Responder` or `DynamicAgent`.
+- Pass an `ActionSelector` or a named sender-first proc directly to DirectView
+  `onAction` and `onChange`, as shown in the form editor examples.
+- Allow helpers to call `bindTextField` and `bindValue` on a mounted DirectView
+  widget to use its existing scope. Bindings stop updating when the owning
+  composition is released.
+- Replace `arrangedSizing(policy)` with `this.arrangedSizing = policy` in the
+  widget body.
+- Use `this.patchText(value)` to preserve text drafts across body updates.
+  `TextField(stringValue = value)` and `this.stringValue = value` can now
+  overwrite a draft when the body reruns.
+- Register DirectView bindings and actions through the widget with
+  `this.bindTextField`, `this.bindValue`, `this.onAction`, and `this.onChange`.
+  Add the widget receiver to existing calls in DirectView bodies.
+- Bind a writable `Sigil[string]` directly with `bindTextField`. Use context-free
+  callbacks when text or value bindings only need the controller.
 - Fix DirectView bodies evaluating the host expression twice. A host can be
   cleared and rebuilt after a nested setter or key check raises.
 - Preserve pending binding updates across callback failures and synchronize

@@ -121,7 +121,7 @@ protocol ControlProtocol {.setterStyle: nim.} from Control:
     self.isEnabled() and View(self).viewCanBecomeKeyView()
 
   method shouldBecomeFirstResponder*(self: Control): bool =
-    self.isEnabled() and self.acceptsFirstResponder()
+    self.isEnabled() and self.focusable()
 
   method layoutIntrinsicContentSize*(self: Control): IntrinsicSize =
     self.controlIntrinsicContentSize()

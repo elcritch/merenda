@@ -317,7 +317,7 @@ root.viewBody:
     this.spacing = 12
     Label(stringValue = "Merenda on GitHub")
     Button("Open project"):
-      onAction(app, url) do(this: Button, owner: Application, link: string):
+      this.onAction(app, url) do(this: Button, owner: Application, link: string):
         discard owner.workspace().openUrl(link)
 
 app.runWindow(window, root)
@@ -327,10 +327,10 @@ Save this as `examples/project_link.nim` and run `nim ic -r examples/project_lin
 
 `VStack` places its children from top to bottom. Inside that block, `this` is
 the stack, so `this.spacing` sets the gap between the label and the button.
+Inside `Button`, `this` is the button, so `this.onAction` sets up its click handler.
 
-When the button is clicked the callback setup by `onAction` will be called and passed
-the sender (the button), its responder (the application or controller), and an optional
-context value. The callback proc is created using
+When you click the button, the handler receives the button, the application or
+controller you supplied, and the optional context value. The handler uses
 [Nim's `do` syntax](https://nim-lang.org/docs/manual.html#procedures-do-notation).
 
 **Note**: Responder is NimKit's general term for controller or application objects which contain
@@ -340,7 +340,7 @@ which knows how to open links.
 
 #### Connect a text field to a task
 
-A text field can show a value from your app and send edits back to it.
+A text field can show a value from your app or controller and send edits back to it.
 To try this in the same window, add the following imports to
 `examples/project_link.nim`. The example task controller starts with three tasks
 and provides the procedures for reading and editing their titles.
@@ -356,15 +356,15 @@ these controls inside the existing `VStack`, below the project button.
 ```nim
     Label(stringValue = "Task title")
     TextField:
-      bindingScope.bindTextField(
-        "title", controller.tasks.item(1), controller, 1, titleFor, this, editTitle
+      this.bindTextField(
+        "title", controller.tasks.item(1), controller, 1, titleFor, editTitle
       )
 ```
 
 Run the app again. The field starts with the title of task 1. Here,
 `"title"` names the binding and `controller.tasks.item(1)` tells it which task to
 watch. The binding calls `titleFor(controller, 1)` to read the title and puts it in
-`this`, the text field. When you type, the field sends the new text to
+the field from the `TextField:` block. When you type, the field sends the new text to
 `editTitle(controller, 1, text)`. If another part of the app changes that task's
 title, the field picks up the change too.
 

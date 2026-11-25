@@ -200,7 +200,7 @@ proc newTerminalRelaysView(
   result = TerminalRelaysView()
   result.initUIRelaysViewFields(frame = frame)
   result.commandLog = commandLog
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(TerminalRelaysDrawing)
   discard result.withProtocol(TerminalRelaysEvents)
   discard result.withProtocol(TerminalRelaysTextInput)

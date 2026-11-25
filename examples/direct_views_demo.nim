@@ -17,21 +17,17 @@ proc taskRow(context: DirectNode, task: TaskItem, owner: TaskController) =
         this.stringValue = "#" & $task.id
       TextField:
         this.identifier = "title-" & $task.id
-        arrangedSizing(svspFillAvailableWidth)
+        this.arrangedSizing = svspFillAvailableWidth
         if owner.isNil:
-          this.stringValue = task.title
+          this.patchText(task.title)
         else:
-          bindingScope.bindTextField(
-            "title",
-            owner.tasks.item(task.id),
-            owner,
-            task.id,
-            titleFor,
-            this,
-            editTitle,
+          this.bindTextField(
+            "title", owner.tasks.item(task.id), owner, task.id, titleFor, editTitle
           )
-      Button("Remove", identifier = "remove-" & $task.id, acceptsFirstResponder = false):
-        onAction(owner, task.id) do(this: Button, receiver: TaskController, id: int):
+      Button("Remove", identifier = "remove-" & $task.id, focusable = false):
+        this.onAction(owner, task.id) do(
+          this: Button, receiver: TaskController, id: int
+        ):
           receiver.removeTask(id)
 
 proc taskRows(context: DirectNode, tasks: TaskRows, owner: TaskController = nil) =
@@ -61,7 +57,7 @@ proc buildChrome(controller: TaskController): DirectView =
       this.spacing = 14
       this.distribution = svdNatural
       this.edgeInsets = insets(16)
-      bindingScope.bindPreview(controller)
+      this.bindPreview(controller)
       Label:
         this.stringValue = "Direct views + MVC bindings"
         this.labelStyle = lsHeading
@@ -71,24 +67,24 @@ proc buildChrome(controller: TaskController): DirectView =
       HStack:
         this.distribution = svdNatural
         this.spacing = 8
-        Button("Insert at top", identifier = "insert", acceptsFirstResponder = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+        Button("Insert at top", identifier = "insert", focusable = false):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.insertTask()
-        Button("Reverse", identifier = "reverse", acceptsFirstResponder = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+        Button("Reverse", identifier = "reverse", focusable = false):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.reverseTasks()
-        Button("Counter +1", identifier = "counter", acceptsFirstResponder = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+        Button("Counter +1", identifier = "counter", focusable = false):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             receiver.counter <- receiver.counter{} + 1
-        Button("Undo", identifier = "undo", acceptsFirstResponder = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+        Button("Undo", identifier = "undo", focusable = false):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performUndo()
-        Button("Redo", identifier = "redo", acceptsFirstResponder = false):
-          onAction(controller) do(this: Button, receiver: TaskController):
+        Button("Redo", identifier = "redo", focusable = false):
+          this.onAction(controller) do(this: Button, receiver: TaskController):
             discard receiver.history.performRedo()
       Label:
         this.identifier = "counter-value"
-        bindingScope.bindValue("counter", controller.counter, this) do(
+        this.bindValue(id = "counter", input = controller.counter) do(
           label: Label, value: int
         ):
           label.stringValue = "Unrelated counter: " & $value
@@ -96,7 +92,7 @@ proc buildChrome(controller: TaskController): DirectView =
       Label:
         this.identifier = "status"
         this.labelStyle = lsStatus
-        bindingScope.bindValue("status", controller.status, this) do(
+        this.bindValue(id = "status", input = controller.status) do(
           label: Label, value: string
         ):
           label.stringValue = value

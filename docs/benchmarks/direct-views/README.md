@@ -1,17 +1,16 @@
 # P7 direct views versus P0, 2026-11-14
 
-These are the pre-cleanup results. The demos now share a keyed collection
-controller and owned bindings; see the later [collection comparison](../collection-sigils/README.md).
+These results predate the shared keyed collection controller and owned bindings.
+See the later [collection comparison](../collection-sigils/README.md).
 
 Diagnostic comparison on Apple M3 Pro, 36 GB, macOS 15.7.9, Nim 2.4.2,
-release/ARC/useMalloc/threads, Clang 17. No native window or GPU. Two sequential
-runs of each variant, five calibrated batches per case per run; results below
-are medians of the ten batch means. No competing test/build jobs were run during
-measurement. Raw CSV files in this directory retain individual batches and
-blocked results. They supplement the original P0 measurements in
-`../declarative-views/`; those files have not been replaced.
+release/ARC/useMalloc/threads, Clang 17. The benchmark ran headless. Each variant
+ran twice in sequence with five calibrated batches per case per run. The results
+below are medians of the ten batch means. No other tests or builds ran during
+measurement.
 
-Build and reproduce from the P7 implementation revision:
+The ViewSpec benchmark was removed. Both benchmark runners are available at
+revision `9295fbd0` for reproducing these measurements.
 
 ```sh
 nim ic -d:release -o:deps/benchmark_declarative_views tests/benchmark_declarative_views.nim

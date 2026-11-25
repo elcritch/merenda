@@ -338,7 +338,7 @@ suite "nimkit text fields":
 
     check field.isEditable
     check field.isSelectable
-    check field.acceptsFirstResponder
+    check field.focusable
     check field.clipsToBounds
     check field.selectedRange == initTextRange(3, 0)
     check field.insertionPoint == 3
@@ -388,7 +388,7 @@ suite "nimkit text fields":
     for label in [body, title, heading, status, form]:
       check not label.editable
       check not label.selectable
-      check not label.acceptsFirstResponder
+      check not label.focusable
       check label.clipsToBounds
 
     check body.labelStyle == lsBody

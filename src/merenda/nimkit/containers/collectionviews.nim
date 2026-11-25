@@ -1030,7 +1030,7 @@ proc initCollectionBaseChild(view: View, clipsToBounds: bool) =
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
-  view.acceptsFirstResponder = false
+  view.focusable = false
 
 proc initCollectionContentView(collectionView: CollectionView): CollectionContentView =
   result = CollectionContentView()
@@ -1049,7 +1049,7 @@ proc initCollectionScrollView(collectionView: CollectionView): ScrollView =
   result.autohidesScrollers = true
   result.scrollerThickness = 12.0'f32
   result.lineScroll = collectionView.defaultLayout().itemSize().height
-  result.acceptsFirstResponder = false
+  result.focusable = false
   result.autoresizingMaskConstraints = false
 
 proc applyCollectionItemAccessibility(
@@ -2477,7 +2477,7 @@ proc initCollectionViewFields*(collectionView: CollectionView, frame: Rect = Aut
   collectionView.xScrollView.clipView().connect(
     geometryDidChange, collectionView, collectionViewportGeometryChanged
   )
-  collectionView.acceptsFirstResponder = true
+  collectionView.focusable = true
   collectionView.clipsToBounds = true
   collectionView.addSubview(collectionView.xScrollView)
   discard collectionView.withProtocol(DefaultCollectionViewLayoutBehavior)

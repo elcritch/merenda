@@ -954,7 +954,7 @@ proc matrixCanBecomeKeyView(matrix: Matrix): bool =
   matrix.matrixIsEnabled() and View(matrix).viewCanBecomeKeyView()
 
 proc matrixShouldBecomeFirstResponder(matrix: Matrix): bool =
-  matrix.matrixIsEnabled() and matrix.acceptsFirstResponder()
+  matrix.matrixIsEnabled() and matrix.focusable()
 
 proc matrixLayoutIntrinsicContentSize(matrix: Matrix): IntrinsicSize =
   initIntrinsicSize(matrix.naturalMatrixSize())
@@ -1149,7 +1149,7 @@ proc initMatrixFields*(
   matrix.xSelectionMode = msmRadio
   matrix.xCellSize = AutoSize
   matrix.xIntercellSpacing = initSize(8.0, 6.0)
-  matrix.acceptsFirstResponder = true
+  matrix.focusable = true
   matrix.installMatrixControlProtocol()
   discard matrix.withProtocol(DefaultMatrixDrawing)
   discard matrix.withProtocol(DefaultMatrixEvents)

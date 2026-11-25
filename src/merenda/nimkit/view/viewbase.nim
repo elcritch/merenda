@@ -300,6 +300,7 @@ type
     xPreviousKeyView*: BackRef[View]
     xSuperview*: BackRef[View]
     xWindow*: BackRef[Responder]
+    xDirectNode*: BackRef[Responder]
     xSubviews*: seq[View]
     xToolTip*: string
     xCursorRects*: seq[ViewCursorRect]

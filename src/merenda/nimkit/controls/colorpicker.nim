@@ -641,7 +641,7 @@ proc newColorWheelView(well: ColorWell): ColorWheelView =
   result = ColorWheelView(xSource: well)
   initViewFields(result)
   result.backgroundColor = color(0.0, 0.0, 0.0, 0.0)
-  result.acceptsFirstResponder = true
+  result.focusable = true
   result.accessibilityRole = arGroup
   result.accessibilityLabel = "Color wheel"
   discard result.withProtocol(ColorWheelDrawing)
@@ -960,7 +960,7 @@ proc initColorWellFields*(
   well.xColor = selectedColor
   well.xPopupPresentation = ppAutomatic
   well.backgroundColor = color(0.0, 0.0, 0.0, 0.0)
-  well.acceptsFirstResponder = true
+  well.focusable = true
   well.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
   well.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard well.withProto()

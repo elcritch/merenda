@@ -972,7 +972,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   tabView.xTabBar = newTabBarView(tabView)
   tabView.background = color(0.94, 0.95, 0.97, 0.0)
   tabView.clipsToBounds = true
-  tabView.acceptsFirstResponder = true
+  tabView.focusable = true
   discard tabView.withProto()
   discard tabView.withProtocol(TabViewDrawing)
   discard tabView.withProtocol(TabViewLayout)

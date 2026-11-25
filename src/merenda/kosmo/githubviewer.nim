@@ -508,7 +508,7 @@ proc newKosmoGitHubPanel(
   result.markdownView.matterGrammarSources =
     installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true
-  result.acceptsFirstResponder = true
+  result.focusable = true
   discard result.withProtocol(GitHubLayout)
   result.markdownStyle = markdownStyle
   result.markdownView.headingsToggleOnClick = true

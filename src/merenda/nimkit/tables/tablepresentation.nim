@@ -1421,7 +1421,7 @@ proc initTableScrollView*(tableView: TableView): ScrollView =
   result.autohidesScrollers = true
   result.scrollerThickness = 12.0'f32
   result.lineScroll = tableView.rowHeight()
-  result.acceptsFirstResponder = false
+  result.focusable = false
   result.autoresizingMaskConstraints = false
 
 proc drawTableHeaderSortIndicator*(

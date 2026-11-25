@@ -568,8 +568,7 @@ proc `editable=`*(textView: TextView, editable: bool) =
     textView.xFlags.incl tvEditable
   else:
     textView.xFlags.excl tvEditable
-  textView.acceptsFirstResponder =
-    tvEditable in textView.xFlags or tvSelectable in textView.xFlags
+  textView.focusable = tvEditable in textView.xFlags or tvSelectable in textView.xFlags
 
 proc selectable*(textView: TextView): bool =
   tvSelectable in textView.xFlags
@@ -581,8 +580,7 @@ proc `selectable=`*(textView: TextView, selectable: bool) =
     textView.xFlags.incl tvSelectable
   else:
     textView.xFlags.excl tvSelectable
-  textView.acceptsFirstResponder =
-    tvEditable in textView.xFlags or tvSelectable in textView.xFlags
+  textView.focusable = tvEditable in textView.xFlags or tvSelectable in textView.xFlags
 
 proc richText*(textView: TextView): bool =
   tvRichText in textView.xFlags
@@ -3759,7 +3757,7 @@ proc initTextViewFields*(
   textView.xMarkedTextAttributes.underlineStyle = tldsSingle
   textView.xDefaultParagraphStyle = initTextParagraphStyle()
   textView.xCompletionPanel = TextCompletionPanel(selectedIndex: -1)
-  textView.acceptsFirstResponder = true
+  textView.focusable = true
   discard textView.withProtocol(DefaultTextViewStyleLayout)
   discard textView.withProtocol(DefaultTextViewLayoutClient)
   discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
