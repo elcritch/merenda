@@ -131,11 +131,11 @@ suite "Kosmo Moe frontend bridges":
     require editor.handleTextInput("other unsaved work")
     require editor.handleKey("Esc")
     require frontend.editorView.openFile(path)
-    let selected = frontend.documentTabs.selectedDocumentTabIdentifier
+    let selected = frontend.documentTabs.selectedIdentifier
     require editor.handleTextInput("A changed")
     require editor.handleKey("Esc")
     require frontend.command("wq")
-    check frontend.documentTabs.selectedDocumentTabIdentifier != selected
+    check frontend.documentTabs.selectedIdentifier != selected
     check readFile(path) == "original changed"
     check editor.activeText() == "other unsaved work"
     require editor.handleKey("i")
@@ -155,13 +155,13 @@ suite "Kosmo Moe frontend bridges":
     frontend.window.setContentView(frontend.contentView)
     require frontend.newEditorTab()
     require frontend.editorView.openFile(path)
-    let selected = frontend.documentTabs.selectedDocumentTabIdentifier
+    let selected = frontend.documentTabs.selectedIdentifier
     require frontend.editorView.editor.handleTextInput("A changed")
     require frontend.editorView.editor.handleKey("Esc")
     require frontend.window.makeFirstResponder(frontend.editorView)
     require frontend.window.dispatchTextInput("ZZ")
     frontend.editorView.refresh()
-    check frontend.documentTabs.selectedDocumentTabIdentifier != selected
+    check frontend.documentTabs.selectedIdentifier != selected
     check readFile(path) == "original changed"
 
   test "parsed native quit stops a mapping before trailing source edits":
@@ -213,14 +213,14 @@ suite "Kosmo Moe frontend bridges":
     require frontend.command("vsplit")
     require frontend.newEditorTab()
     let source = KosmoEditorView(frontend.window.firstResponder())
-    let selected = source.documentTabs.selectedDocumentTabIdentifier
+    let selected = source.documentTabs.selectedIdentifier
     require frontend.command("bd missing.txt", source)
     check editor.bufferText(target).isSome
-    check source.documentTabs.selectedDocumentTabIdentifier == selected
+    check source.documentTabs.selectedIdentifier == selected
     require frontend.command("bd target.txt", source)
     check editor.bufferText(target).isNone
     check frontend.editorGroups().len == 1
-    check source.documentTabs.selectedDocumentTabIdentifier == selected
+    check source.documentTabs.selectedIdentifier == selected
     check source.documentTabs.len == 1
 
   test "idle revisions report text changes without depending on Git":
@@ -311,14 +311,13 @@ suite "Kosmo Moe frontend bridges":
     let editor = frontend.editorView.editor
     editor.configureRecovery(directory / "recovery")
     require frontend.openPath(path)
-    let original = frontend.documentTabs.selectedDocumentTabIdentifier
+    let original = frontend.documentTabs.selectedIdentifier
     require editor.handleTextInput("A recovered")
     require editor.handleKey("Esc")
     require editor.preserveModifiedBuffers().len == 1
     require editor.undo()
     require frontend.command("recover!")
-    check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoRecoveryTabIdentifier
+    check frontend.documentTabs.selectedIdentifier == KosmoRecoveryTabIdentifier
     let documents = frontend.editorGroups()[0].documents()
     require documents.len == 1
     let recovery = KosmoRecoveryView(documents[0].contentView)
@@ -327,7 +326,7 @@ suite "Kosmo Moe frontend bridges":
     check frontend.window.firstResponder() == recovery.preferredResponder()
     editor.forceInputMode = true
     require recovery.restoreSelected()
-    check frontend.documentTabs.selectedDocumentTabIdentifier == original
+    check frontend.documentTabs.selectedIdentifier == original
     check editor.activeText() == "on disk recovered"
     check editor.mode() == KosmoEditorMode.Insert
     check editor.moeWindowCount() == 1
@@ -348,8 +347,7 @@ suite "Kosmo Moe frontend bridges":
     require frontend.command("jobs")
     frontend.editorView.refresh()
     check editor.tabs().len == original
-    check frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoOutputTabIdentifier) >=
-      0
+    check frontend.documentTabs.find(KosmoOutputTabIdentifier) >= 0
     var documents = 0
     for group in frontend.editorGroups():
       for document in group.documents():

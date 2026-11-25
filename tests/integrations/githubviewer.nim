@@ -524,8 +524,7 @@ suite "GitHub CLI document integration":
       require panel.waitForGitHub()
       check panel.snapshot.rootPath == root
       check panel.snapshot.items.len == 2
-      check frontend.documentTabs.selectedDocumentTabIdentifier ==
-        KosmoGitHubTabIdentifier
+      check frontend.documentTabs.selectedIdentifier == KosmoGitHubTabIdentifier
       require frontend.showGitHub(root)
       check frontend.gitHubPanel == panel
       require panel.waitForGitHub()

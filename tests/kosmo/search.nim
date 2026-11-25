@@ -629,7 +629,7 @@ suite "Kosmo":
       check frontend.editorGroups().len == 1
       check frontend.editorGroups()[0].documents.len == 1
       check frontend.documentTabs.len == initialTabCount + 1
-      let selectedTitle = frontend.documentTabs.selectedDocumentTabItem().title
+      let selectedTitle = frontend.documentTabs.selectedItem().title
       check selectedTitle == "Terminal 1"
       let terminalVisible = frontend.editorPane.contentView of TerminalView
       require terminalVisible

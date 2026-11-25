@@ -210,16 +210,6 @@ protocol DefaultDocumentControllerReview of DocumentControllerReview:
   ): DocumentCloseReviewAction =
     dcraCancel
 
-proc documentIndexOfIdentifier(
-    controller: DocumentController, identifier: string
-): int =
-  if identifier.len == 0:
-    return -1
-  for index, document in controller.xDocuments:
-    if not document.isNil and document.documentIdentifier() == identifier:
-      return index
-  -1
-
 proc documentTabModelForDocument(document: Document): DocumentTabModel =
   initDocumentTabModel(
     identifier = document.documentIdentifier(),
@@ -244,11 +234,6 @@ protocol DocumentControllerDocumentTabsDataSource of DocumentTabsDataSource:
       controller.xDocuments[index].documentTabModelForDocument()
     else:
       initDocumentTabModel()
-
-  method indexOfDocumentTabModelIdentifier(
-      controller: DocumentController, tabs: DocumentTabs, identifier: string
-  ): int =
-    controller.documentIndexOfIdentifier(identifier)
 
 protocol DocumentControllerDocumentTabsDelegate of DocumentTabsDelegate:
   method didSelectDocumentTab(
@@ -394,7 +379,7 @@ proc bindDocumentTabs*(tabs: DocumentTabs, controller: DocumentController) =
   tabs.delegate = controller
   let current = controller.currentDocument()
   if not current.isNil:
-    tabs.selectedDocumentTabIdentifier = current.documentIdentifier()
+    tabs.selectedIdentifier = current.documentIdentifier()
   documenttabs.reloadData(tabs)
 
 proc addDocument*(controller: DocumentController, document: Document) =

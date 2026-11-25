@@ -152,7 +152,7 @@ suite "Kosmo terminal input routing":
     frontend.contentView.frame = rect(0, 0, 1000, 700)
     require frontend.openDocument(document)
     # A single document duplicates on split; multiple tabs move the selected tab.
-    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    require frontend.documentTabs.closeTab(frontend.documentTabs[0])
     require frontend.documentTabs.len == 1
     frontend.contentView.layoutSubtreeIfNeeded()
     require frontend.window.terminalIsFocused(terminal)

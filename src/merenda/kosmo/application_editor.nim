@@ -1009,14 +1009,14 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
         selectedIdentifier = tab.id.tabIdentifier
         break
 
-  if visibleTabs == view.lastTabs and models == view.documentTabs.documentTabModels() and
-      selectedIdentifier == view.documentTabs.selectedDocumentTabIdentifier:
+  if visibleTabs == view.lastTabs and models == view.documentTabs.models() and
+      selectedIdentifier == view.documentTabs.selectedIdentifier:
     return
   view.syncingTabs = true
   defer:
     view.syncingTabs = false
-  view.documentTabs.documentTabModels = models
-  view.documentTabs.selectedDocumentTabIdentifier = selectedIdentifier
+  view.documentTabs.models = models
+  view.documentTabs.selectedIdentifier = selectedIdentifier
   view.lastTabs = visibleTabs
 
 proc isActiveEditorGroup(view: KosmoEditorView): bool =
@@ -1670,10 +1670,7 @@ proc refresh(view: KosmoEditorView, rowOffset: int) =
       discard view.openConfigDocument()
   elif not view.dockGroup.isNil:
     let group = view.dockGroup[]
-    let index =
-      group.pane.documentTabs.indexOfDocumentTabIdentifier(KosmoConfigTabIdentifier)
-    if index >= 0:
-      discard group.pane.documentTabs.closeDocumentTabAtIndex(index)
+    discard group.pane.documentTabs.closeTab(KosmoConfigTabIdentifier)
   view.inactiveRefreshDeferred = false
   defer:
     if view.editor.mode() notin {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
@@ -1990,7 +1987,7 @@ proc closeTabWithConfirmation(
     proc() =
       let outcome = view.closeTab(id, discardChanges = true)
       if outcome.closed:
-        if not view.documentTabs.completeDocumentTabClose(id.tabIdentifier):
+        if not view.documentTabs.completeClose(id.tabIdentifier):
           controller.finishTabClose(view)
         if not afterClose.isNil:
           afterClose()
@@ -2428,7 +2425,7 @@ proc handleDocumentTabsKeyEquivalent(
     handler.keyboardTabbing = true
     defer:
       handler.keyboardTabbing = wasKeyboardTabbing
-    tabs.selectRelativeDocumentTab(offset)
+    tabs.selectRelative(offset)
 
   if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {}:
     return selectKeepingStripFocus(if nimkit.kmShift in event.modifiers: -1 else: 1)
@@ -2613,8 +2610,8 @@ proc closeTabBatch(handler: KosmoEditorTabsHandler, pending: seq[string]) =
       if identifier.parseTabIdentifier(id):
         let
           group = controller[].groupForView(view)
-          item = tabs.documentTabItemWithIdentifier(identifier)
-        if not group.isNil and not view.syncingTabs and tabs.canCloseDocumentTab(item) and
+          item = tabs[identifier]
+        if not group.isNil and not view.syncingTabs and tabs.canClose(item) and
             not controller[].bufferIsVisibleOutside(group, id) and
             controller[].bufferHasUnsavedData(id):
           let
@@ -2630,14 +2627,14 @@ proc closeTabBatch(handler: KosmoEditorTabsHandler, pending: seq[string]) =
             ,
           )
           return
-    if not tabs.closeDocumentTabWithIdentifier(identifier):
+    if not tabs.closeTab(identifier):
       return
 
 proc closeTabsExcept(
     handler: KosmoEditorTabsHandler, view: KosmoEditorView, keepIdentifier: string
 ) =
   var pending: seq[string]
-  for identifier in view.documentTabs.documentTabIdentifiers():
+  for identifier in view.documentTabs.identifiers():
     if identifier != keepIdentifier:
       pending.add identifier
   closeTabBatch(handler, pending)
@@ -2697,7 +2694,7 @@ proc tabContextMenu(
       closeSelector = nimkit.actionSelector("kosmo.editorTabs.close")
       closeItem = nimkit.newMenuItem("Close", closeSelector)
     closeItem.validates = false
-    closeItem.enabled = view.documentTabs.canCloseDocumentTab(item)
+    closeItem.enabled = view.documentTabs.canClose(item)
     closeItem.target = nimkit.newActionTarget(closeSelector) do(
       sender: nimkit.DynamicAgent
     ):
@@ -2705,14 +2702,14 @@ proc tabContextMenu(
       if not weakHandler.isNil:
         let view = weakHandler[].targetView()
         if not view.isNil:
-          discard view.documentTabs.closeDocumentTabWithIdentifier(identifier)
+          discard view.documentTabs.closeTab(identifier)
     discard result.addItem(closeItem)
   block:
     let
       closeOthersSelector = nimkit.actionSelector("kosmo.editorTabs.closeOthers")
       closeOthersItem = nimkit.newMenuItem("Close others", closeOthersSelector)
     closeOthersItem.validates = false
-    closeOthersItem.enabled = view.documentTabs.documentTabIdentifiers().len > 1
+    closeOthersItem.enabled = view.documentTabs.identifiers().len > 1
     closeOthersItem.target = nimkit.newActionTarget(closeOthersSelector) do(
       sender: nimkit.DynamicAgent
     ):

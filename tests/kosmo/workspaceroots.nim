@@ -23,7 +23,7 @@ suite "Kosmo workspace roots":
     frontend.contentView.layoutSubtreeIfNeeded()
     let
       tabs = frontend.documentTabs
-      bounds = tabs.documentTabRect(0)
+      bounds = tabs.tabRect(0)
       start = tabs.pointToWindow(initPoint(bounds.minX + 30, bounds.minY + 12))
       drop = initPoint(
         frontend.window.frame().size.width + 180,
@@ -38,7 +38,7 @@ suite "Kosmo workspace roots":
     detached.close()
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(path, fodPermanent)
-    let models = frontend.documentTabs.documentTabModels()
+    let models = frontend.documentTabs.models()
     var fileInMainWindow = false
     for model in models:
       if model.title == "file.txt":
