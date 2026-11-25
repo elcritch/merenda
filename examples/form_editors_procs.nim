@@ -1,11 +1,10 @@
-## Run `nim ic -r examples/form_editors_procs.nim` to compare named callbacks
-## in DirectView and ViewSpec toolbars around the same FormView.
+## Run `nim ic -r examples/form_editors_procs.nim` to see named callbacks
+## in DirectView toolbars around FormView panels.
 ## Async Save writes only accepted data into a private temporary directory.
 ## Save / Close is the separate in-memory draft checkpoint.
 import std/[os, tempfiles]
 import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/declarative
 import merenda/nimkit/directviews
 import ./form_drafts
 from ./form_editors import newDraftForm
@@ -68,34 +67,6 @@ proc directActions(panel: FormPanel): DirectView =
         Button("External 99", acceptsFirstResponder = false):
           onAction(panel, external)
 
-type FormAction = proc(sender: Responder, panel: FormPanel) {.nimcall.}
-
-proc specAction(panel: FormPanel, handler: FormAction): ViewAction =
-  viewAction(panel, handler) do(p: FormPanel, action: FormAction, sender: DynamicAgent):
-    if sender of Responder:
-      action(Responder(sender), p)
-
-proc specActions(panel: FormPanel): DeclarativeView =
-  let body = viewBody:
-    VStack:
-      HStack:
-        Button("Apply", focusable = false, onAction = specAction(panel, apply))
-        Button("Undo", focusable = false, onAction = specAction(panel, undo))
-        Button("Cancel", focusable = false, onAction = specAction(panel, cancel))
-        Button(
-          "Async Save accepted",
-          focusable = false,
-          onAction = specAction(panel, saveFile),
-        )
-        Button("Save / Close", focusable = false, onAction = specAction(panel, save))
-      HStack:
-        Button(
-          "Queue validation", focusable = false, onAction = specAction(panel, queue)
-        )
-        Button("Complete", focusable = false, onAction = specAction(panel, complete))
-        Button("External 99", focusable = false, onAction = specAction(panel, external))
-  newDeclarativeView(body)
-
 proc runFormEditorsProcs*() =
   let savePath = createTempDir("merenda-form-save-", "") / "accepted.txt"
   let document = newFormDocument(12)
@@ -114,9 +85,9 @@ proc runFormEditorsProcs*() =
     directActions(first),
   )
   root.addArrangedSubview(
-    newLabel("Shared draft: ViewSpec toolbar + DirectView form"),
+    newLabel("Shared draft: second panel"),
     newDraftForm(second.draft),
-    specActions(second),
+    directActions(second),
   )
   root.addArrangedSubview(
     newLabel("Independent local draft"), newDraftForm(local.draft), directActions(local)

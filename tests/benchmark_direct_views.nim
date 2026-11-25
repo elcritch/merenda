@@ -1,4 +1,4 @@
-## P7 diagnostic timings; compare on the same machine with benchmark_declarative_views.
+## DirectView diagnostic timings.
 ## nim ic -d:release -o:deps/benchmark_direct_views tests/benchmark_direct_views.nim
 import std/[algorithm, math, monotimes, os, strformat, strutils, times]
 import sigils/[core, reactive]

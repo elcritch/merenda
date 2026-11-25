@@ -72,7 +72,4 @@ bottleneck.
   document, define atomic save, recovery and cancellation. These decisions
   belong to the document or controller. [Form and save experiment](docs/declarative-forms.md)
 
-The original ViewSpec implementation remains available as a comparison for
-structural preflight and detached previews. The design history records the
-other approaches considered. [ViewSpec guide](docs/declarative-views.md) ·
-[Earlier roadmap](https://github.com/elcritch/merenda/blob/2d673d0d/TODO-declarative.md)
+The design history records earlier approaches in the [earlier roadmap](https://github.com/elcritch/merenda/blob/2d673d0d/TODO-declarative.md).

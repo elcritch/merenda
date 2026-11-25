@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the experimental ViewSpec API. Use DirectView for declarative views.
+
 - Show Kosmo's About information in a NimKit window that closes with Cmd-W.
 - Open web links in Kosmo's Markdown previews in the system default browser.
 - Scroll faster in Quick Open while holding Control.

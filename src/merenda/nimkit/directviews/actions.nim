@@ -13,7 +13,7 @@ proc initViewAction*[T: Responder](selector: ActionSelector, target: T): ViewAct
   result.target{} = target
 
 proc dispatchViewAction*(action: ViewAction, sender: DynamicAgent) =
-  ## Internal bridge used by mounts; not exported through the declarative facade.
+  ## Internal bridge used by DirectView.
   let target = action.target{}
   if not target.isNil:
     discard target.sendLocalIfHandled(action.selector, ActionArgs(sender: sender))

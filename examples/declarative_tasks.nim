@@ -1,4 +1,4 @@
-## Shared domain/controller policy for the ViewSpec and direct-view comparisons.
+## Domain and controller policy for the direct-view task demo.
 import std/[algorithm, strutils]
 import sigils/[core, reactive]
 import merenda/nimkit

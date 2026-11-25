@@ -15,6 +15,7 @@ import merenda/nimkit/foundation/selectors
 type
   DirectController = ref object of Responder
     calls: int
+    host: DirectView
 
   DirectBindingModel = ref object of Responder
     value: int
@@ -180,6 +181,21 @@ static:
   )
 
 suite "direct view composition":
+  test "an inline action can clear its own host":
+    let owner = DirectController(host: newDirectView())
+    initResponder(owner)
+    owner.host.viewBody:
+      Button("Clear", identifier = "clear"):
+        onAction(owner) do(this: Button, receiver: DirectController):
+          inc receiver.calls
+          receiver.host.clear()
+    let button = Button(owner.host.viewWithIdentifier("clear"))
+    require button.tryToPerform(performClick(), button)
+    check owner.calls == 1
+    check owner.host.arrangedSubviews.len == 0
+    discard button.tryToPerform(performClick(), button)
+    check owner.calls == 1
+
   test "body receiver is evaluated once and its update is completed":
     let first = newDirectView()
     let second = newDirectView()

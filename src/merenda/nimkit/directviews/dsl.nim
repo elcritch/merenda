@@ -7,7 +7,7 @@ import ../view/views
 import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
-import ../declarative/actions
+import ./actions
 from ../viewbindings import BindingScope, bindTextField, bindValue
 import ./runtime
 export runtime

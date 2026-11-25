@@ -7,7 +7,7 @@ import ../controls/buttons
 import ../text/textfields
 import ../responder/actiontargets
 import ../foundation/[selectors, types]
-import ../declarative/actions
+import ./actions
 import ./bindings
 
 type

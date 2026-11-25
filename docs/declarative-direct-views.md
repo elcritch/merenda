@@ -11,10 +11,9 @@ recovery from interrupted updates, and native application validation.
 
 ## Current prototype: collections and owned components
 
-Run `nim ic -r examples/direct_views_demo.nim`. Both demos now share
-`examples/declarative_tasks.nim`: the same collection, validation, undo/redo,
-commands, and stale-drag rejection. Their differences are in view construction
-and the scope of structural rebuilding, not domain behavior.
+Run `nim ic -r examples/direct_views_demo.nim`. The demo uses the task controller
+in `examples/declarative_tasks.nim` for collection updates, validation, undo and
+redo, and rejecting stale drag proposals.
 
 ```nim
 import merenda/nimkit
@@ -89,8 +88,8 @@ Use actual widget property names; constructor-only parameters can still be suppl
 positionally.
 
 Ordinary block statements run on each structural evaluation. `arrangedSizing`
-sets the parent's sizing policy. Custom factories need no ViewSpec enum case;
-child arrangement currently requires StackView containers.
+sets the parent's sizing policy. Custom factories create actual views. Child
+arrangement currently requires StackView containers.
 
 An inline `onAction` or `onChange` handler takes the typed widget first, followed
 by the receiver and optional context. The examples call the widget parameter
@@ -278,10 +277,9 @@ flowchart LR
   A --> R[Create, reuse, or rebind actual rows]
 ```
 
-No layer needs a complete `ViewSpec` tree. Some metadata remains necessary:
-child keys/type compatibility, binding identity, connections, and selected last
-authored values. That metadata describes ownership and synchronization rather than
-every property and child in a second view representation.
+Composition tracks child keys, widget types, binding identities, connections, and
+selected last-authored values. It uses that metadata to reuse widgets and keep
+their bindings current.
 
 ## The direct-view execution contract
 
@@ -314,7 +312,7 @@ ownership, rather than leaving an accidental stale value.
 
 Direct execution changes validation possibilities. For the first list prototype,
 obtain and validate the complete sibling-ID sequence from the model before changing
-its views. Arbitrary nested declarations cannot promise P0's whole-description
+its views. Arbitrary nested declarations cannot promise whole-description
 duplicate-key validation before any mutation merely by checking keys as they run.
 That broader guarantee needs a structural preflight/staging contract, or must remain
 a reported compatibility gap. Setter failures likewise do not imply rollback.
@@ -440,7 +438,6 @@ unrelated model notification must not push old text back into an active editor.
 Echoing the user's accepted value must preserve selection and marked text; conflicting
 external changes need a stated policy. Selected last-authored-value storage can
 provide this without retaining an entire view description.
-[Existing text patch policy](../src/merenda/nimkit/declarative/mounts.nim),
 [TextField behavior](../src/merenda/nimkit/text/textfields.nim).
 
 Keep inline ActionTarget handlers for local behavior and named controller commands
@@ -485,11 +482,9 @@ See the executable coverage in
 [directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in
 [form_editors.nim](../examples/form_editors.nim).
 
-## Dragology does not require ViewSpec
+## Dragology previews
 
-`newDeclarativeDragView` already accepts a builder returning `View`. The current
-demo happens to call `buildDetachedView(ViewSpec)` inside that callback, but this
-is one way to satisfy the API, not a requirement of Dragology.
+`newDeclarativeDragView` accepts a builder returning `View`.
 [Drag controller](../src/merenda/nimkit/interaction/dragcontrollers.nim).
 
 Use the same direct-view layout/configuration code against a fresh detached scope
@@ -503,31 +498,6 @@ This still creates widgets and performs layout/capture. It does not eliminate th
 solver budget or full-candidate cost. Preserve capture-validity checks and commit
 accepted operations against current model state, so a preview cannot restore an
 outdated unrelated value. Sharing live widgets or editors with candidates is excluded.
-
-## First experiment and evidence required
-
-Keep P0 as the reference. Implement P7 in logical steps, with a commit after each:
-
-1. Direct typed creation/reuse and removal for a small eager keyed list. Retain the
-   existing editor identity tests and document structural validation limitations.
-2. Owned bindings: one Sigil counter, one controller-signaled row title, explicit
-   row-ID context, coalesced flush, and teardown/reuse with queued work.
-3. Controller commands and editing: validation rejection, accepted-edit undo,
-   programmatic echo, external changes, and action context after reordering.
-4. The same layout code constructing isolated Dragology candidates from snapshots.
-5. A table/collection adapter, measured separately with a fixed viewport after the
-   relevant shared cell/item identity behavior is corrected.
-
-Measure against the same semantic contract and workload, including layout. Count
-body/binding executions, handler creations, connections and retained memory; measure
-actual allocations before characterizing them as expensive. No-op updates, repeated
-source switching, and long-lived row recycling must not grow subscription counts.
-Then assess authoring complexity and compile-time diagnostics as well as timings.
-
-The main hypothesis is that real-view composition plus MVC-owned bindings provides
-the needed expressiveness with less intermediate representation and narrower update
-work. Whether it is faster, simpler, and more robust than P0/P2 remains the result
-this experiment must establish.
 
 ## Experimental virtualized rows
 

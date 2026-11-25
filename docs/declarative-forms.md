@@ -6,8 +6,7 @@ that send protocol selectors such as `onAction(panel, apply())`.
 Run `nim ic -r examples/form_editors_procs.nim` to compare named callbacks such
 as `onAction(panel, apply)`.
 Two panels share an editing owner, and a third has an independent draft of the
-same document. The first and third use DirectView toolbars. The second uses a
-ViewSpec toolbar around the same DirectView-owned form.
+same document. All three use DirectView toolbars around DirectView-owned forms.
 
 The example deliberately uses ordinary helpers instead of introducing a public
 form DSL. `newDraftForm` composes an actual FormView whose rows are created through
