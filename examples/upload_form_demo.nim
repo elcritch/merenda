@@ -203,12 +203,8 @@ proc removeFile*(store: UploadStore, id: int) =
     store.files <- next
     if store.selected{} == id:
       # Select the file that moved into the removed row, or the new last row.
-      store.selectFile(
-        if next.len == 0:
-          0
-        else:
-          next[min(index, next.high)].id
-      )
+      let id = (if next.len == 0: 0 else: next[min(index, next.high)].id)
+      store.selectFile(id)
     emit store.filesChanged(next)
 
 proc clearFiles*(store: UploadStore) =
