@@ -1,6 +1,7 @@
 import std/[macros, math, monotimes, options, sets, tables, times]
 
 import pkg/kiwiberry
+import sigils/core
 from sigils/hom import findFirst, isSome
 
 import ../themes
@@ -73,6 +74,7 @@ type
     items: seq[SolverView]
     itemIndexes: Table[pointer, int]
     constraintItemIndexes: HashSet[pointer]
+    keepsContainerFrames: bool
     generatedInputs: seq[LayoutInput]
     limits: LayoutSolveLimits
     startedAt: MonoTime
@@ -82,6 +84,7 @@ type
     workCoefficientCount: Natural
     cssInputs: seq[LayoutInput]
     cssSubjects: HashSet[pointer]
+    cssTargets: HashSet[pointer]
     cssDiagnostics: seq[CssLayoutDiagnostic]
     didResolveCss: bool
     when defined(merendaPersistentLayout):
@@ -1138,11 +1141,14 @@ proc checkSolveBudget(state: LayoutSolveState) =
       state.elapsedMilliseconds() >= state.limits.maxMilliseconds:
     state.raiseBudgetExceeded(lslTime)
 
-proc initLayoutSolveState(limits: LayoutSolveLimits): LayoutSolveState =
+proc initLayoutSolveState(
+    limits: LayoutSolveLimits, mode: LayoutSolveMode
+): LayoutSolveState =
   result = LayoutSolveState(
     solver: initSolver(),
     itemIndexes: initTable[pointer, int](),
     constraintItemIndexes: initHashSet[pointer](),
+    keepsContainerFrames: mode == lsmLayout,
     limits: limits,
     startedAt: getMonoTime(),
   )
@@ -1439,8 +1445,18 @@ proc expressionFor(state: var LayoutSolveState, term: LayoutTerm): Expression =
     return toExpression(0.KiwiScalar)
   state.solverView(term.item).expressionFor(term.attribute) * term.multiplier.solverValue
 
+proc keepsContainerFrame(state: LayoutSolveState, item: View): bool =
+  ## A container assigns this view's frame after the solve, so sizing it to its
+  ## intrinsic content would only be overwritten, every transaction.
+  state.keepsContainerFrames and not item.isNil and
+    vipContainerOwnedFrame in item.xPrivProps and not state.hasConstraintItem(item) and
+    cast[pointer](item) notin state.cssTargets
+
 proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
   if equation.terms.len == 0:
+    return
+  if equation.source == lisIntrinsic and
+      state.keepsContainerFrame(equation.terms[0].item):
     return
   for term in equation.terms:
     state.checkSolveBudget()
@@ -1738,6 +1754,7 @@ proc prepareCssProperty(
         var terms = @[initLayoutTerm(subject, spec.attribute)]
         if not target.isNil:
           terms.add initLayoutTerm(target, spec.targetAttribute, -spec.multiplier)
+          state.cssTargets.incl cast[pointer](target)
         var equation =
           initLayoutEquation(terms, spec.relation, spec.constant, spec.priority, lisCss)
         equation.cssProperty = property
@@ -1856,9 +1873,11 @@ proc solvedFrames(state: var LayoutSolveState): seq[SolvedFrame] =
       )
       result.add SolvedFrame(item: solverView.item, frame: frame)
 
-proc applySolvedFrames(frames: openArray[SolvedFrame]) =
+proc applySolvedFrames(frames: openArray[SolvedFrame]): seq[View] =
   profileViewPhase(vppFrameApplication)
   for solved in frames:
+    if solved.item.xFrame != solved.frame:
+      result.add solved.item
     solved.item.applyLayoutFrame(solved.frame, lfoSolver)
 
 proc refreshAutoresizingStates(state: LayoutSolveState) =
@@ -1981,7 +2000,7 @@ proc buildAndSolveConstraints(
       state.supportsPersistentTree(view)
   while true:
     view.xLayoutInputCache = previousCache
-    state = initLayoutSolveState(view.xLayoutSolveLimits)
+    state = initLayoutSolveState(view.xLayoutSolveLimits, mode)
     when defined(merendaPersistentLayout):
       state.captureConstraints = capturePersistent
     state.startedAt = startedAt
@@ -2065,7 +2084,9 @@ when defined(merendaPersistentLayout):
     view.xPersistentLayout = move cache
     recordPersistentBuild()
 
-  proc tryPersistentLayout(view: View, startedAt: MonoTime): bool =
+  proc tryPersistentLayout(
+      view: View, startedAt: MonoTime, changedFrames: var seq[View]
+  ): bool =
     if not view.xPersistentLayout.valid or vpPersistentLayout notin view.xProps or
         activeLayoutTransaction.isNil or activeLayoutTransaction[].root != view or
         activeLayoutTransaction[].phase != ltpSolvingConstraints:
@@ -2084,7 +2105,7 @@ when defined(merendaPersistentLayout):
         view.xLayoutInputCache.structureDirty = true
         recordPersistentFallback()
 
-    var state = initLayoutSolveState(view.xLayoutSolveLimits)
+    var state = initLayoutSolveState(view.xLayoutSolveLimits, lsmLayout)
     state.startedAt = startedAt
     try:
       if not state.supportsPersistentTree(view) or
@@ -2122,7 +2143,7 @@ when defined(merendaPersistentLayout):
       state.checkSolveBudget()
       let frames = state.solvedFrames()
       state.checkSolveBudget()
-      applySolvedFrames(frames)
+      changedFrames = applySolvedFrames(frames)
       state.refreshAutoresizingStates()
       state.refreshLayoutInputCaches(view)
       view.clearSolveFailure(lsmLayout)
@@ -2146,22 +2167,29 @@ proc applyConstraintsForSubtree*(view: View): bool =
   if not view.needsConstraintSolve():
     return true
 
+  var changedFrames: seq[View]
+  defer:
+    # Notify after the frames and solver caches have settled. The ordinary
+    # geometry signal also drives autoresizing input invalidation.
+    for item in changedFrames:
+      emit item.solvedFrameDidChange()
+
   when defined(merendaPersistentLayout):
     let attemptStarted = getMonoTime()
-    if view.tryPersistentLayout(attemptStarted):
+    if view.tryPersistentLayout(attemptStarted, changedFrames):
       return true
 
   let previousCache = view.xLayoutInputCache
   when defined(merendaPersistentLayout):
     let inputRevision = view.xLayoutInputRevision
-  var state = initLayoutSolveState(view.xLayoutSolveLimits)
+  var state = initLayoutSolveState(view.xLayoutSolveLimits, lsmLayout)
   when defined(merendaPersistentLayout):
     state.startedAt = attemptStarted
   try:
     state.buildAndSolveConstraints(view, lsmLayout)
     let frames = state.solvedFrames()
     state.checkSolveBudget()
-    applySolvedFrames(frames)
+    changedFrames = applySolvedFrames(frames)
     state.refreshAutoresizingStates()
     state.refreshLayoutInputCaches(view)
     when defined(merendaPersistentLayout):
@@ -2207,7 +2235,7 @@ proc fittingSize*(view: View): Size =
     return view.alignmentRect().size
 
   let previousCache = view.xLayoutInputCache
-  var state = initLayoutSolveState(view.xLayoutSolveLimits)
+  var state = initLayoutSolveState(view.xLayoutSolveLimits, lsmFitting)
   try:
     state.buildAndSolveConstraints(view, lsmFitting)
 

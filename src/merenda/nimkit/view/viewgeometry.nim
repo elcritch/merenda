@@ -126,6 +126,9 @@ protocol ViewLayoutInputEvents:
 protocol ViewGeometryEvents:
   proc geometryDidChange*(view: View) {.signal.}
 
+protocol ViewSolvedFrameEvents:
+  proc solvedFrameDidChange*(view: View) {.signal.}
+
 proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   case reason
   of lirConstraints:
@@ -193,6 +196,10 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
     of lirFrame, lirSuperview, lirAutoresizingMask:
       view.xAutoresizingState.referenceDirty = true
       view.xAutoresizingState.inputsDirty = true
+      if reason in {lirFrame, lirSuperview}:
+        # An authored frame or a new superview hands geometry back to the
+        # solver until a container places the view again.
+        view.xPrivProps.excl vipContainerOwnedFrame
     of lirBounds, lirSuperviewGeometry, lirSubviews:
       view.xAutoresizingState.inputsDirty = true
     else:
@@ -237,6 +244,10 @@ proc invalidateLayoutItemGeometry*(
     emit current.layoutInputChanged(if isOrigin: reason else: ancestorReason)
     isOrigin = false
     current = current.superviewBacklink()
+
+proc releaseContainerFrame*(view: View) =
+  if vipContainerOwnedFrame in view.xPrivProps:
+    view.invalidateLayoutItemGeometry(lirFrame)
 
 proc autoresizingMask*(view: View): AutoresizingMask =
   view.xAutoresizingMask
@@ -316,9 +327,16 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
     view.refreshAutoresizingReference()
 
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
-  if origin == lfoSolver:
+  let frameChanged = view.xFrame != frame
+  case origin
+  of lfoSolver:
     view.xPrivProps.excl vipNeedsLocalConstraintLayout
-  if view.xFrame == frame:
+  of lfoContainer:
+    view.xPrivProps.incl vipContainerOwnedFrame
+  of lfoAuthored:
+    if not frameChanged:
+      view.releaseContainerFrame()
+  if not frameChanged:
     return
   if origin == lfoContainer and view.xFrame.size != frame.size:
     view.xPrivProps.incl vipNeedsLocalConstraintLayout

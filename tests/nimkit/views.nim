@@ -34,6 +34,13 @@ type
     target: View
     invalidatesTarget: bool
 
+  SiblingMovingView = ref object of View
+    sibling: View
+    moves: int
+    defersMove: bool
+    failsAfterLayout: bool
+    phasesDuringMove: seq[LayoutTransactionPhase]
+
   ReentrantLayoutView = ref object of View
     target: LayoutSpyView
     targetEventsDuringLayout: int
@@ -137,6 +144,33 @@ protocol LayoutInvalidatingHooks of ViewLayoutProtocol:
     if spy.invalidatesTarget:
       spy.invalidatesTarget = false
       spy.target.setNeedsLayout()
+
+proc moveSibling(view: SiblingMovingView, root: View) =
+  inc view.moves
+  view.phasesDuringMove.add root.layoutPhase
+  view.sibling.frame = rect(0, float32(view.moves), 10, 10)
+
+protocol SiblingMovingHooks of ViewLayoutProtocol:
+  method layout(view: SiblingMovingView) =
+    let root = view.superview()
+    if view.failsAfterLayout:
+      performAfterLayout(
+        proc() =
+          raise newException(ValueError, "deferred failure")
+      )
+    if view.defersMove:
+      performAfterLayout(
+        proc() =
+          view.moveSibling(root)
+      )
+    else:
+      view.moveSibling(root)
+
+proc newSiblingMovingView(sibling: View, defersMove: bool): SiblingMovingView =
+  result = SiblingMovingView(sibling: sibling, defersMove: defersMove)
+  initViewFields(result, rect(0, 0, 20, 20))
+  result.identifier = "sibling-mover"
+  discard result.withProtocol(SiblingMovingHooks)
 
 protocol ReentrantLayoutHooks of ViewLayoutProtocol:
   method layoutSubviews(spy: ReentrantLayoutView) =
@@ -566,6 +600,30 @@ suite "nimkit views":
     root.finishDisplaySubtree()
     check not root.needsDisplay
 
+  test "equal frame assignments can claim and release container ownership":
+    let
+      root = newFrameAssigningView()
+      child = newLabel("short")
+    child.autoresizingMaskConstraints = false
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+    let assigned = child.frame
+
+    root.frameTarget.target = View(child)
+    root.requestedFrame = assigned
+    root.setNeedsLayout()
+    root.layoutSubtreeIfNeeded()
+
+    child.stringValue = "a much longer label"
+    root.layoutSubtreeIfNeeded()
+    require child.frame == assigned
+    let naturalWidth = child.resolvedIntrinsicContentSize().width
+    require naturalWidth > assigned.size.width
+
+    child.frame = assigned
+    root.layoutSubtreeIfNeeded()
+    check child.frame.size.width == naturalWidth
+
   test "frame assignments to descendants are output in both layout hooks":
     for phase in [fapLayoutSubviews, fapLayout]:
       let
@@ -793,6 +851,53 @@ suite "nimkit views":
     check diagnostic.targetView == "nonconverging-layout-test"
     check diagnostic.phase == ltpLayingOut
     check diagnostic.reason == lirExplicit
+
+  test "feedback diagnostics name the view whose frame layout changed":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      sibling = newView(frame = rect(0, 0, 10, 10))
+      mover = newSiblingMovingView(sibling, defersMove = false)
+    sibling.identifier = "moved-sibling"
+    root.addSubview(mover)
+    root.addSubview(sibling)
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.layoutFeedbackCycles() == 1
+    let diagnostic = root.lastLayoutInvalidation()
+    check diagnostic.invalidatingView == "sibling-mover"
+    check diagnostic.targetView == "moved-sibling"
+    check diagnostic.reason == lirFrame
+
+  test "work deferred from layout runs after the transaction":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      sibling = newView(frame = rect(0, 0, 10, 10))
+      mover = newSiblingMovingView(sibling, defersMove = true)
+    root.addSubview(mover)
+    root.addSubview(sibling)
+
+    root.layoutSubtreeIfNeeded()
+
+    check mover.moves == 1
+    check mover.phasesDuringMove == @[ltpIdle]
+    check sibling.frame == rect(0, 1, 10, 10)
+    check root.layoutFeedbackCycles() == 0
+
+  test "a deferred error propagates after the remaining layout work runs":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      sibling = newView(frame = rect(0, 0, 10, 10))
+      mover = newSiblingMovingView(sibling, defersMove = true)
+    mover.failsAfterLayout = true
+    root.addSubview(mover)
+    root.addSubview(sibling)
+
+    expect ValueError:
+      root.layoutSubtreeIfNeeded()
+
+    check mover.phasesDuringMove == @[ltpIdle]
+    check sibling.frame == rect(0, 1, 10, 10)
 
   test "repeated self invalidation stops scheduling layout":
     let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))

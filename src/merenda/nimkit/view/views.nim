@@ -29,6 +29,7 @@ export viewconstraints except
 export viewgeometry except
   resolvedLayoutStyleContext, resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
+  releaseContainerFrame, ViewSolvedFrameEvents, solvedFrameDidChange,
   initLayoutSignalBus, markConstraintStorageChanged, observeSuperviewGeometry,
   unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,
   ViewSuperviewGeometrySlots
@@ -325,7 +326,37 @@ proc hasActiveLayoutAncestor(view: View): bool =
       return true
     current = current.superviewBacklink()
 
-proc layoutSubtreeIfNeeded*(view: View) =
+var afterLayoutWork {.threadvar.}: seq[proc() {.closure.}]
+
+proc performAfterLayout*(work: proc() {.closure.}) =
+  ## Run `work` once the running layout transaction finishes, or now when no
+  ## layout is running. Use it for changes outside the subtree being laid out,
+  ## such as moving a popup to follow its anchor, so they do not schedule
+  ## another pass of that transaction.
+  ## If deferred work raises a catchable error, finish the queue before raising
+  ## the first error to the caller.
+  if work.isNil:
+    return
+  if activeLayoutTransaction.isNil:
+    work()
+  else:
+    afterLayoutWork.add work
+
+proc runAfterLayoutWork() =
+  var firstError: ref CatchableError
+  while afterLayoutWork.len > 0 and activeLayoutTransaction.isNil:
+    let pending = move afterLayoutWork
+    afterLayoutWork = @[]
+    for work in pending:
+      try:
+        work()
+      except CatchableError as error:
+        if firstError.isNil:
+          firstError = error
+  if not firstError.isNil:
+    raise firstError
+
+proc runLayoutTransaction(view: View) =
   profileViewPhase(vppLayoutTransaction)
   if view.hasActiveLayoutAncestor() or view.hasBlockedLayoutAncestor() or
       not view.hasPendingLayoutInSubtree():
@@ -397,6 +428,10 @@ proc layoutSubtreeIfNeeded*(view: View) =
       target = diagnostic.targetView,
       phase = diagnostic.phase,
       reason = diagnostic.reason
+
+proc layoutSubtreeIfNeeded*(view: View) =
+  view.runLayoutTransaction()
+  runAfterLayoutWork()
 
 proc layoutGeneration*(view: View): Natural =
   view.xLayoutGeneration

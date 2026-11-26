@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Keep frames that a container such as `StackView` assigns when the layout
+  solver runs. The solver no longer resizes those views to their intrinsic
+  size before the container stretches them back. Each layout pass now moves
+  only views whose geometry changes, and geometry observers no longer cause
+  repeated layout feedback.
+- Add `performAfterLayout` to run work once the current layout pass finishes.
+  Popup hosts use it to follow their anchor when layout moves it.
+- Name the view whose frame changed in layout feedback diagnostics, rather than
+  the root view.
+- Redraw a control when its field editor starts or ends editing, so hosted
+  table cells hide their previous value.
+
 - Add a model-backed tag picker with shared input and chip views, configurable
   placement, and a reactive upload form example.
 - Replace TokenField's `onSelect`, `onRemove`, and `onChange` callbacks with

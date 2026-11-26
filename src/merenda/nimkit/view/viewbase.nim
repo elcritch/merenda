@@ -138,6 +138,9 @@ type
     vipNeedsLocalConstraintLayout
     vipLayoutSubtreeInProgress
     vipAutoresizingMaskConstraints
+    vipContainerOwnedFrame
+      ## The superview's layout callback placed this view, so the solver keeps
+      ## its frame instead of sizing it to its intrinsic content.
     vipHasCachedRenders
     vipContextMenuHandlerInstalled
 
@@ -489,6 +492,11 @@ proc noteLayoutInvalidation*(
   if not requiresFollowUp:
     return
 
+  if transaction.followUpRequested and
+      reason in {lirDescendantGeometry, lirDescendantIntrinsic}:
+    # Ancestors are notified after the view that changed. Keep naming that view
+    # rather than the root at the end of the walk.
+    return
   let invalidatingView =
     if transaction.currentView.isNil: target else: transaction.currentView
   transaction.followUpRequested = true

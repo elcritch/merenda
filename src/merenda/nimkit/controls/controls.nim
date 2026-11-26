@@ -316,7 +316,11 @@ proc activeEditor*(control: Control): FieldEditor =
   control.xCurrentEditor
 
 proc setCurrentEditor*(control: Control, editor: FieldEditor) =
+  if control.xCurrentEditor == editor:
+    return
   control.xCurrentEditor = editor
+  # Controls draw their own value only while no field editor covers it.
+  control.needsDisplay = true
 
 proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()

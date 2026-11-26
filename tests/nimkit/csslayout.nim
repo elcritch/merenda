@@ -3,6 +3,7 @@ import figdraw except CornerRadii
 
 import merenda/nimkit
 import merenda/nimkit/view/viewbase
+from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 type CssIntrinsicView = ref object of View
   naturalSize: Size
@@ -154,6 +155,22 @@ suite "NimKit CSS layout":
     root.layoutSubtreeIfNeeded()
     check sibling.frame.origin.x == 130
     check subject.frame.origin.x == 175
+
+  test "a CSS target retains its intrinsic sizing after container placement":
+    let
+      root = newView(frame = rect(0, 0, 300, 150))
+      target = fixedView(80, 20)
+      subject = newView()
+    target.styleId = "target"
+    subject.styleId = "subject"
+    root.addSubview(target)
+    root.addSubview(subject)
+    target.setFrameFromLayout(rect(0, 0, 200, 20))
+    root.installCss("#subject { -nimkit-constraints: width == #target.width; }")
+    root.layoutSubtreeIfNeeded()
+    check root.cssLayoutDiagnostics.len == 0
+    check target.frame.size.width == 80
+    check subject.frame.size.width == 80
 
   test "authored required constraints win and all rejected CSS restores autoresizing":
     let root = newView(frame = rect(0, 0, 300, 150))

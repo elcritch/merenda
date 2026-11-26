@@ -399,6 +399,53 @@ suite "tag picker views":
     let above = newTagPicker(tags, tlpAbove)
     check above.arrangedSubviews == @[View(above.tagList), View(above.input)]
 
+  test "an open dropdown in a filling stack settles and matches the input":
+    let picker = newTagPicker(newTags(), tlpInline)
+    let stack = newStackView(laVertical)
+    stack.alignment = svaFill
+    stack.addArrangedSubview(picker)
+    let window = newWindow("Tags", frame = rect(0, 0, 600, 300))
+    window.setContentView(stack)
+    defer:
+      picker.input.closeList()
+      window.close()
+    stack.layoutSubtreeIfNeeded()
+    picker.input.openList()
+    require picker.input.isListOpen
+    for pass in 0 ..< 4:
+      stack.setNeedsLayout()
+      stack.layoutSubtreeIfNeeded()
+    check stack.layoutFeedbackCycles() == 0
+    check picker.input.frame.size.width == 600
+    let popup = stack.subviews()[^1]
+    check popup.frame.size.width == picker.input.frame.size.width
+
+  test "an open dropdown tracks the position and width set by constraints":
+    let
+      window = newWindow("Tags", frame = rect(0, 0, 400, 220))
+      root = newView(frame = rect(0, 0, 400, 220))
+      input = newTagInput(newTags())
+      width = input[atWidth].equalTo(120)
+      left = input[atLeft].equalTo(root[atLeft] + 10)
+    defer:
+      window.close()
+    root.addSubview(input)
+    window.setContentView(root)
+    activate(width, left)
+    root.layoutSubtreeIfNeeded()
+    input.openList()
+    let popup = window.popupIn()
+    require not popup.isNil
+    check popup.frame.size.width == 120
+    check popup.frame.minX == 10
+
+    width.constant = 200
+    left.constant = 35
+    root.layoutSubtreeIfNeeded()
+    check popup.frame.size.width == 200
+    check popup.frame.minX == 35
+    check root.layoutFeedbackCycles() == 0
+
   test "an inline picker grows only when its tags wrap":
     let tags = newTags()
     tags.setSelectedTags(

@@ -130,11 +130,16 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     let nextFrame = self.resolvedFrame(frame)
     if frame.hasAutoMetric:
       self.autoresizingMaskConstraints = false
+    let containerOutput = self.isContainerLayoutFrame()
     if self.xFrame == nextFrame:
+      if containerOutput:
+        self.setFrameFromLayout(nextFrame)
+      else:
+        self.releaseContainerFrame()
       return
     discard
       recordPropertyAnimation(DynamicAgent(self), `frame=`(), self.xFrame, nextFrame)
-    if self.isContainerLayoutFrame():
+    if containerOutput:
       self.setFrameFromLayout(nextFrame)
       return
     self.xFrame = nextFrame
