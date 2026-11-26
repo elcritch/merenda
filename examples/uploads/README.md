@@ -7,77 +7,33 @@ techniques together in the same NimKit window.
 
 ## The upload problem
 
-Imagine preparing a photo, a contract, and a podcast for the same upload.
-You give the photo a readable name and describe it for someone who can't see
-it. You file the contract under **Documents › Contract** and add a **legal**
-tag. You can move between files in any order, remove one, or add more before
-saving. **Save** submits the metadata for the whole batch. The demos start
-with five sample paths and simulate the upload, so you can try the entire
-interaction without supplying files or running a server.
+Imagine preparing a photo and a contract for the same upload. The list shows
+which files still need details. The editor shows one file at a time. Erase
+the photo's name and its row immediately reads **Untitled file**. Switch to
+the contract and back. The photo's name should still be empty, but the error
+should stay hidden until you edit the field or try to save.
 
-The list on the left shows the whole batch at a glance. Each row has a display name,
-file type, category if chosen, and whether the file still needs details. The
-editor on the right gives you the full record for one file. Erase the photo's
-name and its row immediately reads **Untitled file**. Switch to the contract
-and back, and the photo's name field should still be empty. “Untitled file”
-is a presentation choice for the list. Saving that string into the record
-would accidentally satisfy the required-name check.
+That interaction separates **file data** from **editing state**. The name,
+alt text, category, subcategory, chosen tags, and special flag belong to
+the record. Touched fields, visible errors, and the current tag query belong
+to a visit to the editor. A reusable list and editor can share a record while
+each presents it differently.
 
-This is a common integration problem when a screen combines a reusable list
-with a reusable editor. A list can report which row was clicked without
-knowing what makes an image valid. A tag picker can report a query without
-knowing where the catalog lives. Someone still has to decide which record an
-edit belongs to, how long an error should stay visible, and what a parent
-receives when the user clicks Save. The examples use concrete upload widgets
-so you can follow those decisions in ordinary Nim code.
+Three rules make their coordination interesting.
 
-Several rules make this a useful example.
+- Changing category clears the old subcategory. Marking a file **Special**
+  clears the flag on every other file.
+- Typing `su` requests suggestions. Picking **sunset** stores the tag on the
+  file. The editor accepts a worker reply only if it matches the current query.
+- **Save** validates the whole batch and opens the first invalid file. The
+  shared rules include requiring alt text for images, even after you change
+  the display name. [Shared file rules](uploadfiles.nim)
 
-- **File values and editing state have different lifetimes.** Your edits stay
-  with each file. Touched fields and visible errors reset when you select
-  another file.
-- **Some rules span fields or files.** Changing category clears the subcategory.
-  Marking one file as special clears the flag on the others.
-- **Tag search runs asynchronously.** The parent sends each query to a worker
-  that simulates a backend. The form checks the query when results arrive and applies
-  suggestions for the current query.
-- **Save checks the whole batch.** It selects the first invalid file and shows
-  its errors. When all files are valid, the demo displays a simulated upload
-  summary.
-
-This gives you three kinds of updates to compare. Editing a name changes the
-text already on screen. Selecting another file replaces the editor. Adding or
-removing a file changes the list's structure. A design needs to account for all
-three while keeping one authoritative set of file records.
-
-### What belongs to a file?
-
-The shared `UploadFile` type has an ID, an original path, and editable
-metadata. The path supplies the initial name and determines whether alt text
-is required. Renaming a JPEG to “Cover photo” leaves that requirement intact.
-Both the row summary and the Save action use `issueFor` through `isValid`, so
-they agree about which records are ready. The editor asks a second question
-before showing an issue. Has the user touched this field or tried to submit
-this file? A row can truthfully say **Needs details** while the newly opened
-editor shows no errors. [Shared file rules](uploadfiles.nim)
-
-The tag field makes the distinction especially visible. A chosen tag such as
-**sunset** belongs in the upload. The characters `su` belong to the current
-search. The suggestions **summer** and **sunset** are an answer from the
-catalog. Returning to the file restores its chosen tags and starts with an
-empty query. The parent sees three events with different meanings.
-
-| Event | When the parent receives it | What the demo parent does |
-| --- | --- | --- |
-| `tagSearchStarted(query)` | The picker browses the catalog or asks for a prefix | Sends the normalized query to a worker and returns the matching tags to the editor |
-| `filesChanged(files)` | An add, removal, or clear changes batch membership | Logs the new count from the resulting file sequence |
-| `uploadRequested(files)` | Save finds every file valid | Records the submitted batch and displays a summary |
-
-For example, renaming the photo changes its row on every keystroke. The
-parent receives the edited name with the eventual upload. A parent that only
-cares how many files are queued can listen to `filesChanged` without handling
-every keystroke. Try renaming a file and then removing it. The row title
-reflects the edit, and the **Events** line reports the removal.
+The parent listens for three events. `tagSearchStarted(query)` asks it to
+search, `filesChanged(files)` reports additions and removals (including a
+clear), and `uploadRequested(files)` delivers the valid batch. The demos start
+with five sample paths and simulate the upload so you can try all three
+without setting up a backend.
 
 ## Run the demos
 
@@ -109,27 +65,35 @@ Type `su` in the tag field and pick **sunset** from the results. Switch files
 and return. The tag stays with the file, and the search field starts empty.
 These interactions work with the sample records that are loaded at startup.
 
-To follow the code, start with the operation you care about. For a rename,
-look for the point where an editor hands text to the model. For selection,
-look for who owns the old editor and its connections. For a change made
-outside the editor, such as a parent updating a name, look for how the row
-learns about it. Those questions expose the architectural differences even
-when the three windows look much the same.
+### Which version should I read first?
+
+| If your next change is… | Start with | Why |
+| --- | --- | --- |
+| Change what happens after a failed Save | [Traditional MVC](#traditional-mvc-refreshes-views-from-the-controller) | One handler shows the order in which the form selects a file, reveals its errors, and updates the status. |
+| Let a metadata importer update a name while the editor is open | [Reactive MVC](#reactive-mvc-binds-the-same-widgets-to-the-model) | The existing native field and row can both follow the store, regardless of which caller made the edit. |
+| Keep individual row widgets alive as files are added and removed | [DirectView](#directview-gives-each-row-and-editor-a-key) | The list declares a key per file. DirectView matches the surviving rows when the list changes. |
 
 ## Traditional MVC refreshes views from the controller
 
-Build the widget tree with ordinary NimKit constructors. A plain `UploadModel`
-holds the file records in a sequence. The controller keeps the selected index
-and the set of fields touched in the current editor. It uses that index to find
-both the record to edit and the row to refresh.
+In traditional MVC you can step through a user action in one handler. Here
+is the decision inside `save` once the controller knows the batch has files.
 
-There are two controllers here. `UploadController` owns the editable batch
-and the controls that operate on it. `UploadPageController` embeds that form,
-listens for its events, and owns the search worker and submitted batches.
-Inside the form, `UploadView` keeps handles to the controls, including a
-`FileEditor` with the text fields and issue labels. The widget builder can
-therefore concentrate on layout. The controller can update the label for
-`ffName` directly without searching the view tree for “the name error”.
+```nim
+for i, file in c.model.files:
+  if not file.isValid:
+    c.selectFile(i)
+    c.submitted = true
+    c.showIssues()
+    c.ui.status.stringValue = "Fix the highlighted fields before uploading."
+    return
+emit c.uploadRequested(c.model.files)
+```
+
+The order matters. Selecting a different file resets its editor. Setting
+`submitted` on the next line reveals the issues on that fresh editor.
+`UploadController` owns this interaction and the plain sequence of files.
+The parent `UploadPageController` listens for the successful upload and owns
+the search worker.
 
 ### Follow a text edit
 
@@ -163,9 +127,11 @@ opening a file, `addFileEditor` initializes the text fields from the record
 before `showEditor` connects their edit handlers. On a keystroke, the text is
 already in the active field. The controller writes it once, then refreshes the
 row and error labels. There is no step that copies a row title back into the
-text field. If another command later changes a name programmatically, its
-author must also arrange the appropriate widget updates. An assignment to
-the plain model has no subscribers.
+text field. For a form where typing is the only way to rename, those two
+refresh calls may be all the coordination you need. Add a metadata importer
+and there are now two ways to rename. The controller must give both paths a
+common refresh routine or remember to update the row and editor from each.
+That second writer is a concrete reason to consider a binding.
 
 ### Handle selection and changes across files
 
@@ -199,10 +165,19 @@ stays with the same file. Delete the selected row and the controller opens
 the file that takes its place. If you delete the last row, the selection moves
 to the new last file, or clears if the list is empty.
 
-For **Special file**, the handler calls `c.model.setSpecial` to update the flags,
-then refreshes every row. That covers the previously marked file as well as the
-selected one. The handler makes the full update easy to trace, and each new
-display of that flag needs a refresh call from the relevant edit paths.
+The special-file handler shows the cost of explicit refresh. Either the
+selected row or a different row can lose the **Special** label, so the
+controller refreshes them all.
+
+```nim
+proc specialEdited(c: UploadController, sender: DynamicAgent) {.slot.} =
+  if sender == DynamicAgent(c.ui.editor.special):
+    c.model.setSpecial(c.selected, c.ui.editor.special.state == bsOn)
+    for i in 0 ..< c.ui.rows.len:
+      c.showRow(i)
+```
+
+A new display of the flag would need a refresh here too.
 [Traditional MVC demo](upload_form_mvc_demo.nim)
 
 ### See how far one command reaches
@@ -226,26 +201,25 @@ to **Documents** removes **Portrait** from both the record and the screen.
 The model rule is four lines. Much of the controller's work is deciding
 which controls need to present its result.
 
-Save uses the same selection path as a row click. It walks the files in list
-order, selects the first invalid one, *then* sets `submitted` and refreshes
-its issues. Setting that flag before switching would let the fresh editor
-clear it. Once the batch passes, the controller emits `uploadRequested` and
-the page handles the result. This division lets the page change what happens
-after submission without changing how the editor validates an image.
-
 ## Reactive MVC binds the same widgets to the model
 
-Keep the native row and editor constructors and connect their widgets to the
-model with a `BindingScope`. Button actions and text edits call commands.
-Changes from those commands and changes from elsewhere in the application
-follow the same path from the model back to the widgets.
+A metadata importer can change the name while the native editor is open.
+This excerpt adapts the upload test to show what the caller does and what
+the two existing widgets display after the UI processes the change.
 
-There are still ordinary constructors, a `ViewController`, and named commands.
-What changes is the return trip after the command runs. In traditional MVC
-the person writing the rename handler has to know about the sidebar. Here
-the person building the sidebar declares what its title reads. You can add a
-second display of the selected name by binding it to the same file. The code
-that accepts a rename can stay as it is.
+```nim
+let name = TextField(view.viewWithIdentifier("name"))
+let row = Button(view.viewWithIdentifier("file-1"))
+store.setName(1, "Cover photo")
+discard drainMainThreadWork()
+check name.stringValue == "Cover photo"
+check row.title == "Cover photo"
+check controller.page.form.touched{} == {}
+```
+
+The importer only needs the store and file ID. The controller can keep
+the row and editor constructors from traditional MVC because the bindings
+attach to the widgets those constructors return. [Upload form tests](../../tests/nimkit/uploadform.nim)
 
 ### Observe the right part of the model
 
@@ -259,26 +233,25 @@ subscription follows the state that matters to its target.
 - `store.files.item(id)` observes one record. The row and editor can read from
   that record using separate bindings.
 
-The row's `bindValue` calls `showName` when the record changes. The editor's
-`bindTextField` has both a reader and an edit callback. The reader supplies the
-model text to the widget, and `editFileText` marks the field as touched and
-calls the store command when the user types.
+In `showRows`, each native row binds its title and detail to its own file.
 
 ```nim
-# When binding a row in the list.
+let row = list.addFileRow(id)
 let item = store.files.item(id)
 scope.bindValue("name-" & $id, item, row.select, showName)
-
-# In the selected file's editor scope.
-let key: FileTextContext = (id, ffName)
-scope.bindTextField("name", item, form, key, readFileText, editor.name, editFileText)
+scope.bindValue("detail-" & $id, item, row.detail, showDetail)
 ```
 
-Calling `store.setName(id, "Cover photo")` for the selected file updates the
-row title and the mounted text field in place. That model-driven update uses
-the field setter and leaves the touched flags as they were. User edits take
-the callback path. The callback checks the selected ID before writing so an
-edit from an old editor leaves the new selection alone.
+In `showEditor`, a separate scope binds the two editable fields to that same
+record. The reader loads the text. The edit callback carries the ID and field
+so it can mark a user edit as touched and reject an edit from an old editor.
+
+```nim
+let item = store.files.item(id)
+for (field, widget) in [(ffName, editor.name), (ffAltText, editor.altText)]:
+  let key: FileTextContext = (id, FileTextField(field))
+  scope.bindTextField($field, item, form, key, readFileText, widget, editFileText)
+```
 
 There are two protections against sending a change round in circles.
 `bindTextField` tracks model text and suppresses the edit callback during a
@@ -333,34 +306,48 @@ into one record before publishing it. The choice controls receive a pair that
 already agrees with the file rule. The form separately decides whether the
 cleared subcategory warrants a visible issue.
 
-The **Special file** command widens the same idea to the whole collection.
-It takes the current sequence, sets each flag from the requested ID and
-checkbox state, then publishes the finished sequence if it changed. Both
-affected rows can read the new flags without observing a moment when two
-files are special. Their IDs are still in the same order, so the list builder
-has no work to do. The parent receives a membership event when a file is
-removed, but moving the special flag only updates observers of file data.
+For **Special file**, the store publishes all the changed flags together.
+Here is the update inside `setSpecial`, after it checks that the ID exists.
+
+```nim
+var next = store.files{}
+for file in next.mitems:
+  file.special = special and file.id == id
+if next != store.files{}:
+  store.files <- next
+```
+
+The old and new special rows receive the new details through the row bindings
+above. File order stays the same, so `showRows` can stay idle.
 
 ## DirectView gives each row and editor a key
 
-Describe the tree with `viewBody`. Inside a control's body, `this` is the
-ordinary NimKit widget. The demo's `bindFileText` helper connects the name
-field to the same file and edit command as reactive MVC. DirectView ties the
-binding's lifetime to the node that declares it.
+Delete the photo while editing the contract below it. Both MVC demos rebuild
+their lists. DirectView can keep the contract row because the loop in
+`drawFileList` identifies it by file ID as it moves up.
 
 ```nim
-TextField(identifier = "name"):
-  this.bindFileText(form, id, ffName)
+for id in state.ids:
+  keyed(id):
+    component(fileRow, id, id == state.selected, store)
+if state.ids.len == 0:
+  Label(stringValue = "No files. Add some to upload.")
 ```
 
-The model side of this line is exactly the one used by reactive MVC.
-`bindFileText` supplies the file's item, the pair of file ID and field, and
-the `readFileText` and `editFileText` callbacks. What changes is who owns the
-widget side. In reactive MVC, `showEditor` makes a scope and registers the
-widgets it just constructed. Here the field declaration gives DirectView
-enough information to create or reuse the text field and own its binding.
-The body describes ordinary NimKit controls, so a custom control can still
-handle native input or call an existing controller.
+The same key has a second use in the editor. Selecting a different file
+should replace the fields, even when the new file has the same name.
+
+```nim
+if id in form.store.files:
+  keyed(id):
+    component(fileFields, form, id)
+else:
+  Label(stringValue = "Select or add a file to edit its details.")
+```
+
+These two declarations let DirectView keep the surviving rows and retire
+the old editor's bindings. The application supplies the identities and
+decides which changes should run each builder.
 
 ### Separate value updates from changes to the tree
 
@@ -400,48 +387,45 @@ record. It can get a new title while the loop is idle. When reading a body,
 look at the source passed to each binding to tell which updates can reach
 that part of the tree.
 
-### Match identity to the editing session
+### Bind a field inside its editing session
 
-The list gives each row the file's ID as a key. When you remove the first row,
-the rows below keep their widgets as they move up. The key follows the file as
-its position changes.
+Inside `fileFields`, `this` is the ordinary NimKit text field. DirectView
+gives the field a binding scope for the lifetime of its node.
 
 ```nim
-for id in state.ids:
-  keyed(id):
-    component(fileRow, id, id == state.selected, store)
+TextField(identifier = "name"):
+  this.bindFileText(form, id, ffName)
 ```
 
-The editor also uses the file ID as its key. A different selection gives it a
-new key, so DirectView mounts fresh fields and retires the old bindings.
-`FileForm` resets validation and tag search state on selection. The view
-lifecycle and the session reset follow the same selected ID. The new fields
-read the values already in the store.
+The helper uses the same reader and edit command as the native MVC binding.
 
-The row and the editor both have identifiers you can use to find widgets.
-Their keys serve a different purpose. Imagine deleting the photo at the top
-of the list. The contract moves into the photo's old position. Matching on
-file ID lets the contract row keep its own identity, including the remove
-action that targets the contract. On the right, replacing the editor is
-deliberate. Even if two files have identical names, moving from one ID to
-the other starts a new editing session.
+```nim
+template bindFileText(field: TextField, form: FileForm, id: int, kind: FileTextField) =
+  let key: FileTextContext = (id, kind)
+  field.bindTextField(
+    $kind, form.store.files.item(id), form, key, readFileText, editFileText
+  )
+```
+
+Switching IDs mounts a new field that reads the new record. The separate
+`FileForm` selection handler clears touched fields, submit errors, and the
+query. A rename keeps the same ID and updates the existing field.
 
 ### Follow an action out of the tree
 
-Here is the checkbox's action from `fileFields`. The widget supplies the new
-checkbox state, and the action carries the ID from this editor.
+The **Special file** checkbox declares both directions together. Its binding
+reads the flag for this file, and its action delegates the batch-wide rule
+to the same store command reactive MVC uses.
 
 ```nim
-this.onAction(store, id) do(this: Button, receiver: UploadStore, id: int):
-  receiver.setSpecial(id, this.state == bsOn)
+CheckBox(identifier = "special", title = "Special file (only one per upload)"):
+  this.bindValue("special", store.files.item(id)) do(
+    box: Button, file: Opt[UploadFile]
+  ):
+    box.state = if file.isSome and file.get.special: bsOn else: bsOff
+  this.onAction(store, id) do(this: Button, receiver: UploadStore, id: int):
+    receiver.setSpecial(id, this.state == bsOn)
 ```
-
-Reading the declaration alongside its `bindValue` shows both directions.
-The action asks the store to make the change. The binding presents the flag
-that the store accepted. The checkbox knows nothing about how many rows are
-visible or which one used to be special. Those rows have their own bindings
-to the affected records. Save works the same way at page level. Its button
-calls `page.save()`, and a label bound to `page.status` displays the result.
 
 The tag picker shows where a component can keep its existing controller.
 `TagPicker(form.tagController, ...)` mounts a native picker. The shared
