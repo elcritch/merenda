@@ -54,6 +54,35 @@ suite "NimKit popup hosts":
     check dismissCount == 1
     check dismissReason == tdrEscape
 
+  test "an inline popup follows its anchor when layout moves it":
+    let
+      window = newWindow("Popup follows anchor", frame = rect(0, 0, 240, 220))
+      stack = newStackView(laVertical, frame = rect(0, 0, 240, 220))
+      anchor = newTextField("anchor")
+      content = newView(frame = rect(0, 0, 120, 50))
+    defer:
+      window.close()
+    stack.alignment = svaFill
+    stack.addArrangedSubview(anchor)
+    window.setContentView(stack)
+    stack.layoutSubtreeIfNeeded()
+    let host =
+      newPopupHost(window, anchor, content, initSize(120, 50), presentation = ppInline)
+    check host.presentPopup()
+    check content.frame.minY == anchor.frame.maxY
+
+    stack.insertArrangedSubview(newTextField("above"), 0)
+    stack.layoutSubtreeIfNeeded()
+    check anchor.frame.minY > 0
+    check content.frame.minY == anchor.frame.maxY
+    check stack.layoutFeedbackCycles() == 0
+    check not stack.needsLayout
+
+    check host.dismissPopup()
+    stack.insertArrangedSubview(newTextField("first"), 0)
+    stack.layoutSubtreeIfNeeded()
+    check content.superview().isNil
+
   test "popup host can force above placement and use a custom inline parent":
     let
       window = newWindow("Popup host parent", frame = rect(0, 0, 320, 220))

@@ -399,6 +399,27 @@ suite "tag picker views":
     let above = newTagPicker(tags, tlpAbove)
     check above.arrangedSubviews == @[View(above.tagList), View(above.input)]
 
+  test "an open dropdown in a filling stack settles and matches the input":
+    let picker = newTagPicker(newTags(), tlpInline)
+    let stack = newStackView(laVertical)
+    stack.alignment = svaFill
+    stack.addArrangedSubview(picker)
+    let window = newWindow("Tags", frame = rect(0, 0, 600, 300))
+    window.setContentView(stack)
+    defer:
+      picker.input.closeList()
+      window.close()
+    stack.layoutSubtreeIfNeeded()
+    picker.input.openList()
+    require picker.input.isListOpen
+    for pass in 0 ..< 4:
+      stack.setNeedsLayout()
+      stack.layoutSubtreeIfNeeded()
+    check stack.layoutFeedbackCycles() == 0
+    check picker.input.frame.size.width == 600
+    let popup = stack.subviews()[^1]
+    check popup.frame.size.width == picker.input.frame.size.width
+
   test "an inline picker grows only when its tags wrap":
     let tags = newTags()
     tags.setSelectedTags(

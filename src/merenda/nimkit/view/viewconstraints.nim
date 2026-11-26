@@ -73,6 +73,7 @@ type
     items: seq[SolverView]
     itemIndexes: Table[pointer, int]
     constraintItemIndexes: HashSet[pointer]
+    keepsContainerFrames: bool
     generatedInputs: seq[LayoutInput]
     limits: LayoutSolveLimits
     startedAt: MonoTime
@@ -1439,8 +1440,18 @@ proc expressionFor(state: var LayoutSolveState, term: LayoutTerm): Expression =
     return toExpression(0.KiwiScalar)
   state.solverView(term.item).expressionFor(term.attribute) * term.multiplier.solverValue
 
+proc keepsContainerFrame(state: LayoutSolveState, item: View): bool =
+  ## A container assigns this view's frame after the solve, so sizing it to its
+  ## intrinsic content would only be overwritten, every transaction.
+  state.keepsContainerFrames and not item.isNil and
+    vipContainerOwnedFrame in item.xPrivProps and not state.hasConstraintItem(item) and
+    cast[pointer](item) notin state.cssSubjects
+
 proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
   if equation.terms.len == 0:
+    return
+  if equation.source == lisIntrinsic and
+      state.keepsContainerFrame(equation.terms[0].item):
     return
   for term in equation.terms:
     state.checkSolveBudget()
@@ -1985,6 +1996,7 @@ proc buildAndSolveConstraints(
     when defined(merendaPersistentLayout):
       state.captureConstraints = capturePersistent
     state.startedAt = startedAt
+    state.keepsContainerFrames = mode == lsmLayout
     state.workConstraintCount = constraintCount
     state.workCoefficientCount = coefficientCount
     state.didResolveCss = hadCss

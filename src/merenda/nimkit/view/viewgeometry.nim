@@ -193,6 +193,10 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
     of lirFrame, lirSuperview, lirAutoresizingMask:
       view.xAutoresizingState.referenceDirty = true
       view.xAutoresizingState.inputsDirty = true
+      if reason in {lirFrame, lirSuperview}:
+        # An authored frame or a new superview hands geometry back to the
+        # solver until a container places the view again.
+        view.xPrivProps.excl vipContainerOwnedFrame
     of lirBounds, lirSuperviewGeometry, lirSubviews:
       view.xAutoresizingState.inputsDirty = true
     else:
@@ -316,8 +320,13 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
     view.refreshAutoresizingReference()
 
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
-  if origin == lfoSolver:
+  case origin
+  of lfoSolver:
     view.xPrivProps.excl vipNeedsLocalConstraintLayout
+  of lfoContainer:
+    view.xPrivProps.incl vipContainerOwnedFrame
+  of lfoAuthored:
+    view.xPrivProps.excl vipContainerOwnedFrame
   if view.xFrame == frame:
     return
   if origin == lfoContainer and view.xFrame.size != frame.size:

@@ -69,7 +69,7 @@ type
     xChips: seq[Chip]
     xDisabled: bool
     xTrailing: View
-    xMeasuredHeight, xLayoutWidth: float32
+    xMeasuredHeight: float32
 
   TagTextField = ref object of TextField
     xTagInput: BackRef[TagInput]
@@ -89,7 +89,6 @@ type
     xField: TextField
     xInlineList: TagList
     xList: TagPopupList
-    xAnchorAncestors: seq[BackRef[View]]
     xHost: PopupHost
     xMatches: seq[ModelItem]
     xHighlight: int
@@ -98,7 +97,8 @@ type
     xListRequested: bool
     xPopupPresentation: PopupPresentation
     xSyncingText: bool
-    xMeasuredHeight, xLayoutWidth: float32
+    xListUpdatePending: bool
+    xMeasuredHeight: float32
 
   TagPicker* = ref object of StackView
     ## A `TagInput` and the selected tags, arranged by placement.
@@ -353,24 +353,18 @@ proc relayoutForHeight(view: View) =
     current.setNeedsLayout()
     current = current.superview()
 
-proc measureWidth(view: View, layoutWidth: float32): float32 =
-  # Layout can measure a view at a provisional width, so prefer the width it
-  # was last laid out at.
-  if layoutWidth > 0.0'f32: layoutWidth else: view.bounds.size.width
-
 proc refreshHeight(list: TagList) =
-  let height = list.flowHeight(list.measureWidth(list.xLayoutWidth))
+  let height = list.flowHeight(list.bounds.size.width)
   if height != list.xMeasuredHeight:
     list.xMeasuredHeight = height
     list.relayoutForHeight()
 
 protocol TagListLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(list: TagList): IntrinsicSize =
-    list.xMeasuredHeight = list.flowHeight(list.measureWidth(list.xLayoutWidth))
+    list.xMeasuredHeight = list.flowHeight(list.bounds.size.width)
     initIntrinsicSize(NoIntrinsicMetric, list.xMeasuredHeight)
 
   method layoutSubviews(list: TagList) =
-    list.xLayoutWidth = list.bounds.size.width
     let layout = flowLayout(
       list.flowSizes(),
       list.bounds.size.width,
@@ -667,26 +661,23 @@ proc refreshSuggestionRows(input: TagInput) =
     popup.xRows = rows
     popup.postAccessibilityNotification(anLayoutChanged)
 
-protocol TagAnchorGeometry of ViewGeometryEvents:
-  proc tagAnchorMoved(input: TagInput) {.slotFor: geometryDidChange.} =
-    if input.isListOpen:
-      input.updateList()
-
-proc observeAnchorAncestors(input: TagInput) =
-  var ancestor = input.superview()
-  while not ancestor.isNil:
-    input.observeProtocol(ancestor, TagAnchorGeometry)
-    var link: BackRef[View]
-    link.target = ancestor
-    input.xAnchorAncestors.add link
-    ancestor = ancestor.superview()
-
-proc unobserveAnchorAncestors(input: TagInput) =
-  for link in input.xAnchorAncestors:
-    let ancestor = link.target
-    if not ancestor.isNil:
-      input.unobserveProtocol(ancestor, TagAnchorGeometry)
-  input.xAnchorAncestors.setLen(0)
+protocol TagInputGeometry of ViewGeometryEvents:
+  proc tagInputResized(input: TagInput) {.slotFor: geometryDidChange.} =
+    # The dropdown matches the input's width. The popup host follows moves;
+    # resize the list once layout has settled.
+    if not input.isListOpen or input.xListUpdatePending:
+      return
+    input.xListUpdatePending = true
+    var weakInput: BackRef[TagInput]
+    weakInput.target = input
+    performAfterLayout(
+      proc() =
+        let input = weakInput.target
+        if not input.isNil:
+          input.xListUpdatePending = false
+          if input.isListOpen:
+            input.updateList()
+    )
 
 proc ownerWindow(input: TagInput): Window =
   let owner = input.window()
@@ -698,7 +689,6 @@ proc dismissHost(input: TagInput, reason = tdrProgrammatic) =
   if not host.isNil:
     input.xHost = nil
     if host.dismissPopup(reason):
-      input.unobserveAnchorAncestors()
       input.xField.postAccessibilityNotification(anExpandedChanged)
     else:
       input.xHost = host
@@ -734,7 +724,6 @@ proc updateList(input: TagInput) =
         if not input.isNil and input.xHost == host:
           input.xHost = nil
           input.xListRequested = false
-          input.unobserveAnchorAncestors()
           input.xField.postAccessibilityNotification(anExpandedChanged)
       ,
     )
@@ -743,7 +732,6 @@ proc updateList(input: TagInput) =
       input.xHost = nil
       return
     input.popupList().setNextResponder(input)
-    input.observeAnchorAncestors()
   input.refreshSuggestionRows()
   if not wasOpen:
     input.xField.postAccessibilityNotification(anExpandedChanged)
@@ -896,9 +884,8 @@ proc fittingHeight(input: TagInput): float32 =
   if input.xInlineList.isNil:
     input.xField.sizeThatFits().height
   else:
-    input.xInlineList.flowHeight(
-      input.measureWidth(input.xLayoutWidth) - TagInlineInset * 2
-    ) + TagInlineInset * 2
+    input.xInlineList.flowHeight(input.bounds.size.width - TagInlineInset * 2) +
+      TagInlineInset * 2
 
 protocol TagInputLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(input: TagInput): IntrinsicSize =
@@ -906,15 +893,12 @@ protocol TagInputLayout of ViewLayoutProtocol:
     initIntrinsicSize(TagInputDefaultWidth, input.xMeasuredHeight)
 
   method layoutSubviews(input: TagInput) =
-    input.xLayoutWidth = input.bounds.size.width
     if input.xInlineList.isNil:
       input.xField.frame = input.bounds
     else:
       input.xInlineList.frame = input.bounds.inset(insets(TagInlineInset))
       if input.fittingHeight() != input.xMeasuredHeight:
         input.relayoutForHeight()
-    if not input.xHost.isNil:
-      input.updateList()
 
 protocol TagInputDrawing of ViewDrawingProtocol:
   method draw(input: TagInput, context: DrawContext) =
@@ -1101,7 +1085,7 @@ proc newTagInput*(
   discard result.withProtocol(TagInputDrawing)
   field.connect(textDidChange, result, tagFieldTextChanged)
   field.connect(dropdownIndicatorPressed, result, tagFieldIndicatorPressed)
-  result.observeProtocol(result, TagAnchorGeometry)
+  result.observeProtocol(result, TagInputGeometry)
   result.connect(viewWillMoveToWindow, result, tagInputWindowChanging)
   connect(controller, tagQueryDidChange, result, tagQueryChanged)
   connect(controller, tagMatchModeDidChange, result, tagOptionsChanged)

@@ -1,5 +1,7 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
 
 type
@@ -9,6 +11,12 @@ type
 
   CheckBoxRowView = ref object of View
     checkBox: Button
+
+  GeometryCounter = ref object of Agent
+    changes: int
+
+proc countGeometry(counter: GeometryCounter) {.slot.} =
+  inc counter.changes
 
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
@@ -39,6 +47,28 @@ proc newCheckBoxRow(title: string): CheckBoxRowView =
   result.addSubview(result.checkBox)
 
 suite "nimkit stack views":
+  test "the solver keeps the frames a stack view assigns":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 300, 200))
+      child = newFixedIntrinsicView(80, 20)
+      counter = GeometryCounter()
+    stack.alignment = svaFill
+    stack.addArrangedSubview(child)
+    stack.layoutSubtreeIfNeeded()
+    check child.frame.size.width == 300
+    child.connect(geometryDidChange, counter, countGeometry)
+
+    # A new solve used to size the child to its intrinsic width before the
+    # stack stretched it again, moving it twice on every pass.
+    child.invalidateIntrinsicContentSize()
+    stack.layoutSubtreeIfNeeded()
+    check child.frame.size.width == 300
+    check counter.changes == 0
+
+    child.frame = rect(0, 0, 50, 20)
+    stack.layoutSubtreeIfNeeded()
+    check child.frame.size.width == 300
+
   test "inserting and reordering arranged fields keeps Tab order and focus":
     let
       stack = newStackView(laVertical, frame = rect(0, 0, 420, 180))

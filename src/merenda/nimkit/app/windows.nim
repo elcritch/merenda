@@ -33,6 +33,7 @@ import ../themes
 import ../foundation/types
 import ../foundation/undomanagers
 import ../view/views
+from ../view/viewgeometry import setFrameFromLayout
 import ./windoweffects
 
 export windoweffects
@@ -255,6 +256,8 @@ type
     xRestoreCurrentResponderIfNil: bool
     xRestoresFocus: bool
     xPopupOpen: bool
+    xAnchorChain: seq[BackRef[View]]
+    xRepositionPending: bool
 
   PopoverPresenter* = PopupHost
 
@@ -453,6 +456,8 @@ proc presentPopup*(host: PopupHost): bool {.discardable.}
 proc dismissPopup*(host: PopupHost, reason = tdrProgrammatic): bool {.discardable.}
 proc repositionPopup*(host: PopupHost)
 proc resizePopup*(host: PopupHost, size: Size)
+proc followAnchor(host: PopupHost)
+proc stopFollowingAnchor(host: PopupHost)
 
 proc needsDisplayUpdate*(window: Window): bool
 proc isVisible*(window: Window): bool
@@ -2393,6 +2398,7 @@ proc finishPopupHost(host: PopupHost, reason: DismissReason, notify = true) =
     content = host.xContent
     inlineParent = host.popupHostInlineParent()
   host.xPopupOpen = false
+  host.stopFollowingAnchor()
   host.xPopupWindow = nil
   host.xTransientOwner = nil
   if not popupWindow.isNil:
@@ -2535,6 +2541,7 @@ proc presentPopup*(host: PopupHost): bool =
   host.xPopupSize = size
   host.xPopupWindow = popupWindow
   host.xPopupOpen = true
+  host.followAnchor()
   if not popupWindow.isNil:
     popupWindow.setPopupDoneHandler(
       proc() =
@@ -2583,7 +2590,10 @@ proc repositionPopup*(host: PopupHost) =
   if popup.isNil:
     let parent = host.popupHostInlineParent()
     if not parent.isNil and host.xContent.superview() == parent:
-      host.xContent.frame = host.popupHostInlineFrame()
+      # The host places its overlay like a container, so moving it does not
+      # make the window lay out again.
+      host.xContent.setFrameFromLayout(host.popupHostInlineFrame())
+      host.xContent.layoutSubtreeIfNeeded()
   else:
     let
       anchor = host.xAnchor.rectToWindow(host.xAnchor.bounds())
@@ -2606,6 +2616,41 @@ proc resizePopup*(host: PopupHost, size: Size) =
   if not host.isNil:
     host.xPopupSize = initSize(max(size.width, 1.0'f32), max(size.height, 1.0'f32))
     host.repositionPopup()
+
+protocol PopupAnchorGeometry of ViewGeometryEvents:
+  proc popupAnchorMoved(host: PopupHost) {.slotFor: geometryDidChange.} =
+    # Layout can move the anchor several times in one pass. Follow it once the
+    # pass is done, from where it settled.
+    if not host.xPopupOpen or host.xRepositionPending:
+      return
+    host.xRepositionPending = true
+    var weakHost: BackRef[PopupHost]
+    weakHost.target = host
+    performAfterLayout(
+      proc() =
+        let host = weakHost.target
+        if not host.isNil:
+          host.xRepositionPending = false
+          host.repositionPopup()
+    )
+
+proc followAnchor(host: PopupHost) =
+  ## Keep the popup beside its anchor while the anchor or an ancestor moves.
+  host.stopFollowingAnchor()
+  var view = host.xAnchor
+  while not view.isNil:
+    host.observeProtocol(view, PopupAnchorGeometry)
+    var link: BackRef[View]
+    link.target = view
+    host.xAnchorChain.add link
+    view = view.superview()
+
+proc stopFollowingAnchor(host: PopupHost) =
+  for link in host.xAnchorChain:
+    let view = link.target
+    if not view.isNil:
+      host.unobserveProtocol(view, PopupAnchorGeometry)
+  host.xAnchorChain.setLen(0)
 
 proc mouseDownAt*(
   window: Window,
