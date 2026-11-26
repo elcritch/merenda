@@ -1578,10 +1578,14 @@ proc setIcon*(host: HostWindow, icon: ImageResource) =
 proc setVisible*(host: HostWindow, visible: bool) =
   if not host.isReady:
     return
-  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused():
+  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused() and
+      host.xNativeWindow.siwinDisplayServerName() != "wayland":
     # Raising an already mapped window needs the unmap+remap below to make the
-    # window manager focus it. Remapping applies the window manager's placement
-    # again, so re-assert the window's actual position afterwards.
+    # window manager focus it (X11). Remapping applies the window manager's
+    # placement again, so re-assert the window's actual position afterwards.
+    # Not on Wayland: a client cannot raise itself there, and once siwin
+    # unmaps on `visible = false` this would unmap and remap an unfocused
+    # window on every call, so it would never be shown.
     let savedPos = host.xNativeWindow.pos
     host.xNativeWindow.visible = false
     host.xNativeWindow.visible = true
