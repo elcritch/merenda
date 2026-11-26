@@ -1214,7 +1214,11 @@ proc resolvedPopupPresentation*(
       return ppInline
     preferred = window.xPopupPresentation
     if preferred == ppAutomatic:
-      when defined(nimkitInlinePopups):
+      when defined(nimkitInlinePopups) or (defined(linux) and not defined(android)):
+        # On Linux, popup windows are created (menus, context menus) but
+        # never drawn -- on Wayland and under XWayland alike, e.g.
+        # examples/menu_demo on labwc -- so popups are drawn inline until
+        # they are. An explicit ppWindow preference still asks for windows.
         preferred = ppInline
       else:
         preferred = ppWindow
