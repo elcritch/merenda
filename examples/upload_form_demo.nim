@@ -336,17 +336,10 @@ proc newFileForm*(store: UploadStore): FileForm =
   # recomputes `choice` and `tags`, but they publish nothing because their
   # values are unchanged, so the category buttons and tag chips are not rebuilt.
   result.choice = computedNow[CategoryChoice]:
-    let file = files.item(selected{}){}
-    if file.isSome:
-      (category: file.get.category, subcategory: file.get.subcategory)
-    else:
-      (category: "", subcategory: "")
+    let file = files.item(selected{}){}.get(UploadFile())
+    (category: file.category, subcategory: file.subcategory)
   result.tags = computedNow[seq[string]]:
-    let file = files.item(selected{}){}
-    if file.isSome:
-      file.get.tags
-    else:
-      newSeq[string]()
+    files.item(selected{}){}.get(UploadFile()).tags
   result.tagController = newTagController(selected = result.tags{}.mapIt(tagItem(it)))
   for field in FileField:
     result.issues[field] = visibleIssue(files, selected, touched, submitted, field)
@@ -359,8 +352,7 @@ proc newFileForm*(store: UploadStore): FileForm =
   connect(result.tagController, tagQueryDidChange, result, tagQueryEdited)
 
 proc touch*(form: FileForm, field: FileField) =
-  if field notin form.touched{}:
-    form.touched <- form.touched{} + {field}
+  form.touched <- form.touched{} + {field}
 
 proc nameFor(form: FileForm, id: int): string =
   if id in form.store.files:
@@ -526,7 +518,6 @@ proc fileRow(context: DirectNode, id: int, selected: bool, store: UploadStore) =
       this.showFile(store, id)
       this.distribution = svdNatural
       this.alignment = svaCenter
-      this.spacing = 8
       this.edgeInsets = insets(6, 10)
       this.backgroundColor = if selected: SelectedColor else: ClearColor
       VStack:
@@ -556,16 +547,12 @@ proc drawFileList(context: DirectNode, store: UploadStore, state: ListState) =
     VStack:
       this.identifier = "files"
       this.distribution = svdNatural
-      this.alignment = svaFill
       this.spacing = 2
       for id in state.ids:
         keyed(id):
           component(fileRow, id, id == state.selected, store)
       if state.ids.len == 0:
         Label(stringValue = "No files. Add some to upload.")
-
-proc fileList(context: DirectNode, store: UploadStore) =
-  context.bindBody(store.listState, store, drawFileList)
 
 proc issueLabel(context: DirectNode, form: FileForm, field: FileField) =
   context.viewBody:
@@ -579,7 +566,6 @@ proc drawChoices(context: DirectNode, form: FileForm, choice: CategoryChoice) =
   context.viewBody:
     VStack:
       this.distribution = svdNatural
-      this.alignment = svaFill
       this.spacing = 6
       HStack:
         this.identifier = "categories"
@@ -613,9 +599,6 @@ proc drawChoices(context: DirectNode, form: FileForm, choice: CategoryChoice) =
                 receiver.chooseSubcategory(subcategory)
       component(issueLabel, form, ffSubcategory)
 
-proc categoryChoices(context: DirectNode, form: FileForm) =
-  context.bindBody(form.choice, form, drawChoices)
-
 proc fileFields(context: DirectNode, form: FileForm, id: int) =
   ## Rule 1: this component is keyed by file id, so selecting another file
   ## replaces these widgets and their edit state.
@@ -624,7 +607,6 @@ proc fileFields(context: DirectNode, form: FileForm, id: int) =
     VStack:
       this.identifier = "form-" & $id
       this.distribution = svdNatural
-      this.alignment = svaFill
       this.spacing = 6
       Label(identifier = "path", labelStyle = lsStatus):
         this.stringValue = store.files[id].path
@@ -639,7 +621,7 @@ proc fileFields(context: DirectNode, form: FileForm, id: int) =
         )
       component(issueLabel, form, ffAltText)
       Label(stringValue = "Category")
-      component(categoryChoices, form)
+      component(bindBody, form.choice, form, drawChoices)
       Label(stringValue = "Tags")
       TagPicker(form.tagController, tlpInline, "Search tags…"):
         this.identifier = "tags"
@@ -655,34 +637,26 @@ proc drawForm(context: DirectNode, form: FileForm, id: int) =
   context.viewBody:
     VStack:
       this.distribution = svdNatural
-      this.alignment = svaFill
       if id in form.store.files:
         keyed(id):
           component(fileFields, form, id)
       else:
         Label(stringValue = "Select or add a file to edit its details.")
 
-proc fileForm(context: DirectNode, form: FileForm) =
-  context.bindBody(form.store.selected, form, drawForm)
-
 proc newUploadView*(page: UploadPage): DirectView =
   result = newDirectView()
   result.viewBody:
     VStack:
       this.distribution = svdNatural
-      this.alignment = svaFill
       this.spacing = 12
       this.edgeInsets = insets(16)
       Label(stringValue = "Upload files", labelStyle = lsHeading)
       HStack:
         this.distribution = svdNatural
-        this.alignment = svaFill
         this.spacing = 16
         VStack:
           this.identifier = "file-list"
           this.distribution = svdNatural
-          this.alignment = svaFill
-          this.spacing = 8
           this.edgeInsets = insets(8)
           this.backgroundColor = PanelColor
           Label(identifier = "file-count", labelStyle = lsStatus):
@@ -691,7 +665,7 @@ proc newUploadView*(page: UploadPage): DirectView =
             ):
               label.stringValue =
                 (if ids.len == 1: "1 file" else: $ids.len & " files") & " to upload"
-          component(fileList, page.store)
+          component(bindBody, page.store.listState, page.store, drawFileList)
           Button(
             "Upload more documents…", identifier = "add-files", focusable = false
           ):
@@ -700,14 +674,12 @@ proc newUploadView*(page: UploadPage): DirectView =
         VStack:
           this.arrangedSizing = svspFillAvailableWidth
           this.distribution = svdNatural
-          this.alignment = svaFill
           this.spacing = 12
           this.edgeInsets = insets(8)
           this.backgroundColor = PanelColor
-          component(fileForm, page.form)
+          component(bindBody, page.form.store.selected, page.form, drawForm)
           HStack:
             this.distribution = svdNatural
-            this.spacing = 8
             Button("Cancel", identifier = "cancel", focusable = false):
               this.onAction(page) do(this: Button, receiver: UploadPage):
                 receiver.cancel()
