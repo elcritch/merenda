@@ -10,6 +10,7 @@ type
     edits: int
 
   TagPolicy = ref object of Responder
+    attempted: seq[string]
 
 proc queryChanged(recorder: TagRecorder, sender: DynamicAgent) {.slot.} =
   recorder.queries.add TagController(sender).query
@@ -21,6 +22,7 @@ protocol LowercaseTags of TagControllerDelegate:
   method shouldAddTag(
       policy: TagPolicy, controller: TagController, item: ModelItem
   ): bool =
+    policy.attempted.add item.identifier
     item.identifier != "blocked"
 
   method tagForText(
@@ -53,6 +55,21 @@ proc showInWindow(view: View, width = 320.0'f32): Window =
 
 proc key(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord))
+
+proc popupIn(window: Window): PopupListView =
+  for view in window.contentView.subviews:
+    if view of PopupListView:
+      return PopupListView(view)
+
+proc firstRowPoint(popup: PopupListView): Point =
+  let row = popup.popupListItemRect(popup.bounds, popup.firstIndex())
+  popup.pointToWindow(initPoint(row.minX + 5, row.minY + row.size.height / 2))
+
+proc recordInputLifetime(fieldRef: var BackRef[Responder]): Chip =
+  let input =
+    newTagInput(newTagController(selected = [tagItem("selected")]), inlineTags = true)
+  fieldRef.target = input.field
+  input.tagList.chips[0]
 
 suite "tag picker controller":
   test "matches exclude selected tags and follow the match mode":
@@ -94,6 +111,31 @@ suite "tag picker controller":
     check tags.selectedTags[^1].identifier == "fresh"
     check tags.selectedTags[^1].title == "Fresh"
     check not tags.addTag(tagItem("blocked"))
+
+  test "an exact title cannot bypass selection identity or a catalog veto":
+    let
+      tags = newTagController(
+        [tagItem("sea-ice", "Sea Ice"), tagItem("blocked", "Reserved")],
+        [tagItem("sea-ice", "Sea Ice")],
+        allowsNewTags = true,
+      )
+      policy = TagPolicy()
+    initResponder(policy)
+    discard policy.withProtocol(LowercaseTags)
+    tags.delegate = policy
+    tags.selected.filter = proc(item: ModelItem): bool =
+      false
+
+    check tags.isSelected("sea-ice")
+    check not tags.addTag(tagItem("sea-ice", "Sea Ice"))
+    for query in ["SEA ICE", "Reserved"]:
+      tags.query = query
+      check not tags.commitQuery()
+      check tags.query == query
+    check tags.selectedIdentifiers == @["sea-ice"]
+    tags.setAvailableTags([])
+    tags.query = "Sea Ice"
+    check not tags.commitQuery()
 
   test "replacing items keeps surviving selections and rejects duplicates":
     let controller = newArrayController([tagItem("a"), tagItem("b")])
@@ -161,6 +203,141 @@ suite "tag picker views":
     check input.field.stringValue == "ni"
     check input.isListOpen
     check input.field.currentEditor == editor
+
+  test "keyboard and mouse vetoes keep the query and suggestions open":
+    let
+      tags = newTagController([tagItem("blocked", "Reserved")], allowsNewTags = true)
+      policy = TagPolicy()
+      input = newTagInput(tags)
+      window = input.showInWindow()
+    defer:
+      window.close()
+    initResponder(policy)
+    discard policy.withProtocol(LowercaseTags)
+    tags.delegate = policy
+    require window.makeFirstResponder(input.field)
+    require window.dispatchTextInput("res")
+    require input.isListOpen
+    check window.key(keyEnter)
+    check tags.query == "res"
+    check input.isListOpen
+    check window.clickAt(window.popupIn().firstRowPoint())
+    check tags.selectedIdentifiers.len == 0
+    check input.field.stringValue == "res"
+    check input.isListOpen
+    check policy.attempted == @["blocked", "blocked"]
+
+    tags.query = ""
+    require window.dispatchTextInput("Reserved,fresh,")
+    check tags.query == "Reserved,fresh,"
+    check tags.selectedIdentifiers.len == 0
+    check policy.attempted == @["blocked", "blocked", "blocked"]
+
+  test "detaching the anchor dismisses the popup and discards stale row actions":
+    let
+      tags = newTags()
+      input = newTagInput(tags)
+      window = input.showInWindow()
+    defer:
+      window.close()
+    require window.makeFirstResponder(input.field)
+    input.openList()
+    let popup = window.popupIn()
+    require not popup.isNil
+    let point = popup.firstRowPoint()
+    let row = popup.accessibilityChildren()[0]
+    input.removeFromSuperview()
+    check not input.isListOpen
+    check not window.hasActiveTransientSession()
+    check popup.superview().isNil
+    discard window.clickAt(point)
+    check not row.accessibilityPerformAction(AccessibilityActionPress)
+    check tags.selectedIdentifiers.len == 0
+
+  test "a discarded input releases its field and retained chips can outlive it":
+    var fieldRef: BackRef[Responder]
+    let chip = recordInputLifetime(fieldRef)
+    check fieldRef.isNil
+    discard chip.remove()
+
+  test "an open popup follows match mode, row count, and ancestor movement":
+    let tags = newTags()
+    tags.query = "set"
+    let input = newTagInput(tags)
+    check input.field.stringValue == "set"
+    let
+      group = newView()
+      window = group.showInWindow()
+    defer:
+      window.close()
+    input.frame = rect(0, 0, 260, 32)
+    group.addSubview(input)
+    input.openList()
+    check not input.isListOpen
+    tags.matchMode = tmmContains
+    require input.isListOpen
+    check input.matches.identifiers == @["sunset"]
+    tags.query = ""
+    let popup = window.popupIn()
+    require not popup.isNil
+    let before = popup.frame
+    input.maxVisibleRows = 1
+    check popup.frame.size.height < before.size.height
+    check popup.accessibilityChildren().len == 1
+    group.frame = rect(20, 30, group.frame.size.width, group.frame.size.height)
+    check popup.frame.minX == before.minX + 10
+    check popup.frame.minY == before.minY + 20
+
+  test "the picker disables input and chips, and separate chips support keyboard removal":
+    let
+      tags = newTags()
+      picker = newTagPicker(tags, tlpBelow)
+      window = picker.showInWindow()
+      input = picker.input
+    defer:
+      window.close()
+    tags.setSelectedTags([tagItem("night")])
+    require window.makeFirstResponder(input.field)
+    input.openList()
+    require input.isListOpen
+    picker.enabled = false
+    let chip = picker.tagList.chips[0]
+    check not picker.enabled
+    check input.field.currentEditor.isNil
+    check not window.dispatchTextInput("ignored")
+    check tags.query == ""
+    check not input.isListOpen
+    discard window.clickAt(input.field.pointToWindow(initPoint(10, 10)))
+    check not input.isListOpen
+    check not chip.remove()
+    check not window.makeFirstResponder(chip)
+    picker.enabled = true
+    require window.makeFirstResponder(input.field)
+    check window.key(keyTab)
+    require window.firstResponder() == chip
+    check window.key(keyBackspace)
+    check tags.selectedIdentifiers.len == 0
+
+  test "accessibility can open suggestions, inspect labels, and add a tag":
+    let
+      tags = newTags()
+      input = newTagInput(tags)
+      window = input.showInWindow()
+    defer:
+      window.close()
+    check input.field.accessibilityRole() == arComboBox
+    check input.field.accessibilityLabel() == input.field.placeholder
+    check input.field.accessibilitySupportsAction(AccessibilityActionShowMenu)
+    check input.field.accessibilityPerformAction(AccessibilityActionShowMenu)
+    let popup = window.popupIn()
+    require not popup.isNil
+    let rows = popup.accessibilityChildren()
+    require rows.len == 4
+    check rows[1].accessibilityRole() == arListItem
+    check rows[1].accessibilityLabel() == "night"
+    check rows[1].accessibilityPerformAction(AccessibilityActionPress)
+    check tags.selectedIdentifiers == @["night"]
+    check not input.isListOpen
 
   test "the indicator toggles the list without editing text":
     let input = newTagInput(newTags())

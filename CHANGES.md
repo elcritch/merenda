@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a model-backed tag picker with shared input and chip views, configurable
+  placement, and a reactive upload form example.
+- Replace TokenField's `onSelect`, `onRemove`, and `onChange` callbacks with
+  `tokenFieldDidSelect`, `tokenFieldDidRemove`, and `tokenFieldDidChange` Sigils
+  signals. Connect a slot to the corresponding signal. Selection with
+  `notify = false` skips the aggregate change signal and control action.
+  The select signal and any query-clear signal still fire.
+
 - Restore clipboard shortcuts in Kosmo Quick Open and show file paths in
   document tab tooltips.
 - Add a match-case control to editor search and replacement.

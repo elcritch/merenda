@@ -13,6 +13,7 @@
 ##   Escape closes the list, and Delete in an empty field removes the last tag
 ##   when the tags are inline.
 ## - `TagList` shows the selected tags as removable chips that wrap onto lines.
+##   Focus a chip and press Backspace or Delete to remove it.
 ## - `TagPicker` arranges a `TagInput` and a `TagList` by `TagListPlacement`.
 ##   Create the two views directly to show the list somewhere else.
 ##
@@ -37,6 +38,7 @@ import ../text/fieldeditors
 import ../text/textfields
 import ../themes
 import ./chips
+import ./controls
 import ./popuplists
 
 type
@@ -52,9 +54,9 @@ type
   TagController* = ref object of Responder
     ## The tag model. Edit `available` and `selected` through the commands below
     ## so views and observers are notified consistently.
-    available*: ArrayController
-    selected*: ArrayController
-    matchMode*: TagMatchMode
+    xAvailable: ArrayController
+    xSelected: ArrayController
+    xMatchMode: TagMatchMode
     allowsNewTags*: bool ## Return or a separator turns unmatched text into a tag.
     separators*: set[char] ## Characters that commit typed text as tags.
     xQuery: string
@@ -65,8 +67,18 @@ type
     ## view, such as a text field, can share the last line.
     xController: TagController
     xChips: seq[Chip]
+    xDisabled: bool
     xTrailing: View
     xMeasuredHeight, xLayoutWidth: float32
+
+  TagTextField = ref object of TextField
+    xTagInput: BackRef[TagInput]
+
+  TagSuggestion = ref object of View
+    xTagInput: BackRef[TagInput]
+
+  TagPopupList = ref object of PopupListView
+    xRows: seq[View]
 
   TagInputFieldCell = ref object of TextFieldCell
     editor: FieldEditor
@@ -76,7 +88,8 @@ type
     xController: TagController
     xField: TextField
     xInlineList: TagList
-    xList: PopupListView
+    xList: TagPopupList
+    xAnchorAncestors: seq[BackRef[View]]
     xHost: PopupHost
     xMatches: seq[ModelItem]
     xHighlight: int
@@ -102,6 +115,9 @@ const
 
 proc tagQueryDidChange*(controller: TagController, sender: DynamicAgent) {.signal.}
   ## Sent when the typed query changes. Start a search here if needed.
+
+proc tagMatchModeDidChange*(controller: TagController, sender: DynamicAgent) {.signal.}
+  ## Sent when the rule for matching candidate titles changes.
 
 proc tagSelectionDidChange*(controller: TagController, sender: DynamicAgent) {.signal.}
   ## Sent after the user adds or removes a tag. `setSelectedTags` does not send
@@ -129,13 +145,29 @@ proc newTagController*(
     allowsNewTags = false,
 ): TagController =
   result = TagController(
-    available: newArrayController(available),
-    selected: newArrayController(selected),
-    matchMode: matchMode,
+    xAvailable: newArrayController(available),
+    xSelected: newArrayController(selected),
+    xMatchMode: matchMode,
     allowsNewTags: allowsNewTags,
     separators: {','},
   )
   initResponder(result)
+
+proc available*(controller: TagController): ArrayController =
+  ## The candidate collection. Its identity stays fixed for observers.
+  controller.xAvailable
+
+proc selected*(controller: TagController): ArrayController =
+  ## The selected collection. Use the TagController commands to edit tags.
+  controller.xSelected
+
+proc matchMode*(controller: TagController): TagMatchMode =
+  controller.xMatchMode
+
+proc `matchMode=`*(controller: TagController, value: TagMatchMode) =
+  if controller.xMatchMode != value:
+    controller.xMatchMode = value
+    emit controller.tagMatchModeDidChange(DynamicAgent(controller))
 
 proc delegate*(controller: TagController): Responder =
   controller.xDelegate.target
@@ -154,39 +186,35 @@ proc `query=`*(controller: TagController, value: string) =
     controller.xQuery = value
     emit controller.tagQueryDidChange(DynamicAgent(controller))
 
-proc items(controller: ArrayController): seq[ModelItem] =
-  for index in 0 ..< controller.len:
-    result.add controller.itemAt(index)
-
 proc selectedTags*(controller: TagController): seq[ModelItem] =
-  controller.selected.items()
+  for item in controller.selected.sourceItems:
+    result.add item
 
 proc selectedIdentifiers*(controller: TagController): seq[string] =
-  for index in 0 ..< controller.selected.len:
-    result.add controller.selected.itemAt(index).identifier
+  for item in controller.selected.sourceItems:
+    result.add item.identifier
 
 proc isSelected*(controller: TagController, identifier: string): bool =
-  controller.selected.indexOfIdentifier(identifier) >= 0
+  controller.selected.getItemWithIdentifier(identifier).isSome
 
-proc matchesQuery(controller: TagController, item: ModelItem): bool =
-  let query = controller.xQuery.strip.toLower
-  if query.len == 0:
-    return true
-  let title = item.displayTitle.toLower
-  case controller.matchMode
-  of tmmPrefix:
-    title.startsWith(query)
-  of tmmContains:
-    query in title
+func canOfferTag(item: ModelItem): bool =
+  item.enabled and not item.hidden and not item.separator and item.identifier.len > 0
 
 proc matches*(controller: TagController): seq[ModelItem] =
-  ## Available tags that are not selected and match the query, in arranged order.
+  ## Available tags that are unselected and match the query, in arranged order.
+  let query = controller.query.strip.toLower
   for index in 0 ..< controller.available.len:
     let item = controller.available.itemAt(index)
-    if item.enabled and not item.hidden and not item.separator and
-        item.identifier.len > 0 and not controller.isSelected(item.identifier) and
-        controller.matchesQuery(item):
-      result.add item
+    if item.canOfferTag and not controller.isSelected(item.identifier):
+      let title = item.displayTitle.toLower
+      let matches =
+        case controller.matchMode
+        of tmmPrefix:
+          title.startsWith(query)
+        of tmmContains:
+          query in title
+      if matches:
+        result.add item
 
 proc setAvailableTags*(controller: TagController, items: openArray[ModelItem]) =
   ## Replace the candidate tags, for example with new search results.
@@ -204,7 +232,7 @@ proc addTag*(controller: TagController, item: ModelItem): bool {.discardable.} =
   let allowed = controller.delegate.asDynamicAgent().trySendLocal(
       shouldAddTag(), (controller: controller, item: item)
     )
-  if allowed.isSome and not allowed.get:
+  if (allowed.isSome and not allowed.get) or controller.isSelected(item.identifier):
     return
   controller.selected.addItem(item)
   emit controller.tagSelectionDidChange(DynamicAgent(controller))
@@ -217,10 +245,11 @@ proc removeTag*(controller: TagController, identifier: string): bool {.discardab
     result = true
 
 proc removeLastTag*(controller: TagController): bool {.discardable.} =
-  if controller.selected.len > 0:
-    result = controller.removeTag(
-      controller.selected.itemAt(controller.selected.len - 1).identifier
-    )
+  var identifier: string
+  for item in controller.selected.sourceItems:
+    identifier = item.identifier
+  if identifier.len > 0:
+    result = controller.removeTag(identifier)
 
 proc tagForText(controller: TagController, text: string): ModelItem =
   let custom = controller.delegate.asDynamicAgent().trySendLocal(
@@ -231,20 +260,26 @@ proc tagForText(controller: TagController, text: string): ModelItem =
   else:
     tagItem(text)
 
-proc commitQuery*(controller: TagController): bool {.discardable.} =
-  ## Add the tag the query names: a match with the same title, or a new tag when
-  ## `allowsNewTags` is on. Clears the query when a tag is added.
-  let text = controller.xQuery.strip
-  if text.len == 0:
-    return
-  for item in controller.matches():
-    if item.displayTitle.toLower == text.toLower:
-      result = controller.addTag(item)
-      break
-  if not result and controller.allowsNewTags:
+proc addTagForText(controller: TagController, text: string): bool =
+  let title = text.toLower
+  for item in controller.available.sourceItems:
+    if item.displayTitle.toLower == title:
+      return
+        item.canOfferTag and controller.available.indexOfIdentifier(item.identifier) >= 0 and
+        controller.addTag(item)
+  for item in controller.selected.sourceItems:
+    if item.displayTitle.toLower == title:
+      return false
+  if controller.allowsNewTags:
     result = controller.addTag(controller.tagForText(text))
-  if result:
+
+proc commitQuery*(controller: TagController): bool {.discardable.} =
+  ## Commit an exact catalog title, or create a tag for unmatched text when
+  ## allowed. A successful commit clears the query.
+  let text = controller.query.strip
+  if text.len > 0 and controller.addTagForText(text):
     controller.query = ""
+    result = true
 
 # Flow layout shared by the chip list and the inline input
 
@@ -354,11 +389,21 @@ proc controller*(list: TagList): TagController =
 proc chips*(list: TagList): seq[Chip] =
   list.xChips
 
-proc chipRemoval(controller: TagController, identifier: string): ChipRemoveHandler =
-  let owner = controller.unsafeWeakRef()
+proc enabled*(list: TagList): bool =
+  not list.xDisabled
+
+proc `enabled=`*(list: TagList, value: bool) =
+  list.xDisabled = not value
+  for chip in list.xChips:
+    chip.enabled = value
+
+proc chipRemoval(list: TagList): ChipRemoveHandler =
+  var owner: BackRef[TagList]
+  owner.target = list
   result = proc(chip: Chip) =
-    if not owner.isNil:
-      discard owner[].removeTag(identifier)
+    let list = owner.target
+    if not list.isNil and chip.superview() == list:
+      discard list.xController.removeTag(chip.identifier)
 
 proc reloadTags*(list: TagList) =
   ## Rebuild the chips from the selected tags, reusing chips by identifier.
@@ -372,14 +417,15 @@ proc reloadTags*(list: TagList) =
     if chip.isNil:
       chip = newChip(item.displayTitle)
       chip.identifier = item.identifier
-      chip.focusable = false
-      chip.onRemove = list.xController.chipRemoval(item.identifier)
+      chip.enabled = list.enabled
+      chip.onRemove = list.chipRemoval()
       list.addSubview(chip)
     elif chip.label != item.displayTitle:
       chip.label = item.displayTitle
     next.add chip
   for chip in list.xChips:
     if chip notin next:
+      chip.onRemove = nil
       chip.removeFromSuperview()
   list.xChips = next
   list.refreshHeight()
@@ -418,8 +464,10 @@ proc `trailingView=`*(list: TagList, view: View) =
 
 proc closeList*(input: TagInput)
 proc refreshMatches(input: TagInput)
-proc dismissHost(input: TagInput)
+proc dismissHost(input: TagInput, reason = tdrProgrammatic)
 proc updateList(input: TagInput)
+proc scrollHighlightToVisible(input: TagInput)
+proc refreshSuggestionRows(input: TagInput)
 
 proc controller*(input: TagInput): TagController =
   input.xController
@@ -427,6 +475,12 @@ proc controller*(input: TagInput): TagController =
 proc field*(input: TagInput): TextField =
   ## The text field the user types into.
   input.xField
+
+proc enabled*(input: TagInput): bool =
+  input.xField.isEnabled()
+
+proc `enabled=`*(input: TagInput, value: bool) =
+  input.xField.enabled = value
 
 proc tagList*(input: TagInput): TagList =
   ## The inline chips, or nil when the tags are shown elsewhere.
@@ -457,7 +511,11 @@ proc maxVisibleRows*(input: TagInput): int =
   input.xMaxVisibleRows
 
 proc `maxVisibleRows=`*(input: TagInput, value: int) =
-  input.xMaxVisibleRows = max(value, 1)
+  let rows = max(value, 1)
+  if rows != input.xMaxVisibleRows:
+    input.xMaxVisibleRows = rows
+    input.scrollHighlightToVisible()
+    input.updateList()
 
 proc listSize(input: TagInput): Size =
   let popup =
@@ -507,22 +565,25 @@ protocol TagInputListDataSource of PopupListDataSource:
   method isShowing(input: TagInput, popupList: PopupListView): bool =
     input.isListOpen
 
-proc pick(input: TagInput, index: int) =
-  if index in 0 ..< input.xMatches.len:
-    let item = input.xMatches[index]
-    input.xListRequested = false
-    discard input.xController.addTag(item)
+proc pick(input: TagInput, index: int): bool {.discardable.} =
+  if input.enabled and input.isListOpen and index in 0 ..< input.xMatches.len and
+      input.xController.addTag(input.xMatches[index]):
+    input.closeList()
     input.xController.query = ""
-    input.refreshMatches()
+    result = true
 
 protocol TagInputListDelegate of PopupListDelegate:
   method highlightRow(input: TagInput, popupList: PopupListView, index: int) =
     if index in 0 ..< input.xMatches.len and input.xHighlight != index:
       input.xHighlight = index
       popupList.needsDisplay = true
+      popupList.postAccessibilityNotification(anSelectionChanged)
 
   method activateRow(input: TagInput, popupList: PopupListView, index: int) =
     input.pick(index)
+
+  method dismissAfterActivation(input: TagInput, popupList: PopupListView): bool =
+    false
 
   method dismissList(input: TagInput, popupList: PopupListView) =
     input.closeList()
@@ -532,38 +593,132 @@ protocol TagInputListDelegate of PopupListDelegate:
     input.xFirstRow =
       (input.xFirstRow + delta).clampFirstIndex(input.xMatches.len, visible)
     popupList.needsDisplay = true
+    input.refreshSuggestionRows()
 
   method moveFocus(input: TagInput, popupList: PopupListView, delta: int) =
     input.closeList()
 
-proc popupList(input: TagInput): PopupListView =
+protocol TagSuggestionHitTesting of ViewProtocol:
+  method hitTest(row: TagSuggestion, point: Point): View =
+    nil
+
+protocol TagSuggestionAccessibility of AccessibilityProtocol:
+  method accessibilityTraits(row: TagSuggestion): AccessibilityTraits =
+    result = {atSelectable}
+    let input = row.xTagInput.target
+    if not input.isNil and input.xHighlight in 0 ..< input.xMatches.len and
+        input.xMatches[input.xHighlight].identifier == row.identifier:
+      result.incl atSelected
+
+  method accessibilityActionNames(row: TagSuggestion): seq[string] =
+    @[AccessibilityActionPress]
+
+  method accessibilityPerformAction(row: TagSuggestion, action: string): bool =
+    let input = row.xTagInput.target
+    if action == AccessibilityActionPress and not input.isNil and input.enabled and
+        input.isListOpen and row.superview() == input.xList:
+      for index, item in input.xMatches:
+        if item.identifier == row.identifier:
+          return input.pick(index)
+
+protocol TagPopupAccessibility of AccessibilityProtocol:
+  method accessibilityChildren(popup: TagPopupList): seq[View] =
+    popup.xRows
+
+proc popupList(input: TagInput): TagPopupList =
   if input.xList.isNil:
-    input.xList = newPopupListView(dataSource = input, delegate = input)
+    let popup = TagPopupList()
+    popup.initPopupListViewFields(dataSource = input, delegate = input)
+    popup.focusable = false
+    discard popup.withProtocol(TagPopupAccessibility)
+    input.xList = popup
   input.xList
+
+proc refreshSuggestionRows(input: TagInput) =
+  let popup = input.xList
+  if popup.isNil:
+    return
+  var rows: seq[View]
+  for index in popup.firstIndex() ..<
+      min(popup.firstIndex() + popup.visibleItemCount(), input.xMatches.len):
+    let item = input.xMatches[index]
+    var row: View
+    for existing in popup.xRows:
+      if existing.identifier == item.identifier:
+        row = existing
+        break
+    if row.isNil:
+      let suggestion = TagSuggestion()
+      initViewFields(suggestion)
+      suggestion.xTagInput.target = input
+      suggestion.identifier = item.identifier
+      suggestion.accessibilityRole = arListItem
+      discard suggestion.withProtocol(TagSuggestionHitTesting)
+      discard suggestion.withProtocol(TagSuggestionAccessibility)
+      popup.addSubview(suggestion)
+      row = suggestion
+    row.accessibilityLabel = item.displayTitle
+    row.frame = popup.popupListItemRect(popup.bounds, index)
+    rows.add row
+  for row in popup.xRows:
+    if row notin rows:
+      row.removeFromSuperview()
+  if popup.xRows != rows:
+    popup.xRows = rows
+    popup.postAccessibilityNotification(anLayoutChanged)
+
+protocol TagAnchorGeometry of ViewGeometryEvents:
+  proc tagAnchorMoved(input: TagInput) {.slotFor: geometryDidChange.} =
+    if input.isListOpen:
+      input.updateList()
+
+proc observeAnchorAncestors(input: TagInput) =
+  var ancestor = input.superview()
+  while not ancestor.isNil:
+    input.observeProtocol(ancestor, TagAnchorGeometry)
+    var link: BackRef[View]
+    link.target = ancestor
+    input.xAnchorAncestors.add link
+    ancestor = ancestor.superview()
+
+proc unobserveAnchorAncestors(input: TagInput) =
+  for link in input.xAnchorAncestors:
+    let ancestor = link.target
+    if not ancestor.isNil:
+      input.unobserveProtocol(ancestor, TagAnchorGeometry)
+  input.xAnchorAncestors.setLen(0)
 
 proc ownerWindow(input: TagInput): Window =
   let owner = input.window()
   if owner of Window:
     result = Window(owner)
 
-proc dismissHost(input: TagInput) =
+proc dismissHost(input: TagInput, reason = tdrProgrammatic) =
   let host = input.xHost
-  input.xHost = nil
   if not host.isNil:
-    discard host.dismissPopup()
+    input.xHost = nil
+    if host.dismissPopup(reason):
+      input.unobserveAnchorAncestors()
+      input.xField.postAccessibilityNotification(anExpandedChanged)
+    else:
+      input.xHost = host
 
 proc updateList(input: TagInput) =
   ## Show, resize or hide the dropdown to match the request and the matches.
   let owner = input.ownerWindow()
-  if not input.xListRequested or input.xMatches.len == 0 or owner.isNil:
+  if not input.enabled or not input.xListRequested or input.xMatches.len == 0 or
+      owner.isNil:
     input.dismissHost()
     return
-  let size = input.listSize()
-  if not input.xHost.isNil:
+  let
+    size = input.listSize()
+    wasOpen = input.isListOpen
+  if wasOpen:
     # Resize in place: recreating the popup would interrupt typing.
     input.xHost.resizePopup(size)
   else:
-    let weakInput = input.unsafeWeakRef()
+    var weakInput: BackRef[TagInput]
+    weakInput.target = input
     let host = newPopupHost(
       owner,
       input,
@@ -571,14 +726,16 @@ proc updateList(input: TagInput) =
       size,
       title = "Tag suggestions",
       presentation = input.xPopupPresentation,
-      # The list never takes focus. Closing it restores the responder that was
-      # current when it opened: the field's active editor, so typing continues.
       transientOwner = input,
       focusContent = false,
+      restoresFocus = false,
       onDismiss = proc(host: PopupHost, reason: DismissReason) =
-        if not weakInput.isNil and weakInput[].xHost == host:
-          weakInput[].xHost = nil
-          weakInput[].xListRequested = false
+        let input = weakInput.target
+        if not input.isNil and input.xHost == host:
+          input.xHost = nil
+          input.xListRequested = false
+          input.unobserveAnchorAncestors()
+          input.xField.postAccessibilityNotification(anExpandedChanged)
       ,
     )
     input.xHost = host
@@ -586,6 +743,10 @@ proc updateList(input: TagInput) =
       input.xHost = nil
       return
     input.popupList().setNextResponder(input)
+    input.observeAnchorAncestors()
+  input.refreshSuggestionRows()
+  if not wasOpen:
+    input.xField.postAccessibilityNotification(anExpandedChanged)
   input.popupList().needsDisplay = true
 
 proc refreshMatches(input: TagInput) =
@@ -608,8 +769,9 @@ proc refreshMatches(input: TagInput) =
 
 proc openList*(input: TagInput) =
   ## Show every match, as clicking the field or its indicator does.
-  input.xListRequested = true
-  input.refreshMatches()
+  if input.enabled:
+    input.xListRequested = true
+    input.refreshMatches()
 
 proc closeList*(input: TagInput) =
   input.xListRequested = false
@@ -628,7 +790,9 @@ proc moveHighlight(input: TagInput, delta: int) =
         (input.xHighlight + delta + input.xMatches.len) mod input.xMatches.len
   input.scrollHighlightToVisible()
   if not input.xList.isNil:
+    input.refreshSuggestionRows()
     input.xList.needsDisplay = true
+    input.xList.postAccessibilityNotification(anSelectionChanged)
 
 proc showFieldText(input: TagInput, text: string) =
   if input.xField.stringValue != text:
@@ -653,7 +817,10 @@ proc handleReturn(input: TagInput): bool =
   if input.isListOpen and input.xHighlight >= 0:
     input.pick(input.xHighlight)
     result = true
-  elif input.xController.commitQuery():
+  elif input.xController.query.strip.len > 0:
+    input.xListRequested = false
+    if input.xController.commitQuery():
+      input.closeList()
     result = true
 
 proc handleEscape(input: TagInput): bool =
@@ -674,13 +841,15 @@ proc handleTab(input: TagInput): bool =
 proc editorCommand(
     input: TagInput, handle: proc(input: TagInput): bool {.nimcall.}
 ): dynamicSelectors.AroundMethod =
-  let owner = input.unsafeWeakRef()
+  var owner: BackRef[TagInput]
+  owner.target = input
   result = proc(
       self: DynamicAgent,
       invocation: var dynamicSelectors.Invocation,
       next: dynamicSelectors.DynamicMethod,
   ) =
-    if not owner.isNil and handle(owner[]):
+    let input = owner.target
+    if not input.isNil and input.enabled and handle(input):
       invocation.setResult(())
     elif not next.isNil:
       next(self, invocation)
@@ -690,18 +859,22 @@ protocol TagInputFieldCellEditing of CellEditingProtocol:
     cell.editor
 
 proc tagFieldTextChanged(input: TagInput, sender: DynamicAgent) {.slot.} =
-  if input.xSyncingText:
+  if input.xSyncingText or not input.enabled:
     return
   let controller = input.xController
   var text = input.xField.stringValue
-  if controller.allowsNewTags and controller.separators != {} and
-      text.find(controller.separators) >= 0:
-    let parts = text.split(controller.separators)
-    for part in parts[0 ..^ 2]:
-      controller.query = part
-      discard controller.commitQuery()
-    text = parts[^1]
-    input.showFieldText(text)
+  if controller.allowsNewTags and controller.separators != {}:
+    var start = 0
+    var separator = text.find(controller.separators, start)
+    while separator >= 0:
+      let part = text[start ..< separator].strip
+      if part.len > 0 and not controller.addTagForText(part):
+        break
+      start = separator + 1
+      separator = text.find(controller.separators, start)
+    if start > 0:
+      text = text.substr(start)
+      input.showFieldText(text)
   input.xListRequested = true
   controller.query = text
   input.refreshMatches()
@@ -780,6 +953,43 @@ protocol TagInputDrawing of ViewDrawingProtocol:
     if ssFocusVisible in states:
       context.addFocusRing(frame, style.box)
 
+protocol TagFieldAccessibility of AccessibilityProtocol:
+  method accessibilityRole(field: TagTextField): AccessibilityRole =
+    arComboBox
+
+  method accessibilityLabel(field: TagTextField): string =
+    if field.xAccessibilityLabel.len > 0:
+      field.xAccessibilityLabel
+    elif field.identifier.len > 0:
+      field.identifier
+    else:
+      field.placeholder
+
+  method accessibilityActionNames(field: TagTextField): seq[string] =
+    let input = field.xTagInput.target
+    if not input.isNil and input.isListOpen:
+      @[AccessibilityActionCollapse]
+    else:
+      @[AccessibilityActionShowMenu]
+
+  method accessibilityPerformAction(field: TagTextField, action: string): bool =
+    let input = field.xTagInput.target
+    if input.isNil or not input.enabled:
+      return false
+    case action
+    of AccessibilityActionShowMenu:
+      input.openList()
+      input.isListOpen
+    of AccessibilityActionCollapse:
+      input.closeList()
+      not input.isListOpen
+    else:
+      false
+
+proc tagInputWindowChanging(input: TagInput, owner: Responder) {.slot.} =
+  input.xListRequested = false
+  input.dismissHost(tdrOwnerClosed)
+
 proc newTagInput*(
     controller: TagController, placeholder = "Add tags…", inlineTags = false
 ): TagInput =
@@ -800,7 +1010,8 @@ proc newTagInput*(
     discard DynamicAgent(editor).pushMethod(command, result.editorCommand(handle))
   discard
     DynamicAgent(editor).pushMethod(insertNewline(), result.editorCommand(handleReturn))
-  discard DynamicAgent(editor).pushMethod(insertTab(), result.editorCommand(handleTab))
+  for command in [insertTab(), insertBacktab()]:
+    discard DynamicAgent(editor).pushMethod(command, result.editorCommand(handleTab))
   discard DynamicAgent(editor).pushMethod(
       cancelOperation(), result.editorCommand(handleEscape)
     )
@@ -808,14 +1019,16 @@ proc newTagInput*(
   cell.initTextFieldCellFields()
   discard cell.withProtocol(TagInputFieldCellEditing)
 
-  let field = newTextField()
+  let field = TagTextField()
+  field.initTextFieldFields()
+  field.xTagInput.target = result
   field.setCell(cell)
+  field.stringValue = controller.query
   field.placeholder = placeholder
   field.showsDropdownIndicator = true
-  field.accessibilityRole = arComboBox
+  discard field.withProtocol(TagFieldAccessibility)
   result.xField = field
-  # Clicking into the field lists every tag, like a web combobox.
-  let owner = result.unsafeWeakRef()
+
   discard DynamicAgent(field).pushMethod(
       mouseDown(),
       proc(
@@ -823,13 +1036,53 @@ proc newTagInput*(
           invocation: var dynamicSelectors.Invocation,
           next: dynamicSelectors.DynamicMethod,
       ) =
-        let event = invocation.argsAs(MouseEvent)
         if not next.isNil:
           next(self, invocation)
-        if not owner.isNil and not field.dropdownIndicatorRect().contains(
-          event.location
-        ):
-          owner[].openList()
+        let
+          field = TagTextField(self)
+          input = field.xTagInput.target
+          event = invocation.argsAs(MouseEvent)
+        if not input.isNil and input.enabled and event.button == mbPrimary and
+            not field.dropdownIndicatorRect().contains(event.location):
+          input.openList()
+      ,
+    )
+  discard DynamicAgent(field).pushMethod(
+      `enabled=`(),
+      proc(
+          self: DynamicAgent,
+          invocation: var dynamicSelectors.Invocation,
+          next: dynamicSelectors.DynamicMethod,
+      ) =
+        if not next.isNil:
+          next(self, invocation)
+        let input = TagTextField(self).xTagInput.target
+        if not input.isNil:
+          if not input.xInlineList.isNil:
+            input.xInlineList.enabled = input.enabled
+          let editor = input.xField.currentEditor()
+          if not editor.isNil:
+            editor.editable = input.enabled and input.xField.isEditable()
+          if not input.enabled:
+            input.closeList()
+            let owner = input.ownerWindow()
+            if not owner.isNil and not editor.isNil and owner.firstResponder() == editor:
+              discard owner.makeFirstResponder(nil)
+          input.needsDisplay = true
+      ,
+    )
+  discard DynamicAgent(field).pushMethod(
+      didEndEditing(),
+      proc(
+          self: DynamicAgent,
+          invocation: var dynamicSelectors.Invocation,
+          next: dynamicSelectors.DynamicMethod,
+      ) =
+        if not next.isNil:
+          next(self, invocation)
+        let input = TagTextField(self).xTagInput.target
+        if not input.isNil:
+          input.closeList()
       ,
     )
 
@@ -848,10 +1101,13 @@ proc newTagInput*(
   discard result.withProtocol(TagInputDrawing)
   field.connect(textDidChange, result, tagFieldTextChanged)
   field.connect(dropdownIndicatorPressed, result, tagFieldIndicatorPressed)
+  result.observeProtocol(result, TagAnchorGeometry)
+  result.connect(viewWillMoveToWindow, result, tagInputWindowChanging)
   connect(controller, tagQueryDidChange, result, tagQueryChanged)
+  connect(controller, tagMatchModeDidChange, result, tagOptionsChanged)
   connect(controller.available, arrayControllerDidChange, result, tagOptionsChanged)
   connect(controller.selected, arrayControllerDidChange, result, tagOptionsChanged)
-  result.xMatches = controller.matches()
+  result.refreshMatches()
 
 # TagPicker
 
@@ -861,6 +1117,14 @@ proc input*(picker: TagPicker): TagInput =
 proc tagList*(picker: TagPicker): TagList =
   ## The chip list, inline or separate.
   if picker.xList.isNil: picker.xInput.tagList else: picker.xList
+
+proc enabled*(picker: TagPicker): bool =
+  picker.xInput.enabled
+
+proc `enabled=`*(picker: TagPicker, value: bool) =
+  picker.xInput.enabled = value
+  if not picker.xList.isNil:
+    picker.xList.enabled = value
 
 proc placement*(picker: TagPicker): TagListPlacement =
   picker.xPlacement

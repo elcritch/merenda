@@ -59,6 +59,9 @@ protocol PopupListDelegate {.selectorScope: protocol.}:
   ## Handles interactions with popup content.
   method highlightRow*(popupList: PopupListView, index: int) {.optional.}
   method activateRow*(popupList: PopupListView, index: int) {.optional.}
+  method dismissAfterActivation*(popupList: PopupListView): bool {.optional.}
+    ## Defaults to true. Return false when the delegate manages dismissal.
+
   method dismissList*(popupList: PopupListView) {.optional.}
   method scrollByRows*(popupList: PopupListView, delta: int) {.optional.}
   method handleKeyDown*(popupList: PopupListView, event: KeyEvent) {.optional.}
@@ -597,7 +600,16 @@ proc finishPopupListTracking*(
       not item.separator and not item.disabled
   if itemCanActivate:
     popupList.sendToDelegate(activateRow(), (popupList: popupList, index: itemIndex))
-  if closeWhenDone and (itemIndex < 0 or itemCanActivate):
+  if closeWhenDone and (
+    itemIndex < 0 or (
+      itemCanActivate and
+      popupList
+      .delegate()
+      .asDynamicAgent()
+      .trySendLocal(dismissAfterActivation(), popupList)
+      .get(true)
+    )
+  ):
     popupList.sendToDelegate(dismissList(), popupList)
 
 proc resetPopupListTracking*(popupList: PopupListView) =

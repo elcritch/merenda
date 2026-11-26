@@ -481,6 +481,11 @@ proc len*(controller: ArrayController): int =
 proc sourceLen*(controller: ArrayController): int =
   controller.xItems.len
 
+iterator sourceItems*(controller: ArrayController): lent ModelItem =
+  ## Iterates items in storage order, including items filtered out of the arrangement.
+  for item in controller.xItems.items:
+    yield item
+
 proc selectionController*(controller: ArrayController): SelectionController =
   controller.xSelection
 
@@ -587,7 +592,7 @@ proc setItems*(controller: ArrayController, items: openArray[ModelItem]) =
   for identifier in controller.xSelection.selectedIdentifiers:
     if identifier in present:
       kept.add identifier
-  controller.xItems = initItemCollection(items, indexEmptyIdentifiers = true)
+  controller.xItems.replaceItems(items)
   if kept != controller.xSelection.selectedIdentifiers:
     controller.xSelection.setSelectedIdentifiers(kept)
   controller.notifyArrayControllerDidChange(mmkItemsChanged, identifiers = identifiers)

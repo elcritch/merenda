@@ -49,6 +49,7 @@ protocol TokenFieldEvents:
 
   proc tokenFieldDidChange*(field: TokenField, sender: DynamicAgent) {.signal.}
     ## Sent once per notifying selection change, after the select or remove signal.
+    ## Passing `notify = false` suppresses this signal and the control action.
 
   proc tokenQueryDidChange*(field: TokenField, sender: DynamicAgent) {.signal.}
     ## Sent after the typed query changes, including when it is cleared.
@@ -333,11 +334,12 @@ proc updateEnabledOptions(field: TokenField) =
       values[index].enabled = field.xOriginalEnabled[key]
   field.xOptions.options = values
 
-proc chipRemovalHandler(fieldRef: WeakRef[TokenField], key: string): ChipRemoveHandler =
+proc chipRemovalHandler(fieldRef: BackRef[TokenField], key: string): ChipRemoveHandler =
   result = proc(sender: Chip) =
     discard sender
-    if not fieldRef.isNil:
-      discard fieldRef[].removeSelectedOptionWithIdentifier(key)
+    let field = fieldRef.target
+    if not field.isNil:
+      discard field.removeSelectedOptionWithIdentifier(key)
 
 proc rebuildChips(field: TokenField) =
   for chip in field.xChips:
@@ -346,7 +348,8 @@ proc rebuildChips(field: TokenField) =
   for child in field.xChipRow.arrangedSubviews:
     child.removeFromSuperview()
 
-  let fieldRef = field.unsafeWeakRef()
+  var fieldRef: BackRef[TokenField]
+  fieldRef.target = field
   for index, option in field.xSelectedOptions:
     let
       chip = newChip(tokenOptionDisplayText(option), removable = true)
@@ -393,12 +396,14 @@ proc selectOption(field: TokenField, option: ComboBoxOption, notify = true): boo
   field.updateEnabledOptions()
   if not field.xInput.isNil:
     field.xInput.reloadData()
-  field.clearTokenQuery()
   field.rebuildChips()
+  field.clearTokenQuery()
   field.notifyTokenChange(option, selected = true, notify = notify)
   true
 
 proc selectOptionAtIndex*(field: TokenField, index: int, notify = true): bool =
+  ## Select a filtered option by index. `notify = false` skips the aggregate
+  ## change signal and action. The select and query signals still report changes.
   if field.xInput.isNil:
     return false
   field.selectOption(field.xInput.optionAtIndex(index), notify)
@@ -406,6 +411,8 @@ proc selectOptionAtIndex*(field: TokenField, index: int, notify = true): bool =
 proc selectOptionWithIdentifier*(
     field: TokenField, identifier: string, notify = true
 ): bool =
+  ## Select an option by identifier regardless of the query. See
+  ## `selectOptionAtIndex` for the notification contract.
   let index = field.storageIndexForKey(identifier)
   if index < 0:
     return false
@@ -663,13 +670,13 @@ proc initTokenFieldFields*(
   field.addSubview(field.xChipScroll)
   field.addSubview(field.xInput)
 
-  let
-    fieldRef = field.unsafeWeakRef()
-    action = actionSelector("nimkit.tokenFieldSelect")
+  let action = actionSelector("nimkit.tokenFieldSelect")
+  var fieldRef: BackRef[TokenField]
+  fieldRef.target = field
   field.xInput.target = newActionTarget(action) do(sender: DynamicAgent):
     discard sender
     if not fieldRef.isNil:
-      fieldRef[].selectInputOption()
+      fieldRef.target.selectInputOption()
   field.xInput.action = action
 
   let keyWrapper: dynamicSelectors.AroundMethod = proc(
@@ -680,7 +687,7 @@ proc initTokenFieldFields*(
     let event = invocation.argsAs(KeyEvent)
     if not fieldRef.isNil and event.modifiers == {} and
         event.key in {keyBackspace, keyDelete}:
-      let target = fieldRef[]
+      let target = fieldRef.target
       if target.xQuery.len > 0:
         target.setTokenQuery(target.xQuery.runeSubStr(0, target.xQuery.runeLen - 1))
       elif target.xRemovesLastTokenOnBackspace and target.xSelectedOptions.len > 0:
@@ -688,11 +695,11 @@ proc initTokenFieldFields*(
       invocation.setResult(true)
       return
     if not fieldRef.isNil and event.modifiers == {} and event.key == keyEnter:
-      fieldRef[].selectInputOption()
+      fieldRef.target.selectInputOption()
       invocation.setResult(true)
       return
     if not fieldRef.isNil and event.modifiers == {} and
-        fieldRef[].appendTokenText(event.text):
+        fieldRef.target.appendTokenText(event.text):
       invocation.setResult(true)
       return
     if not next.isNil:
@@ -705,7 +712,7 @@ proc initTokenFieldFields*(
     proc(self: ComboBox, text: string) =
       discard self
       if not fieldRef.isNil:
-        discard fieldRef[].appendTokenText(text)
+        discard fieldRef.target.appendTokenText(text)
     ,
   )
 

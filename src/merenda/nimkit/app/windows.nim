@@ -188,6 +188,7 @@ type
     xSheetParent: Window
     xIsPopup: bool
     xPopupPlacement: siwinshim.PopupPlacement
+    xPopupFocusContent: bool
     xOnPopupDone: proc() {.closure.}
     xTransientSession: TransientSession
     xLastTransientDismissReason: DismissReason
@@ -224,6 +225,7 @@ type
     transientWindow: Window
     restoreWindow: Window
     restoreResponder: Responder
+    restoresFocus: bool
     onDismiss: TransientDismissHandler
     onKeyDown: TransientKeyDownHandler
 
@@ -251,6 +253,7 @@ type
     xOnKeyDown: TransientKeyDownHandler
     xPlaceAbove: bool
     xRestoreCurrentResponderIfNil: bool
+    xRestoresFocus: bool
     xPopupOpen: bool
 
   PopoverPresenter* = PopupHost
@@ -397,6 +400,7 @@ proc beginTransientSession*(
   onDismiss: TransientDismissHandler = nil,
   restoreCurrentResponderIfNil = true,
   onKeyDown: TransientKeyDownHandler = nil,
+  restoresFocus = true,
 )
 
 proc dismissTransientSession*(
@@ -410,7 +414,12 @@ proc endTransientSession*(
 proc nativeContentScale*(window: Window): float32
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient)
 proc newPopupWindow*(
-  owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup", placeAbove = false
+  owner: Window,
+  anchorFrame: Rect,
+  popupSize: Size,
+  title = "Popup",
+  placeAbove = false,
+  focusContent = true,
 ): Window
 
 proc newPopupHost*(
@@ -430,6 +439,7 @@ proc newPopupHost*(
   managesTransientSession = true,
   focusContent = true,
   onKeyDown: TransientKeyDownHandler = nil,
+  restoresFocus = true,
 ): PopupHost
 
 proc popupOpen*(host: PopupHost): bool
@@ -2187,7 +2197,7 @@ proc finishTransientSession(
   if notifyDismiss and not session.onDismiss.isNil:
     session.onDismiss(reason)
   emit window.didDismissTransientSession(reason)
-  if reason != tdrOwnerClosed:
+  if session.restoresFocus and reason != tdrOwnerClosed:
     window.restoreTransientFocus(session)
   if not window.xContentView.isNil:
     window.xContentView.needsDisplay = true
@@ -2201,6 +2211,7 @@ proc beginTransientSession*(
     onDismiss: TransientDismissHandler = nil,
     restoreCurrentResponderIfNil = true,
     onKeyDown: TransientKeyDownHandler = nil,
+    restoresFocus = true,
 ) =
   window.clearToolTip()
   if window.xTransientSession.active:
@@ -2221,6 +2232,7 @@ proc beginTransientSession*(
     transientWindow: transientWindow,
     restoreWindow: window,
     restoreResponder: resolvedRestore,
+    restoresFocus: restoresFocus,
     onDismiss: onDismiss,
     onKeyDown: onKeyDown,
   )
@@ -2306,6 +2318,7 @@ proc newPopupWindow*(
     popupSize: Size,
     title = "Popup",
     placeAbove = false,
+    focusContent = true,
 ): Window =
   let frame = rect(
     anchorFrame.origin.x,
@@ -2318,6 +2331,7 @@ proc newPopupWindow*(
   )
   result = newWindow(title, frame)
   result.xIsPopup = true
+  result.xPopupFocusContent = focusContent
   result.xPopupPlacement =
     popupPlacement(anchorFrame, popupSize, owner.nativeContentScale(), placeAbove)
   owner.attachAuxiliaryWindow(result)
@@ -2413,6 +2427,7 @@ proc newPopupHost*(
     managesTransientSession = true,
     focusContent = true,
     onKeyDown: TransientKeyDownHandler = nil,
+    restoresFocus = true,
 ): PopupHost =
   result = PopupHost(
     xOwner: owner,
@@ -2433,6 +2448,7 @@ proc newPopupHost*(
     xOnKeyDown: onKeyDown,
     xPlaceAbove: placeAbove,
     xRestoreCurrentResponderIfNil: restoreCurrentResponderIfNil,
+    xRestoresFocus: restoresFocus,
   )
   initResponder(result)
 
@@ -2494,10 +2510,11 @@ proc presentPopup*(host: PopupHost): bool =
       size,
       host.xTitle,
       host.xPlaceAbove,
+      focusContent = host.xFocusContent,
     )
     popupWindow.setContentView(host.xContent)
-    popupWindow.setInitialFirstResponder(host.xContent)
     if host.xFocusContent:
+      popupWindow.setInitialFirstResponder(host.xContent)
       popupWindow.makeKeyAndOrderFront()
     else:
       # Keep typing in the owner, as a text field's completion list does.
@@ -2540,6 +2557,7 @@ proc presentPopup*(host: PopupHost): bool =
         host.popupHostDidDismiss(reason),
       restoreCurrentResponderIfNil = host.xRestoreCurrentResponderIfNil,
       onKeyDown = host.xOnKeyDown,
+      restoresFocus = host.xRestoresFocus,
     )
     if host.xFocusContent:
       if popupWindow.isNil:
@@ -2559,35 +2577,35 @@ proc dismissPopup*(host: PopupHost, reason = tdrProgrammatic): bool =
   true
 
 proc repositionPopup*(host: PopupHost) =
-  if host.isNil or not host.xPopupOpen or not host.xPopupWindow.isNil:
+  if host.isNil or not host.xPopupOpen:
     return
-  let parent = host.popupHostInlineParent()
-  if not parent.isNil and host.xContent.superview() == parent:
-    host.xContent.frame = host.popupHostInlineFrame()
+  let popup = host.xPopupWindow
+  if popup.isNil:
+    let parent = host.popupHostInlineParent()
+    if not parent.isNil and host.xContent.superview() == parent:
+      host.xContent.frame = host.popupHostInlineFrame()
+  else:
+    let
+      anchor = host.xAnchor.rectToWindow(host.xAnchor.bounds())
+      size = host.xPopupSize
+      placement =
+        popupPlacement(anchor, size, host.xOwner.nativeContentScale(), host.xPlaceAbove)
+    if popup.xPopupPlacement != placement:
+      popup.xPopupPlacement = placement
+      let y =
+        if host.xPlaceAbove:
+          anchor.minY - size.height
+        else:
+          anchor.maxY
+      popup.setFrame(rect(anchor.minX, y, size.width, size.height))
+      if not popup.xHostWindow.isNil:
+        popup.xHostWindow.repositionNativePopup(placement)
 
 proc resizePopup*(host: PopupHost, size: Size) =
-  ## Resize the popup in place. An open popup keeps its session, window and
-  ## focus, so content such as a filtered list can change length while shown.
-  if host.isNil:
-    return
-  let size = initSize(max(size.width, 1.0'f32), max(size.height, 1.0'f32))
-  if host.xPopupSize == size:
-    return
-  host.xPopupSize = size
-  if not host.xPopupOpen:
-    return
-  if host.xPopupWindow.isNil:
+  ## Resize the popup in place. An open popup keeps its session, window and focus.
+  if not host.isNil:
+    host.xPopupSize = initSize(max(size.width, 1.0'f32), max(size.height, 1.0'f32))
     host.repositionPopup()
-  else:
-    let anchor = host.xAnchor.rectToWindow(host.xAnchor.bounds())
-    let y =
-      if host.xPlaceAbove:
-        anchor.origin.y - size.height
-      else:
-        anchor.origin.y + anchor.size.height
-    host.xPopupWindow.setFrame(
-      rect(host.xPopupWindow.frame.origin.x, y, size.width, size.height)
-    )
 
 proc mouseDownAt*(
   window: Window,
@@ -3743,7 +3761,10 @@ proc ensureNativeWindow*(window: Window) =
     if not window.xOwnerWindow.nativeReady:
       return
     window.xHostWindow = createPopupHostWindow(
-      window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
+      window.xOwnerWindow.xHostWindow,
+      window.xPopupPlacement,
+      callbacks,
+      focusContent = window.xPopupFocusContent,
     )
   else:
     when defined(linux) or defined(bsd):

@@ -82,6 +82,44 @@ suite "NimKit native window lifecycle":
     check not second.popupWindow().isClosed
     check second.dismissPopup()
 
+  test "tag suggestions resize and move without taking native keyboard focus":
+    let
+      window = newWindow("Native tag suggestions", frame = rect(80, 80, 400, 280))
+      root = newView(frame = rect(0, 0, 400, 280))
+      tags = newTagController([tagItem("night"), tagItem("nature"), tagItem("sun")])
+      input = newTagInput(tags)
+    defer:
+      window.close()
+    input.frame = rect(20, 20, 220, 30)
+    input.popupPresentation = ppWindow
+    root.addSubview(input)
+    window.setContentView(root)
+    window.makeKeyAndOrderFront()
+    window.ensureNativeWindow()
+    require window.nativeReady
+    require window.makeFirstResponder(input.field)
+    let editor = input.field.currentEditor
+    require not editor.isNil
+    input.openList()
+    let popup = window.transientWindow()
+    require not popup.isNil
+    let native = popup.nativeWindowOrNil()
+    require not native.isNil
+    check not popup.isKeyWindow()
+    check not native.popupGrab()
+    when defined(macosx):
+      check not native.canBecomeKeyWindow()
+
+    let before = native.placement()
+    require window.dispatchTextInput("ni")
+    check window.transientWindow() == popup
+    check input.matches.len == 1
+    check native.placement().size.y < before.size.y
+    input.frame = rect(35, 40, 220, 30)
+    check native.placement().anchorRectPos.x > before.anchorRectPos.x
+    check input.field.currentEditor == editor
+    check window.firstResponder() == editor
+
   test "native close delivers the regular window lifecycle callbacks":
     block nativeDelegateClose:
       let

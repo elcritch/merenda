@@ -8,6 +8,7 @@ import merenda/nimkit
 type TokenRecorder = ref object of Agent
   selected, removed, queries: seq[string]
   changes: int
+  chipCounts: seq[int]
 
 proc tokenSelected(recorder: TokenRecorder, option: ComboBoxOption) {.slot.} =
   recorder.selected.add option.identifier
@@ -19,7 +20,9 @@ proc tokensChanged(recorder: TokenRecorder, sender: DynamicAgent) {.slot.} =
   inc recorder.changes
 
 proc queryChanged(recorder: TokenRecorder, sender: DynamicAgent) {.slot.} =
-  recorder.queries.add TokenField(sender).query
+  let field = TokenField(sender)
+  recorder.queries.add field.query
+  recorder.chipCounts.add field.chipCount
 
 proc record(field: TokenField): TokenRecorder =
   result = TokenRecorder()
@@ -136,6 +139,7 @@ suite "nimkit token fields":
     check field.selectedOptionIdentifiers == @["security"]
     check field.query.len == 0
     check recorder.queries == @["sec", "security", ""]
+    check recorder.chipCounts == @[0, 0, 1]
     check not field.popupOpen
 
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
