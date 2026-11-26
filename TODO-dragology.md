@@ -77,7 +77,7 @@ model states. The upstream behavior interface makes this separation explicit:
 | [animations.nim](src/merenda/nimkit/app/animations.nim) | Scheduler, easing, and springs | Presentation animation targets |
 | [dragging.nim](src/merenda/nimkit/app/dragging.nim) | Payload/destination conventions where applicable | Optional model-driven adapter |
 | [undomanagers.nim](src/merenda/nimkit/foundation/undomanagers.nim) | Undo grouping | One model transition per completed drag |
-| [todo_stack_drag.nim](examples/todo_stack_drag.nim) | Baseline interaction and comparison | Separate declarative example |
+| [todo_stack_drag.nim](examples/todo/todo_stack_drag.nim) | Baseline interaction and comparison | Separate declarative example |
 
 `buildRenderScene` runs layout, updates caches, and acknowledges display state.
 It is not a pure snapshot operation. Speculation must operate on independently

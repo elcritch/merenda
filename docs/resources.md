@@ -115,9 +115,9 @@ app.addWindow(built.instance.window(resourceId("inspector")))
 app.runWindow(window, window.contentView)
 ```
 
-The [runnable example](../examples/html_ui_demo.nim) loads a
-[preferences interface and About window](../examples/html_ui_demo.html).
-An [external stylesheet](../examples/html_ui_demo.css) styles the native controls.
+The [runnable example](../examples/html_ui/html_ui_demo.nim) loads a
+[preferences interface and About window](../examples/html_ui/html_ui_demo.html).
+An [external stylesheet](../examples/html_ui/html_ui_demo.css) styles the native controls.
 The demo uses `input`, `span`, and `select` for controls and display text; their
 native `nk-*` aliases remain available.
 The Appearance dropdown switches both windows between custom CSS and all eight
@@ -231,14 +231,14 @@ validation then applies the same schema and reference checks as other frontends.
 
 ## NIF demo
 
-`examples/nif_ui_demo.nim` duplicates the HTML demo using
+`examples/nif_ui/nif_ui_demo.nim` duplicates the HTML demo using
 `nif_ui_demo.nif` for its interface and `nif_ui_demo.css.nif` for its appearance.
 The optional dependency is [OpenParser](https://github.com/openpeeps/openparser)
 0.4.1 or newer. This feature requires Nim 2.2.10 or newer:
 
 ```sh
 atlas install -tk --feature=nifDemo
-nim ic -r examples/nif_ui_demo.nim
+nim ic -r examples/nif_ui/nif_ui_demo.nim
 ```
 
 Elements contain an optional first `attrs` child with `kv` entries. Camel-case
@@ -324,7 +324,7 @@ Character literals retain NIF's stricter escaping rules, for example `'\23'`
 for a hash. Suffix comments such as `(nkLabel#Description# "Text")` are accepted
 and do not become GUI text or CSS.
 
-The adapter in `examples/private/nifmarkup.nim` translates OpenParser's NIF
+The adapter in `examples/nif_ui/nifmarkup.nim` translates OpenParser's NIF
 nodes into HTML/CSS for the existing loaders. This is a demo vocabulary, with an
 optional leading `(.nif27)` marker; other directives, symbols, and empty atoms
 are unsupported. Comment and line-info suffixes are ignored during conversion.
@@ -340,12 +340,12 @@ and the example is included in the example compilation bundle.
 
 ### Native shorthand example
 
-`examples/nif_shorthand_demo.nim` loads the same interface and appearance from
+`examples/nif_ui/nif_shorthand_demo.nim` loads the same interface and appearance from
 `nif_shorthand_demo.nif` and `nif_shorthand_demo.css.nif`. Run it after enabling
 the same `nifDemo` feature:
 
 ```sh
-nim ic -r examples/nif_shorthand_demo.nim
+nim ic -r examples/nif_ui/nif_shorthand_demo.nim
 ```
 
 Widget tags use native names, with lowercase property children:

@@ -1,9 +1,9 @@
-import std/[monotimes, os, times, unittest]
+import std/[monotimes, os, sequtils, strutils, times, unittest]
 import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/mainthreadwork
-import ../../examples/upload_form_demo
+import ../../examples/uploads/[upload_form_direct_demo, upload_form_mvc_demo]
 
 type EventRecorder = ref object of Agent
   publications: int
@@ -167,3 +167,94 @@ suite "upload form demo":
     require recorder.uploads.len == 1
     check recorder.uploads[0] == page.store.files{}
     check recorder.uploads[0][1].tags == @["legal"]
+
+proc click(view: View, id: string) =
+  let button = Button(view.viewWithIdentifier(id))
+  require not button.isNil
+  discard button.send(performClick(), ActionArgs(sender: button))
+
+suite "MVC upload form":
+  test "edits stay with their file and a selection change resets validation":
+    let page = newUploadPageController(["one.png", "two.pdf"])
+    let view = page.view
+    let recorder = EventRecorder()
+    connect(page.form, uploadRequested, recorder, uploadRequested)
+    connect(page.form, filesChanged, recorder, filesChanged)
+
+    let first = TextField(view.viewWithIdentifier("name"))
+    first.stringValue = ""
+    emit first.textDidChange(first)
+    check view.viewWithIdentifier("name") == first
+    check Button(view.viewWithIdentifier("file-1")).title == "Untitled file"
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue.len > 0
+    view.click("save")
+    check Label(view.viewWithIdentifier("issue-ffAltText")).stringValue.len > 0
+
+    view.click("file-2")
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    view.click("file-1")
+    check TextField(view.viewWithIdentifier("name")).stringValue == ""
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue == ""
+    check Label(view.viewWithIdentifier("issue-ffAltText")).stringValue == ""
+
+    for id in ["name", "alt-text"]:
+      let field = TextField(view.viewWithIdentifier(id))
+      field.stringValue = "sunset"
+      emit field.textDidChange(field)
+    view.click("category-Photos")
+    view.click("subcategory-Portrait")
+    view.click("category-Documents")
+    check view.viewWithIdentifier("subcategory-Portrait").isNil
+    check Label(view.viewWithIdentifier("issue-ffSubcategory")).stringValue.len > 0
+    view.click("subcategory-Report")
+    view.click("special")
+    view.click("save")
+    check recorder.uploads.len == 0
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check Label(view.viewWithIdentifier("issue-ffCategory")).stringValue.len > 0
+    view.click("category-Media")
+    view.click("subcategory-Audio")
+    view.click("special")
+    view.click("file-1")
+    check Button(view.viewWithIdentifier("special")).state == bsOff
+    view.click("save")
+    require recorder.uploads.len == 1
+    let files = recorder.uploads[0]
+    require files.len == 2
+    check files[0].name == "sunset" and files[0].altText == "sunset"
+    check files[0].subcategory == "Report" and not files[0].special
+    check files[1].subcategory == "Audio" and files[1].special
+    check recorder.fileCounts.len == 0
+
+  test "the parent handles membership and asynchronous tag search events":
+    let page = newUploadPageController([])
+    let view = page.view
+    let recorder = EventRecorder()
+    connect(page.form, filesChanged, recorder, filesChanged)
+    connect(page.form, tagSearchStarted, recorder, tagSearchStarted)
+    page.form.addPaths(["one.png", "two.pdf"])
+    let tags = TagPicker(view.viewWithIdentifier("tags")).controller
+    tags.query = " SU "
+    check recorder.queries == @["", "su"]
+    page.form.showSuggestions("old", @["surprise"])
+    check not tags.matches.anyIt(it.identifier == "surprise")
+    waitUntil(tags.matches.mapIt(it.identifier) == @["summer", "sunset"])
+    check tags.addTag(tagItem("sunset"))
+    view.click("file-2")
+    let other = TagPicker(view.viewWithIdentifier("tags")).controller
+    check other.query == "" and other.selectedIdentifiers.len == 0
+    page.form.showSuggestions("su", @["surprise"])
+    check not other.matches.anyIt(it.identifier == "surprise")
+    view.click("file-1")
+    check TagPicker(view.viewWithIdentifier("tags")).controller.selectedIdentifiers ==
+      @["sunset"]
+    view.click("remove-1")
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check Label(view.viewWithIdentifier("events")).stringValue.contains(
+      "filesChanged: 1 file(s)"
+    )
+    view.click("cancel")
+    check view.viewWithIdentifier("name").isNil
+    page.form.addPaths(["three.txt"])
+    check TextField(view.viewWithIdentifier("name")).stringValue == "three.txt"
+    check recorder.fileCounts == @[2, 1, 0, 1]

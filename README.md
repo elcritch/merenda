@@ -166,8 +166,8 @@ nim ic -r examples/markdown_viewer_demo.nim README.md
 
 That is the kind of efficiency NimKit aims for: you write the app's behavior,
 while the controls take care of text selection, focus, drawing, and layout.
-For an app with more interaction, try the [to-do list](examples/todo_basic.nim)
-or its [table-based version](examples/todo_table.nim), which adds row selection
+For an app with more interaction, try the [to-do list](examples/todo/todo_basic.nim)
+or its [table-based version](examples/todo/todo_table.nim), which adds row selection
 and drag reordering.
 
 ### A table with model–view–presenter
@@ -221,7 +221,7 @@ app.runWindow(window, root, table)
 Save this as `examples/tasks_mvp.nim` and run `nim ic -r examples/tasks_mvp.nim`.
 The table binding supplies the columns and row values, so you only write the
 action specific to your app. For a larger version, see the
-[table-based to-do app](examples/todo_table.nim) or the
+[table-based to-do app](examples/todo/todo_table.nim) or the
 [model controller examples](examples/modelcontrollers_demo.nim).
 
 ### Change a view's behavior with a protocol
@@ -503,8 +503,8 @@ You can also describe interfaces in [lightweight markup](docs/resources.md#gui-m
 ```
 
 Use IDs to look up controls and connect behavior in Nim. Try the
-[GUI resource example](examples/html_ui_demo.nim) with
-`nim ic -r examples/html_ui_demo.nim`, or build an interface visually with
+[GUI resource example](examples/html_ui/html_ui_demo.nim) with
+`nim ic -r examples/html_ui/html_ui_demo.nim`, or build an interface visually with
 [Tekton](#tekton-interface-builder).
 
 ## Kosmo
@@ -562,8 +562,8 @@ See [Tekton's authoring guide](docs/resources.md#tekton-resource-editor) to get 
 
 The [examples directory](examples/) has complete apps you can run and change:
 
-- Build a small app: [to-do list](examples/todo_basic.nim) or
-  [table-based to-do list](examples/todo_table.nim).
+- Build a small app: [to-do list](examples/todo/todo_basic.nim) or
+  [table-based to-do list](examples/todo/todo_table.nim).
 - Arrange controls: [layout showcase](examples/layout_showcase.nim) and
   [layout guide](docs/layout.md).
 - Work with text: [Markdown reader](examples/markdown_viewer_demo.nim),

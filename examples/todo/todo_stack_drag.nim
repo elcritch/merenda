@@ -4,6 +4,8 @@ import merenda/nimkit
 
 import sigils/selectors
 
+import ./todo_common
+
 type TodoItemView = ref object of View
   checkBox: Button
   mouseDownPoint: Point
@@ -163,10 +165,8 @@ proc updateStatus() =
   let total = todos.len
   if total == 0:
     status.text = "0 items"
-  elif completed == 1:
-    status.text = "1 of " & $total & " done"
   else:
-    status.text = $completed & " of " & $total & " done"
+    status.text = todoProgress(completed, total)
 
 proc onToggleTodo(sender: DynamicAgent) =
   if not sender.isNil:
@@ -238,7 +238,7 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-for item in ["Write release notes", "Tag v0.4.0", "Try the demo"]:
+for item in SampleTodos:
   addTodo(item)
 
 app.runWindow(window, root, input)

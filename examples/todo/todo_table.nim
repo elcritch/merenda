@@ -4,6 +4,8 @@ import merenda/nimkit
 
 import sigils/selectors
 
+import ./todo_common
+
 const
   TodoDoneColumn = "done"
   TodoTitleColumn = "title"
@@ -26,7 +28,7 @@ proc updateStatus(controller: TodoTableController) =
       inc completed
 
   let total = controller.model.sourceLen()
-  controller.status.text = $completed & " of " & $total & " done"
+  controller.status.text = todoProgress(completed, total)
 
 proc toggleTodo(controller: TodoTableController, identifier: string) =
   if controller.isNil or controller.model.isNil or controller.table.isNil:
@@ -199,7 +201,7 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight, leBottom},
 )
 
-for item in ["Write release notes", "Tag v0.4.0", "Try the demo"]:
+for item in SampleTodos:
   controller.addTodo(item)
 
 app.runWindow(window, root, input)

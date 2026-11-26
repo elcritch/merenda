@@ -1,5 +1,5 @@
 ## A multi-file upload form built with DirectView and Sigils.
-## Run `nim ic -r examples/upload_form_demo.nim`.
+## Run `nim ic -r examples/uploads/upload_form_direct_demo.nim`.
 ##
 ## The user picks several files, selects one in the list on the left, and edits
 ## its name, alt text, category, subcategory, tags and "special" flag on the right.
@@ -28,23 +28,13 @@ import std/[os, sequtils, strutils]
 import sigils/[core, reactive, threadProxies, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/backgroundworkers
+import ./uploadfiles
+
+export
+  FileField, UploadFile, Categories, SamplePaths, subcategoriesFor, isImage, issueFor,
+  isValid
 
 type
-  FileField* = enum
-    ffName
-    ffAltText
-    ffCategory
-    ffSubcategory
-
-  UploadFile* = object
-    id*: int
-    path*: string
-    name*, altText*: string
-    category*, subcategory*: string
-    tags*: seq[string]
-    special*: bool
-
   CategoryChoice* = tuple[category, subcategory: string]
   ListState* = tuple[ids: seq[int], selected: int]
 
@@ -69,8 +59,6 @@ type
     tagController*: TagController
     issues*: array[FileField, Sigil[string]]
 
-  TagBackend = ref object of AgentActor
-
   FileRow* = ref object of StackView ## A list row that selects its file when clicked.
     store: BackRef[UploadStore]
     fileId: int
@@ -85,24 +73,6 @@ type
     backend: AgentProxy[TagBackend]
 
 const
-  Categories* = [
-    (name: "Photos", subcategories: @["Landscape", "Portrait", "Product"]),
-    (name: "Documents", subcategories: @["Invoice", "Contract", "Report"]),
-    (name: "Media", subcategories: @["Audio", "Video", "Slides"]),
-  ]
-  TagCatalog = [
-    "brand", "campaign", "contract", "draft", "final", "internal", "interview",
-    "invoice", "landscape", "launch", "legal", "nature", "night", "nim", "portrait",
-    "press", "product", "public", "quarterly", "release", "review", "summer", "sunset",
-    "team", "travel",
-  ]
-  SearchLatencyMs = 150
-  SamplePaths* = [
-    "~/Pictures/sunset-over-lake.jpg", "~/Documents/contract-2026.pdf",
-    "~/Pictures/team-offsite.png", "~/Music/podcast-intro.mp3",
-    "~/Documents/q3-report.pdf",
-  ]
-  ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]
   ErrorColor = color(0.85, 0.2, 0.2, 1)
   SelectedColor = color(0.3, 0.55, 1.0, 0.22)
   ClearColor = color(0, 0, 0, 0)
@@ -116,48 +86,6 @@ proc tagSearchStarted*(form: FileForm, query: string) {.signal.}
 
 proc fileId*(file: UploadFile): int =
   file.id
-
-proc subcategoriesFor*(category: string): seq[string] =
-  for entry in Categories:
-    if entry.name == category:
-      return entry.subcategories
-
-proc isImage*(file: UploadFile): bool =
-  file.path.splitFile.ext.toLowerAscii in ImageExtensions
-
-proc issueFor*(file: UploadFile, field: FileField): string =
-  case field
-  of ffName:
-    if file.name.strip.len == 0:
-      result = "A file name is required."
-  of ffAltText:
-    if file.isImage and file.altText.strip.len == 0:
-      result = "Images need alt text."
-  of ffCategory:
-    if file.category.len == 0:
-      result = "Choose a category."
-  of ffSubcategory:
-    if file.category.len > 0 and file.subcategory.len == 0:
-      result = "Choose a subcategory."
-
-proc isValid*(file: UploadFile): bool =
-  allIt(FileField, file.issueFor(it).len == 0)
-
-proc displayName(file: UploadFile): string =
-  if file.name.strip.len > 0: file.name else: "Untitled file"
-
-proc detailLine(file: UploadFile): string =
-  ## A one-line summary under the file name in the list.
-  var parts = @[file.path.splitFile.ext.strip(chars = {'.'}).toUpperAscii]
-  if file.category.len > 0:
-    parts.add file.category &
-      (if file.subcategory.len > 0: " › " & file.subcategory
-      else: "")
-  if file.special:
-    parts.add "Special"
-  if not file.isValid:
-    parts.add "Needs details"
-  parts.join("  ·  ")
 
 # The store: the single owner of the file values.
 
@@ -412,15 +340,6 @@ proc submit*(form: FileForm): bool =
 
 # The parent: listens to the form's events and runs the tag search backend.
 
-proc searchTags(backend: AgentProxy[TagBackend], query: string) {.signal.}
-proc tagsFound(backend: TagBackend, query: string, tags: seq[string]) {.signal.}
-
-proc searchTags(backend: TagBackend, query: string) {.slot.} =
-  ## Runs on a worker thread and simulates a backend round trip.
-  sleep(SearchLatencyMs)
-  let found = TagCatalog.filterIt(it.startsWith(query))
-  emit backend.tagsFound(query, found)
-
 proc showTagResults(page: UploadPage, query: string, tags: seq[string]) {.slot.} =
   page.form.showSuggestions(query, tags)
 
@@ -437,24 +356,14 @@ proc onFilesChanged(page: UploadPage, files: seq[UploadFile]) {.slot.} =
 proc onTagSearchStarted(page: UploadPage, query: string) {.slot.} =
   page.logEvent("tagSearchStarted: \"" & query & "\"")
   if page.backend.isNil:
-    var backend = TagBackend()
-    page.backend = backend.moveToThread(nimkitWorkerPool())
-    connectThreaded(page.backend, searchTags, page.backend, searchTags)
+    page.backend = newTagBackend()
     connectThreaded(page.backend, tagsFound, page, UploadPage.showTagResults())
   emit page.backend.searchTags(query)
 
 proc onUploadRequested(page: UploadPage, files: seq[UploadFile]) {.slot.} =
   page.uploads.add files
-  var lines: seq[string]
-  for file in files:
-    var line = file.name & " -> " & file.category & "/" & file.subcategory
-    if file.tags.len > 0:
-      line.add " #" & file.tags.join(" #")
-    if file.special:
-      line.add " (special)"
-    lines.add line
   page.logEvent("uploadRequested: " & $files.len & " file(s)")
-  page.status <- "Uploaded " & lines.join("; ")
+  page.status <- uploadSummary(files)
 
 proc newUploadPage*(paths: openArray[string] = SamplePaths): UploadPage =
   let store = newUploadStore()
