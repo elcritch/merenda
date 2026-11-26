@@ -141,10 +141,7 @@ proc issueFor*(file: UploadFile, field: FileField): string =
       result = "Choose a subcategory."
 
 proc isValid*(file: UploadFile): bool =
-  result = true
-  for field in FileField:
-    if file.issueFor(field).len > 0:
-      return false
+  allIt(FileField, file.issueFor(it).len == 0)
 
 proc displayName(file: UploadFile): string =
   if file.name.strip.len > 0: file.name else: "Untitled file"
@@ -200,20 +197,19 @@ proc addPaths*(store: UploadStore, paths: openArray[string]) =
 
 proc removeFile*(store: UploadStore, id: int) =
   var next = store.files{}
-  for index, file in next:
-    if file.id == id:
-      next.delete(index)
-      store.files <- next
-      if store.selected{} == id:
-        # Select the file that moved into the removed row, or the new last row.
-        store.selectFile(
-          if next.len == 0:
-            0
-          else:
-            next[min(index, next.high)].id
-        )
-      emit store.filesChanged(next)
-      return
+  let index = next.findIt(it.id == id)
+  if index >= 0:
+    next.delete(index)
+    store.files <- next
+    if store.selected{} == id:
+      # Select the file that moved into the removed row, or the new last row.
+      store.selectFile(
+        if next.len == 0:
+          0
+        else:
+          next[min(index, next.high)].id
+      )
+    emit store.filesChanged(next)
 
 proc clearFiles*(store: UploadStore) =
   if store.files.len > 0:
@@ -434,10 +430,7 @@ proc tagsFound(backend: TagBackend, query: string, tags: seq[string]) {.signal.}
 proc searchTags(backend: TagBackend, query: string) {.slot.} =
   ## Runs on a worker thread and simulates a backend round trip.
   sleep(SearchLatencyMs)
-  var found: seq[string]
-  for tag in TagCatalog:
-    if tag.startsWith(query):
-      found.add tag
+  let found = TagCatalog.filterIt(it.startsWith(query))
   emit backend.tagsFound(query, found)
 
 proc showTagResults(page: UploadPage, query: string, tags: seq[string]) {.slot.} =
@@ -506,10 +499,7 @@ proc chooseFiles*(page: UploadPage) =
   panel.allowsMultipleSelection = true
   panel.directoryUrl = getHomeDir()
   if sharedApplication().runModal(panel) == PanelResponseOk:
-    var paths: seq[string]
-    for url in panel.selectedUrls:
-      paths.add url.filePathFromUrl()
-    page.store.addPaths(paths)
+    page.store.addPaths(panel.selectedUrls.mapIt(it.filePathFromUrl()))
 
 # Views. Rows and form fields bind to single files; bodies rebuild structure only.
 

@@ -20,7 +20,7 @@
 ## For a server-side search, observe `tagQueryDidChange`, run the search and
 ## pass its results to `setAvailableTags`. The list keeps filtering the current
 ## options locally while the search runs.
-import std/[strutils, unicode]
+import std/[sequtils, strutils, unicode]
 
 import sigils/core
 import sigils/selectors as dynamicSelectors
@@ -637,21 +637,20 @@ proc refreshSuggestionRows(input: TagInput) =
   for index in popup.firstIndex() ..<
       min(popup.firstIndex() + popup.visibleItemCount(), input.xMatches.len):
     let item = input.xMatches[index]
-    var row: View
-    for existing in popup.xRows:
-      if existing.identifier == item.identifier:
-        row = existing
-        break
-    if row.isNil:
-      let suggestion = TagSuggestion()
-      initViewFields(suggestion)
-      suggestion.xTagInput.target = input
-      suggestion.identifier = item.identifier
-      suggestion.accessibilityRole = arListItem
-      discard suggestion.withProtocol(TagSuggestionHitTesting)
-      discard suggestion.withProtocol(TagSuggestionAccessibility)
-      popup.addSubview(suggestion)
-      row = suggestion
+    let rowIndex = popup.xRows.findIt(it.identifier == item.identifier)
+    let row =
+      if rowIndex >= 0:
+        popup.xRows[rowIndex]
+      else:
+        let suggestion = TagSuggestion()
+        initViewFields(suggestion)
+        suggestion.xTagInput.target = input
+        suggestion.identifier = item.identifier
+        suggestion.accessibilityRole = arListItem
+        discard suggestion.withProtocol(TagSuggestionHitTesting)
+        discard suggestion.withProtocol(TagSuggestionAccessibility)
+        popup.addSubview(suggestion)
+        View(suggestion)
     row.accessibilityLabel = item.displayTitle
     row.frame = popup.popupListItemRect(popup.bounds, index)
     rows.add row
