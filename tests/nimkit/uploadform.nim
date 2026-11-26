@@ -3,7 +3,9 @@ import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/mainthreadwork
-import ../../examples/uploads/[upload_form_direct_demo, upload_form_mvc_demo]
+import
+  ../../examples/uploads/
+    [upload_form_direct_demo, upload_form_mvc_demo, upload_form_reactive_mvc_demo]
 
 type EventRecorder = ref object of Agent
   publications: int
@@ -65,6 +67,22 @@ suite "upload form demo":
     check recorder.publications == 1
     check field.stringValue == "renamed.png"
     check ffName in page.form.touched{}
+
+    let altText = TextField(view.viewWithIdentifier("alt-text"))
+    require not altText.isNil
+    page.store.setAltText(1, "Imported description")
+    discard drainMainThreadWork()
+    check altText.stringValue == "Imported description"
+    check page.form.touched{} == {ffName}
+    check recorder.publications == 2
+
+    altText.stringValue = "Edited description"
+    emit altText.textDidChange(altText)
+    discard drainMainThreadWork()
+    check page.store.files[1].altText == "Edited description"
+    check page.store.files[2].altText == ""
+    check page.form.touched{} == {ffName, ffAltText}
+    check recorder.publications == 3
 
   test "selecting another file rebuilds its fields and resets form state":
     let page = newUploadPage(["one.png", "two.pdf"])
@@ -172,6 +190,55 @@ proc click(view: View, id: string) =
   let button = Button(view.viewWithIdentifier(id))
   require not button.isNil
   discard button.send(performClick(), ActionArgs(sender: button))
+
+suite "reactive MVC upload form":
+  test "the native list and editor follow model changes while keeping their widget identity":
+    let controller = newReactiveUploadController(["one.png", "two.pdf"])
+    defer:
+      controller.teardown()
+    let store = controller.page.store
+    let view = controller.view
+    let recorder = controller.page.newRecorder()
+    let name = TextField(view.viewWithIdentifier("name"))
+    let row = Button(view.viewWithIdentifier("file-1"))
+    require not name.isNil and not row.isNil
+
+    store.setName(1, "From the model")
+    store.setCategory(1, "Photos")
+    store.setSpecial(1, true)
+    discard drainMainThreadWork()
+    check name.stringValue == "From the model"
+    check row.title == "From the model"
+    check view.viewWithIdentifier("name") == name
+    check view.viewWithIdentifier("file-1") == row
+    check not view.viewWithIdentifier("subcategory-Portrait").isNil
+    check Button(view.viewWithIdentifier("special")).state == bsOn
+    check controller.page.form.touched{} == {}
+    check recorder.publications == 3
+
+    name.stringValue = ""
+    emit name.textDidChange(name)
+    discard drainMainThreadWork()
+    check row.title == "Untitled file"
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue.len > 0
+    check recorder.publications == 4
+
+    view.click("file-2")
+    name.stringValue = "Stale edit"
+    emit name.textDidChange(name)
+    discard drainMainThreadWork()
+    check store.files[1].name == ""
+    check store.files[2].name == "two.pdf"
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check view.viewWithIdentifier("file-1") == row
+    check row.state == bsOff
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue == ""
+
+    view.click("remove-2")
+    discard drainMainThreadWork()
+    check view.viewWithIdentifier("file-2").isNil
+    check store.selected{} == 1
+    check recorder.fileCounts == @[1]
 
 suite "MVC upload form":
   test "edits stay with their file and a selection change resets validation":

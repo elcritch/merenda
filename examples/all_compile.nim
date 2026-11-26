@@ -63,7 +63,8 @@ import textfield_demo
 import threadpool_long_work_demo
 import todo/[todo_basic, todo_stack_drag, todo_table]
 import two_document_direct
-import uploads/[upload_form_direct_demo, upload_form_mvc_demo]
+import
+  uploads/[upload_form_direct_demo, upload_form_mvc_demo, upload_form_reactive_mvc_demo]
 import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo

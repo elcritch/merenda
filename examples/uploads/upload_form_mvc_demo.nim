@@ -10,28 +10,12 @@
 import std/[os, sequtils, strutils]
 import sigils/[core, threadProxies, threads]
 import merenda/nimkit
-import ./uploadfiles
+import ./[uploadfiles, uploadviews]
 
 type
   UploadModel = object
     files: seq[UploadFile]
     lastId: int
-
-  FileRow = tuple[select, remove: Button, detail: Label]
-
-  FileEditor = object
-    name, altText: TextField
-    categories, subcategories: StackView
-    special: Button
-    tags: TagController
-    issues: array[FileField, Label]
-
-  UploadView = ref object of StackView
-    addButton, cancelButton, saveButton: Button
-    list, form: StackView
-    count, status: Label
-    rows: seq[FileRow]
-    editor: FileEditor
 
   UploadController* = ref object of ViewController
     model: UploadModel
@@ -64,15 +48,6 @@ proc setSpecial(model: var UploadModel, index: int, special: bool) =
 proc filesChanged*(c: UploadController, files: seq[UploadFile]) {.signal.}
 proc tagSearchStarted*(c: UploadController, query: string) {.signal.}
 proc uploadRequested*(c: UploadController, files: seq[UploadFile]) {.signal.}
-
-proc stack(orientation = laVertical, spacing = 8): StackView =
-  result = newStackView(orientation)
-  result.distribution = svdNatural
-  result.spacing = spacing.float32
-
-proc clear(stack: StackView) =
-  for child in stack.arrangedSubviews:
-    child.removeFromSuperview()
 
 proc showSuggestions*(c: UploadController, query: string, tags: seq[string]) =
   let picker = c.ui.editor.tags
@@ -172,42 +147,8 @@ proc showEditor(c: UploadController) =
     c.ui.form.addArrangedSubview(newLabel("Select or add a file to edit its details."))
     return
   let file = c.model.files[c.selected]
-  var editor = FileEditor(
-    name: newTextField(file.name),
-    altText: newTextField(file.altText),
-    categories: stack(laHorizontal, 12),
-    subcategories: stack(laHorizontal, 12),
-    special: newCheckBox("Special file (only one per upload)"),
-    tags: newTagController(selected = file.tags.mapIt(tagItem(it))),
-  )
-  editor.name.identifier = "name"
-  editor.altText.identifier = "alt-text"
-  editor.altText.placeholder = "Describe the image"
-  editor.special.identifier = "special"
-  editor.special.state = if file.special: bsOn else: bsOff
-  for field in FileField:
-    editor.issues[field] = newLabel()
-    editor.issues[field].identifier = "issue-" & $field
-    editor.issues[field].textColor = color(0.85, 0.2, 0.2, 1)
-  let picker = newTagPicker(editor.tags, tlpInline, "Search tags…")
-  picker.identifier = "tags"
-  c.ui.form.addArrangedSubview(
-    newStatusLabel(file.path),
-    newLabel("File name"),
-    editor.name,
-    editor.issues[ffName],
-    newLabel("Alt text"),
-    editor.altText,
-    editor.issues[ffAltText],
-    newLabel("Category"),
-    editor.categories,
-    editor.issues[ffCategory],
-    newLabel("Subcategory"),
-    editor.subcategories,
-    editor.issues[ffSubcategory],
-    newLabel("Tags"),
-    picker,
-    editor.special,
+  let editor = c.ui.form.addFileEditor(
+    file, newTagController(selected = file.tags.mapIt(tagItem(it)))
   )
   c.ui.editor = editor
   c.showChoices()
@@ -255,18 +196,9 @@ proc showList(c: UploadController) =
   if count == 0:
     c.ui.list.addArrangedSubview(newLabel("No files. Add some to upload."))
   for index, file in c.model.files:
-    let row: FileRow = (newRadioButton(), newButton("×"), newStatusLabel())
-    row.select.identifier = "file-" & $file.id
-    row.remove.identifier = "remove-" & $file.id
-    row.remove.focusable = false
+    let row = c.ui.list.addFileRow(file.id)
     connect(row.select, actionDidSend, c, selectRow)
     connect(row.remove, actionDidSend, c, removeRow)
-    let titles = stack(spacing = 2)
-    titles.addArrangedSubview(row.select, row.detail)
-    let line = stack(laHorizontal)
-    line.alignment = svaCenter
-    line.addArrangedSubview((titles, svspFillAvailableWidth), row.remove)
-    c.ui.list.addArrangedSubview(line)
     c.ui.rows.add row
     c.showRow(index)
 
@@ -308,37 +240,6 @@ proc cancel(c: UploadController, sender: DynamicAgent) {.slot.} =
     c.showEditor()
     emit c.filesChanged(c.model.files)
   c.ui.status.stringValue = "Upload cancelled."
-
-proc newUploadView(): UploadView =
-  result = UploadView(
-    addButton: newButton("Upload more documents…"),
-    cancelButton: newButton("Cancel"),
-    saveButton: newButton("Save"),
-    list: stack(spacing = 2),
-    form: stack(spacing = 6),
-    count: newStatusLabel(),
-    status: newStatusLabel("Select a file to edit its upload details."),
-  )
-  initStackViewFields(result, laVertical)
-  result.addButton.identifier = "add-files"
-  result.cancelButton.identifier = "cancel"
-  result.saveButton.identifier = "save"
-  result.status.identifier = "status"
-  let sidebar = stack()
-  sidebar.addArrangedSubview(result.count, result.list, result.addButton)
-  let actions = stack(laHorizontal)
-  actions.addArrangedSubview(result.cancelButton, result.saveButton)
-  let panel = stack(spacing = 12)
-  panel.addArrangedSubview(result.form, actions)
-  for column in [sidebar, panel]:
-    column.edgeInsets = insets(8)
-    column.backgroundColor = color(0.5, 0.5, 0.5, 0.08)
-  let columns = stack(laHorizontal, 16)
-  columns.addArrangedSubview(sidebar, (panel, svspFillAvailableWidth))
-  result.distribution = svdNatural
-  result.spacing = 12
-  result.edgeInsets = insets(16)
-  result.addArrangedSubview(newHeadingLabel("Upload files"), columns, result.status)
 
 proc newUploadController*(): UploadController =
   let c = UploadController(selected: -1, ui: newUploadView())
