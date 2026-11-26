@@ -702,6 +702,7 @@ proc removeArrangedSubview*(stackView: StackView, child: View) =
     return
   stackView.xArrangedSubviews.delete(index)
   stackView.xArrangedSubviewSizing.delete(index)
+  child.releaseContainerFrame()
   stackView.invalidateStackLayout()
 
 protocol StackViewLifecycleSlots of ViewLifecycleProtocol:

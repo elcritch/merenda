@@ -29,6 +29,7 @@ export viewconstraints except
 export viewgeometry except
   resolvedLayoutStyleContext, resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
+  releaseContainerFrame, ViewSolvedFrameEvents, solvedFrameDidChange,
   initLayoutSignalBus, markConstraintStorageChanged, observeSuperviewGeometry,
   unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,
   ViewSuperviewGeometrySlots
@@ -332,6 +333,8 @@ proc performAfterLayout*(work: proc() {.closure.}) =
   ## layout is running. Use it for changes outside the subtree being laid out,
   ## such as moving a popup to follow its anchor, so they do not schedule
   ## another pass of that transaction.
+  ## If deferred work raises a catchable error, finish the queue before raising
+  ## the first error to the caller.
   if work.isNil:
     return
   if activeLayoutTransaction.isNil:
@@ -340,11 +343,18 @@ proc performAfterLayout*(work: proc() {.closure.}) =
     afterLayoutWork.add work
 
 proc runAfterLayoutWork() =
+  var firstError: ref CatchableError
   while afterLayoutWork.len > 0 and activeLayoutTransaction.isNil:
     let pending = move afterLayoutWork
     afterLayoutWork = @[]
     for work in pending:
-      work()
+      try:
+        work()
+      except CatchableError as error:
+        if firstError.isNil:
+          firstError = error
+  if not firstError.isNil:
+    raise firstError
 
 proc runLayoutTransaction(view: View) =
   profileViewPhase(vppLayoutTransaction)

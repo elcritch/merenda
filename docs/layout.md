@@ -321,12 +321,12 @@ container output are different operations:
   callbacks do not need to import this helper.
 - `setHiddenFromLayout` and `setBoundsOriginFromLayout` provide the same
   ownership rule for computed visibility and scroll offsets.
-- A view placed by container output stays container-owned until an authored
-  frame or a new superview hands it back. The solver keeps such a view's frame
-  and skips its intrinsic-size equations, unless an explicit constraint or CSS
-  layout rule refers to it. Otherwise each solve would shrink a stretched stack
-  child to its intrinsic size and the stack would stretch it again, moving it
-  twice on every pass.
+- A frame assignment can change ownership even when the rectangle is the same.
+  Container output takes ownership. An authored frame, a new superview, or
+  removal from a stack's arrangement hands it back to the solver. The solver
+  keeps container-owned frames and skips their intrinsic-size equations unless
+  an explicit constraint or CSS layout rule refers to the view. This avoids
+  shrinking a stretched stack child before the stack stretches it again.
 - To change views outside the subtree being laid out, such as moving a popup
   to follow its anchor, use `performAfterLayout`. It runs the work once the
   current layout pass finishes, so the change does not schedule another pass.

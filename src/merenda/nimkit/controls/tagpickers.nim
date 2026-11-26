@@ -37,6 +37,7 @@ import ../foundation/types
 import ../text/fieldeditors
 import ../text/textfields
 import ../themes
+from ../view/viewgeometry import solvedFrameDidChange
 import ./chips
 import ./controls
 import ./popuplists
@@ -661,23 +662,21 @@ proc refreshSuggestionRows(input: TagInput) =
     popup.xRows = rows
     popup.postAccessibilityNotification(anLayoutChanged)
 
-protocol TagInputGeometry of ViewGeometryEvents:
-  proc tagInputResized(input: TagInput) {.slotFor: geometryDidChange.} =
-    # The dropdown matches the input's width. The popup host follows moves;
-    # resize the list once layout has settled.
-    if not input.isListOpen or input.xListUpdatePending:
-      return
-    input.xListUpdatePending = true
-    var weakInput: BackRef[TagInput]
-    weakInput.target = input
-    performAfterLayout(
-      proc() =
-        let input = weakInput.target
-        if not input.isNil:
-          input.xListUpdatePending = false
-          if input.isListOpen:
-            input.updateList()
-    )
+proc tagInputResized(input: TagInput) {.slot.} =
+  # The dropdown matches the input's width. Update it from the settled frame.
+  if not input.isListOpen or input.xListUpdatePending:
+    return
+  input.xListUpdatePending = true
+  var weakInput: BackRef[TagInput]
+  weakInput.target = input
+  performAfterLayout(
+    proc() =
+      let input = weakInput.target
+      if not input.isNil:
+        input.xListUpdatePending = false
+        if input.isListOpen:
+          input.updateList()
+  )
 
 proc ownerWindow(input: TagInput): Window =
   let owner = input.window()
@@ -1085,7 +1084,8 @@ proc newTagInput*(
   discard result.withProtocol(TagInputDrawing)
   field.connect(textDidChange, result, tagFieldTextChanged)
   field.connect(dropdownIndicatorPressed, result, tagFieldIndicatorPressed)
-  result.observeProtocol(result, TagInputGeometry)
+  result.connect(geometryDidChange, result, tagInputResized)
+  result.connect(solvedFrameDidChange, result, tagInputResized)
   result.connect(viewWillMoveToWindow, result, tagInputWindowChanging)
   connect(controller, tagQueryDidChange, result, tagQueryChanged)
   connect(controller, tagMatchModeDidChange, result, tagOptionsChanged)

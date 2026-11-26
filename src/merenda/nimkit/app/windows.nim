@@ -33,7 +33,7 @@ import ../themes
 import ../foundation/types
 import ../foundation/undomanagers
 import ../view/views
-from ../view/viewgeometry import setFrameFromLayout
+from ../view/viewgeometry import setFrameFromLayout, solvedFrameDidChange
 import ./windoweffects
 
 export windoweffects
@@ -2617,29 +2617,29 @@ proc resizePopup*(host: PopupHost, size: Size) =
     host.xPopupSize = initSize(max(size.width, 1.0'f32), max(size.height, 1.0'f32))
     host.repositionPopup()
 
-protocol PopupAnchorGeometry of ViewGeometryEvents:
-  proc popupAnchorMoved(host: PopupHost) {.slotFor: geometryDidChange.} =
-    # Layout can move the anchor several times in one pass. Follow it once the
-    # pass is done, from where it settled.
-    if not host.xPopupOpen or host.xRepositionPending:
-      return
-    host.xRepositionPending = true
-    var weakHost: BackRef[PopupHost]
-    weakHost.target = host
-    performAfterLayout(
-      proc() =
-        let host = weakHost.target
-        if not host.isNil:
-          host.xRepositionPending = false
-          host.repositionPopup()
-    )
+proc popupAnchorMoved(host: PopupHost) {.slot.} =
+  # Layout can move the anchor several times in one pass. Follow it once the
+  # pass is done, from where it settled.
+  if not host.xPopupOpen or host.xRepositionPending:
+    return
+  host.xRepositionPending = true
+  var weakHost: BackRef[PopupHost]
+  weakHost.target = host
+  performAfterLayout(
+    proc() =
+      let host = weakHost.target
+      if not host.isNil:
+        host.xRepositionPending = false
+        host.repositionPopup()
+  )
 
 proc followAnchor(host: PopupHost) =
   ## Keep the popup beside its anchor while the anchor or an ancestor moves.
   host.stopFollowingAnchor()
   var view = host.xAnchor
   while not view.isNil:
-    host.observeProtocol(view, PopupAnchorGeometry)
+    view.connect(geometryDidChange, host, popupAnchorMoved)
+    view.connect(solvedFrameDidChange, host, popupAnchorMoved)
     var link: BackRef[View]
     link.target = view
     host.xAnchorChain.add link
@@ -2649,7 +2649,8 @@ proc stopFollowingAnchor(host: PopupHost) =
   for link in host.xAnchorChain:
     let view = link.target
     if not view.isNil:
-      host.unobserveProtocol(view, PopupAnchorGeometry)
+      view.disconnect(geometryDidChange, host, popupAnchorMoved)
+      view.disconnect(solvedFrameDidChange, host, popupAnchorMoved)
   host.xAnchorChain.setLen(0)
 
 proc mouseDownAt*(

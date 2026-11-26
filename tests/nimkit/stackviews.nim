@@ -2,6 +2,9 @@ import std/unittest
 
 import sigils/core
 
+when defined(merendaPersistentLayout):
+  from pkg/kiwiberry import sameVariable
+
 import merenda/nimkit
 
 type
@@ -68,6 +71,45 @@ suite "nimkit stack views":
     child.frame = rect(0, 0, 50, 20)
     stack.layoutSubtreeIfNeeded()
     check child.frame.size.width == 300
+
+  test "an unarranged child returns to intrinsic sizing while still attached":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 300, 200))
+      child = newFixedIntrinsicView(80, 20)
+    stack.addArrangedSubview(child)
+    stack.layoutSubtreeIfNeeded()
+    require child.frame.size.width == 300
+
+    stack.removeArrangedSubview(child)
+    child.naturalSize = initSize(110, 20)
+    child.invalidateIntrinsicContentSize()
+    stack.layoutSubtreeIfNeeded()
+    check child.superview() == stack
+    check child.frame.size.width == 110
+
+  when defined(merendaPersistentLayout):
+    test "the retained solver respects and reuses container-owned frames":
+      let
+        stack = newStackView(laVertical, frame = rect(0, 0, 300, 200))
+        child = newFixedIntrinsicView(80, 20)
+        counter = GeometryCounter()
+      stack{vpPersistentLayout} = true
+      stack.addArrangedSubview(child)
+      stack.layoutSubtreeIfNeeded()
+      require child.frame.size.width == 300
+      child.connect(geometryDidChange, counter, countGeometry)
+
+      child.invalidateIntrinsicContentSize()
+      stack.layoutSubtreeIfNeeded()
+      require stack.xPersistentLayout.valid
+      let saved = stack.xPersistentLayout.items[0].left
+
+      child.invalidateIntrinsicContentSize()
+      stack.layoutSubtreeIfNeeded()
+      require stack.xPersistentLayout.valid
+      check stack.xPersistentLayout.items[0].left.sameVariable(saved)
+      check child.frame.size.width == 300
+      check counter.changes == 0
 
   test "inserting and reordering arranged fields keeps Tab order and focus":
     let
