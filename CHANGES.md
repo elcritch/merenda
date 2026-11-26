@@ -185,7 +185,7 @@
 - Add opt-in typed undo coalescing, explicit gesture boundaries and a total
   undo/redo group limit. See `docs/undo-history.md` for checkpoint and replay
   contracts. The formatted-form experiment demonstrates local/shared drafts,
-  explicit acceptance and owned bindings in `examples/form_editors.nim`.
+  explicit acceptance and owned bindings in `examples/form_editors/`.
 - Batch DirectView stack ordering and reuse FormView child measurements within
   each layout pass. Synthetic arrangement measurements and their limits are in
   `docs/benchmarks/layout/README.md`.

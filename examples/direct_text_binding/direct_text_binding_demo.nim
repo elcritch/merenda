@@ -1,4 +1,4 @@
-## Run `nim ic -r examples/direct_text_binding_demo.nim` and edit the text
+## Run `nim ic -r examples/direct_text_binding/direct_text_binding_demo.nim` and edit the text
 ## in the window. Each edit updates the same Sigil the field reads from.
 import sigils/reactive
 import merenda/nimkit

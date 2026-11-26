@@ -1,7 +1,7 @@
 import std/[os, strutils]
 
 import merenda/nimkit
-import ./private/nifmarkup
+import ./nifmarkup
 
 proc configureNifUiDemo*(
     app: Application, instance: ResourceInstance, customTheme: Theme

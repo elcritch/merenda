@@ -108,14 +108,14 @@ Button("Remove"):
 Pass a named, non-capturing proc to `this.onAction(panel, apply)` or
 `this.onChange(panel, update)` when the handler only needs the sender and receiver.
 Each parameter can use its concrete type or a base type such as `Responder`.
-See the [named callback form editor](../examples/form_editors_procs.nim).
+See the [named callback form editor](../examples/form_editors/form_editors_procs.nim).
 
 Use `this.onAction(receiver, apply())` or `this.onChange(receiver, textEdited())`
 to send an existing action selector directly to a responder. A protocol method that
 takes `ActionArgs` and returns no value provides an `ActionSelector` through
 its generated accessor, such as `apply()`. The method receives the emitting
 widget in `args.sender`. A variable holding an `ActionSelector` works too. See the
-[protocol form editor](../examples/form_editors_protocol.nim).
+[protocol form editor](../examples/form_editors/form_editors_protocol.nim).
 
 Use `this.patchText(modelTitle)` when a field should preserve the user's draft
 across body updates.
@@ -169,8 +169,8 @@ its own signal, use `controller`, `signal`, and `getter` with either binding.
 The getter takes the controller. For `bindTextField`, the `edit` proc takes the
 controller and the edited string. For `bindValue`, the `setter` takes the widget
 and the value. Pass `context` with the full binding form when a callback needs
-extra data such as a task ID. See the [Sigil demo](../examples/direct_text_binding_demo.nim)
-and the [explicit signal demo](../examples/direct_text_binding_signal_demo.nim).
+extra data such as a task ID. See the [Sigil demo](../examples/direct_text_binding/direct_text_binding_demo.nim)
+and the [explicit signal demo](../examples/direct_text_binding/direct_text_binding_signal_demo.nim).
 
 A helper that receives a widget from a DirectView body can call `bindTextField`
 or `bindValue` on that widget. For example, `form.bindTextField(...)` registers
@@ -178,7 +178,7 @@ the binding in the form's existing scope, so the form can manage a field it
 creates in ordinary Nim code. Pass the target as an argument when the widget that
 owns the scope and the binding target are different.
 These calls raise `ValueError` if the owner has no active DirectView scope. See
-the [form editor example](../examples/form_editors_protocol.nim).
+the [form editor example](../examples/form_editors/form_editors_protocol.nim).
 
 The demo uses `CollectionSigil[int, TaskItem]`. Whole snapshots drive previews and
 undo, `tasks.order` drives row structure, and `tasks.item(id)` drives that row's
@@ -489,7 +489,7 @@ without that explicit policy continues to leave its bindings active.
 
 See the executable coverage in
 [directlifetimes.nim](../tests/nimkit/directlifetimes.nim) and the form experiment in
-[form_editors_protocol.nim](../examples/form_editors_protocol.nim).
+[form_editors_protocol.nim](../examples/form_editors/form_editors_protocol.nim).
 
 ## Dragology previews
 

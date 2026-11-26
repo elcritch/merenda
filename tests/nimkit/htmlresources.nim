@@ -2,7 +2,7 @@
 import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
-import ../../examples/html_ui_demo
+import ../../examples/html_ui/html_ui_demo
 
 proc hasCode(loaded: ResourceLoadResult, code: string): bool =
   for diagnostic in loaded.diagnostics:
@@ -558,7 +558,8 @@ suite "NimKit GUI markup resources":
 
   test "the shipped HTML example keeps controls compact when resized":
     let path =
-      currentSourcePath().parentDir.parentDir.parentDir / "examples/html_ui_demo.html"
+      currentSourcePath().parentDir.parentDir.parentDir /
+      "examples/html_ui/html_ui_demo.html"
     let loaded = loadGuiResourceBundle(path)
     check loaded.loaded
     let built = loaded.bundle.instantiateResources()
@@ -617,7 +618,8 @@ suite "NimKit GUI markup resources":
 
   test "HTML demo switches CSS themes immediately and reset restores custom styles":
     let path =
-      currentSourcePath().parentDir.parentDir.parentDir / "examples/html_ui_demo.html"
+      currentSourcePath().parentDir.parentDir.parentDir /
+      "examples/html_ui/html_ui_demo.html"
     let loaded = loadGuiResourceBundle(path)
     require loaded.loaded
     let built = loaded.bundle.instantiateResources()
@@ -690,7 +692,8 @@ suite "NimKit GUI markup resources":
   test "the About window can reopen after the application prunes closed windows":
     let
       path =
-        currentSourcePath().parentDir.parentDir.parentDir / "examples/html_ui_demo.html"
+        currentSourcePath().parentDir.parentDir.parentDir /
+        "examples/html_ui/html_ui_demo.html"
       loaded = loadGuiResourceBundle(path)
     require loaded.loaded
     let built = loaded.bundle.instantiateResources()

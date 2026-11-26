@@ -23,20 +23,17 @@ import declarative_drag_demo
 import direct_views_demo
 import direct_collection_demo
 import direct_lifetimes_demo
-import direct_text_binding_demo
-import direct_text_binding_signal_demo
+import direct_text_binding/[direct_text_binding_demo, direct_text_binding_signal_demo]
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
 import font_fallback_demo
-import form_editors_protocol
-import form_editors_procs
+import form_editors/[form_editors_protocol, form_editors_procs]
 import grid_preferences
 import hello
-import html_ui_demo
+import html_ui/html_ui_demo
 when defined(features.merenda.nifDemo):
-  import nif_ui_demo
-  import nif_shorthand_demo
+  import nif_ui/[nif_ui_demo, nif_shorthand_demo]
 import image_resources_demo
 import layout_showcase
 import matrix_demo
@@ -64,11 +61,10 @@ when defined(features.merenda.terminal) or defined(features.merenda.kosmo):
 import texteditor_demo
 import textfield_demo
 import threadpool_long_work_demo
-import todo_basic
-import todo_stack_drag
-import todo_table
+import todo/[todo_basic, todo_stack_drag, todo_table]
 import two_document_direct
-import upload_form_demo
+import
+  uploads/[upload_form_direct_demo, upload_form_mvc_demo, upload_form_reactive_mvc_demo]
 import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo

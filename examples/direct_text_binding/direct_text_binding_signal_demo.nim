@@ -1,4 +1,4 @@
-## Run `nim ic -r examples/direct_text_binding_signal_demo.nim` and edit
+## Run `nim ic -r examples/direct_text_binding/direct_text_binding_signal_demo.nim` and edit
 ## the text in the window. Each edit updates a plain string.
 import sigils/core
 import merenda/nimkit

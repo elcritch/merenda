@@ -1,4 +1,4 @@
-## Run `nim ic -r examples/form_editors_procs.nim` to try named callbacks.
+## Run `nim ic -r examples/form_editors/form_editors_procs.nim` to try named callbacks.
 ## Async Save writes accepted data to a private temporary directory.
 ## Save / Close is a separate in-memory draft checkpoint.
 import std/[os, tempfiles]

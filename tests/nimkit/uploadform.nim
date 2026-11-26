@@ -1,9 +1,11 @@
-import std/[monotimes, os, times, unittest]
+import std/[monotimes, os, sequtils, strutils, times, unittest]
 import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/foundation/mainthreadwork
-import ../../examples/upload_form_demo
+import
+  ../../examples/uploads/
+    [upload_form_direct_demo, upload_form_mvc_demo, upload_form_reactive_mvc_demo]
 
 type EventRecorder = ref object of Agent
   publications: int
@@ -65,6 +67,22 @@ suite "upload form demo":
     check recorder.publications == 1
     check field.stringValue == "renamed.png"
     check ffName in page.form.touched{}
+
+    let altText = TextField(view.viewWithIdentifier("alt-text"))
+    require not altText.isNil
+    page.store.setAltText(1, "Imported description")
+    discard drainMainThreadWork()
+    check altText.stringValue == "Imported description"
+    check page.form.touched{} == {ffName}
+    check recorder.publications == 2
+
+    altText.stringValue = "Edited description"
+    emit altText.textDidChange(altText)
+    discard drainMainThreadWork()
+    check page.store.files[1].altText == "Edited description"
+    check page.store.files[2].altText == ""
+    check page.form.touched{} == {ffName, ffAltText}
+    check recorder.publications == 3
 
   test "selecting another file rebuilds its fields and resets form state":
     let page = newUploadPage(["one.png", "two.pdf"])
@@ -167,3 +185,143 @@ suite "upload form demo":
     require recorder.uploads.len == 1
     check recorder.uploads[0] == page.store.files{}
     check recorder.uploads[0][1].tags == @["legal"]
+
+proc click(view: View, id: string) =
+  let button = Button(view.viewWithIdentifier(id))
+  require not button.isNil
+  discard button.send(performClick(), ActionArgs(sender: button))
+
+suite "reactive MVC upload form":
+  test "the native list and editor follow model changes while keeping their widget identity":
+    let controller = newReactiveUploadController(["one.png", "two.pdf"])
+    defer:
+      controller.teardown()
+    let store = controller.page.store
+    let view = controller.view
+    let recorder = controller.page.newRecorder()
+    let name = TextField(view.viewWithIdentifier("name"))
+    let row = Button(view.viewWithIdentifier("file-1"))
+    require not name.isNil and not row.isNil
+
+    store.setName(1, "From the model")
+    store.setCategory(1, "Photos")
+    store.setSpecial(1, true)
+    discard drainMainThreadWork()
+    check name.stringValue == "From the model"
+    check row.title == "From the model"
+    check view.viewWithIdentifier("name") == name
+    check view.viewWithIdentifier("file-1") == row
+    check not view.viewWithIdentifier("subcategory-Portrait").isNil
+    check Button(view.viewWithIdentifier("special")).state == bsOn
+    check controller.page.form.touched{} == {}
+    check recorder.publications == 3
+
+    name.stringValue = ""
+    emit name.textDidChange(name)
+    discard drainMainThreadWork()
+    check row.title == "Untitled file"
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue.len > 0
+    check recorder.publications == 4
+
+    view.click("file-2")
+    name.stringValue = "Stale edit"
+    emit name.textDidChange(name)
+    discard drainMainThreadWork()
+    check store.files[1].name == ""
+    check store.files[2].name == "two.pdf"
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check view.viewWithIdentifier("file-1") == row
+    check row.state == bsOff
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue == ""
+
+    view.click("remove-2")
+    discard drainMainThreadWork()
+    check view.viewWithIdentifier("file-2").isNil
+    check store.selected{} == 1
+    check recorder.fileCounts == @[1]
+
+suite "MVC upload form":
+  test "edits stay with their file and a selection change resets validation":
+    let page = newUploadPageController(["one.png", "two.pdf"])
+    let view = page.view
+    let recorder = EventRecorder()
+    connect(page.form, uploadRequested, recorder, uploadRequested)
+    connect(page.form, filesChanged, recorder, filesChanged)
+
+    let first = TextField(view.viewWithIdentifier("name"))
+    first.stringValue = ""
+    emit first.textDidChange(first)
+    check view.viewWithIdentifier("name") == first
+    check Button(view.viewWithIdentifier("file-1")).title == "Untitled file"
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue.len > 0
+    view.click("save")
+    check Label(view.viewWithIdentifier("issue-ffAltText")).stringValue.len > 0
+
+    view.click("file-2")
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    view.click("file-1")
+    check TextField(view.viewWithIdentifier("name")).stringValue == ""
+    check Label(view.viewWithIdentifier("issue-ffName")).stringValue == ""
+    check Label(view.viewWithIdentifier("issue-ffAltText")).stringValue == ""
+
+    for id in ["name", "alt-text"]:
+      let field = TextField(view.viewWithIdentifier(id))
+      field.stringValue = "sunset"
+      emit field.textDidChange(field)
+    view.click("category-Photos")
+    view.click("subcategory-Portrait")
+    view.click("category-Documents")
+    check view.viewWithIdentifier("subcategory-Portrait").isNil
+    check Label(view.viewWithIdentifier("issue-ffSubcategory")).stringValue.len > 0
+    view.click("subcategory-Report")
+    view.click("special")
+    view.click("save")
+    check recorder.uploads.len == 0
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check Label(view.viewWithIdentifier("issue-ffCategory")).stringValue.len > 0
+    view.click("category-Media")
+    view.click("subcategory-Audio")
+    view.click("special")
+    view.click("file-1")
+    check Button(view.viewWithIdentifier("special")).state == bsOff
+    view.click("save")
+    require recorder.uploads.len == 1
+    let files = recorder.uploads[0]
+    require files.len == 2
+    check files[0].name == "sunset" and files[0].altText == "sunset"
+    check files[0].subcategory == "Report" and not files[0].special
+    check files[1].subcategory == "Audio" and files[1].special
+    check recorder.fileCounts.len == 0
+
+  test "the parent handles membership and asynchronous tag search events":
+    let page = newUploadPageController([])
+    let view = page.view
+    let recorder = EventRecorder()
+    connect(page.form, filesChanged, recorder, filesChanged)
+    connect(page.form, tagSearchStarted, recorder, tagSearchStarted)
+    page.form.addPaths(["one.png", "two.pdf"])
+    let tags = TagPicker(view.viewWithIdentifier("tags")).controller
+    tags.query = " SU "
+    check recorder.queries == @["", "su"]
+    page.form.showSuggestions("old", @["surprise"])
+    check not tags.matches.anyIt(it.identifier == "surprise")
+    waitUntil(tags.matches.mapIt(it.identifier) == @["summer", "sunset"])
+    check tags.addTag(tagItem("sunset"))
+    view.click("file-2")
+    let other = TagPicker(view.viewWithIdentifier("tags")).controller
+    check other.query == "" and other.selectedIdentifiers.len == 0
+    page.form.showSuggestions("su", @["surprise"])
+    check not other.matches.anyIt(it.identifier == "surprise")
+    view.click("file-1")
+    check TagPicker(view.viewWithIdentifier("tags")).controller.selectedIdentifiers ==
+      @["sunset"]
+    view.click("remove-1")
+    check TextField(view.viewWithIdentifier("name")).stringValue == "two.pdf"
+    check Label(view.viewWithIdentifier("events")).stringValue.contains(
+      "filesChanged: 1 file(s)"
+    )
+    view.click("cancel")
+    check view.viewWithIdentifier("name").isNil
+    page.form.addPaths(["three.txt"])
+    check TextField(view.viewWithIdentifier("name")).stringValue == "three.txt"
+    check recorder.fileCounts == @[2, 1, 0, 1]

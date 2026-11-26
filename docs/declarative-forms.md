@@ -1,9 +1,9 @@
 # Form drafts and MVC experiment
 
-Run `nim ic -r examples/form_editors_protocol.nim` to try a form with DirectView buttons
+Run `nim ic -r examples/form_editors/form_editors_protocol.nim` to try a form with DirectView buttons
 that send protocol selectors such as `this.onAction(panel, apply())`.
 
-Run `nim ic -r examples/form_editors_procs.nim` to compare named callbacks such
+Run `nim ic -r examples/form_editors/form_editors_procs.nim` to compare named callbacks such
 as `this.onAction(panel, apply)`. Both examples use the same layout and actions.
 Two panels share an editing owner, and a third has an independent draft of the
 same document. All three use DirectView toolbars around DirectView-owned forms.

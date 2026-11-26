@@ -2,7 +2,7 @@ import std/[monotimes, os, tempfiles, times, unittest]
 import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
-import ../../examples/[form_drafts, form_editors_shared]
+import ../../examples/form_editors/[form_drafts, form_editors_shared]
 
 proc waitForSave(document: FormDocument): bool =
   let deadline = getMonoTime() + initDuration(seconds = 60)

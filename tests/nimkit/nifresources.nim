@@ -1,18 +1,19 @@
 ## The optional NIF demo shares the HTML demo's native resource and style paths.
 import std/[os, strutils, unittest]
 import merenda/nimkit
-import ../../examples/nif_ui_demo
-import ../../examples/private/nifmarkup
+import ../../examples/nif_ui/[nif_ui_demo, nifmarkup]
 
-const exampleDir = currentSourcePath().parentDir.parentDir.parentDir / "examples"
+const
+  exampleDir = currentSourcePath().parentDir.parentDir.parentDir / "examples"
+  htmlDir = exampleDir / "html_ui"
+  nifDir = exampleDir / "nif_ui"
 
 suite "NimKit NIF markup demo":
   test "NIF and HTML demo markup produce identical resource bundles":
-    let original = loadGuiResourceBundle(exampleDir / "html_ui_demo.html")
+    let original = loadGuiResourceBundle(htmlDir / "html_ui_demo.html")
     for filename in ["nif_ui_demo.nif", "nif_shorthand_demo.nif"]:
       checkpoint filename
-      let converted =
-        parseGuiResourceBundle(nifGuiMarkup(readFile(exampleDir / filename)))
+      let converted = parseGuiResourceBundle(nifGuiMarkup(readFile(nifDir / filename)))
       require original.loaded
       require converted.loaded
       check converted.diagnostics.len == 0
@@ -21,11 +22,10 @@ suite "NimKit NIF markup demo":
 
   test "NIF and CSS styles resolve identically across roles, ids, classes, and states":
     let base = initThemeByName("macos-dark")
-    let original = loadCssTheme(exampleDir / "html_ui_demo.css", base)
+    let original = loadCssTheme(htmlDir / "html_ui_demo.css", base)
     for filename in ["nif_ui_demo.css.nif", "nif_shorthand_demo.css.nif"]:
       checkpoint filename
-      let converted =
-        parseCssTheme(nifStylesheet(readFile(exampleDir / filename)), base)
+      let converted = parseCssTheme(nifStylesheet(readFile(nifDir / filename)), base)
       require original.diagnostics.len == 0
       require converted.diagnostics.len == 0
       for role in StyleRole:
@@ -125,7 +125,7 @@ style "#name:hover" "#name:open" (rule
 
   test "NIF demo wires preview, reset, and appearance changes for both windows":
     let loaded =
-      parseGuiResourceBundle(nifGuiMarkup(readFile(exampleDir / "nif_ui_demo.nif")))
+      parseGuiResourceBundle(nifGuiMarkup(readFile(nifDir / "nif_ui_demo.nif")))
     require loaded.loaded
     let built = loaded.bundle.instantiateResources()
     require built.instantiated
@@ -142,7 +142,7 @@ style "#name:hover" "#name:open" (rule
       status = TextField(built.instance.view(resourceId("status")))
       progress = ProgressIndicator(built.instance.view(resourceId("progress")))
       stylesheet = parseCssTheme(
-        nifStylesheet(readFile(exampleDir / "nif_ui_demo.css.nif")),
+        nifStylesheet(readFile(nifDir / "nif_ui_demo.css.nif")),
         initThemeByName("macos-dark"),
       )
       context = controlStyle(srButton, id = "preview", classes = @["primary"])
