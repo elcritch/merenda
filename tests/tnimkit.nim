@@ -57,6 +57,7 @@ else:
   import nimkit/fontpickers
   import nimkit/formviews
   import nimkit/formdrafts
+  import nimkit/uploadform
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews
@@ -112,6 +113,7 @@ else:
   import nimkit/textviews
   import nimkit/theme
   import nimkit/tokenfields
+  import nimkit/tagpickers
   import nimkit/tooltips
   import nimkit/treeviewdemo
   import nimkit/twodocumenteditors

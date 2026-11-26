@@ -34,6 +34,8 @@ type
     tfEditable
     tfSelectable
     tfEditing
+    tfDropdownIndicator
+    tfBezelHidden
 
   TextFieldFlags = set[TextFieldFlag]
 
@@ -87,6 +89,7 @@ proc postSelectionChanged(textField: TextField, before: TextRange) =
 
 protocol TextFieldEvents:
   proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
+  proc dropdownIndicatorPressed*(textField: TextField, sender: DynamicAgent) {.signal.}
 
 protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
   property stringValue -> string
@@ -435,10 +438,56 @@ proc setObjectValue*(textField: TextField, value: ObjectValue, notify = false) =
 proc `objectValue=`*(textField: TextField, value: ObjectValue) =
   textField.setObjectValue(value)
 
+const DropdownIndicatorWidth* = 24.0'f32
+
+proc reserveAccessories(textField: TextField, style: var TextFieldStyle) =
+  # Keep text and the field editor clear of the dropdown indicator.
+  if tfDropdownIndicator in textField.xFlags:
+    style.text.insets.right += DropdownIndicatorWidth
+
 proc textFieldStyle(textField: TextField): TextFieldStyle =
-  textField.effectiveAppearance().resolveTextFieldStyle(
-    textField.textFieldStyleContext(), textField.textColor()
-  )
+  result = textField.effectiveAppearance().resolveTextFieldStyle(
+      textField.textFieldStyleContext(), textField.textColor()
+    )
+  textField.reserveAccessories(result)
+
+proc showsDropdownIndicator*(textField: TextField): bool =
+  ## Whether the field draws a dropdown chevron at its trailing edge, as a
+  ## combo box, `<input list>` or editable QComboBox does.
+  tfDropdownIndicator in textField.xFlags
+
+proc `showsDropdownIndicator=`*(textField: TextField, value: bool) =
+  if value == textField.showsDropdownIndicator:
+    return
+  if value:
+    textField.xFlags.incl tfDropdownIndicator
+  else:
+    textField.xFlags.excl tfDropdownIndicator
+  textField.invalidateIntrinsicContentSize()
+  textField.setNeedsLayout()
+  textField.needsDisplay = true
+
+proc bezeled*(textField: TextField): bool =
+  ## Whether the field draws its own background, border and focus ring, like
+  ## NSTextField's `isBezeled`. Turn it off when a container draws the bezel
+  ## around the field and other content.
+  tfBezelHidden notin textField.xFlags
+
+proc `bezeled=`*(textField: TextField, value: bool) =
+  if value == textField.bezeled:
+    return
+  if value:
+    textField.xFlags.excl tfBezelHidden
+  else:
+    textField.xFlags.incl tfBezelHidden
+  textField.needsDisplay = true
+
+proc dropdownIndicatorRect*(textField: TextField): Rect =
+  ## The clickable chevron area, in the field's bounds. Empty when hidden.
+  if textField.showsDropdownIndicator:
+    let bounds = textField.bounds
+    let width = min(DropdownIndicatorWidth, bounds.size.width)
+    result = rect(bounds.maxX - width, bounds.origin.y, width, bounds.size.height)
 
 proc textFieldChromeRole(textField: TextField): ChromeRole =
   if textField of Label: crTextLabel else: crTextField
@@ -848,49 +897,62 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
     let absoluteFrame = context.renderRectFor(textField.bounds)
     let states: set[WidgetState] = textField.widgetStateSet()
-    let
-      styleContext = controlStyle(
-        srTextField, states, id = textField.styleId, classes = textField.styleClasses
-      )
-      style =
-        context.appearance.resolveTextFieldStyle(styleContext, textField.textColor)
-      chrome = chromeContext(
-        context.appearance.resolveChromeName(styleContext),
-        textField.textFieldChromeRole(),
-        cpFace,
-        style.box.fill,
-        states,
-      )
+    let styleContext = controlStyle(
+      srTextField, states, id = textField.styleId, classes = textField.styleClasses
+    )
+    var style =
+      context.appearance.resolveTextFieldStyle(styleContext, textField.textColor)
+    textField.reserveAccessories(style)
+    let chrome = chromeContext(
+      context.appearance.resolveChromeName(styleContext),
+      textField.textFieldChromeRole(),
+      cpFace,
+      style.box.fill,
+      states,
+    )
 
-    context.drawChromeBacking(
-      chrome,
-      initChromeExtras(
-        context.renderViewParent(),
-        absoluteFrame,
-        cornerRadius = style.box.cornerRadius,
-        cornerRadii = style.box.cornerRadii,
-      ),
-    )
-    let textFieldRoot = context.addRenderRectangle(
-      absoluteFrame,
-      context.appearance.chromeFill(chrome),
-      style.box.borderColor,
-      style.box.borderWidth,
-      style.box.cornerRadius,
-      style.box.shadows,
-      cornerRadii = style.box.cornerRadii,
-    )
-    context.drawChromeExtras(
-      chrome,
-      initChromeExtras(
+    let textFieldRoot =
+      if textField.bezeled:
+        context.drawChromeBacking(
+          chrome,
+          initChromeExtras(
+            context.renderViewParent(),
+            absoluteFrame,
+            cornerRadius = style.box.cornerRadius,
+            cornerRadii = style.box.cornerRadii,
+          ),
+        )
+        let root = context.addRenderRectangle(
+          absoluteFrame,
+          context.appearance.chromeFill(chrome),
+          style.box.borderColor,
+          style.box.borderWidth,
+          style.box.cornerRadius,
+          style.box.shadows,
+          cornerRadii = style.box.cornerRadii,
+        )
+        context.drawChromeExtras(
+          chrome,
+          initChromeExtras(
+            root,
+            absoluteFrame,
+            cornerRadius = style.box.cornerRadius,
+            cornerRadii = style.box.cornerRadii,
+          ),
+        )
+        if ssFocusVisible in states:
+          context.addFocusRing(absoluteFrame, style.box)
+        root
+      else:
+        context.addRenderRectangle(absoluteFrame, fill(color(0.0, 0.0, 0.0, 0.0)))
+    if textField.showsDropdownIndicator:
+      var indicatorColor = style.text.color
+      indicatorColor.a *= 0.7
+      context.addComboBoxArrow(
         textFieldRoot,
-        absoluteFrame,
-        cornerRadius = style.box.cornerRadius,
-        cornerRadii = style.box.cornerRadii,
-      ),
-    )
-    if ssFocusVisible in states:
-      context.addFocusRing(absoluteFrame, style.box)
+        context.renderRectFor(textField.dropdownIndicatorRect()),
+        indicatorColor,
+      )
 
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
@@ -937,6 +999,13 @@ proc forwardFieldEditorMouse(
 
 protocol DefaultTextFieldEvents of ResponderEventProtocol:
   method mouseDown(textField: TextField, event: MouseEvent): bool =
+    if event.button == mbPrimary and textField.isEnabled and
+        textField.dropdownIndicatorRect().contains(event.location):
+      let owner = textField.window()
+      if owner of Window and textField.isEditable():
+        discard Window(owner).makeFirstResponder(textField, focusVisible = false)
+      emit textField.dropdownIndicatorPressed(textField)
+      return true
     if event.button == mbPrimary and (
       textField.isEditable() or textField.isSelectable()
     ):

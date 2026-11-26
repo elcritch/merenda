@@ -1536,6 +1536,10 @@ proc setLogicalSize*(host: HostWindow, size: Size) =
     return
   host.xNativeWindow.size = nativeWindowSize(size, host.nativeSizeScale())
 
+proc repositionNativePopup*(host: HostWindow, placement: siwinshim.PopupPlacement) =
+  if host.isReady:
+    host.xNativeWindow.reposition(placement)
+
 proc setMinimumSize*(host: HostWindow, size: Size) =
   if not host.isReady:
     return
@@ -2180,6 +2184,7 @@ proc createPopupHostWindow*(
     owner: HostWindow,
     placement: siwinshim.PopupPlacement,
     callbacks: HostWindowCallbacks,
+    focusContent = true,
 ): HostWindow =
   if not owner.isReady:
     return nil
@@ -2194,8 +2199,9 @@ proc createPopupHostWindow*(
     xCallbacks: callbacks, xTransparent: true, xResources: newRenderResourceManager()
   )
   result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
-      owner.xNativeWindow, placement, transparent = true, grab = true
+      owner.xNativeWindow, placement, transparent = true, grab = focusContent
     )
+  result.xNativeWindow.canBecomeKeyWindow = focusContent
   result.configureHostUiScale(scaleOverride)
   when defined(merenda.softwareRenderer):
     result.initSoftwareRenderer()
