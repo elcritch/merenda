@@ -69,10 +69,23 @@ type
     minMargin: float32
     size: float32
 
+  QueuedConstraint = object
+    constraint: Constraint
+    nonNegative: bool
+
   LayoutSolveState = object
     solver: Solver
     items: seq[SolverView]
     itemIndexes: Table[pointer, int]
+    variableItems: Table[VariableId, int]
+    queued: seq[QueuedConstraint]
+    pins: seq[Constraint]
+    pinnedVariables: Table[VariableId, int]
+    partitioned: bool
+    components: seq[Solver]
+    componentPins: seq[set[uint8]]
+    itemComponents: seq[int]
+    pinComponent: int
     constraintItemIndexes: HashSet[pointer]
     keepsContainerFrames: bool
     generatedInputs: seq[LayoutInput]
@@ -1147,8 +1160,11 @@ proc initLayoutSolveState(
   result = LayoutSolveState(
     solver: initSolver(),
     itemIndexes: initTable[pointer, int](),
+    variableItems: initTable[VariableId, int](),
+    pinnedVariables: initTable[VariableId, int](),
     constraintItemIndexes: initHashSet[pointer](),
     keepsContainerFrames: mode == lsmLayout,
+    pinComponent: -1,
     limits: limits,
     startedAt: getMonoTime(),
   )
@@ -1170,6 +1186,9 @@ proc ensureSolverView(state: var LayoutSolveState, item: View): int =
     height: newVariable(index.solverViewName("height")),
   )
   state.itemIndexes[key] = index
+  let solverView = state.items[index]
+  for variable in [solverView.left, solverView.top, solverView.width, solverView.height]:
+    state.variableItems[variable.variableId] = index
   state.checkSolveBudget()
   index
 
@@ -1230,17 +1249,6 @@ proc addStay(
     state: var LayoutSolveState, variable: Variable, value: float32, strength: Strength
 ) =
   state.addSolverConstraint(eq(variable, value.solverValue).withStrength(strength))
-
-proc addGeometryStays(state: var LayoutSolveState, root: View) =
-  profileViewPhase(vppConstraintConstruction)
-  for solverView in state.items:
-    state.checkSolveBudget()
-    if solverView.item != root:
-      let rect = solverView.item.alignmentRect()
-      state.addStay(solverView.width, rect.size.width, Weak)
-      state.addStay(solverView.height, rect.size.height, Weak)
-      state.addStay(solverView.left, rect.minX, Weak)
-      state.addStay(solverView.top, rect.minY, Weak)
 
 proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expression =
   case attribute
@@ -1359,22 +1367,175 @@ proc strengthened(constraint: Constraint, priority: LayoutPriority): Constraint 
   else:
     constraint.withStrength(priority.solverStrength)
 
-proc accountSolverConstraint(state: var LayoutSolveState, constraint: Constraint) =
-  inc state.constraintCount
-  inc state.workConstraintCount
+proc accountConstraints(
+    state: var LayoutSolveState, constraints, coefficients: Natural
+) =
+  state.constraintCount += constraints
+  state.workConstraintCount += constraints
   state.coefficientCount = Natural(
     min(
       int64(high(Natural)),
-      saturatingAdd(int64(state.coefficientCount), int64(constraint.expression.len)),
+      saturatingAdd(int64(state.coefficientCount), int64(coefficients)),
     )
   )
   state.workCoefficientCount = Natural(
     min(
       int64(high(Natural)),
-      saturatingAdd(int64(state.workCoefficientCount), int64(constraint.expression.len)),
+      saturatingAdd(int64(state.workCoefficientCount), int64(coefficients)),
     )
   )
   state.checkSolveBudget()
+
+proc accountSolverConstraint(state: var LayoutSolveState, constraint: Constraint) =
+  state.accountConstraints(1, Natural(constraint.expression.len))
+
+proc defersInsertion(state: LayoutSolveState): bool =
+  ## Constraints wait until the graph is partitioned, except when a single
+  ## persistent tableau must record or capture them in order.
+  when defined(merendaPersistentLayout):
+    not (state.captureConstraints or state.recordOnly)
+  else:
+    true
+
+proc solverItem(state: LayoutSolveState, variable: Variable): int =
+  ## The solver view owning `variable`, or -1 for a pinned root variable.
+  ## Pins precede every other constraint, so a pinned variable is a constant
+  ## that cannot connect otherwise independent groups.
+  if state.pinnedVariables.hasKey(variable.variableId):
+    return -1
+  state.variableItems.getOrDefault(variable.variableId, -1)
+
+proc addComponent(state: var LayoutSolveState): int =
+  result = state.components.len
+  state.components.add initSolver()
+  state.componentPins.add {}
+
+proc constraintComponent(state: var LayoutSolveState, constraint: Constraint): int =
+  ## The partition owning `constraint`, or -1 when it only bounds a view that
+  ## keeps its current geometry. Partitions never split a constraint's terms.
+  for term in constraint.expression:
+    let item = state.solverItem(term.variable)
+    if item >= 0:
+      return
+        if item < state.itemComponents.len:
+          state.itemComponents[item]
+        else:
+          -1
+  # Only pinned or no variables: the pins alone decide whether it is satisfiable.
+  if state.pinComponent < 0:
+    state.pinComponent = state.addComponent()
+  state.pinComponent
+
+proc addReferencedPins(
+    state: var LayoutSolveState, component: int, constraint: Constraint
+) =
+  for term in constraint.expression:
+    let pin = state.pinnedVariables.getOrDefault(term.variable.variableId, -1)
+    if pin >= 0 and uint8(pin) notin state.componentPins[component]:
+      state.componentPins[component].incl uint8(pin)
+      state.components[component].addConstraint(state.pins[pin])
+
+proc insertSolverConstraint(state: var LayoutSolveState, constraint: Constraint): bool =
+  ## Adds `constraint` to its solver and reports whether it was satisfiable.
+  profileViewPhase(vppConstraintInsertion)
+  try:
+    if state.partitioned:
+      let component = state.constraintComponent(constraint)
+      if component >= 0:
+        state.addReferencedPins(component, constraint)
+        state.components[component].addConstraint(constraint)
+    else:
+      state.solver.addConstraint(constraint)
+    state.checkSolveBudget()
+    true
+  except UnsatisfiableConstraintError:
+    false
+
+proc keepsCurrentGeometry(state: LayoutSolveState, index: int): bool =
+  ## Views outside every solver keep their current geometry: a view constrained
+  ## only by non-negative sizes, or a layout root fixed by its pins.
+  state.partitioned and index < state.itemComponents.len and
+    state.itemComponents[index] < 0
+
+proc rootItem(parents: var seq[int], index: int): int =
+  result = index
+  while parents[result] != result:
+    parents[result] = parents[parents[result]]
+    result = parents[result]
+
+proc linkTerms(
+    state: LayoutSolveState,
+    parents: var seq[int],
+    needsSolver: var seq[bool],
+    constraint: Constraint,
+) =
+  var first = -1
+  for term in constraint.expression:
+    let item = state.solverItem(term.variable)
+    if item < 0:
+      continue
+    needsSolver[item] = true
+    if first < 0:
+      first = parents.rootItem(item)
+    else:
+      let other = parents.rootItem(item)
+      if other != first:
+        parents[other] = first
+
+proc partitionConstraints(state: var LayoutSolveState, extra: openArray[Constraint]) =
+  ## Kiwi substitutes every new row into every existing row, so one tableau
+  ## grows quadratically with the tree. Views that share no constraint are
+  ## independent problems; solve each connected group separately.
+  if not state.defersInsertion() or state.partitioned:
+    return
+  var
+    parents = newSeq[int](state.items.len)
+    needsSolver = newSeq[bool](state.items.len)
+  for index in 0 ..< parents.len:
+    parents[index] = index
+  for queued in state.queued:
+    state.checkSolveBudget()
+    if not queued.nonNegative:
+      state.linkTerms(parents, needsSolver, queued.constraint)
+  for constraint in extra:
+    state.linkTerms(parents, needsSolver, constraint)
+
+  for index in 0 ..< parents.len:
+    if needsSolver[index]:
+      needsSolver[parents.rootItem(index)] = true
+  var rootComponents = newSeq[int](parents.len)
+  for index in 0 ..< rootComponents.len:
+    rootComponents[index] = -1
+  state.itemComponents = newSeq[int](parents.len)
+  for index in 0 ..< parents.len:
+    let root = parents.rootItem(index)
+    if not needsSolver[root]:
+      state.itemComponents[index] = -1
+      continue
+    if rootComponents[root] < 0:
+      rootComponents[root] = state.addComponent()
+    state.itemComponents[index] = rootComponents[root]
+
+  state.partitioned = true
+  let queued = move state.queued
+  for entry in queued:
+    discard state.insertSolverConstraint(entry.constraint)
+
+proc updateSolvedVariables(state: var LayoutSolveState) =
+  profileViewPhase(vppSolverUpdate)
+  if state.partitioned:
+    for component in state.components.mitems:
+      component.updateVariables()
+  else:
+    state.solver.updateVariables()
+
+proc queueSolverConstraint(
+    state: var LayoutSolveState, constraint: Constraint, nonNegative: bool
+) =
+  if state.partitioned:
+    discard state.insertSolverConstraint(constraint)
+  else:
+    state.queued.add QueuedConstraint(constraint: constraint, nonNegative: nonNegative)
 
 proc addSolverConstraint(
     state: var LayoutSolveState,
@@ -1386,19 +1547,45 @@ proc addSolverConstraint(
       state.accountSolverConstraint(constraint)
       state.capturedConstraints.add constraint.strengthened(priority)
       return
-  profileViewPhase(vppConstraintInsertion)
   state.accountSolverConstraint(constraint)
-  try:
-    let admitted = constraint.strengthened(priority)
-    state.solver.addConstraint(admitted)
-    when defined(merendaPersistentLayout):
-      if state.captureConstraints:
-        state.capturedConstraints.add admitted
-    state.checkSolveBudget()
-  except UnsatisfiableConstraintError:
+  let admitted = constraint.strengthened(priority)
+  if state.defersInsertion():
+    state.queueSolverConstraint(admitted, nonNegative = false)
+    return
+  if not state.insertSolverConstraint(admitted):
     when defined(merendaPersistentLayout):
       state.captureFailed = true
-    discard
+    return
+  when defined(merendaPersistentLayout):
+    if state.captureConstraints:
+      state.capturedConstraints.add admitted
+
+proc addGeometryStays(state: var LayoutSolveState, root: View) =
+  profileViewPhase(vppConstraintConstruction)
+  for index, solverView in state.items:
+    state.checkSolveBudget()
+    if solverView.item == root:
+      continue
+    if state.keepsCurrentGeometry(index):
+      # Each omitted stay is one single-term constraint. Count them so the
+      # budget does not depend on which views needed a solver.
+      state.accountConstraints(4, 4)
+    else:
+      let rect = solverView.item.alignmentRect()
+      state.addStay(solverView.width, rect.size.width, Weak)
+      state.addStay(solverView.height, rect.size.height, Weak)
+      state.addStay(solverView.left, rect.minX, Weak)
+      state.addStay(solverView.top, rect.minY, Weak)
+
+proc addRootPin(state: var LayoutSolveState, variable: Variable, value: float32) =
+  ## Required root geometry, added before any other constraint.
+  let constraint = eq(variable, value.solverValue)
+  if not state.defersInsertion():
+    state.addSolverConstraint(constraint)
+    return
+  state.accountSolverConstraint(constraint)
+  state.pinnedVariables[variable.variableId] = state.pins.len
+  state.pins.add constraint
 
 proc addRootGeometryConstraints(state: var LayoutSolveState, root: View) =
   profileViewPhase(vppConstraintConstruction)
@@ -1407,10 +1594,10 @@ proc addRootGeometryConstraints(state: var LayoutSolveState, root: View) =
   let
     solverView = state.solverView(root)
     rect = root.alignmentRect()
-  state.addSolverConstraint(eq(solverView.left, rect.minX.solverValue))
-  state.addSolverConstraint(eq(solverView.top, rect.minY.solverValue))
-  state.addSolverConstraint(eq(solverView.width, rect.size.width.solverValue))
-  state.addSolverConstraint(eq(solverView.height, rect.size.height.solverValue))
+  state.addRootPin(solverView.left, rect.minX)
+  state.addRootPin(solverView.top, rect.minY)
+  state.addRootPin(solverView.width, rect.size.width)
+  state.addRootPin(solverView.height, rect.size.height)
 
 proc addRootFittingConstraints(state: var LayoutSolveState, root: View) =
   profileViewPhase(vppConstraintConstruction)
@@ -1419,8 +1606,8 @@ proc addRootFittingConstraints(state: var LayoutSolveState, root: View) =
   let
     solverView = state.solverView(root)
     rect = root.alignmentRect()
-  state.addSolverConstraint(eq(solverView.left, rect.minX.solverValue))
-  state.addSolverConstraint(eq(solverView.top, rect.minY.solverValue))
+  state.addRootPin(solverView.left, rect.minX)
+  state.addRootPin(solverView.top, rect.minY)
   state.addStay(solverView.width, 0.0'f32, Weak)
   state.addStay(solverView.height, 0.0'f32, Weak)
 
@@ -1481,8 +1668,13 @@ proc addGeneratedEquation(state: var LayoutSolveState, equation: LayoutEquation)
 proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
   profileViewPhase(vppConstraintConstruction)
   for solverView in state.items:
-    state.addSolverConstraint(ge(solverView.width, 0))
-    state.addSolverConstraint(ge(solverView.height, 0))
+    for variable in [solverView.width, solverView.height]:
+      let constraint = ge(variable, 0)
+      if not state.defersInsertion():
+        state.addSolverConstraint(constraint)
+        continue
+      state.accountSolverConstraint(constraint)
+      state.queueSolverConstraint(constraint, nonNegative = true)
 
 proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
   if item.isNil:
@@ -1794,7 +1986,7 @@ proc prepareCssInputs(
 
 proc admitCssInputs(state: var LayoutSolveState): HashSet[pointer] =
   profileViewPhase(vppConstraintConstruction)
-  var admitted: seq[LayoutInput]
+  var constraints: seq[Constraint]
   for input in state.cssInputs:
     state.checkSolveBudget()
     let equation = input.equation
@@ -1814,20 +2006,22 @@ proc admitCssInputs(state: var LayoutSolveState): HashSet[pointer] =
         le(expression, right)
       of lrGreaterThanOrEqual:
         ge(expression, right)
-    block:
-      profileViewPhase(vppConstraintInsertion)
-      state.accountSolverConstraint(constraint)
-      try:
-        state.solver.addConstraint(constraint.strengthened(equation.priority))
-        state.checkSolveBudget()
-        result.incl cast[pointer](equation.terms[0].item)
-        admitted.add input
-      except UnsatisfiableConstraintError:
-        state.cssDiagnostic(
-          equation.terms[0].item,
-          equation.cssProperty,
-          "Required constraint conflicts with native geometry or an earlier CSS constraint",
-        )
+    state.accountSolverConstraint(constraint)
+    constraints.add constraint.strengthened(equation.priority)
+
+  state.partitionConstraints(constraints)
+  var admitted: seq[LayoutInput]
+  for index, input in state.cssInputs:
+    let equation = input.equation
+    if state.insertSolverConstraint(constraints[index]):
+      result.incl cast[pointer](equation.terms[0].item)
+      admitted.add input
+    else:
+      state.cssDiagnostic(
+        equation.terms[0].item,
+        equation.cssProperty,
+        "Required constraint conflicts with native geometry or an earlier CSS constraint",
+      )
   state.cssInputs = move admitted
 
 proc solvedFloat(variable: Variable): float32 =
@@ -1849,19 +2043,31 @@ proc requireFiniteCssGeometry(
         )
         raise newException(CssLayoutGeometryError, "Nonfinite CSS geometry")
 
+proc solvedAlignmentRect(state: LayoutSolveState, index: int): Rect =
+  let solverView = state.items[index]
+  if state.keepsCurrentGeometry(index):
+    return solverView.item.alignmentRect()
+  rect(
+    solverView.left.solvedFloat(),
+    solverView.top.solvedFloat(),
+    solverView.width.solvedFloat(),
+    solverView.height.solvedFloat(),
+  )
+
 proc solvedFrames(state: var LayoutSolveState): seq[SolvedFrame] =
   result = newSeqOfCap[SolvedFrame](state.items.len)
-  for solverView in state.items:
+  for index, solverView in state.items:
     state.checkSolveBudget()
     if not solverView.item.isNil:
-      let width = solverView.width.solvedFloat()
-      let height = solverView.height.solvedFloat()
-      state.requireFiniteCssGeometry(solverView.item, [width, height])
+      let solved = state.solvedAlignmentRect(index)
+      state.requireFiniteCssGeometry(
+        solverView.item, [solved.size.width, solved.size.height]
+      )
       let alignmentRect = rect(
-        solverView.left.solvedFloat(),
-        solverView.top.solvedFloat(),
-        max(width, 0.0'f32),
-        max(height, 0.0'f32),
+        solved.minX,
+        solved.minY,
+        max(solved.size.width, 0.0'f32),
+        max(solved.size.height, 0.0'f32),
       )
       let frame = solverView.item.frameForAlignmentRect(alignmentRect)
       state.requireFiniteCssGeometry(
@@ -2038,9 +2244,7 @@ proc buildAndSolveConstraints(
   view.xLayoutInputCache.generated[lisCss] = state.cssInputs
   state.addGeometryStays(view)
   state.checkSolveBudget()
-  block:
-    profileViewPhase(vppSolverUpdate)
-    state.solver.updateVariables()
+  state.updateSolvedVariables()
   state.checkSolveBudget()
 
 when defined(merendaPersistentLayout):

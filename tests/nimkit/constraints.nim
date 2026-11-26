@@ -789,6 +789,34 @@ suite "nimkit constraints":
     check left.frame().size == initSize(80, 40)
     check right.frame() == rect(100, 0, 80, 40)
 
+  test "independent constraint groups solve without disturbing each other":
+    let
+      root = newView(frame = rect(0, 0, 300, 120))
+      free = newView(frame = rect(5, 6, 30, 20))
+      inverted = newView(frame = rect(8, 30, -4, 12))
+      fixed = newView(frame = rect(0, 0, 10, 20))
+      follower = newView(frame = rect(0, 0, 10, 10))
+      conflicted = newView(frame = rect(0, 60, 50, 20))
+
+    for child in [free, inverted, fixed, follower, conflicted]:
+      root.addSubview(child)
+    activate(
+      newLayoutConstraint(fixed, atLeft, lrEqual, root, atLeft, constant = 40.0),
+      newLayoutConstraint(fixed, atWidth, lrEqual, nil, constant = 20.0),
+      newLayoutConstraint(follower, atWidth, lrEqual, fixed, atWidth, multiplier = 2.0),
+      newLayoutConstraint(follower, atLeft, lrEqual, fixed, atRight, constant = 10.0),
+      newLayoutConstraint(conflicted, atWidth, lrEqual, nil, constant = 70.0),
+      # A later conflicting requirement is dropped within its own group only.
+      newLayoutConstraint(conflicted, atWidth, lrEqual, nil, constant = 90.0),
+    )
+    root.layoutSubtreeIfNeeded()
+
+    check free.frame() == rect(5, 6, 30, 20)
+    check inverted.frame() == rect(8, 30, 0, 12)
+    check fixed.frame() == rect(40, 0, 20, 20)
+    check follower.frame() == rect(70, 0, 40, 10)
+    check conflicted.frame() == rect(0, 60, 70, 20)
+
   test "solver honors stronger soft constraints":
     let
       root = newView(frame = rect(0, 0, 240, 120))

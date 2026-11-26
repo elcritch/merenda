@@ -8,7 +8,6 @@ import merenda/nimkit/view/viewbase
 
 type LayoutSnapshot = object
   frames, priorities, diagnostics: Hash
-  partitioned: int
 
 proc addSnapshot(view: View, snapshot: var LayoutSnapshot) =
   snapshot.frames = snapshot.frames !& hash(view.identifier)
@@ -28,8 +27,6 @@ proc addSnapshot(view: View, snapshot: var LayoutSnapshot) =
     snapshot.diagnostics !& hash(view.xLastLayoutSolveDiagnostic.failed)
   snapshot.diagnostics =
     snapshot.diagnostics !& hash(ord(view.xLastLayoutSolveDiagnostic.limit))
-  if view.xLayoutInputCache.partitioned:
-    inc snapshot.partitioned
   for child in view.subviews:
     child.addSnapshot(snapshot)
 
@@ -75,7 +72,7 @@ proc newFixture(count: int, preview: bool, invalid: var bool): TaskController =
 
 proc writeHeader(file: File) =
   file.write(
-    "preview,rows,operation,sample,wall_ns,blocked,solver_views,solver_constraints,solver_passes,solver_failures,frame_hash,priority_hash,diagnostic_hash,partitioned_roots"
+    "preview,rows,operation,sample,wall_ns,blocked,solver_views,solver_constraints,solver_passes,solver_failures,frame_hash,priority_hash,diagnostic_hash"
   )
   for phase in ViewProfilePhase:
     file.write(
@@ -98,8 +95,7 @@ proc writeSample(
     $preview & "," & $count & "," & name & "," & $sample & "," & $elapsed & "," &
       $invalid & "," & $profile.solverViews & "," & $profile.solverConstraints & "," &
       $profile.solverPasses & "," & $profile.solverFailures & "," & $snapshot.frames &
-      "," & $snapshot.priorities & "," & $snapshot.diagnostics & "," &
-      $snapshot.partitioned
+      "," & $snapshot.priorities & "," & $snapshot.diagnostics
   )
   for phase in ViewProfilePhase:
     let timing = profile.phases[phase]

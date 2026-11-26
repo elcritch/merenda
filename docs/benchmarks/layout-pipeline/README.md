@@ -127,6 +127,35 @@ The later [persistent-solver prototype](../persistent-layout/README.md) reduced
 resize insertion work for a fully autoresizing fixture. The original demo did not
 qualify, so its overall measured layout cost remains unresolved.
 
+## Partitioned solving, 2026-11-26
+
+Before partitioning, a 100-row live counter update solved 413 views and
+2,482 constraints. All but four were weak stays on current geometry,
+non-negative sizes or root pins. Kiwiberry substitutes each new row into every existing row, so
+insertion grew quadratically and took 28.4 of the update's 30.3 ms.
+
+The solver now unions views through shared constraint terms and gives each
+group its own tableau. The pinned layout root's variables act as constants
+and do not join groups. A view with only non-negative sizes keeps its current
+frame without a solver. Frame, priority and diagnostic hashes match the
+previous build for every sample.
+
+These are single instrumented runs on the Apple M3 Pro described above, using
+Nim 2.4.3. Each value is the median of five samples, before (`8ac19dd4`) and after, in ms:
+
+| Rows | Operation | Live only | Live + preview |
+| ---: | --- | ---: | ---: |
+| 100 | counter | 30.3 → 1.3 | 31.6 → 1.3 |
+| 100 | edit | 31.3 → 2.4 | 125.1 → 42.3 |
+| 100 | reverse | 34.1 → 4.4 | 127.6 → 45.0 |
+| 100 | resize | 45.7 → 14.1 | 139.1 → 55.1 |
+
+The remaining live resize time is mostly drawing and intrinsic measurement.
+The remaining preview time is mostly building the detached preview tree. In
+the synthetic [container benchmark](../layout/README.md), first layout of
+300 rows fell from 107 to 13 ms. Its children's autoresizing equations
+reference only the pinned root, which no longer joins them into one tableau.
+
 ## Reproduce
 
 From the repository root, build both versions before measuring, then run them
