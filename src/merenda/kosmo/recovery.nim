@@ -136,19 +136,19 @@ proc newKosmoRecoveryView*(editor: KosmoEditor): KosmoRecoveryView =
   ]:
     result.addSubview(child)
   let view = result.unsafeWeakRef()
-  result.restoreButton.action = nimkit.actionSelector(sigils"kosmo.restoreRecovery")
+  result.restoreButton.action = nimkit.actionSelector(sig"kosmo.restoreRecovery")
   result.restoreButton.target = nimkit.newActionTarget(result.restoreButton.action) do(
     sender: nimkit.DynamicAgent
   ):
     if not view.isNil:
       discard view[].restoreSelected()
-  result.discardButton.action = nimkit.actionSelector(sigils"kosmo.discardRecovery")
+  result.discardButton.action = nimkit.actionSelector(sig"kosmo.discardRecovery")
   result.discardButton.target = nimkit.newActionTarget(result.discardButton.action) do(
     sender: nimkit.DynamicAgent
   ):
     if not view.isNil:
       view[].discardSelected()
-  result.refreshButton.action = nimkit.actionSelector(sigils"kosmo.refreshRecovery")
+  result.refreshButton.action = nimkit.actionSelector(sig"kosmo.refreshRecovery")
   result.refreshButton.target = nimkit.newActionTarget(result.refreshButton.action) do(
     sender: nimkit.DynamicAgent
   ):

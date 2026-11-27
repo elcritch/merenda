@@ -80,7 +80,7 @@ else:
         tgt: thread.agent.unsafeWeakRef().asAgent(),
         slot: applyTimerUpdate,
         req: initSigilRequest[ptr TimerUpdate, ptr TimerUpdate](
-          sigils"nimkitTimerUpdate", addr update
+          sig"nimkitTimerUpdate", addr update
         ),
       )
       while not update.finished:

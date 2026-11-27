@@ -2691,7 +2691,7 @@ proc tabContextMenu(
   result = nimkit.newMenu("Tab Actions")
   block:
     let
-      closeSelector = nimkit.actionSelector(sigils"kosmo.editorTabs.close")
+      closeSelector = nimkit.actionSelector(sig"kosmo.editorTabs.close")
       closeItem = nimkit.newMenuItem("Close", closeSelector)
     closeItem.validates = false
     closeItem.enabled = view.documentTabs.canClose(item)
@@ -2706,7 +2706,7 @@ proc tabContextMenu(
     discard result.add(closeItem)
   block:
     let
-      closeOthersSelector = nimkit.actionSelector(sigils"kosmo.editorTabs.closeOthers")
+      closeOthersSelector = nimkit.actionSelector(sig"kosmo.editorTabs.closeOthers")
       closeOthersItem = nimkit.newMenuItem("Close others", closeOthersSelector)
     closeOthersItem.validates = false
     closeOthersItem.enabled = view.documentTabs.identifiers().len > 1
@@ -2723,7 +2723,7 @@ proc tabContextMenu(
   discard result.addSeparator()
   block:
     let
-      rightSelector = nimkit.actionSelector(sigils"kosmo.editorTabs.duplicateRight")
+      rightSelector = nimkit.actionSelector(sig"kosmo.editorTabs.duplicateRight")
       rightItem = nimkit.newMenuItem("Duplicate right", rightSelector)
     rightItem.validates = false
     rightItem.enabled = duplicatesEnabled
@@ -2738,7 +2738,7 @@ proc tabContextMenu(
     discard result.add(rightItem)
   block:
     let
-      belowSelector = nimkit.actionSelector(sigils"kosmo.editorTabs.duplicateBelow")
+      belowSelector = nimkit.actionSelector(sig"kosmo.editorTabs.duplicateBelow")
       belowItem = nimkit.newMenuItem("Duplicate below", belowSelector)
     belowItem.validates = false
     belowItem.enabled = duplicatesEnabled
@@ -2755,7 +2755,7 @@ proc tabContextMenu(
   if target.isSome and not view.dockGroup.isNil:
     let
       controls = view.dockGroup[].pane.markdownControls
-      selector = nimkit.actionSelector(sigils"kosmo.editorTabs.toggleReaderColorMode")
+      selector = nimkit.actionSelector(sig"kosmo.editorTabs.toggleReaderColorMode")
       title =
         if controls.readerColorMode(target.get) == kmcmLight:
           "Use dark reader colors"
@@ -3315,7 +3315,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   result.contentView = row
 
   let weakControls = result.unsafeWeakRef()
-  let modeAction = nimkit.actionSelector(sigils"kosmo.toggleMarkdownMode")
+  let modeAction = nimkit.actionSelector(sig"kosmo.toggleMarkdownMode")
   modeButton.target = nimkit.newActionTarget(
     modeAction,
     proc(sender: nimkit.DynamicAgent) =
@@ -3326,7 +3326,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   )
   modeButton.action = modeAction
 
-  let colorModeAction = nimkit.actionSelector(sigils"kosmo.toggleMarkdownColorMode")
+  let colorModeAction = nimkit.actionSelector(sig"kosmo.toggleMarkdownColorMode")
   colorModeButton.target = nimkit.newActionTarget(
     colorModeAction,
     proc(sender: nimkit.DynamicAgent) =
@@ -3337,7 +3337,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   )
   colorModeButton.action = colorModeAction
 
-  let decreaseFontAction = nimkit.actionSelector(sigils"kosmo.decreaseMarkdownFontSize")
+  let decreaseFontAction = nimkit.actionSelector(sig"kosmo.decreaseMarkdownFontSize")
   decreaseFontButton.target = nimkit.newActionTarget(
     decreaseFontAction,
     proc(sender: nimkit.DynamicAgent) =
@@ -3348,7 +3348,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   )
   decreaseFontButton.action = decreaseFontAction
 
-  let increaseFontAction = nimkit.actionSelector(sigils"kosmo.increaseMarkdownFontSize")
+  let increaseFontAction = nimkit.actionSelector(sig"kosmo.increaseMarkdownFontSize")
   increaseFontButton.target = nimkit.newActionTarget(
     increaseFontAction,
     proc(sender: nimkit.DynamicAgent) =
@@ -3921,7 +3921,7 @@ proc selectKeyMode(self: nimkit.DynamicAgent, invocation: var nimkit.Invocation)
 
 proc configureKeyModeChoice(bar: KosmoStatusBar, controller: KosmoDockController) =
   bar.dockController.set(controller, controller.backRefs)
-  let action = nimkit.actionSelector(sigils"kosmo.selectKeyMode")
+  let action = nimkit.actionSelector(sig"kosmo.selectKeyMode")
   discard bar.replaceMethod(action, nimkit.DynamicMethod(selectKeyMode))
   for index in 0 ..< KosmoKeyModes.len:
     let item = bar.keyModeChoice.menu()[index]
@@ -3934,7 +3934,7 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
   let weakBar = bar.unsafeWeakRef()
   bar.syncNimdexButton(controller.editor.nimdexRequested())
   bar.nimdexButton.target = nimkit.newActionTarget(
-    nimkit.actionSelector(sigils"kosmo.toggleNimdex")
+    nimkit.actionSelector(sig"kosmo.toggleNimdex")
   ) do(sender: nimkit.DynamicAgent):
     discard sender
     if weakController.isNil or weakBar.isNil:
@@ -3974,7 +3974,7 @@ proc configureNimdexButton(bar: KosmoStatusBar, controller: KosmoDockController)
         KosmoStatusBar(host.statusLabel.superview()).syncNimdexButton(
           editor.nimdexRequested()
         )
-  bar.nimdexButton.action = nimkit.actionSelector(sigils"kosmo.toggleNimdex")
+  bar.nimdexButton.action = nimkit.actionSelector(sig"kosmo.toggleNimdex")
 
 proc syncSidebarButtons(frontend: KosmoApplication) =
   if frontend.isNil or frontend.documentView.isNil:

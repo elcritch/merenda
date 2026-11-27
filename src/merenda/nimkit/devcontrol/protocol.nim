@@ -46,8 +46,8 @@ type
     token*: string
 
 let
-  DevRequestSelector* = Selector[DevRequest, JsonNode](name: sigils"request")
-  DevResultSelector* = Selector[DevPendingQuery, JsonNode](name: sigils"result")
+  DevRequestSelector* = Selector[DevRequest, JsonNode](name: sig"request")
+  DevResultSelector* = Selector[DevPendingQuery, JsonNode](name: sig"result")
 
 const CommandNames = [
   "info", "windows", "screenshot", "pointer", "key", "text", "theme-load",

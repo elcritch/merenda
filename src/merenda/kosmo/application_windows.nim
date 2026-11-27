@@ -1254,7 +1254,7 @@ proc closeKeyAuxiliaryWindow(manager: KosmoWindowManager): bool =
   for frontend in manager.frontends:
     if frontend.ownsWindow(window):
       return
-  discard window.sendAction(nimkit.actionSelector(sigils"performClose"))
+  discard window.sendAction(nimkit.actionSelector(sig"performClose"))
   true
 
 proc activeFrontend(manager: KosmoWindowManager): KosmoApplication =
@@ -1529,7 +1529,7 @@ proc configureKosmoApplicationMenu(frontend: KosmoApplication) =
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = manager
-    let aboutAction = nimkit.actionSelector(sigils"orderFrontStandardAboutPanel")
+    let aboutAction = nimkit.actionSelector(sig"orderFrontStandardAboutPanel")
     for item in applicationMenu.items():
       if item.action().name == aboutAction.name:
         item.target = manager
@@ -1833,7 +1833,7 @@ proc newKosmoApplication*(
   let weakFrontend = result.unsafeWeakRef()
   if hasFileBrowser:
     documentView.statusBar.fileButton.target = nimkit.newActionTarget(
-      nimkit.actionSelector(sigils"kosmo.toggleFilesSidebar"),
+      nimkit.actionSelector(sig"kosmo.toggleFilesSidebar"),
       proc(sender: nimkit.DynamicAgent) =
         discard sender
         if not weakFrontend.isNil:
@@ -1841,9 +1841,9 @@ proc newKosmoApplication*(
       ,
     )
     documentView.statusBar.fileButton.action =
-      nimkit.actionSelector(sigils"kosmo.toggleFilesSidebar")
+      nimkit.actionSelector(sig"kosmo.toggleFilesSidebar")
     documentView.statusBar.findButton.target = nimkit.newActionTarget(
-      nimkit.actionSelector(sigils"kosmo.toggleFindSidebar"),
+      nimkit.actionSelector(sig"kosmo.toggleFindSidebar"),
       proc(sender: nimkit.DynamicAgent) =
         discard sender
         if not weakFrontend.isNil:
@@ -1851,7 +1851,7 @@ proc newKosmoApplication*(
       ,
     )
     documentView.statusBar.findButton.action =
-      nimkit.actionSelector(sigils"kosmo.toggleFindSidebar")
+      nimkit.actionSelector(sig"kosmo.toggleFindSidebar")
   result.syncSidebarButtons()
   quickOpenPanel.observeWindow(result.window)
   documentView.onShowFileExplorer = proc() =

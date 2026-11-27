@@ -1,5 +1,12 @@
-from sigils/protocol import SigilName, sigName
+from sigils/protocol import nil
 
-template sigils*(name: static string): SigilName =
-  ## Construct a SigilName from a literal using Sigils' active representation.
-  sigName(name)
+when declared(protocol.sig):
+  from sigils/protocol import sig
+  export sig
+else:
+  template sig*(name: static string): protocol.SigilName =
+    protocol.sigName(name)
+
+template sigils*(name: static string): protocol.SigilName =
+  ## The long spelling of the sigil name literal.
+  sig(name)

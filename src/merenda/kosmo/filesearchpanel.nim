@@ -781,7 +781,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   result.expressionButton.accessibilityLabel = "Use Reni regular expressions"
   result.expressionButton.toolTip = "Use Reni expressions and replacement captures"
   result.expressionButton.action =
-    nimkit.actionSelector(sigils"kosmo.fileSearchExpressions")
+    nimkit.actionSelector(sig"kosmo.fileSearchExpressions")
   result.expressionButton.target = nimkit.newActionTarget(
     result.expressionButton.action
   ) do(sender: nimkit.DynamicAgent):
@@ -789,7 +789,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
       panel[].regularExpression = panel[].expressionButton.state == nimkit.bsOn
       discard panel[].focusQuery()
   result.disclosureButton.action =
-    nimkit.actionSelector(sigils"kosmo.toggleFileReplacement")
+    nimkit.actionSelector(sig"kosmo.toggleFileReplacement")
   result.disclosureButton.target = nimkit.newActionTarget(
     result.disclosureButton.action
   ) do(sender: nimkit.DynamicAgent):
@@ -801,14 +801,14 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   result.replaceButton.accessibilityLabel = "Replace selected match"
   result.replaceButton.toolTip = "Replace the selected match"
   result.replaceAllButton.toolTip = "Replace all displayed matches in files"
-  result.replaceButton.action = nimkit.actionSelector(sigils"kosmo.replaceFileMatch")
+  result.replaceButton.action = nimkit.actionSelector(sig"kosmo.replaceFileMatch")
   result.replaceButton.target = nimkit.newActionTarget(result.replaceButton.action) do(
     sender: nimkit.DynamicAgent
   ):
     if not panel.isNil:
       discard panel[].replaceMatches()
   result.replaceAllButton.action =
-    nimkit.actionSelector(sigils"kosmo.replaceAllFileMatches")
+    nimkit.actionSelector(sig"kosmo.replaceAllFileMatches")
   result.replaceAllButton.target = nimkit.newActionTarget(
     result.replaceAllButton.action
   ) do(sender: nimkit.DynamicAgent):

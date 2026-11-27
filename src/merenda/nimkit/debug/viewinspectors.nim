@@ -231,9 +231,9 @@ proc setSelectedBackground(inspector: ViewInspector, color: Color) =
 
 proc configureInspectorActions(inspector: ViewInspector) =
   let
-    hiddenAction = actionSelector(sigils"viewInspectorToggleHidden")
-    rootAction = actionSelector(sigils"viewInspectorSelectRoot")
-    colorAction = actionSelector(sigils"viewInspectorSetColor")
+    hiddenAction = actionSelector(sig"viewInspectorToggleHidden")
+    rootAction = actionSelector(sig"viewInspectorSelectRoot")
+    colorAction = actionSelector(sig"viewInspectorSetColor")
 
   inspector.xHiddenButton.target = newActionTarget(
     hiddenAction,
