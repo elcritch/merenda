@@ -6,6 +6,16 @@ proc fieldOrNull(node: JsonNode, key: string): JsonNode =
   if result.isNil:
     result = newJNull()
 
+if paramCount() >= 2 and paramStr(1) == "api" and paramStr(2).endsWith("/merge") and
+    fileExists("github-test-mode"):
+  writeFile("merge-request.json", $ %commandLineParams())
+  if fileExists("github-merge-error"):
+    stderr.write("gh: " & readFile("github-merge-error") & " (HTTP 405)\n")
+    quit(1)
+  writeFile("github-merged-pr", paramStr(2).split('/')[^2])
+  stdout.write("{\"merged\":true}")
+  quit(0)
+
 if paramCount() == 2 and paramStr(1) == "api" and fileExists("github-test-mode"):
   let
     mode = readFile("github-test-mode").strip()
@@ -154,6 +164,11 @@ if paramCount() == 2 and paramStr(1) == "api" and fileExists("github-test-mode")
         ]
     var output = newJArray()
     for item in input:
+      let merged =
+        command == "pr" and fileExists("github-merged-pr") and
+        readFile("github-merged-pr") == $item["number"].getInt()
+      if merged and state == "open":
+        continue
       var converted = %*{
         "number": item["number"],
         "title": item["title"],
@@ -171,6 +186,9 @@ if paramCount() == 2 and paramStr(1) == "api" and fileExists("github-test-mode")
           "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
         converted["base"] = %*{"ref": item.fieldOrNull("baseRefName")}
+        if merged:
+          converted["state"] = %"closed"
+          converted["merged_at"] = %"2026-01-01T00:00:00Z"
       output.add converted
     stdout.write($output)
   quit(0)
