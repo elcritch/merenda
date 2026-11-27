@@ -1169,8 +1169,15 @@ proc initLayoutSolveState(
     startedAt: getMonoTime(),
   )
 
-proc solverViewName(index: int, suffix: string): string =
-  "v" & $index & "." & suffix
+proc solverVariables(item: View): SolverVariables =
+  if item.xSolverVariables.left.isNil:
+    item.xSolverVariables = SolverVariables(
+      left: newVariable(),
+      top: newVariable(),
+      width: newVariable(),
+      height: newVariable(),
+    )
+  item.xSolverVariables
 
 proc ensureSolverView(state: var LayoutSolveState, item: View): int =
   let key = cast[pointer](item)
@@ -1178,12 +1185,13 @@ proc ensureSolverView(state: var LayoutSolveState, item: View): int =
     return state.itemIndexes[key]
 
   let index = state.items.len
+  let variables = item.solverVariables()
   state.items.add SolverView(
     item: item,
-    left: newVariable(index.solverViewName("left")),
-    top: newVariable(index.solverViewName("top")),
-    width: newVariable(index.solverViewName("width")),
-    height: newVariable(index.solverViewName("height")),
+    left: variables.left,
+    top: variables.top,
+    width: variables.width,
+    height: variables.height,
   )
   state.itemIndexes[key] = index
   let solverView = state.items[index]

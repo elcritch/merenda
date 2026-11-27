@@ -1,6 +1,8 @@
 import std/tables
 when defined(merendaPersistentLayout):
   import pkg/kiwiberry
+else:
+  from pkg/kiwiberry import Variable
 
 import ../responder/responders
 import ../themes
@@ -203,6 +205,11 @@ type
     sourceGenerations*: array[LayoutInputSource, Natural]
     generation*: Natural
 
+  SolverVariables* = object
+    ## A view's alignment-rect variables, created by its first solve and reused
+    ## by later solves so that layout passes do not allocate them again.
+    left*, top*, width*, height*: Variable
+
   PersistentSolverView* = object
     when defined(merendaPersistentLayout):
       item*: BackRef[View]
@@ -296,6 +303,7 @@ type
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xLayoutInputCache*: LayoutInputCache
+    xSolverVariables*: SolverVariables
     when defined(merendaPersistentLayout):
       xPersistentLayout*: PersistentLayoutCache
     xCssLayoutDiagnostics*: array[LayoutSolveMode, seq[CssLayoutDiagnostic]]
