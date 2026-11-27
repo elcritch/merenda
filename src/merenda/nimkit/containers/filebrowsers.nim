@@ -1,6 +1,6 @@
-## Lazy filesystem listings and a reusable table-backed file browser.
+## Reusable table-backed file browser.
 
-import std/[algorithm, options, os, strutils, tables]
+import std/[options, os, strutils, tables]
 
 import sigils/core
 import ../../services/filesystem/listings
