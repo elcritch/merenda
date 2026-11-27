@@ -263,12 +263,14 @@ suite "GitHub CLI document integration":
     panel.layoutSubtreeIfNeeded()
     panel.selectFilter(ghsAll, {ghikPullRequest})
     require panel.waitForGitHub()
+    require panel.markdownView.waitForMarkdownLayout()
     check panel.mergeButton(9, GitHubMergeMethod.Merge).isNil
     for title in ["#9 Open PR", "#10 Draft PR"]:
       let heading = panel.headingDisclosure(title)
       require not heading.isNil
       require heading.accessibilityPerformAction(AccessibilityActionExpand)
       require panel.waitForGitHub()
+      require panel.markdownView.waitForMarkdownLayout()
     check panel.mergeButton(10, GitHubMergeMethod.Merge).isNil
     let cancelMerge = panel.mergeButton(9, GitHubMergeMethod.Merge)
     require not cancelMerge.isNil
@@ -305,6 +307,7 @@ suite "GitHub CLI document integration":
       require confirm.sendAction()
       check not button.enabled
       require panel.waitForGitHub()
+      require panel.markdownView.waitForMarkdownLayout()
       let request = parseJson(readFile(root / "merge-request.json"))
       check request ==
         %(
@@ -333,6 +336,7 @@ suite "GitHub CLI document integration":
           removeFile(root / "github-merged-pr")
           panel.refresh()
           require panel.waitForGitHub()
+          require panel.markdownView.waitForMarkdownLayout()
 
   test "timed out gh commands are terminated and reaped":
     let root = createTempDir("kosmo-github-timeout-", "")
