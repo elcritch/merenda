@@ -211,13 +211,15 @@ proc newSearchBar*(
 
   result.xQueryField.connect(textDidChange, result, searchQueryDidChange)
   result.bindSearchTarget(
-    result.previousButton, actionSelector("nimkit.searchPrevious")
+    result.previousButton, actionSelector(sigils"nimkit.searchPrevious")
   )
-  result.previousButton.action = actionSelector("nimkit.searchPrevious")
-  result.bindSearchTarget(result.nextButton, actionSelector("nimkit.searchNext"))
-  result.nextButton.action = actionSelector("nimkit.searchNext")
-  result.bindSearchTarget(result.closeButton, actionSelector("nimkit.searchClose"))
-  result.closeButton.action = actionSelector("nimkit.searchClose")
+  result.previousButton.action = actionSelector(sigils"nimkit.searchPrevious")
+  result.bindSearchTarget(result.nextButton, actionSelector(sigils"nimkit.searchNext"))
+  result.nextButton.action = actionSelector(sigils"nimkit.searchNext")
+  result.bindSearchTarget(
+    result.closeButton, actionSelector(sigils"nimkit.searchClose")
+  )
+  result.closeButton.action = actionSelector(sigils"nimkit.searchClose")
 
 func queryField*(bar: SearchBar): TextField =
   if not bar.isNil:
@@ -279,7 +281,7 @@ proc enableExpressions*(bar: SearchBar) =
   bar.queryRow.insertArrangedSubview(
     bar.expressionButton, if bar.disclosureButton.isNil: 1 else: 2
   )
-  bar.expressionButton.action = actionSelector("nimkit.searchExpressions")
+  bar.expressionButton.action = actionSelector(sigils"nimkit.searchExpressions")
   bar.bindSearchTarget(bar.expressionButton, bar.expressionButton.action)
 
 func caseSensitive*(bar: SearchBar): bool =
@@ -301,7 +303,7 @@ proc enableCaseSensitivity*(bar: SearchBar) =
   bar.caseButton.accessibilityLabel = "Match case"
   bar.caseButton.toolTip = "Match case"
   bar.queryRow.addArrangedSubview(bar.caseButton)
-  bar.caseButton.action = actionSelector("nimkit.searchCaseSensitive")
+  bar.caseButton.action = actionSelector(sigils"nimkit.searchCaseSensitive")
   bar.bindSearchTarget(bar.caseButton, bar.caseButton.action)
 
 func replacementVisible*(bar: SearchBar): bool =
@@ -367,12 +369,12 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
   bar.replacementRow.addArrangedSubview(bar.replaceButton, bar.replaceAllButton)
   bar.inputColumn.insertArrangedSubview(bar.replacementRow, 1)
   bar.queryRow.insertArrangedSubview(bar.disclosureButton, 0)
-  bar.disclosureButton.action = actionSelector("nimkit.toggleReplacement")
+  bar.disclosureButton.action = actionSelector(sigils"nimkit.toggleReplacement")
   bar.bindSearchTarget(bar.disclosureButton, bar.disclosureButton.action)
   bar.xReplacementField.connect(textDidChange, bar, replacementDidChange)
-  bar.replaceButton.action = actionSelector("nimkit.replaceMatch")
+  bar.replaceButton.action = actionSelector(sigils"nimkit.replaceMatch")
   bar.bindSearchTarget(bar.replaceButton, bar.replaceButton.action)
-  bar.replaceAllButton.action = actionSelector("nimkit.replaceAllMatches")
+  bar.replaceAllButton.action = actionSelector(sigils"nimkit.replaceAllMatches")
   bar.bindSearchTarget(bar.replaceAllButton, bar.replaceAllButton.action)
   bar.replacementVisible = false
   bar.hasMatches = bar.xHasMatches

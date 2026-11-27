@@ -169,7 +169,7 @@ proc resolvedApplicationName(name: string): string =
   "Application"
 
 proc orderFrontWindowAction*(): ActionSelector =
-  actionSelector("orderFrontWindow")
+  actionSelector(sigils"orderFrontWindow")
 
 proc installApplicationCommandMethods(app: Application) =
   let aboutMethod: DynamicMethod = proc(
@@ -182,12 +182,13 @@ proc installApplicationCommandMethods(app: Application) =
       application.xAboutInfo.creditLinks,
     )
     invocation.setResult(())
-  discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
+  discard
+    app.replaceMethod(actionSelector(sigils"orderFrontStandardAboutPanel"), aboutMethod)
 
   let hideMethod: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
     Application(self).hide()
     invocation.setResult(())
-  discard app.replaceMethod(actionSelector("hide"), hideMethod)
+  discard app.replaceMethod(actionSelector(sigils"hide"), hideMethod)
 
   let hideOthersMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -195,7 +196,8 @@ proc installApplicationCommandMethods(app: Application) =
     discard self
     nativeMenus.hideOtherNativeApplications()
     invocation.setResult(())
-  discard app.replaceMethod(actionSelector("hideOtherApplications"), hideOthersMethod)
+  discard
+    app.replaceMethod(actionSelector(sigils"hideOtherApplications"), hideOthersMethod)
 
   let unhideAllMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -203,14 +205,15 @@ proc installApplicationCommandMethods(app: Application) =
     discard self
     nativeMenus.unhideAllNativeApplications()
     invocation.setResult(())
-  discard app.replaceMethod(actionSelector("unhideAllApplications"), unhideAllMethod)
+  discard
+    app.replaceMethod(actionSelector(sigils"unhideAllApplications"), unhideAllMethod)
 
   let terminateMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
     discard Application(self).terminate()
     invocation.setResult(())
-  discard app.replaceMethod(actionSelector("terminate"), terminateMethod)
+  discard app.replaceMethod(actionSelector(sigils"terminate"), terminateMethod)
 
   let orderFrontWindowMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -228,8 +231,9 @@ proc installApplicationCommandMethods(app: Application) =
   ) =
     Application(self).showMerendaSettings()
     invocation.setResult(())
-  discard
-    app.replaceMethod(actionSelector("showMerendaSettings"), showMerendaSettingsMethod)
+  discard app.replaceMethod(
+    actionSelector(sigils"showMerendaSettings"), showMerendaSettingsMethod
+  )
 
   let keyEquivalentMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -741,54 +745,56 @@ proc installStandardMainMenu*(app: Application) =
     servicesMenu = newMenu("Services")
 
   applicationMenu.addStandardApplicationItem(
-    app, "About " & appName, actionSelector("orderFrontStandardAboutPanel")
+    app, "About " & appName, actionSelector(sigils"orderFrontStandardAboutPanel")
   )
   applicationMenu.addSeparator()
   applicationMenu.addStandardApplicationItem(
-    app, "Settings…", actionSelector("showMerendaSettings"), ",", shortcut
+    app, "Settings…", actionSelector(sigils"showMerendaSettings"), ",", shortcut
   )
   applicationMenu.addSeparator()
   applicationMenu.addStandardMenu("Services", servicesMenu)
   applicationMenu.addSeparator()
   applicationMenu.addStandardApplicationItem(
-    app, "Hide " & appName, actionSelector("hide"), "h", shortcut
+    app, "Hide " & appName, actionSelector(sigils"hide"), "h", shortcut
   )
   applicationMenu.addStandardApplicationItem(
     app,
     "Hide Others",
-    actionSelector("hideOtherApplications"),
+    actionSelector(sigils"hideOtherApplications"),
     "h",
     shortcut + {kmOption},
   )
   applicationMenu.addStandardApplicationItem(
-    app, "Show All", actionSelector("unhideAllApplications")
+    app, "Show All", actionSelector(sigils"unhideAllApplications")
   )
   applicationMenu.addSeparator()
   applicationMenu.addStandardApplicationItem(
-    app, "Quit " & appName, actionSelector("terminate"), "q", shortcut
+    app, "Quit " & appName, actionSelector(sigils"terminate"), "q", shortcut
   )
-
-  discard fileMenu.add("Close Window", actionSelector("performClose"), "w", shortcut)
-
-  discard editMenu.add("Undo", actionSelector("undo"), "z", shortcut)
-  discard editMenu.add("Redo", actionSelector("redo"), "z", shortcut + {kmShift})
-  editMenu.addSeparator()
-  discard editMenu.add("Cut", actionSelector("cut"), "x", shortcut)
-  discard editMenu.add("Copy", actionSelector("copy"), "c", shortcut)
-  discard editMenu.add("Paste", actionSelector("paste"), "v", shortcut)
-  editMenu.addSeparator()
-  discard editMenu.add("Select All", actionSelector("selectAll"), "a", shortcut)
 
   discard
-    windowMenu.add("Minimize", actionSelector("performMiniaturize"), "m", shortcut)
-  discard windowMenu.add("Zoom", actionSelector("performZoom"))
+    fileMenu.add("Close Window", actionSelector(sigils"performClose"), "w", shortcut)
+
+  discard editMenu.add("Undo", actionSelector(sigils"undo"), "z", shortcut)
+  discard editMenu.add("Redo", actionSelector(sigils"redo"), "z", shortcut + {kmShift})
+  editMenu.addSeparator()
+  discard editMenu.add("Cut", actionSelector(sigils"cut"), "x", shortcut)
+  discard editMenu.add("Copy", actionSelector(sigils"copy"), "c", shortcut)
+  discard editMenu.add("Paste", actionSelector(sigils"paste"), "v", shortcut)
+  editMenu.addSeparator()
+  discard editMenu.add("Select All", actionSelector(sigils"selectAll"), "a", shortcut)
+
+  discard windowMenu.add(
+    "Minimize", actionSelector(sigils"performMiniaturize"), "m", shortcut
+  )
+  discard windowMenu.add("Zoom", actionSelector(sigils"performZoom"))
   windowMenu.addSeparator()
   windowMenu.addStandardApplicationItem(
-    app, "Merenda Settings", actionSelector("showMerendaSettings")
+    app, "Merenda Settings", actionSelector(sigils"showMerendaSettings")
   )
   windowMenu.addSeparator()
 
-  discard helpMenu.add(appName & " Help", actionSelector("showHelp"))
+  discard helpMenu.add(appName & " Help", actionSelector(sigils"showHelp"))
 
   mainMenu.addStandardMenu(appName, applicationMenu)
   mainMenu.addStandardMenu("File", fileMenu)

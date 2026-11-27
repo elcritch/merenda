@@ -2,6 +2,7 @@
 import std/[json, math]
 import sigils/selectors
 import sigils/rpcs/jsonrpc
+import ../foundation/sigilnames
 
 export jsonrpc
 
@@ -45,8 +46,8 @@ type
     token*: string
 
 let
-  DevRequestSelector* = selector[DevRequest, JsonNode]("request")
-  DevResultSelector* = selector[DevPendingQuery, JsonNode]("result")
+  DevRequestSelector* = Selector[DevRequest, JsonNode](name: sigils"request")
+  DevResultSelector* = Selector[DevPendingQuery, JsonNode](name: sigils"result")
 
 const CommandNames = [
   "info", "windows", "screenshot", "pointer", "key", "text", "theme-load",

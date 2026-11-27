@@ -741,8 +741,8 @@ proc newColorValuesView(well: ColorWell): ColorValuesView =
   result.xStatusLabel = newStatusLabel(CssColorHelp)
   let
     values = result
-    cssAction = actionSelector("colorPickerCssChanged")
-    sliderAction = actionSelector("colorPickerRgbaChanged")
+    cssAction = actionSelector(sigils"colorPickerCssChanged")
+    sliderAction = actionSelector(sigils"colorPickerRgbaChanged")
   result.xCssField.target = newActionTarget(
     cssAction,
     proc(sender: DynamicAgent) =
@@ -781,7 +781,7 @@ proc applyCssColor*(picker: ColorPicker, input: string): bool {.discardable.} =
   picker.xValuesView.applyCssColor()
 
 proc newColorPickerOkayButton(picker: ColorPicker): Button =
-  let action = actionSelector("colorPickerOkay")
+  let action = actionSelector(sigils"colorPickerOkay")
   result = newButton(
     "OK",
     rect(

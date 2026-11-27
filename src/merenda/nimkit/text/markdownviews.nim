@@ -560,7 +560,7 @@ proc newMarkdownHeadingDisclosureButton(
   discard result.withProtocol(MarkdownHeadingDisclosureDrawing)
   discard result.withProtocol(MarkdownHeadingDisclosureAccessibility)
   let weakButton = result.unsafeWeakRef()
-  let toggleAction = actionSelector("nimkit.toggleMarkdownHeading")
+  let toggleAction = actionSelector(sigils"nimkit.toggleMarkdownHeading")
   result.action = toggleAction
   result.target = newActionTarget(toggleAction) do(sender: DynamicAgent):
     discard sender

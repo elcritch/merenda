@@ -73,16 +73,18 @@ protocol MatrixEvents:
   proc selectionDidChange*(matrix: Matrix, sender: DynamicAgent) {.signal.}
 
 let
-  controlIsEnabledSelector = selector[tuple[], bool]("isEnabled")
-  controlSetEnabledSelector = selector[bool, void]("setEnabled")
-  controlCanBecomeKeyViewSelector = selector[tuple[], bool]("canBecomeKeyView")
+  controlIsEnabledSelector = Selector[tuple[], bool](name: sigils"isEnabled")
+  controlSetEnabledSelector = Selector[bool, void](name: sigils"setEnabled")
+  controlCanBecomeKeyViewSelector =
+    Selector[tuple[], bool](name: sigils"canBecomeKeyView")
   controlShouldBecomeFirstResponderSelector =
-    selector[tuple[], bool]("shouldBecomeFirstResponder")
+    Selector[tuple[], bool](name: sigils"shouldBecomeFirstResponder")
   controlLayoutIntrinsicContentSizeSelector =
-    selector[tuple[], IntrinsicSize]("layoutIntrinsicContentSize")
-  controlSendActionSelector = selector[tuple[], bool]("sendAction")
-  controlValidateEditingSelector = selector[tuple[], bool]("validateEditing")
-  controlAbortEditingSelector = selector[tuple[], bool]("abortEditing")
+    Selector[tuple[], IntrinsicSize](name: sigils"layoutIntrinsicContentSize")
+  controlSendActionSelector = Selector[tuple[], bool](name: sigils"sendAction")
+  controlValidateEditingSelector =
+    Selector[tuple[], bool](name: sigils"validateEditing")
+  controlAbortEditingSelector = Selector[tuple[], bool](name: sigils"abortEditing")
 
 proc invalidateMatrix(matrix: Matrix) =
   matrix.invalidateIntrinsicContentSize()

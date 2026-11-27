@@ -292,7 +292,7 @@ proc newResponseButton(
     title: string, response: int, callback: proc(response: int) {.closure.}
 ): Button =
   result = newButton(title)
-  let action = actionSelector("panelResponse")
+  let action = actionSelector(sigils"panelResponse")
   result.action = action
   result.target = newActionTarget(action) do(sender: DynamicAgent):
     discard sender
