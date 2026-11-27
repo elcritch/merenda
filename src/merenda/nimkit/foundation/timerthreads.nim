@@ -16,6 +16,7 @@ else:
   import std/[locks, selectors, tables]
   import sigils/core
   import sigils/threadSelectors
+  import ./sigilnames
   export threadSelectors
 
   type
@@ -79,7 +80,7 @@ else:
         tgt: thread.agent.unsafeWeakRef().asAgent(),
         slot: applyTimerUpdate,
         req: initSigilRequest[ptr TimerUpdate, ptr TimerUpdate](
-          sigName("nimkitTimerUpdate"), addr update
+          sig"nimkitTimerUpdate", addr update
         ),
       )
       while not update.finished:

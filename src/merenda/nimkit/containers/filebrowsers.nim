@@ -600,7 +600,7 @@ proc initFileBrowserFields*(
   browser.xStatusLabel.setCompressionPriority(LayoutPriorityRequired, laVertical)
   let
     browserRef = browser.unsafeWeakRef()
-    locationAction = actionSelector("file-browser.location")
+    locationAction = actionSelector(sig"file-browser.location")
     locationRow = newStackView(laHorizontal)
   browser.xLocationField.action = locationAction
   browser.xLocationField.target = newActionTarget(locationAction) do(

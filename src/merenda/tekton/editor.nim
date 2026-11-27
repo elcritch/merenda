@@ -2019,13 +2019,13 @@ proc configureToolbar(
       moveEarlierButton, moveLaterButton: Button,
 ) =
   let
-    saveAction = nimkitSelectors.actionSelector("resourceEditorSave")
-    undoAction = nimkitSelectors.actionSelector("resourceEditorUndo")
-    redoAction = nimkitSelectors.actionSelector("resourceEditorRedo")
-    deleteAction = nimkitSelectors.actionSelector("resourceEditorDelete")
-    duplicateAction = nimkitSelectors.actionSelector("resourceEditorDuplicate")
-    moveEarlierAction = nimkitSelectors.actionSelector("resourceEditorMoveEarlier")
-    moveLaterAction = nimkitSelectors.actionSelector("resourceEditorMoveLater")
+    saveAction = nimkitSelectors.actionSelector(sig"resourceEditorSave")
+    undoAction = nimkitSelectors.actionSelector(sig"resourceEditorUndo")
+    redoAction = nimkitSelectors.actionSelector(sig"resourceEditorRedo")
+    deleteAction = nimkitSelectors.actionSelector(sig"resourceEditorDelete")
+    duplicateAction = nimkitSelectors.actionSelector(sig"resourceEditorDuplicate")
+    moveEarlierAction = nimkitSelectors.actionSelector(sig"resourceEditorMoveEarlier")
+    moveLaterAction = nimkitSelectors.actionSelector(sig"resourceEditorMoveLater")
   saveButton.target = newActionTarget(
     saveAction,
     proc(sender: DynamicAgent) =
@@ -2163,7 +2163,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   themePicker.editable = false
   themePicker.selectedIndex = 0
   themePicker.toolTip = "Preview theme (does not change the resource document)"
-  let themeAction = nimkitSelectors.actionSelector("resourceEditorPreviewTheme")
+  let themeAction = nimkitSelectors.actionSelector(sig"resourceEditorPreviewTheme")
   themePicker.target = newActionTarget(
     themeAction,
     proc(sender: DynamicAgent) =
@@ -2176,7 +2176,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     ,
   )
   themePicker.action = themeAction
-  let interactAction = nimkitSelectors.actionSelector("resourceEditorInteract")
+  let interactAction = nimkitSelectors.actionSelector(sig"resourceEditorInteract")
   interactButton.target = newActionTarget(
     interactAction,
     proc(sender: DynamicAgent) =
@@ -2186,7 +2186,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   interactButton.toolTip = "Run preview controls; uncheck to select and position views"
   resourcePicker.editable = false
   resourcePicker.selectedIndex = 0
-  let addAction = nimkitSelectors.actionSelector("resourceEditorAddResource")
+  let addAction = nimkitSelectors.actionSelector(sig"resourceEditorAddResource")
   addResourceButton.target = newActionTarget(
     addAction,
     proc(sender: DynamicAgent) =
@@ -2200,7 +2200,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     ,
   )
   addResourceButton.action = addAction
-  let pinAction = nimkitSelectors.actionSelector("resourceEditorPin")
+  let pinAction = nimkitSelectors.actionSelector(sig"resourceEditorPin")
   pinButton.target = newActionTarget(
     pinAction,
     proc(sender: DynamicAgent) =
@@ -2210,14 +2210,14 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     ,
   )
   pinButton.action = pinAction
-  let saveAsAction = nimkitSelectors.actionSelector("resourceEditorSaveAs")
+  let saveAsAction = nimkitSelectors.actionSelector(sig"resourceEditorSaveAs")
   saveAsButton.target = newActionTarget(
     saveAsAction,
     proc(sender: DynamicAgent) =
       discard editor.saveEditorDocument(choosePath = true),
   )
   saveAsButton.action = saveAsAction
-  let openAction = nimkitSelectors.actionSelector("resourceEditorOpen")
+  let openAction = nimkitSelectors.actionSelector(sig"resourceEditorOpen")
   openButton.target = newActionTarget(
     openAction,
     proc(sender: DynamicAgent) =

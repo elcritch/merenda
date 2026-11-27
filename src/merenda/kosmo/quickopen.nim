@@ -669,7 +669,8 @@ proc newQuickOpenPanel*(rootPath = "", files: WorkspaceFiles = nil): QuickOpenPa
   result.queryField.styleId = QuickOpenFieldStyleId
   result.queryField.accessibilityLabel = "Open file by name"
   result.expressionButton = newExpressionButton()
-  result.expressionButton.action = nimkit.actionSelector("kosmo.quickOpenExpressions")
+  result.expressionButton.action =
+    nimkit.actionSelector(sig"kosmo.quickOpenExpressions")
   result.expressionButton.target = nimkit.newActionTarget(
     result.expressionButton.action
   ) do(sender: nimkit.DynamicAgent):

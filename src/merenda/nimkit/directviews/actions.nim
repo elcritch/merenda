@@ -20,11 +20,11 @@ proc dispatchViewAction*(action: ViewAction, sender: DynamicAgent) =
 template viewAction*(receiver: typed, handler: untyped): ViewAction =
   ## Bind a receiver using newActionTarget's non-capturing handler contract.
   block:
-    let selector = actionSelector("declarativeViewEvent")
+    let selector = actionSelector(sig"declarativeViewEvent")
     initViewAction(selector, newActionTarget(selector, receiver, handler))
 
 template viewAction*(receiver, context: typed, handler: untyped): ViewAction =
   ## Bind explicit row context alongside the weak receiver.
   block:
-    let selector = actionSelector("declarativeViewEvent")
+    let selector = actionSelector(sig"declarativeViewEvent")
     initViewAction(selector, newActionTarget(selector, receiver, context, handler))

@@ -1359,7 +1359,7 @@ proc newGitDiffRevisionMenuItem(
     choice: GitDiffRevisionChoice,
 ): nimkit.MenuItem =
   let isFrom = side == gdrsFrom
-  let action = nimkit.actionSelector("kosmo.selectGitDiffRevision")
+  let action = nimkit.actionSelector(sig"kosmo.selectGitDiffRevision")
   result = nimkit.newMenuItem(choice.title, action)
   result.identifier = gitDiffRevisionIdentifier(isFrom, choice.revision)
   result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
@@ -1378,7 +1378,7 @@ proc newGitDiffHistoryMenuItem(
     title, suffix: string,
     workingTree = false,
 ): nimkit.MenuItem =
-  let action = nimkit.actionSelector("kosmo.selectGitDiffHistory")
+  let action = nimkit.actionSelector(sig"kosmo.selectGitDiffHistory")
   result = nimkit.newMenuItem(title, action)
   result.identifier =
     (
@@ -1798,7 +1798,7 @@ proc newDisclosureButton(
   discard result.withProtocol(GitDiffDisclosureFocus)
   discard result.withProtocol(GitDiffDisclosureAccessibility)
   let weakButton = result.unsafeWeakRef()
-  let toggleAction = nimkit.actionSelector("kosmo.toggleGitDiffFile")
+  let toggleAction = nimkit.actionSelector(sig"kosmo.toggleGitDiffFile")
   result.action = toggleAction
   result.target = nimkit.newActionTarget(toggleAction) do(sender: nimkit.DynamicAgent):
     discard sender
@@ -1831,7 +1831,7 @@ proc newDisclosureButton(
     result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
   result.openButton = nimkit.newButton("Open")
   result.openButton.addStyleClass(nimkit.ToolbarButtonStyleClass)
-  let openAction = nimkit.actionSelector("kosmo.openGitDiffFile")
+  let openAction = nimkit.actionSelector(sig"kosmo.openGitDiffFile")
   result.openButton.action = openAction
   result.openButton.target = nimkit.newActionTarget(openAction) do(
     sender: nimkit.DynamicAgent
@@ -3597,7 +3597,7 @@ proc newKosmoGitDiffPanel(
   result.focusable = true
   result.syncComparisonControls()
   let panel = result.unsafeWeakRef()
-  let refreshAction = nimkit.actionSelector("kosmo.refreshGitDiff")
+  let refreshAction = nimkit.actionSelector(sig"kosmo.refreshGitDiff")
   result.refreshButton.action = refreshAction
   result.refreshButton.target = nimkit.newActionTarget(refreshAction) do(
     sender: nimkit.DynamicAgent
@@ -3605,7 +3605,7 @@ proc newKosmoGitDiffPanel(
     discard sender
     if not panel.isNil:
       panel[].refresh()
-  let autoRefreshAction = nimkit.actionSelector("kosmo.toggleGitDiffAutoRefresh")
+  let autoRefreshAction = nimkit.actionSelector(sig"kosmo.toggleGitDiffAutoRefresh")
   result.autoRefreshSwitch.action = autoRefreshAction
   result.autoRefreshSwitch.target = nimkit.newActionTarget(autoRefreshAction) do(
     sender: nimkit.DynamicAgent
@@ -3613,7 +3613,7 @@ proc newKosmoGitDiffPanel(
     discard sender
     if not panel.isNil and not panel[].autoRefreshSwitch.on:
       panel[].refreshPending = false
-  let expandAction = nimkit.actionSelector("kosmo.expandGitDiff")
+  let expandAction = nimkit.actionSelector(sig"kosmo.expandGitDiff")
   result.expandButton.action = expandAction
   result.expandButton.target = nimkit.newActionTarget(expandAction) do(
     sender: nimkit.DynamicAgent
@@ -3621,7 +3621,7 @@ proc newKosmoGitDiffPanel(
     discard sender
     if not panel.isNil:
       panel[].expandAllFiles()
-  let collapseAction = nimkit.actionSelector("kosmo.collapseGitDiff")
+  let collapseAction = nimkit.actionSelector(sig"kosmo.collapseGitDiff")
   result.collapseButton.action = collapseAction
   result.collapseButton.target = nimkit.newActionTarget(collapseAction) do(
     sender: nimkit.DynamicAgent

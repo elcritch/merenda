@@ -670,7 +670,7 @@ proc initTokenFieldFields*(
   field.addSubview(field.xChipScroll)
   field.addSubview(field.xInput)
 
-  let action = actionSelector("nimkit.tokenFieldSelect")
+  let action = actionSelector(sig"nimkit.tokenFieldSelect")
   var fieldRef: BackRef[TokenField]
   fieldRef.target = field
   field.xInput.target = newActionTarget(action) do(sender: DynamicAgent):

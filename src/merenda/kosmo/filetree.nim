@@ -936,7 +936,7 @@ proc syncScopeControl(panel: FileBrowserPanel) =
 proc branchMenuItem(
     panel: WeakRef[FileBrowserPanel], root, branch, label: string, current: bool
 ): nimkit.MenuItem =
-  let action = nimkit.actionSelector("kosmo.selectGitBranch")
+  let action = nimkit.actionSelector(sig"kosmo.selectGitBranch")
   result = nimkit.newMenuItem(label, action)
   result.state = if current: nimkit.bsOn else: nimkit.bsOff
   result.validates = false
@@ -1344,7 +1344,8 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
   closeFilterButton.action = closeAction
   result.expressionButton.state =
     if tree.regularExpression: nimkit.bsOn else: nimkit.bsOff
-  result.expressionButton.action = nimkit.actionSelector("kosmo.fileFilterExpressions")
+  result.expressionButton.action =
+    nimkit.actionSelector(sig"kosmo.fileFilterExpressions")
   result.expressionButton.target = nimkit.newActionTarget(
     result.expressionButton.action
   ) do(sender: nimkit.DynamicAgent):

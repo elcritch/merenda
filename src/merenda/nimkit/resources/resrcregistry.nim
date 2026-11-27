@@ -188,7 +188,7 @@ proc registerResourceValueType*[T](
     var decoded: T
     if not decoder(value, context, decoded):
       return
-    let setter = selector[T, tuple[]]($selectorName)
+    let setter = Selector[T, tuple[]](name: selectorName)
     DynamicAgent(view).sendLocalIfHandled(setter, decoded)
 
   let readValue: ResourcePropertyValueReader =
@@ -201,7 +201,7 @@ proc registerResourceValueType*[T](
           context: ResourcePropertyContext,
           value: var ResourceValue,
       ): bool =
-        let getter = selector[tuple[], T]($selectorName)
+        let getter = Selector[tuple[], T](name: selectorName)
         let current = DynamicAgent(view).trySendLocal(getter, ())
         if current.isSome:
           return encoder(current.get(), context, value)
@@ -1013,7 +1013,7 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
       true,
     getter = proc(view: View, _: ResourcePropertyContext): ResourcePropertyReadResult =
       ResourcePropertyReadResult(
-        read: true, value: resourceValue(Control(view).action.name)
+        read: true, value: resourceValue($Control(view).action.name)
       ),
     nimTypeName = "string",
   )

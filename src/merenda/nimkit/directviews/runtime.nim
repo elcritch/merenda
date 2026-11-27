@@ -49,7 +49,7 @@ type
     value: T
     draw: proc(context: DirectNode, owner: R, value: T) {.nimcall.}
 
-let DirectAction = actionSelector("directViewAction")
+let DirectAction = actionSelector(sig"directViewAction")
 
 proc view*(node: DirectNode): View =
   if node.component:

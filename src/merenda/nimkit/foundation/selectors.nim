@@ -11,8 +11,9 @@ import ./events
 import ../text/texttypes
 import ../text/textstorage
 import ./types
+import ./sigilnames
 
-export selectors
+export selectors, sigilnames
 
 type
   EmptyArgs* = tuple[]
@@ -254,5 +255,9 @@ protocol ViewLayoutProtocol:
   method layoutSubviews*() {.optional.}
   method layout*() {.optional.}
 
-proc actionSelector*(name: string): ActionSelector =
-  selector[ActionArgs, EmptyArgs](name)
+proc actionSelector*(name: SigilName): ActionSelector =
+  ActionSelector(name: name)
+
+when SigilName isnot string:
+  proc actionSelector*(name: string): ActionSelector =
+    actionSelector(toSigilName(name))

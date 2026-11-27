@@ -436,7 +436,7 @@ proc newGitHubFilterItem(
     state = ghsOpen,
 ): nimkit.MenuItem =
   # A separate call owns each captured selection; loop closures share locals.
-  let action = nimkit.actionSelector("kosmo.selectGitHubFilter")
+  let action = nimkit.actionSelector(sig"kosmo.selectGitHubFilter")
   result = nimkit.newMenuItem(title, action)
   result.validates = false
   result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
@@ -578,14 +578,14 @@ proc newKosmoGitHubPanel(
     nimkitSelectors.performKeyEquivalent(), keyHandler
   )
   discard result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyHandler)
-  let refreshAction = nimkit.actionSelector("kosmo.refreshGitHub")
+  let refreshAction = nimkit.actionSelector(sig"kosmo.refreshGitHub")
   result.refreshButton.action = refreshAction
   result.refreshButton.target = nimkit.newActionTarget(refreshAction) do(
     sender: nimkit.DynamicAgent
   ):
     if not weakPanel.isNil:
       weakPanel[].refresh()
-  let autoRefreshAction = nimkit.actionSelector("kosmo.toggleGitHubAutoRefresh")
+  let autoRefreshAction = nimkit.actionSelector(sig"kosmo.toggleGitHubAutoRefresh")
   result.autoRefreshSwitch.action = autoRefreshAction
   result.autoRefreshSwitch.target = nimkit.newActionTarget(autoRefreshAction) do(
     sender: nimkit.DynamicAgent

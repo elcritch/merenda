@@ -176,7 +176,7 @@ proc newKosmoContextPanel*(): KosmoContextPanel =
   discard header.withProtocol(KosmoContextHeaderDrawing)
   discard header.withProtocol(KosmoContextHeaderAccessibility)
   let weakHeader = header.unsafeWeakRef()
-  let toggleAction = nimkit.actionSelector("kosmo.toggleContext")
+  let toggleAction = nimkit.actionSelector(sig"kosmo.toggleContext")
   header.action = toggleAction
   header.target = nimkit.newActionTarget(toggleAction) do(sender: nimkit.DynamicAgent):
     discard sender
