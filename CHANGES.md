@@ -6,6 +6,8 @@
   solver for views without constraints. In the DirectView task demo, 100-row
   live updates are 3–24 times faster. In the synthetic 300-row form and stack,
   the first layout is 8 times faster. Solved frames are unchanged.
+- Reuse each view's solver variables across layout passes instead of
+  allocating new ones for every solve.
 
 - Keep frames that a container such as `StackView` assigns when the layout
   solver runs. The solver no longer resizes those views to their intrinsic

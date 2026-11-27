@@ -1,6 +1,7 @@
 import std/unittest
 
 import sigils/core
+from pkg/kiwiberry import sameVariable
 
 import merenda/nimkit
 import merenda/nimkit/view/viewbase
@@ -816,6 +817,24 @@ suite "nimkit constraints":
     check fixed.frame() == rect(40, 0, 20, 20)
     check follower.frame() == rect(70, 0, 40, 10)
     check conflicted.frame() == rect(0, 60, 70, 20)
+
+  test "layout passes reuse each view's solver variables":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(0, 0, 40, 20))
+      width = newLayoutConstraint(child, atWidth, lrEqual, nil, constant = 90.0)
+
+    root.addSubview(child)
+    activate(width)
+    root.layoutSubtreeIfNeeded()
+    let first = child.xSolverVariables
+    check child.frame().size == initSize(90, 20)
+
+    width.constant = 120
+    root.layoutSubtreeIfNeeded()
+    check child.frame().size == initSize(120, 20)
+    check child.xSolverVariables.width.sameVariable(first.width)
+    check child.xSolverVariables.left.sameVariable(first.left)
 
   test "solver honors stronger soft constraints":
     let
