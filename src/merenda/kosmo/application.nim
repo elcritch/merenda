@@ -16,6 +16,8 @@ from sigils/hom import findFirst, isSome
 
 import ./readerpresentation
 import ../nimkit as nimkit
+import ../services/filesystem/[filesearch, listings, workspacefiles]
+import ../services/git/status as gitstatus
 from ../nimkit/text/textruneutils import utf8RunesForText
 from ../nimkit/foundation/mainthreadwork import scheduleMainThreadWork
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -26,7 +28,7 @@ import
     gitdiff, githubviewer, hintsmode, inputtranslation, matterworkers, moe,
     moehighlighting, panedocuments, panekeys, quickopen, recovery, scrolling, searchbar,
     settings, shortcutpresentation, shortcuts, terminalsearch, textbackendlogging,
-    viewersearch, updater, workspacefiles,
+    viewersearch, updater,
   ]
 
 export

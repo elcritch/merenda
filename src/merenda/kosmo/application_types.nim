@@ -27,7 +27,7 @@ type
   KosmoMarkdownView* = ref object of nimkit.MarkdownView
     search: KosmoViewerSearch
     pendingSearchRange: Option[nimkit.TextRange]
-    pendingFileSearchMatch: Option[nimkit.FileSearchMatch]
+    pendingFileSearchMatch: Option[filesearch.FileSearchMatch]
     editorView: WeakRef[KosmoEditorView]
     previewWatch: KosmoMarkdownCacheWatch
     previewGrammarRevision: uint64

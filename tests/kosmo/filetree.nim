@@ -4,6 +4,8 @@ import figdraw
 import figdraw/debugtools
 
 import merenda/nimkit
+import merenda/services/filesystem/listings
+import merenda/services/git/status
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 

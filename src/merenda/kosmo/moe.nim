@@ -70,7 +70,7 @@ import sigils/threads
 import sigils/weakrefs
 
 import ../nimkit/text/mattergrammarassets
-import ../nimkit/foundation/textsearch
+import ../services/textsearch
 import ./matterworkers
 import ./moelogging
 import ./cli

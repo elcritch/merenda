@@ -6,7 +6,7 @@ import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../nimkit as nimkit
 import ../nimkit/foundation/backgroundworkers
-import ../nimkit/foundation/gitprocesses
+import ../services/git/processes
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork

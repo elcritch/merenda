@@ -36,8 +36,6 @@ import ./nimkit/viewbindings
 import ./nimkit/foundation/assetcache
 import ./nimkit/foundation/backgroundworkers
 import ./nimkit/foundation/events
-import ./nimkit/foundation/filesearch
-import ./nimkit/foundation/gitstatus
 import ./nimkit/text/fieldeditors
 import ./nimkit/text/gaptextbuffers
 import ./nimkit/text/texteditors
@@ -141,8 +139,6 @@ export dragcontrollers
 export viewbindings
 export assetcache
 export events
-export filesearch
-export gitstatus
 export fieldeditors
 export gaptextbuffers
 export texteditors

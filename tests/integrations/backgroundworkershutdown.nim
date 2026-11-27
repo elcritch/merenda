@@ -4,7 +4,8 @@ import std/[atomics, monotimes, os, strtabs, strutils, times, unittest]
 
 import sigils/[core, threads]
 import terminex/workerthreads
-import merenda/nimkit/foundation/[backgroundprocesses, backgroundworkers]
+import merenda/nimkit/foundation/backgroundworkers
+import merenda/services/backgroundprocesses
 import ./fixtures/markdownworkerlifetime
 import merenda/nimkit/text/markdownparsing
 

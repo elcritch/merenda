@@ -3,9 +3,10 @@
 import std/[monotimes, os, strutils, tables, times]
 
 import sigils/[core, threadProxies, threads]
-import ./[backgroundworkers, gitbranchcleanup, gitprocesses, timerthreads]
+import ../../nimkit/foundation/[backgroundworkers, timerthreads]
+import ./[branches, processes]
 
-export gitbranchcleanup except GitBranchMergeCache, readGitBranches, removeGitBranches
+export branches except GitBranchMergeCache, readGitBranches, removeGitBranches
 
 const DefaultGitStatusRefreshInterval*: Duration = initDuration(seconds = 3)
 

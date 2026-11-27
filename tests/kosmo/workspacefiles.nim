@@ -6,8 +6,11 @@ import
 import dmon
 import sigils/[core, threads]
 import merenda/nimkit
-import merenda/nimkit/foundation/gitprocesses
-import merenda/kosmo/[kosmo, workspacefiles, workspacewatch, workspacechanges]
+import merenda/services/git/[processes, status]
+import merenda/kosmo/kosmo
+import
+  merenda/services/filesystem/
+    [listings, workspacefiles, workspacewatch, workspacechanges]
 
 privateAccess(WorkspaceFiles)
 privateAccess(WorkspaceWatch)

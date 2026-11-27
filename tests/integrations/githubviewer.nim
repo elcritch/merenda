@@ -2,7 +2,8 @@ import std/[json, monotimes, os, sequtils, strutils, tempfiles, times, unittest]
 import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-import merenda/nimkit/foundation/[gitprocesses, mainthreadwork]
+import merenda/nimkit/foundation/mainthreadwork
+import merenda/services/git/processes
 import merenda/kosmo/kosmo
 
 proc headingDisclosure(panel: KosmoGitHubPanel, title: string): Button =

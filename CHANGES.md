@@ -8,6 +8,8 @@
 - Clean up merged local branches, including squash merges whose changes
   are in the default branch. Update → Clean Up All shows a selectable list
   before deleting branches.
+- Import Git, subprocess, file listing, file search, workspace watch and
+  inventory, and HTTP download APIs from `merenda/services`.
 - Merge open pull requests from Kosmo's GitHub view with a merge commit,
   squash merge, or rebase merge.
 - Open the selected project's GitHub view with the shortcut when its root has

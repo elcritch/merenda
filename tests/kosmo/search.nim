@@ -3,6 +3,7 @@ import std/[monotimes, options, os, strutils, tempfiles, times, unicode, unittes
 import figdraw
 import sigils/threads
 
+import merenda/services/filesystem/filesearch
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo

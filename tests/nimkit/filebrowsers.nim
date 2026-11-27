@@ -4,6 +4,7 @@ import figdraw
 import sigils/core
 
 import merenda/nimkit
+import merenda/services/filesystem/listings
 import ./fixtures/widgetflows
 
 type FileBrowserSignalSpy = ref object of Responder

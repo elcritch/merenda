@@ -9,7 +9,8 @@ when defined(macosx):
 
   import merenda/nimkit
   import merenda/nimkit/app/windows as nimkitWindows
-  import merenda/kosmo/[filetree, workspacefiles]
+  import merenda/kosmo/filetree
+  import merenda/services/filesystem/workspacefiles
 
   proc orderedWindows(app: NSApplication): NSArray[NSWindow] {.objc: "orderedWindows".}
   proc isVisible(window: NSWindow): BOOL {.objc: "isVisible".}

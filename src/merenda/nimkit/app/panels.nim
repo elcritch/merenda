@@ -3,6 +3,7 @@ import std/[os, strutils]
 import sigils/core
 
 import ../containers/filebrowsers
+import ../../services/filesystem/listings
 import ../containers/stackviews
 import ../controls/buttons
 import ../foundation/selectors

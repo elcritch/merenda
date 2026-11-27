@@ -4,7 +4,7 @@ import figdraw
 import sigils/[core, threads]
 import merenda/nimkit
 import merenda/kosmo/kosmo
-import merenda/kosmo/workspacefiles
+import merenda/services/filesystem/workspacefiles
 from merenda/nimkit/foundation/mainthreadwork import drainMainThreadWork
 
 proc git(root: string, args: varargs[string]) =

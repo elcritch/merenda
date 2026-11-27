@@ -8,7 +8,7 @@
 
 import std/[monotimes, os, strformat, strutils, tempfiles, times]
 
-import merenda/nimkit/foundation/filesearch
+import merenda/services/filesystem/filesearch
 
 const
   FileCount = 128

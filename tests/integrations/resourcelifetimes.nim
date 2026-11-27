@@ -5,9 +5,9 @@ import threading/smartptrs
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
 import merenda/nimkit/foundation/backgroundworkers
-import merenda/nimkit/foundation/gitprocesses
+import merenda/services/git/processes
 import merenda/kosmo/kosmo
-import merenda/kosmo/workspacefiles
+import merenda/services/filesystem/workspacefiles
 
 type
   GitSettlementControl = object

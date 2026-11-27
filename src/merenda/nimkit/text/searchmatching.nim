@@ -1,6 +1,6 @@
 ## Reni matches converted from UTF-8 byte offsets to NimKit's rune ranges.
 
-import ../foundation/textsearch
+import ../../services/textsearch
 import ./[textbytecursors, texttypes]
 
 export textsearch

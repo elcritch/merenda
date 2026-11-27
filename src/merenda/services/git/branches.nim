@@ -1,7 +1,7 @@
 ## Classify local branches against the repository's default branch.
 
 import std/[strutils, tables]
-import ./gitprocesses
+import ./processes
 
 const
   LocalBranchPrefix = "refs/heads/"

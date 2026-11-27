@@ -1,9 +1,9 @@
 import std/[os, osproc, strutils, tempfiles, unittest]
 
-import merenda/nimkit/foundation/textsearch
+import merenda/services/textsearch
 import sigils/core
 
-import merenda/nimkit/foundation/filesearch
+import merenda/services/filesystem/filesearch
 
 type FileSearchSpy = ref object of Agent
   finishedIdentifiers: seq[uint64]

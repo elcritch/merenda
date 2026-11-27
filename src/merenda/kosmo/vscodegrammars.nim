@@ -7,7 +7,7 @@ import matter/rawgrammar
 import zippy/ziparchives
 import sigils/core
 import ../nimkit as nimkit
-import ../nimkit/foundation/textsearch
+import ../services/textsearch
 
 const
   KosmoVscodeGrammarDirectoryName* = "grammars"

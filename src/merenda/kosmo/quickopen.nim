@@ -7,11 +7,10 @@ from figdraw import ZLevel
 
 import ../nimkit as nimkit
 import ./scrolling
-import ./workspacefiles
+import ../services/filesystem/workspacefiles
 import ./searchbuttons
 import ./shortcuts
-import ../nimkit/foundation/textsearch
-export workspacefiles.projectFiles
+import ../services/textsearch
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 const
