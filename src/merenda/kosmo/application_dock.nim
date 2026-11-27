@@ -1484,7 +1484,7 @@ proc terminalWorkingDirectory(group: KosmoEditorGroup): string =
     return
   let currentDirectory =
     nimkit.TerminalView(document.contentView).session().screenInfo().currentDirectory
-  let url = nimkit.initUrl(currentDirectory)
+  let url = urls.initUrl(currentDirectory)
   var path = url.localFilePath()
   when defined(posix):
     # Local shells may include the machine name in OSC 7 file URLs. Treat
@@ -1522,7 +1522,7 @@ proc presentTerminalError(
   discard alert.contentView()
   group.window.addChildWindow(alert.window)
   discard app.beginModalSession(alert.window)
-  var weakWindow: nimkit.BackRef[nimkit.Window]
+  var weakWindow: backrefs.BackRef[nimkit.Window]
   weakWindow.target = alert.window
   # The application owns the modal window. Button callbacks must not retain the
   # Alert/content tree or the application through a reference cycle.

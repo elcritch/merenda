@@ -6,7 +6,7 @@ else:
 
 import ../responder/responders
 import ../themes
-import ../foundation/backrefs
+import ../../foundation/backrefs
 import ../foundation/types
 import ../drawing/renderresources
 

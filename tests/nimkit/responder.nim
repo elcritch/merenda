@@ -3,6 +3,7 @@ import std/[options, unittest]
 import sigils/selectors
 from sigils/hom import findFirstReply, get, isNone, isSome
 
+import merenda/foundation/backrefs
 import merenda/nimkit except performKeyEquivalent, undoManager
 from merenda/nimkit/app/backend import HostTextComposition
 from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager

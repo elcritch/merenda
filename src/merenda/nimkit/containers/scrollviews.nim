@@ -2,6 +2,7 @@ import std/times
 
 import sigils/core
 
+import ../../foundation/backrefs
 import ../app/animations
 from ../app/windows import Window, startAnimation, stopAnimation
 import ../accessibility/accessibilityprotocols

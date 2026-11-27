@@ -2,6 +2,7 @@ import std/[strutils, unittest]
 
 import sigils/core
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 
 type

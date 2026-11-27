@@ -1,5 +1,6 @@
 import std/[json, os, strutils, tempfiles, unittest]
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/cli

@@ -1,4 +1,5 @@
 import std/unittest
+import merenda/foundation/backrefs
 import merenda/nimkit
 import ./fixtures/widgetflows
 

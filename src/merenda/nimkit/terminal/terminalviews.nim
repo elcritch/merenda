@@ -7,7 +7,8 @@ import terminex/[compactscrollback, terminput, termscreen, termsessions]
 
 import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
-import ../foundation/[events, selectors, types, urls]
+import ../../foundation/[backrefs, urls]
+import ../foundation/[events, selectors, types]
 import ../foundation/terminaltrace
 import ../foundation/mainthreadwork
 import ../responder/responders

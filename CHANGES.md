@@ -10,6 +10,8 @@
   before deleting branches.
 - Import Git, subprocess, file listing, file search, workspace watch and
   inventory, and HTTP download APIs from `merenda/services`.
+- Import URL values, atomic file writes, and back references from
+  `merenda/foundation/[urls, atomicfiles, backrefs]`.
 - Merge open pull requests from Kosmo's GitHub view with a merge commit,
   squash merge, or rebase merge.
 - Open the selected project's GitHub view with the shortcut when its root has

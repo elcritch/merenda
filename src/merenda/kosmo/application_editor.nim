@@ -2,7 +2,6 @@
 
 import std/algorithm
 
-import ../nimkit/foundation/backrefs
 import ../nimkit/text/markdownparsing
 import ./markdownpreviewbudget
 
@@ -4229,7 +4228,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       return false
     true
 
-proc localMarkdownLinkPath(pane: KosmoEditorPane, url: nimkit.Url): string =
+proc localMarkdownLinkPath(pane: KosmoEditorPane, url: urls.Url): string =
   if not url.isFileUrl() or (not url.hasScheme() and url.host().len > 0):
     return
   let path = url.localFilePath(pane.markdownView.imageBasePath)
@@ -4246,7 +4245,7 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
     if textView.attachmentAtIndex(int(range.location)).attachment.identifier.len > 0:
       return true
     let
-      url = nimkit.initUrl(link)
+      url = urls.initUrl(link)
       isWebLink = url.isHttpUrl()
       path = pane.localMarkdownLinkPath(url)
     if not isWebLink and path.len == 0:

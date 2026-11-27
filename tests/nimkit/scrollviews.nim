@@ -4,6 +4,7 @@ import figdraw/debugtools
 import figdraw
 import ./fixtures/rendergeometry
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 

@@ -1,6 +1,7 @@
 ## ARC back-reference behavior shared by the NimKit test runner.
 import std/unittest
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/responder/responders as nimkitResponders
 import merenda/nimkit/view/[viewbase, viewconstraints]

@@ -4,6 +4,7 @@ import pkg/kiwiberry
 import sigils/core
 from sigils/hom import findFirst, isSome
 
+import ../../foundation/backrefs
 import ../themes
 from ../themes/themecore import
   layoutStyleSelection, constraintCount, validStyleConstraint

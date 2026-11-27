@@ -5,6 +5,7 @@ import threading/smartptrs
 
 import figdraw except Hash, TextCaretPosition
 
+import ../../foundation/backrefs
 import ../drawing
 import ../foundation/mainthreadwork
 import ../foundation/selectors

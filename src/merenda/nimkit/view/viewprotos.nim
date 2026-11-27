@@ -1,6 +1,7 @@
 import std/[algorithm, macros]
 from sigils/hom import findFirst, get
 
+import ../../foundation/backrefs
 import ../app/animations
 import ../foundation/selectors
 import ../themes

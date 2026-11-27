@@ -1,6 +1,7 @@
 ## Domain and controller policy for the direct-view task demo.
 import std/[algorithm, strutils]
 import sigils/[core, reactive]
+import merenda/foundation/backrefs
 import merenda/nimkit
 
 type

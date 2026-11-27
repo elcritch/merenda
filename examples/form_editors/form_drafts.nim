@@ -1,6 +1,7 @@
 ## A small form policy shared by the DirectView form examples.
 ## Draft identity is explicit: pass the same FormDraft to share an edit session.
 import sigils/[core, reactive, threadProxies, threads]
+import merenda/foundation/backrefs
 import merenda/nimkit/foundation/backgroundworkers
 import merenda/nimkit
 

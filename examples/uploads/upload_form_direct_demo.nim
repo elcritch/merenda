@@ -26,6 +26,7 @@
 ## 6. Adding or removing files emits `filesChanged` for the parent to observe.
 import std/strutils
 import sigils/reactive
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/directviews
 import ./uploadstate

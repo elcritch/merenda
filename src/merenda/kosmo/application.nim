@@ -15,6 +15,7 @@ from figdraw import len, `[]`
 from sigils/hom import findFirst, isSome
 
 import ./readerpresentation
+import ../foundation/[backrefs, urls]
 import ../nimkit as nimkit
 import ../services/filesystem/[filesearch, listings, workspacefiles]
 import ../services/git/status as gitstatus

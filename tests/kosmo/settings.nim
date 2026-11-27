@@ -1,6 +1,7 @@
 import std/[options, os, strutils, tempfiles, unicode, unittest]
 
 import figdraw
+import merenda/foundation/backrefs
 import merenda/nimkit
 from merenda/nimkit/directviews import DirectView
 import merenda/kosmo/kosmo

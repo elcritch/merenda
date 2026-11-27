@@ -4,7 +4,7 @@ import sigils/selectors
 
 import ../drawing/images
 import ../foundation/types
-import ../foundation/urls
+import ../../foundation/urls
 import ../text/textstorage
 import ../text/texttypes
 

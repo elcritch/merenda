@@ -2,8 +2,8 @@
 
 var
   convenienceSessions {.threadvar.}: seq[KosmoWindowManager]
-  knownSessions {.threadvar.}: seq[nimkit.BackRef[KosmoWindowManager]]
-  adaptiveSession {.threadvar.}: nimkit.BackRef[KosmoWindowManager]
+  knownSessions {.threadvar.}: seq[backrefs.BackRef[KosmoWindowManager]]
+  adaptiveSession {.threadvar.}: backrefs.BackRef[KosmoWindowManager]
   sessionTerminationObserver {.threadvar.}: nimkit.NotificationObserverToken
   sessionStoppedObserver {.threadvar.}: nimkit.NotificationObserverToken
 
@@ -15,7 +15,7 @@ proc registerKnownSession(manager: KosmoWindowManager): bool =
       knownSessions.delete(index)
     elif knownSessions[index]{} == manager:
       return
-  var reference: nimkit.BackRef[KosmoWindowManager]
+  var reference: backrefs.BackRef[KosmoWindowManager]
   reference.target = manager
   knownSessions.add reference
   result = true
@@ -1537,7 +1537,7 @@ proc installKosmoSettingsSaveHandler(
   if manager.isNil or manager.configPath.len == 0:
     app.merendaSettingsSaveHandler = nil
   else:
-    var managerRef: nimkit.BackRef[KosmoWindowManager]
+    var managerRef: backrefs.BackRef[KosmoWindowManager]
     managerRef.target = manager
     app.merendaSettingsSaveHandler = proc(settings: nimkit.MerendaSettings): bool =
       let target = managerRef{}
@@ -1572,7 +1572,7 @@ proc newKosmoWindowManager*(
   )
   nimkit.initResponder(result)
   if not app.isNil:
-    var managerRef: nimkit.BackRef[KosmoWindowManager]
+    var managerRef: backrefs.BackRef[KosmoWindowManager]
     managerRef.target = result
     result.appearanceObserver = nimkit.sharedNotificationCenter().observe(
         nimkit.nkApplicationAppearanceDidChange,
@@ -2018,7 +2018,7 @@ proc newKosmoApplication*(
   fileTree.onItemAction = proc(path: string, action: FileTreeItemAction) =
     if not frontend.isNil:
       frontend[].performFileTreeAction(path, action)
-  var branchManager: nimkit.BackRef[KosmoWindowManager]
+  var branchManager: backrefs.BackRef[KosmoWindowManager]
   branchManager.target = manager
   fileBrowserPanel.onSelectBranch = proc(root, branch: string) =
     if not frontend.isNil and not branchManager.isNil and
@@ -2541,7 +2541,7 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
     )
   defer:
     manager.close()
-  var cliManager: nimkit.BackRef[KosmoWindowManager]
+  var cliManager: backrefs.BackRef[KosmoWindowManager]
   cliManager.target = manager
   try:
     manager.cliServer = startKosmoCliOpenServer(

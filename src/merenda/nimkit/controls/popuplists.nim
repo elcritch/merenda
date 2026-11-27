@@ -1,6 +1,7 @@
 from figdraw import ZLevel, FigIdx
 import std/options
 
+import ../../foundation/backrefs
 import ../accessibility/accessibilityprotocols
 import ./controls
 import ../drawing

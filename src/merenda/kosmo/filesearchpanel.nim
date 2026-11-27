@@ -1,7 +1,7 @@
 ## Find-in-files sidebar UI backed by NimKit's worker-based file search.
 
 import std/[options, os, strutils, tables]
-import ../nimkit/foundation/atomicfiles
+import ../foundation/atomicfiles
 import ../services/textsearch
 
 import ../nimkit as nimkit

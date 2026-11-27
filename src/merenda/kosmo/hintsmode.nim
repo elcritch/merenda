@@ -18,6 +18,7 @@ import std/[options, strutils, unicode]
 
 from sigils/hom import findFirstReply, get, isSome
 
+import ../foundation/backrefs
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent, interceptKeyEquivalent
 import ../nimkit/text/[searchmatching, textbytecursors]
@@ -65,7 +66,7 @@ type
     xTyped: string
     xDismissed: bool
     xOnActivate: proc(hint: KosmoHint) {.closure.}
-    xRestoreFirstResponder: nimkit.BackRef[nimkit.Responder]
+    xRestoreFirstResponder: backrefs.BackRef[nimkit.Responder]
       ## The surface focused before the session, non-owning so a host that was
       ## itself the first responder cannot form a strong cycle with the
       ## overlay it hosts.

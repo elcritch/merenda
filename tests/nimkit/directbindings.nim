@@ -1,5 +1,6 @@
 import std/unittest
 import sigils/[core, reactive]
+import merenda/foundation/backrefs
 import merenda/nimkit/directviews/bindings
 import merenda/nimkit/responder/responders
 import merenda/nimkit/foundation/mainthreadwork

@@ -2,6 +2,7 @@ import std/unittest
 
 import sigils/core
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/responder/responders as nimkitResponders
 import merenda/nimkit/view/viewgeometry

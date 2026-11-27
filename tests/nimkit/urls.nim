@@ -4,7 +4,7 @@ import std/[os, unittest]
 import merenda/nimkit/app/documents
 import merenda/nimkit/app/panels
 import merenda/nimkit/app/pasteboards
-import merenda/nimkit/foundation/urls
+import merenda/foundation/urls
 import merenda/nimkit/text/texttypes
 import merenda/nimkit/text/textviews
 

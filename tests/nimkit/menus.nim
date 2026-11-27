@@ -13,6 +13,7 @@ when defined(macosx):
 import figdraw
 import sigils/selectors
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 
 when defined(macosx):

@@ -25,6 +25,7 @@ import std/[sequtils, strutils, unicode]
 import sigils/core
 import sigils/selectors as dynamicSelectors
 
+import ../../foundation/backrefs
 import ../accessibility/accessibility
 import ../app/modelcontrollers
 import ../app/windows

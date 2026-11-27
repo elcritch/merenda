@@ -90,7 +90,6 @@ import ./nimkit/contentthemepalettes
 import ./nimkit/contentthemes
 import ./nimkit/foundation/types
 import ./nimkit/foundation/undomanagers
-import ./nimkit/foundation/urls
 import ./nimkit/foundation/urlassets
 import ./nimkit/app/userdefaults
 import ./nimkit/app/viewcontrollers
@@ -193,7 +192,6 @@ export themes
 export contentthemes
 export types
 export undomanagers
-export urls
 export urlassets
 export userdefaults
 export viewcontrollers

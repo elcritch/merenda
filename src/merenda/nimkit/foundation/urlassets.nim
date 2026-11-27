@@ -4,7 +4,7 @@ import std/[appdirs, monotimes, os, paths, strutils, tables, tempfiles, times]
 import crunchy/[common, sha256]
 import sigils/[core, threads]
 
-import ./urls
+import ../../foundation/urls
 
 when defined(features.merenda.chronos):
   from std/uri import Uri, parseUri

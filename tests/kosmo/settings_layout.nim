@@ -2,6 +2,7 @@ import std/[unicode, unittest]
 
 import figdraw
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui

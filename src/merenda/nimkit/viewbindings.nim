@@ -1,6 +1,7 @@
 ## Scope-owned value bindings. All operations run on the owning GUI thread.
 import std/tables
 import sigils/[collections, core, reactive, selectors]
+import ../foundation/backrefs
 import ./responder/responders
 import ./foundation/mainthreadwork
 import ./foundation/sourcedispatch

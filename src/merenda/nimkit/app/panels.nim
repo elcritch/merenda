@@ -8,7 +8,7 @@ import ../containers/stackviews
 import ../controls/buttons
 import ../foundation/selectors
 import ../foundation/types
-import ../foundation/urls
+import ../../foundation/urls
 import ../text/textfields
 import ../themes
 import ../view/views
@@ -34,9 +34,6 @@ proc validateSelection*(panel: SavePanel): bool
 proc refreshSavePanelValidation(panel: SavePanel, sender: DynamicAgent) {.slot.} =
   discard sender
   discard panel.validateSelection()
-
-func normalizedFileType*(fileType: string): string =
-  urls.normalizedFileType(fileType)
 
 proc filePathFromUrl*(fileUrl: string): string =
   initUrl(fileUrl).localFilePath()

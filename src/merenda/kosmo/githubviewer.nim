@@ -3,6 +3,7 @@
 import std/[atomics, monotimes, options, os, strutils, tables, times]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
+import ../foundation/urls
 import ../nimkit as nimkit
 import ../nimkit/foundation/mainthreadwork
 import ../nimkit/foundation/selectors as nimkitSelectors
@@ -587,7 +588,7 @@ protocol GitHubLinks of nimkit.TextViewDelegateProtocol:
               item.headBranch.len > 0 and not panel.diffHandler.isNil:
             return panel.diffHandler(panel.snapshot.rootPath, item)
         return false
-      if not panel.closed and nimkit.initUrl(link).isHttpUrl() and
+      if not panel.closed and urls.initUrl(link).isHttpUrl() and
           not panel.linkHandler.isNil:
         return panel.linkHandler(link)
 

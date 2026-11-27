@@ -15,7 +15,7 @@ import ../foundation/events
 import ../app/pasteboards
 import ../app/workspaces
 import ../foundation/selectors
-import ../foundation/urls
+import ../../foundation/urls
 import ./textlayout
 import ./textstorage
 import ./textsnapshots

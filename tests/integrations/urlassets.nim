@@ -6,7 +6,7 @@ import
   ]
 
 import merenda/nimkit/foundation/urlassets
-import merenda/nimkit/foundation/urls
+import merenda/foundation/urls
 import merenda/nimkit/text/markdownviews
 
 const

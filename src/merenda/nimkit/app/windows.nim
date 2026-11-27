@@ -10,6 +10,7 @@ type SiwinWindow = siwinshim.Window
 import sigils/core
 from sigils/hom import findFirst, findFirstReply, get, isSome
 
+import ../../foundation/backrefs
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
 import ./animations

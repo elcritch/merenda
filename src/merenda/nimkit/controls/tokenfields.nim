@@ -3,6 +3,7 @@ import std/[strutils, tables, unicode]
 import sigils/core
 import sigils/selectors as dynamicSelectors
 
+import ../../foundation/backrefs
 import ../accessibility/accessibility
 import ../containers/scrollviews
 import ../containers/stackviews

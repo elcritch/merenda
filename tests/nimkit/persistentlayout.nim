@@ -1,6 +1,7 @@
 ## Persistent solver experiments are opt-in; the default build keeps fresh solves.
 when defined(merendaPersistentLayout) and defined(merendaProfile):
   import std/[strutils, unittest]
+  import merenda/foundation/backrefs
   import merenda/nimkit
   import merenda/nimkit/view/viewbase
   from pkg/kiwiberry import sameVariable
@@ -361,7 +362,10 @@ when defined(merendaPersistentLayout) and defined(merendaProfile):
           cached.widths[index].constant = value
         of 3:
           let priority =
-            if state.next(2) == 0: LayoutPriorityLow else: LayoutPriority(500)
+            if state.next(2) == 0:
+              LayoutPriorityLow
+            else:
+              LayoutPriority(500)
           fresh.widths[index].priority = priority
           cached.widths[index].priority = priority
         else:
