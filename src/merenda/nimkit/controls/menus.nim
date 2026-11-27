@@ -1234,10 +1234,12 @@ proc ownerWindow(button: PopupMenuButton): Window =
 proc cascadeSuperview(button: PopupMenuButton): View =
   if not button.xParentPopup.isNil:
     return View(button.xParentPopup.popupList())
-  if button.xPopupPresentation == ppInline:
+  if button.xPopupPresentation == ppInline and not button.xMenu.isNil:
     let owner = button.ownerWindow()
     if not owner.isNil:
-      return owner.contentView()
+      for item in button.xMenu.items():
+        if not item.submenu().isNil or not item.optionSubmenu().isNil:
+          return owner.contentView()
   button.superview()
 
 proc popupSize(button: PopupMenuButton): Size =

@@ -195,15 +195,18 @@ proc repositoryFinished(
     panel.nextRefresh = getMonoTime() + panel.refreshInterval
     panel.applySnapshot(snapshot)
 
-proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
-  ## Cancel obsolete requests and load the current repository off the UI thread.
-  if panel.isNil or panel.closed or not panel.repositoryBacked or panel.merging:
-    return
+proc replaceRequestControl(panel: KosmoGitHubPanel) =
   if not panel.control.isNil:
     panel.control[].cancelled.store(true, moRelease)
   panel.control = newSharedPtr(GitHubRequestControl)
   panel.control[].cancelled.store(false, moRelaxed)
   inc panel.generation
+
+proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
+  ## Cancel obsolete requests and load the current repository off the UI thread.
+  if panel.isNil or panel.closed or not panel.repositoryBacked or panel.merging:
+    return
+  panel.replaceRequestControl()
   panel.refreshPending = false
   panel.nextRefresh = getMonoTime() + panel.refreshInterval
   panel.loading = true
@@ -265,10 +268,7 @@ proc startMerge(
       "Pull request #" & $item.number & " changed. Review it and try again."
     )
     return
-  if not panel.control.isNil:
-    panel.control[].cancelled.store(true, moRelease)
-  panel.control = newSharedPtr(GitHubRequestControl)
-  inc panel.generation
+  panel.replaceRequestControl()
   panel.loading = false
   panel.refreshPending = false
   panel.merging = true
