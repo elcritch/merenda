@@ -262,7 +262,11 @@ Each update cycle runs one layout transaction for a dirty root:
 4. The transaction enters `ltpSolvingConstraints`. Dirty generated inputs are
    refreshed and Kiwiberry solves the subtree once. Internal iteration inside
    Kiwiberry is still valid because it operates on mathematical state, not
-   arbitrary widget callbacks.
+   arbitrary widget callbacks. Views that share no constraint are solved as
+   separate groups, each in its own small tableau. The pinned layout root does
+   not join groups, and a view with no constraints keeps its frame without a
+   solver. The groups give the same frames as one tableau, but Kiwiberry's
+   per-constraint cost grows with tableau size.
 5. Solved frames are applied through the solver-owned path, and autoresizing
    reference state is refreshed.
 6. The transaction enters `ltpLayingOut`. Native container callbacks are
