@@ -56,7 +56,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
 | `primary-Shift-D` | Show Git diff tab | |
-| `primary-Shift-H` | Show GitHub issues and PRs | |
+| `primary-Shift-H` | Show GitHub issues and PRs | In Files, focus a project root to open its repository. |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 | `F5` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. macOS also binds `Command-Control-T`, avoiding the fn-key row. |
 | `F6` | Open Link with Hints | Overlays markers on visible URLs; typing a marker's label opens it. macOS also binds `Command-Control-E`. |

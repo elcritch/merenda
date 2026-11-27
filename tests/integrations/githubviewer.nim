@@ -2,7 +2,7 @@ import std/[json, monotimes, os, sequtils, strutils, tempfiles, times, unittest]
 import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/nimkit/foundation/[gitprocesses, mainthreadwork]
 import merenda/kosmo/kosmo
 
 proc headingDisclosure(panel: KosmoGitHubPanel, title: string): Button =
@@ -616,8 +616,10 @@ suite "GitHub CLI document integration":
     check parseInt(readFile(root / "pr-request-count")) == reads + 1
 
   when defined(posix):
-    test "menu opens one reusable project tab and closing releases its worker":
+    test "menu and shortcut open the requested project in one reusable tab":
       let root = createTempDir("kosmo-github-menu-", "")
+      let project = root / "workspace"
+      let otherRoot = root / "second-project"
       let previousPath = getEnv("PATH")
       let previousShell = getEnv("SHELL")
       let hadShell = existsEnv("SHELL")
@@ -628,6 +630,13 @@ suite "GitHub CLI document integration":
         else:
           delEnv("SHELL")
         removeDir(root)
+      for path in [project, otherRoot]:
+        createDir(path)
+      for path in [root, otherRoot]:
+        require runGitCommand(path, ["init", "-q"]).exitCode == 0
+        writeFile(path / "github-test-mode", "success")
+      let sourcePath = project / "source.txt"
+      writeFile(sourcePath, "first project")
       createSymlink(getAppFilename(), root / "gh")
       # Keep this menu test independent of the developer's login profile.
       let shell = root / "shell"
@@ -635,10 +644,9 @@ suite "GitHub CLI document integration":
       setFilePermissions(shell, {fpUserRead, fpUserWrite, fpUserExec})
       putEnv("SHELL", shell)
       putEnv("PATH", root & PathSep & previousPath)
-      writeFile(root / "github-test-mode", "success")
       let app = newApplication("GitHub menu")
       let frontend =
-        newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+        newKosmoApplication(app, filePath = project, monitorsGitStatus = false)
       defer:
         frontend.close()
       app.addWindow(frontend.window)
@@ -656,16 +664,29 @@ suite "GitHub CLI document integration":
       require frontend.showGitHub(root)
       check frontend.gitHubPanel == panel
       require panel.waitForGitHub()
-      require app.performMenuKeyEquivalent(
-        KeyEvent(
-          key: keyH,
-          keyCode: keyH.ord,
-          modifiers: shortcutModifiers() + {nimkit.kmShift},
-        )
+      let shortcut = KeyEvent(
+        key: keyH, keyCode: keyH.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
       )
+      require frontend.openPath(otherRoot)
+      require frontend.openPath(sourcePath)
+      require frontend.fileTree.selectItemWithIdentifier(otherRoot)
+      require frontend.window.makeFirstResponder(frontend.fileTree)
+      require frontend.window.dispatchKeyDown(shortcut)
       check frontend.gitHubPanel == panel
       require panel.waitForGitHub()
+      check panel.snapshot.rootPath == otherRoot
+      check panel.snapshot.items.len == 2
+      require app.performMenuKeyEquivalent(shortcut)
+      require panel.waitForGitHub()
+      check panel.snapshot.rootPath == otherRoot
+      require frontend.openPath(sourcePath)
+      require frontend.window.makeFirstResponder(frontend.editorView)
+      require frontend.window.dispatchKeyDown(shortcut)
+      check frontend.gitHubPanel == panel
+      require panel.waitForGitHub()
+      check panel.snapshot.rootPath == root
       let pr = panel.headingDisclosure("#9 pr open")
+      require not pr.isNil
       require pr.accessibilityPerformAction(AccessibilityActionExpand)
       require panel.waitForGitHub()
       require panel.autoRefreshSwitch.tryToPerform(

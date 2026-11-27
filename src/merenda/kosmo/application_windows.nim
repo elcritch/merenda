@@ -1006,6 +1006,34 @@ proc editorGitDirectory(frontend: KosmoApplication): string =
     if tab.id == id and tab.filePath.isSome:
       return nearestGitDirectory(absolutePath(tab.filePath.get).parentDir())
 
+proc gitViewRoot(frontend: KosmoApplication, path: string): string =
+  if path.len > 0:
+    return nearestGitDirectory(
+      if dirExists(path):
+        path
+      else:
+        absolutePath(path).parentDir()
+    )
+  let editorRoot = frontend.editorGitDirectory()
+  if editorRoot.len > 0:
+    return editorRoot
+  let group = frontend.dockController.activePaneGroup()
+  if not group.isNil:
+    let document = group.documentForIdentifier(group.selectedTabIdentifier)
+    if not document.isNil:
+      if document.contentView of KosmoGitDiffPanel:
+        result = KosmoGitDiffPanel(document.contentView).snapshot.rootPath
+      elif document.contentView of KosmoGitHubPanel:
+        result = KosmoGitHubPanel(document.contentView).snapshot.rootPath
+  if result.len == 0:
+    let projectRoot = frontend.fileTree.rootPath
+    result = nearestGitDirectory(
+      if projectRoot.len > 0:
+        projectRoot
+      else:
+        getCurrentDir()
+    )
+
 proc showPullRequestDiff*(
     frontend: KosmoApplication, rootPath: string, item: GitHubItem
 ): bool {.discardable.} =
@@ -1034,28 +1062,18 @@ proc showPullRequestDiff*(
   true
 
 proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
-  ## Show GitHub issues and PRs for an explicit project or the active repository.
+  ## Show GitHub issues and PRs for a path, the focused project root, or the active repository.
   if frontend.isNil or frontend.dockController.isNil:
     return
-  let editorRoot =
-    if path.len == 0:
-      frontend.editorGitDirectory()
-    else:
-      ""
-  let root =
-    if path.len > 0:
-      nearestGitDirectory(
-        if dirExists(path):
-          path
-        else:
-          absolutePath(path).parentDir()
-      )
-    elif editorRoot.len > 0:
-      editorRoot
-    elif frontend.fileTree.rootPath.len > 0:
-      frontend.fileTree.rootPath
-    else:
-      getCurrentDir()
+  var projectPath = path
+  if projectPath.len == 0:
+    let tree = frontend.fileTree
+    let window = frontend.application.keyWindow()
+    if not tree.isNil and not window.isNil and window.firstResponder == tree:
+      let selected = tree.selectedItemIdentifier()
+      if selected in tree.rootPaths:
+        projectPath = selected
+  let root = frontend.gitViewRoot(projectPath)
   let controller = frontend.dockController
   let title = "GitHub · " & root.lastPathPart()
   for group in controller.groups:
@@ -1119,33 +1137,10 @@ proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
   ## Show the selected editor file's repository, or a scoped diff for an explicit path.
   if frontend.isNil:
     return
-  var editorRoot: string
-  if path.len == 0:
-    editorRoot = frontend.editorGitDirectory()
-    if editorRoot.len == 0 and not frontend.dockController.isNil:
-      let group = frontend.dockController.activePaneGroup()
-      if not group.isNil:
-        let document = group.documentForIdentifier(group.selectedTabIdentifier)
-        if not document.isNil and document.contentView of KosmoGitDiffPanel:
-          editorRoot = KosmoGitDiffPanel(document.contentView).snapshot.rootPath
-  let root =
-    if path.len > 0:
-      nearestGitDirectory(
-        if dirExists(path):
-          path
-        else:
-          absolutePath(path).parentDir()
-      )
-    elif editorRoot.len > 0:
-      editorRoot
-    elif frontend.fileTree.rootPath.len > 0:
-      frontend.fileTree.rootPath
-    else:
-      getCurrentDir()
   frontend.showGitDiffSnapshot(
     GitDiffSnapshot(
       source: gdsRepository,
-      rootPath: root,
+      rootPath: frontend.gitViewRoot(path),
       scopePath:
         if path.len > 0:
           normalizedPath(absolutePath(path))

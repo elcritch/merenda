@@ -4,6 +4,8 @@
 
 - Merge open pull requests from Kosmo's GitHub view with a merge commit,
   squash merge, or rebase merge.
+- Open the selected project's GitHub view with the shortcut when its root has
+  focus in Files.
 - Solve independent groups of constrained views separately, and skip the
   solver for views without constraints. In the DirectView task demo, 100-row
   live updates are 3–24 times faster. In the synthetic 300-row form and stack,
