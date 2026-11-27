@@ -1,4 +1,5 @@
-import std/[monotimes, os, osproc, streams, strutils, tempfiles, times, unittest]
+import
+  std/[monotimes, os, osproc, sequtils, streams, strutils, tempfiles, times, unittest]
 
 import sigils/core
 
@@ -10,6 +11,8 @@ type GitStatusSpy = ref object of Agent
   switchCode: int
   switchOutput: string
   switchCount: int
+  updateCode: int
+  updateCount: int
 
 proc rememberGitStatus(spy: GitStatusSpy, snapshot: GitStatusSnapshot) {.slot.} =
   spy.snapshots.add snapshot
@@ -20,6 +23,16 @@ proc rememberGitSwitch(
   inc spy.switchCount
   spy.switchCode = code
   spy.switchOutput = output
+
+proc rememberGitUpdate(
+    spy: GitStatusSpy,
+    root, branch: string,
+    action: GitRepositoryAction,
+    code: int,
+    output: string,
+) {.slot.} =
+  inc spy.updateCount
+  spy.updateCode = code
 
 proc runGit(rootPath: string, args: openArray[string]): string =
   let process = startProcess(
@@ -52,6 +65,122 @@ func entryForPath(
       return (true, entry)
 
 suite "nimkit Git status service":
+  test "cleanup removes selected merged and squash-merged branches and rechecks moved tips":
+    let
+      root = createTempDir("merenda-git-cleanup-", "")
+      service = newGitStatusService(refreshInterval = initDuration())
+      spy = GitStatusSpy()
+    defer:
+      service.close()
+      removeDir(root)
+    root.initializeRepository()
+    discard runGit(root, ["branch", "-M", "main"])
+    discard runGit(root, ["branch", "merged"])
+    discard runGit(root, ["switch", "-c", "squashed"])
+    for name in ["first", "second"]:
+      writeFile(root / name, name)
+      discard runGit(root, ["add", name])
+      discard runGit(
+        root,
+        [
+          "-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", "-c",
+          "commit.gpgsign=false", "commit", "-qm", name,
+        ],
+      )
+    discard runGit(root, ["switch", "main"])
+    discard runGit(root, ["merge", "--squash", "squashed"])
+    discard runGit(
+      root,
+      [
+        "-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "Squash branch",
+      ],
+    )
+    discard runGit(root, ["switch", "-c", "unmerged"])
+    writeFile(root / "unmerged", "unmerged changes")
+    discard runGit(root, ["add", "unmerged"])
+    discard runGit(
+      root,
+      [
+        "-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "Unmerged change",
+      ],
+    )
+    discard runGit(root, ["switch", "main"])
+    service.connect(gitRepositoryDidUpdate, spy, rememberGitUpdate)
+    service.rootPath = root
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    let initial = service.lastSnapshot().branchInfo
+    let merged = initial.filterIt(it.merged and not it.protected)
+    check merged.mapIt(it.name) == @["merged", "squashed"]
+    let defaultBranch = initial[initial.findIt(it.name == "main")]
+    let unmerged = initial[initial.findIt(it.name == "unmerged")]
+    check defaultBranch.protected
+    check not unmerged.merged
+    discard runGit(root, ["branch", "-f", "merged", "unmerged"])
+    require service.removeBranches(
+      root, merged & @[defaultBranch, unmerged], mergedOnly = true
+    )
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.updateCount == 1
+    check spy.updateCode != 0
+    check service.lastSnapshot().branches == @["main", "merged", "unmerged"]
+    require service.removeBranches(root, @[unmerged], mergedOnly = false)
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.updateCount == 2
+    check spy.updateCode == 0
+    check service.lastSnapshot().branches == @["main", "merged"]
+
+  test "updating a branch from origin fast-forwards only an inactive local branch":
+    let
+      workspace = createTempDir("merenda-git-update-", "")
+      origin = workspace / "origin"
+      local = workspace / "local"
+      service = newGitStatusService(refreshInterval = initDuration())
+      spy = GitStatusSpy()
+    defer:
+      service.close()
+      removeDir(workspace)
+    createDir(origin)
+    origin.initializeRepository()
+    let current = runGit(origin, ["branch", "--show-current"]).strip()
+    let original = runGit(origin, ["rev-parse", "HEAD"]).strip()
+    discard runGit(origin, ["branch", "topic"])
+    discard runGit(workspace, ["clone", "-q", "--", origin, local])
+    discard runGit(local, ["branch", "topic", "origin/topic"])
+    discard runGit(origin, ["switch", "topic"])
+    discard runGit(
+      origin,
+      [
+        "-c", "user.name=NimKit Tests", "-c", "user.email=nimkit@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Advance topic",
+      ],
+    )
+    let advanced = runGit(origin, ["rev-parse", "HEAD"]).strip()
+    service.connect(gitRepositoryDidUpdate, spy, rememberGitUpdate)
+    service.rootPath = local
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    require service.performGitAction(local, "topic", GitRepositoryAction.UpdateBranch)
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.updateCount == 1
+    check spy.updateCode == 0
+    check runGit(local, ["branch", "--show-current"]).strip() == current
+    check runGit(local, ["rev-parse", "refs/heads/topic"]).strip() == advanced
+
+    discard runGit(local, ["switch", "topic"])
+    require service.performGitAction(local, "topic", GitRepositoryAction.UpdateBranch)
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.updateCount == 2
+    check spy.updateCode != 0
+    discard runGit(local, ["switch", current])
+    discard runGit(origin, ["switch", current])
+    discard runGit(origin, ["branch", "-f", "topic", original])
+    require service.performGitAction(local, "topic", GitRepositoryAction.UpdateBranch)
+    require service.waitForIdle(timeoutMilliseconds = 10_000)
+    check spy.updateCount == 3
+    check spy.updateCode != 0
+    check runGit(local, ["rev-parse", "refs/heads/topic"]).strip() == advanced
+
   test "discovers branches and switches without discarding conflicting work":
     let
       root = createTempDir("merenda-git-branches-", "")

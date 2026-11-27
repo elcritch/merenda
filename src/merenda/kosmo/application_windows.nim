@@ -1034,6 +1034,117 @@ proc gitViewRoot(frontend: KosmoApplication, path: string): string =
         getCurrentDir()
     )
 
+proc showBranchComparison(frontend: KosmoApplication, root, branch: string) =
+  if frontend.showGitDiffSnapshot(
+    GitDiffSnapshot(source: gdsRepository, rootPath: nearestGitDirectory(root)),
+    refreshesRepository = true,
+  ):
+    frontend.gitDiffPanel.selectComparison(
+      GitDiffComparison(
+        kind: gdckRevisionRange,
+        fromRevision: "HEAD",
+        toRevision: "refs/heads/" & branch,
+      )
+    )
+
+proc showGitActionError(frontend: KosmoApplication, title, message: string) =
+  let alert = nimkit.newAlert(title, message)
+  defer:
+    alert.window.close()
+  frontend.window.addChildWindow(alert.window)
+  discard frontend.application.runModal(alert)
+
+proc confirmBranchRemoval(
+    frontend: KosmoApplication,
+    root, base: string,
+    branches: seq[nimkit.GitBranchInfo],
+    cleanup, bulk: bool,
+): seq[nimkit.GitBranchInfo] =
+  let title =
+    if bulk:
+      "Clean Up Merged Branches"
+    elif cleanup:
+      "Clean Up " & branches[0].name
+    else:
+      "Delete " & branches[0].name
+  let message =
+    if bulk:
+      "Select the local branches to remove from " & root.lastPathPart() & "."
+    elif cleanup:
+      "Remove this local branch after verifying its merge into " & base & "?"
+    else:
+      "This local branch may contain unmerged commits. Delete it anyway?"
+  let confirm =
+    if bulk:
+      "Clean Up Selected"
+    elif cleanup:
+      "Clean Up"
+    else:
+      "Delete Branch"
+  let alert = nimkit.newAlert(
+    title, message, style = nimkit.asWarning, buttons = ["Cancel", confirm]
+  )
+  defer:
+    alert.window.close()
+  alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+  frontend.window.addChildWindow(alert.window)
+  var choices: seq[nimkit.Button]
+  if bulk:
+    let rows = nimkit.newStackView(nimkit.laVertical)
+    rows.spacing = 4
+    rows.alignment = nimkit.svaFill
+    rows.setInheritedAppearance(frontend.window.effectiveAppearance())
+    for branch in branches:
+      let choice = nimkit.newCheckBox(branch.name)
+      choice.state = nimkit.bsOn
+      rows.addArrangedSubview(choice)
+      choices.add choice
+    let
+      size = rows.fittingSize()
+      height = min(size.height, 220.0'f32)
+      scroll = nimkit.newScrollView(documentView = rows)
+    rows.frame = nimkit.rect(0, 0, max(size.width, 400), size.height)
+    scroll.hasVerticalScroller = true
+    scroll.hasHorizontalScroller = true
+    nimkit.newLayoutConstraint(scroll, nimkit.atHeight, constant = height).activate()
+    alert.accessoryView = scroll
+    alert.window.frame =
+      nimkit.rect(alert.window.frame().origin, nimkit.initSize(460, 160 + height))
+  if frontend.application.runModal(alert) != alert.buttonResponse(1):
+    return
+  if bulk:
+    for index, choice in choices:
+      if choice.state == nimkit.bsOn:
+        result.add branches[index]
+  else:
+    result = branches
+
+proc canChangeGitWorkTree(
+    frontend: KosmoApplication, manager: KosmoWindowManager, title: string
+): bool =
+  for existing in manager.frontends:
+    for tab in existing.dockController.editor.tabs():
+      if tab.modified:
+        frontend.showGitActionError(
+          title, "Save or close unsaved editor changes first."
+        )
+        return false
+  true
+
+proc reloadGitWorkTrees(manager: KosmoWindowManager) =
+  for existing in manager.frontends:
+    for tab in existing.dockController.editor.tabs():
+      if tab.filePath.isSome:
+        let path = absolutePath(
+          tab.filePath.get, existing.dockController.editor.workingDirectory
+        )
+        if fileExists(path):
+          existing.dockController.editor.reloadUnmodifiedFile(path)
+    existing.fileTree.refresh()
+    discard existing.fileTree.refreshGitStatus()
+    for group in existing.dockController.groups:
+      group.editorView.refresh()
+
 proc showPullRequestDiff*(
     frontend: KosmoApplication, rootPath: string, item: GitHubItem
 ): bool {.discardable.} =
@@ -1910,42 +2021,70 @@ proc newKosmoApplication*(
   var branchManager: nimkit.BackRef[KosmoWindowManager]
   branchManager.target = manager
   fileBrowserPanel.onSelectBranch = proc(root, branch: string) =
-    if frontend.isNil or branchManager.isNil:
-      return
-    for existing in branchManager{}.frontends:
-      for tab in existing.dockController.editor.tabs():
-        if tab.modified:
-          let alert = nimkit.newAlert(
-            "Cannot switch branch",
-            "Save or close unsaved editor changes before switching branches.",
-          )
-          defer:
-            alert.window.close()
-          frontend[].window.addChildWindow(alert.window)
-          discard frontend[].application.runModal(alert)
-          return
-    discard fileTree.switchBranch(root, branch)
+    if not frontend.isNil and not branchManager.isNil and
+        frontend[].canChangeGitWorkTree(branchManager{}, "Cannot switch branch"):
+      discard fileTree.switchBranch(root, branch)
   fileTree.onBranchSwitched = proc(root, branch: string, code: int, output: string) =
     if frontend.isNil or branchManager.isNil:
       return
-    for existing in branchManager{}.frontends:
-      for tab in existing.dockController.editor.tabs():
-        if tab.filePath.isSome:
-          let path = absolutePath(
-            tab.filePath.get, existing.dockController.editor.workingDirectory
-          )
-          if fileExists(path):
-            existing.dockController.editor.reloadUnmodifiedFile(path)
-      existing.fileTree.refresh()
-      discard existing.fileTree.refreshGitStatus()
-      for group in existing.dockController.groups:
-        group.editorView.refresh()
+    branchManager{}.reloadGitWorkTrees()
     if code != 0:
-      let alert = nimkit.newAlert("Could not switch branch", output.strip())
-      defer:
-        alert.window.close()
-      frontend[].window.addChildWindow(alert.window)
-      discard frontend[].application.runModal(alert)
+      frontend[].showGitActionError("Could not switch branch", output.strip())
+  fileBrowserPanel.onCompareBranch = proc(root, branch: string) =
+    if not frontend.isNil:
+      frontend[].showBranchComparison(root, branch)
+  fileBrowserPanel.onRemoveBranches = proc(
+      root, base: string, branches: seq[nimkit.GitBranchInfo], cleanup, bulk: bool
+  ) =
+    if not frontend.isNil and branches.len > 0:
+      let selected =
+        frontend[].confirmBranchRemoval(root, base, branches, cleanup, bulk)
+      if fileTree.removeBranches(root, selected, cleanup):
+        statusLabel.text = "Removing local branches…"
+  fileBrowserPanel.onUpdateRepository = proc(
+      root, branch: string, action: nimkit.GitRepositoryAction
+  ) =
+    if frontend.isNil or branchManager.isNil:
+      return
+    if action == nimkit.GitRepositoryAction.PullCurrentBranch and
+        not frontend[].canChangeGitWorkTree(
+          branchManager{}, "Cannot pull current branch"
+        ):
+      return
+    if fileTree.performGitAction(root, branch, action):
+      statusLabel.text = "Updating Git repository…"
+  fileTree.onRepositoryUpdated = proc(
+      root, branch: string,
+      action: nimkit.GitRepositoryAction,
+      code: int,
+      output: string,
+  ) =
+    if frontend.isNil or branchManager.isNil:
+      return
+    if action == nimkit.GitRepositoryAction.PullCurrentBranch:
+      branchManager{}.reloadGitWorkTrees()
+    statusLabel.text =
+      if code == 0:
+        case action
+        of nimkit.GitRepositoryAction.FetchOrigin:
+          "Fetched from origin"
+        of nimkit.GitRepositoryAction.PullCurrentBranch:
+          "Updated " & branch
+        of nimkit.GitRepositoryAction.CleanupBranches:
+          "Cleaned up merged local branches"
+        of nimkit.GitRepositoryAction.DeleteBranch:
+          "Deleted " & branch
+        else:
+          "Updated " & branch & " from origin"
+      elif action in {
+        nimkit.GitRepositoryAction.CleanupBranches,
+        nimkit.GitRepositoryAction.DeleteBranch,
+      }:
+        "Could not remove some branches"
+      else:
+        "Git update failed"
+    if code != 0:
+      frontend[].showGitActionError(statusLabel.text, output.strip())
   searchPanel.onOpenResult = proc(
       match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) =

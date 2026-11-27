@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Hold Option or Alt in Kosmo’s Files branch selector for branch actions.
+  The Update submenu fetches or pulls, and inactive local branches can be
+  fast-forwarded from their matching branches on origin.
+- Clean up merged local branches, including squash merges whose changes
+  are in the default branch. Update → Clean Up All shows a selectable list
+  before deleting branches.
 - Merge open pull requests from Kosmo's GitHub view with a merge commit,
   squash merge, or rebase merge.
 - Open the selected project's GitHub view with the shortcut when its root has

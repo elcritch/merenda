@@ -56,6 +56,7 @@ type
     xKeyEquivalent: KeyStroke
     xHasKeyEquivalent: bool
     xSubmenu: Menu
+    xOptionSubmenu: Menu
     xSeparator: bool
     xImage: ImageResource
     xTag: int
@@ -80,6 +81,7 @@ type
     xPopupList: PopupListView
     xPopupHost: PopupHost
     xPopupOpen: bool
+    xOptionDown: bool
     xRestoreResponder: Responder
     xActionStartResponder: Responder
     xUsesCustomRestoreResponder: bool
@@ -546,6 +548,15 @@ proc submenu*(item: MenuItem): Menu =
 
 proc `submenu=`*(item: MenuItem, submenu: Menu) =
   item.xSubmenu = submenu
+  if not submenu.isNil:
+    submenu.setNextResponder(item)
+
+proc optionSubmenu*(item: MenuItem): Menu =
+  ## The alternate submenu shown in a popup while Option or Alt is held.
+  item.xOptionSubmenu
+
+proc `optionSubmenu=`*(item: MenuItem, submenu: Menu) =
+  item.xOptionSubmenu = submenu
   if not submenu.isNil:
     submenu.setNextResponder(item)
   syncNativeMainMenu()
@@ -1248,6 +1259,15 @@ proc menuItem(button: PopupMenuButton, index: int): MenuItem =
     return nil
   button.xMenu[index]
 
+proc popupSubmenu(button: PopupMenuButton, item: MenuItem): Menu =
+  let alternate = item.optionSubmenu()
+  if not alternate.isNil and (
+    button.xOptionDown or
+    (not button.xChildPopup.isNil and button.xChildPopup.menu() == alternate)
+  ):
+    return alternate
+  item.submenu()
+
 proc menuItemKeyEquivalentText(item: MenuItem): string =
   if item.subtitle().len > 0:
     return item.subtitle()
@@ -1315,6 +1335,13 @@ proc setPopupNeedsDisplay(button: PopupMenuButton) =
   if not button.xPopupList.isNil:
     button.xPopupList.needsDisplay = true
 
+proc updatePopupModifiers(button: PopupMenuButton, modifiers: set[KeyModifier]): bool =
+  let optionDown = kmOption in modifiers
+  if button.popupOpen() and button.xOptionDown != optionDown:
+    button.xOptionDown = optionDown
+    button.setPopupNeedsDisplay()
+    result = true
+
 proc setHighlightedIndex(button: PopupMenuButton, index: int, openSubmenu = false) =
   var boundedIndex = if index < 0 or index >= button.menuItemCount(): -1 else: index
   if boundedIndex >= 0 and not button.menuItemIsSelectable(boundedIndex):
@@ -1356,7 +1383,7 @@ proc activateItem(button: PopupMenuButton, index: int) =
   let item = button.menuItem(index)
   if item.isNil or item.hidden() or item.isSeparatorItem() or not item.enabled():
     return
-  if not item.submenu().isNil:
+  if not button.popupSubmenu(item).isNil:
     button.openSubmenuPopup(index)
     return
   let
@@ -1402,7 +1429,8 @@ protocol MenuPopupListDataSource of PopupListDataSource:
       text: (if separator: "" else: item.title()),
       keyEquivalentText: item.menuItemKeyEquivalentText(),
       separator: separator,
-      hasSubmenu: not hidden and not item.submenu().isNil,
+      hasSubmenu: not hidden and not button.popupSubmenu(item).isNil,
+      reservesSubmenuSpace: not hidden and not item.optionSubmenu().isNil,
       disabled: hidden or not item.enabled(),
     )
 
@@ -1484,7 +1512,7 @@ proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
     button.setHighlightedIndex(button.lastSelectableItemIndex())
   of keyArrowRight:
     let item = button.menuItem(button.xHighlightedIndex)
-    if not item.isNil and not item.submenu().isNil and item.enabled():
+    if not item.isNil and not button.popupSubmenu(item).isNil and item.enabled():
       button.openSubmenuPopup(button.xHighlightedIndex)
     else:
       discard button.selectRelativeMenuBarButton(1)
@@ -1513,6 +1541,12 @@ protocol MenuPopupListDelegate of PopupListDelegate:
   method activateRow(button: PopupMenuButton, popupList: PopupListView, index: int) =
     button.activateItem(index)
 
+  method dismissAfterActivation(
+      button: PopupMenuButton, popupList: PopupListView
+  ): bool =
+    # Leaf actions close the popup themselves. Selecting a submenu opens it.
+    false
+
   method dismissList(button: PopupMenuButton, popupList: PopupListView) =
     button.closePopupRoot()
 
@@ -1523,6 +1557,11 @@ protocol MenuPopupListDelegate of PopupListDelegate:
       button: PopupMenuButton, popupList: PopupListView, event: KeyEvent
   ) =
     discard button.handlePopupKeyDown(event)
+
+  method handleFlagsChanged(
+      button: PopupMenuButton, popupList: PopupListView, event: KeyEvent
+  ) =
+    discard button.updatePopupModifiers(event.modifiers)
 
   method moveFocus(button: PopupMenuButton, popupList: PopupListView, delta: int) =
     button.dismissPopupAndAdvanceKeyView(delta)
@@ -1659,6 +1698,7 @@ proc closePopupImpl(button: PopupMenuButton) =
     return
   button.closeChildPopup()
   button.xPopupOpen = false
+  button.xOptionDown = false
   button.xHighlightedIndex = -1
   button.closePopupWindow()
   if not button.xMenu.isNil:
@@ -1833,8 +1873,12 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
         if button.popupOpen():
           button.closePopup()
         else:
+          button.xOptionDown = kmOption in event.modifiers
           button.openPopup()
       return true
+
+  method flagsChanged(button: PopupMenuButton, event: KeyEvent): bool =
+    button.updatePopupModifiers(event.modifiers)
 
   method keyDown(button: PopupMenuButton, event: KeyEvent): bool =
     if button.popupOpen():
@@ -1848,6 +1892,7 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
         root.closePopup()
       true
     of keyEnter, keyArrowDown:
+      button.xOptionDown = kmOption in event.modifiers
       button.openPopup()
       true
     of keyArrowLeft:
@@ -1959,15 +2004,19 @@ proc submenuCascadeFrame(button: PopupMenuButton, index: int): Rect =
 
 proc openSubmenuPopup(button: PopupMenuButton, index: int) =
   let item = button.menuItem(index)
-  if item.isNil or item.hidden() or item.submenu().isNil or not item.enabled():
+  if item.isNil or item.hidden() or not item.enabled():
+    button.closeChildPopup()
+    return
+  let submenu = button.popupSubmenu(item)
+  if submenu.isNil:
     button.closeChildPopup()
     return
   if not button.xChildPopup.isNil and button.xChildPopupOwnerIndex == index and
-      button.xChildPopup.popupOpen():
+      button.xChildPopup.menu() == submenu and button.xChildPopup.popupOpen():
     return
 
   button.closeChildPopup()
-  let child = newPopupMenuButton(item.title(), item.submenu())
+  let child = newPopupMenuButton(item.title(), submenu)
   child.xParentPopup = button
   child.xCascadeFrame = button.submenuCascadeFrame(index)
   child.xUsesCascadeFrame = true

@@ -17,6 +17,7 @@ type
     keyEquivalentText*: string
     separator*: bool
     hasSubmenu*: bool
+    reservesSubmenuSpace*: bool
     disabled*: bool
 
   PopupListView* = ref object of View
@@ -65,6 +66,7 @@ protocol PopupListDelegate {.selectorScope: protocol.}:
   method dismissList*(popupList: PopupListView) {.optional.}
   method scrollByRows*(popupList: PopupListView, delta: int) {.optional.}
   method handleKeyDown*(popupList: PopupListView, event: KeyEvent) {.optional.}
+  method handleFlagsChanged*(popupList: PopupListView, event: KeyEvent) {.optional.}
   method moveFocus*(popupList: PopupListView, delta: int) {.optional.}
     ## Handles Tab (1) or Backtab (-1). Without this method, the command
     ## continues along the popup's responder chain.
@@ -209,6 +211,9 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
   method keyDown(popupList: PopupListView, event: KeyEvent): bool =
     popupList.sendToDelegate(handleKeyDown(), (popupList: popupList, event: event))
     true
+
+  method flagsChanged(popupList: PopupListView, event: KeyEvent): bool =
+    popupList.sendToDelegate(handleFlagsChanged(), (popupList: popupList, event: event))
 
 protocol DefaultPopupListKeyCommands of KeyViewCommandProtocol:
   method insertTab(popupList: PopupListView, args: ActionArgs) =
@@ -370,7 +375,7 @@ proc itemMetrics(
   if shortcut.len > 0:
     result.shortcutWidth = textNaturalSize(shortcut, style.text).width
     result.textInsets.right += result.shortcutWidth + PopupShortcutGap
-  if item.hasSubmenu:
+  if item.hasSubmenu or item.reservesSubmenuSpace:
     result.submenuWidth = max(textNaturalSize(">", style.text).width, 10.0'f32)
     result.textInsets.right += result.submenuWidth + PopupSubmenuGap
 

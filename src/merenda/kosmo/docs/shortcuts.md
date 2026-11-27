@@ -486,6 +486,21 @@ standard-function-keys preference; macOS therefore also binds
 `Command-Control-T` to the action by default, which needs neither.
 `keybindings.json` can rebind or remove either spelling (see below).
 
+### Branch actions in Files
+
+Open the branch selector and hold Option on macOS or Alt elsewhere. Each
+local branch shows a submenu with actions to switch, compare with the current
+branch, copy its name, or fast-forward it from the matching branch on origin.
+The Update submenu is always available. It can fetch from origin or pull the
+current branch with a fast-forward only.
+
+Choose **Clean Up Branch** to remove one verified merged branch, or
+**Update → Clean Up All** to review a checklist of merged local branches.
+Kosmo checks the default branch's history and contents, which can also
+verify a squash merge. **Delete Branch** requires confirmation for a branch
+whose merge could not be verified. The default branch and branches checked
+out in worktrees are protected.
+
 ### Toggle Markdown source
 
 `primary-Shift-M` (Command-Shift-M on macOS, Control-Shift-M elsewhere) switches
