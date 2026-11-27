@@ -1487,6 +1487,8 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
   result.addSubview(result.errorLabel)
   result.addSubview(scopeButton)
   result.addSubview(branchButton)
+  # Cascading menus need room beyond the clipped sidebar and a native popup's bounds.
+  branchButton.popupPresentation = nimkit.ppInline
   branchButton.toolTip =
     when defined(macosx):
       "Hold Option for branch actions"

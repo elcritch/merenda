@@ -1222,11 +1222,6 @@ proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   while not result.isNil and not result.xParentPopup.isNil:
     result = result.xParentPopup
 
-proc cascadeSuperview(button: PopupMenuButton): View =
-  if not button.xParentPopup.isNil:
-    return View(button.xParentPopup.popupList())
-  button.superview()
-
 proc ownerWindow(button: PopupMenuButton): Window =
   if not button.xParentPopup.isNil:
     return button.xParentPopup.ownerWindow()
@@ -1235,6 +1230,15 @@ proc ownerWindow(button: PopupMenuButton): Window =
     Window(owner)
   else:
     nil
+
+proc cascadeSuperview(button: PopupMenuButton): View =
+  if not button.xParentPopup.isNil:
+    return View(button.xParentPopup.popupList())
+  if button.xPopupPresentation == ppInline:
+    let owner = button.ownerWindow()
+    if not owner.isNil:
+      return owner.contentView()
+  button.superview()
 
 proc popupSize(button: PopupMenuButton): Size =
   let

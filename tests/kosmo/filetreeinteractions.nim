@@ -49,11 +49,14 @@ suite "Kosmo file tree interactions":
     let root = createTempDir("kosmo-branch-selector-", "")
     let tree = newFileTree(root)
     let panel = newFileBrowserPanel(tree)
-    let window = newWindow("Git branches", rect(0, 0, 280, 320))
+    let window = newWindow("Git branches", rect(0, 0, 680, 320))
+    let content = newView(frame = rect(0, 0, 680, 320))
     defer:
       window.close()
       removeDir(root)
-    window.setContentView(panel)
+    panel.frame = rect(0, 0, 240, 320)
+    content.addSubview(panel)
+    window.setContentView(content)
     check panel.branchButton.hidden
     tree.applyGitStatus(
       GitStatusSnapshot(
@@ -74,9 +77,8 @@ suite "Kosmo file tree interactions":
     panel.onSelectBranch = proc(root, branch: string) =
       selectedRoot = root
       selectedBranch = branch
-    panel.branchButton.popupPresentation = ppInline
     panel.branchButton.openPopup()
-    let popup = panel.popupIn()
+    let popup = content.popupIn()
     require not popup.isNil
     let index = popup.choiceIndex("feature")
     require index >= 0
@@ -95,7 +97,7 @@ suite "Kosmo file tree interactions":
       inc updateCalls
     require window.makeFirstResponder(panel.branchButton)
     panel.branchButton.openPopup()
-    let branchPopup = panel.popupIn()
+    let branchPopup = content.popupIn()
     require not branchPopup.isNil
     let updateIndex = branchPopup.choiceIndex("Update")
     require updateIndex >= 0
@@ -121,9 +123,19 @@ suite "Kosmo file tree interactions":
     check not panel.branchButton.popupOpen()
 
     panel.branchButton.openPopup()
-    require window.dispatchKeyDown(KeyEvent(key: keyEnd))
-    require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
-    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    let updatePopup = content.popupIn()
+    require not updatePopup.isNil
+    let updateBounds = updatePopup.popupListItemRect(updatePopup.bounds(), updateIndex)
+    require window.mouseMovedAt(updatePopup.pointToWindow(updateBounds.center()))
+    let updateActions = updatePopup.popupIn()
+    require not updateActions.isNil
+    let fetchIndex = updateActions.choiceIndex("Fetch from Origin")
+    require fetchIndex >= 0
+    let fetchBounds =
+      updateActions.popupListItemRect(updateActions.bounds(), fetchIndex)
+    let fetchPoint = updateActions.pointToWindow(fetchBounds.center())
+    check not panel.bounds().contains(panel.pointFromWindow(fetchPoint))
+    require window.clickAt(fetchPoint)
     check updateCalls == 2
     check updateAction == GitRepositoryAction.FetchOrigin
     check updatedBranch.len == 0
