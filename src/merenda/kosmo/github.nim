@@ -6,6 +6,7 @@ import ../nimkit/foundation/backgroundprocesses
 const GitHubDefaultItemLimit* = 100
 
 const GitHubDiffLinkPrefix* = "kosmo-pr-diff:"
+const GitHubMergeAnchorPrefix* = "kosmo-pr-merge:"
 
 type
   GitHubItemKind* = enum
@@ -16,6 +17,11 @@ type
     ghsOpen
     ghsClosed
     ghsAll
+
+  GitHubMergeMethod* {.pure.} = enum
+    Merge = "merge"
+    Squash = "squash"
+    Rebase = "rebase"
 
   GitHubJobState* = enum
     ghjsUnknown
@@ -318,6 +324,128 @@ func workflowRunId(url: string): string =
       ):
         return identifier
 
+proc runGitHubCli(
+    rootPath, executable: string,
+    arguments: seq[string],
+    cancelled: proc(): bool {.closure, gcsafe.},
+    timeoutMilliseconds: Positive,
+    maxOutputBytes: Natural,
+): BackgroundCommandResult =
+  let environment = newStringTable(modeCaseSensitive)
+  for key, value in envPairs():
+    environment[key] = value
+  environment.del("GH_REPO")
+  environment["GH_PROMPT_DISABLED"] = "1"
+  environment["GH_PAGER"] = "cat"
+  var
+    commandExecutable = executable
+    commandArguments = arguments
+  when defined(posix):
+    if executable == "gh":
+      commandExecutable = getEnv("SHELL")
+      if commandExecutable.len == 0:
+        commandExecutable = "/bin/sh"
+      # Reapply repository settings after the login profile and exec for cancellation.
+      let commandParts =
+        @[
+          "/usr/bin/env",
+          "-C",
+          absolutePath(rootPath),
+          "-u",
+          "GH_REPO",
+          "--",
+          "GH_PROMPT_DISABLED=1",
+          "GH_PAGER=cat",
+          executable,
+        ] & arguments
+      commandArguments = @["-l", "-c", "exec " & quoteShellCommand(commandParts)]
+  runBackgroundCommand(
+    commandExecutable,
+    commandArguments,
+    workingDirectory = rootPath,
+    timeoutMilliseconds = timeoutMilliseconds,
+    cancelled = cancelled,
+    maxOutputBytes = maxOutputBytes,
+    environment = environment,
+    diagnosticName = "GitHub CLI",
+  )
+
+func validHeadSha(sha: string): bool =
+  sha.len in [40, 64] and sha.allCharsInSet(HexDigits)
+
+proc pullRequestMergeTarget(item: GitHubItem): tuple[host, endpoint: string] =
+  if item.kind != ghikPullRequest or item.number <= 0 or item.draft or
+      item.state.toUpperAscii() != "OPEN" or not item.headSha.validHeadSha():
+    return
+  let
+    url = parseUri(item.url)
+    path = url.path.split('/')
+  if url.scheme notin ["http", "https"] or url.hostname.len == 0 or path.len != 5 or
+      path[0].len != 0 or path[3] != "pull" or path[4] != $item.number:
+    return
+  for part in [path[1], path[2]]:
+    if part.len == 0 or part in [".", ".."] or
+        not part.allCharsInSet(Letters + Digits + {'-', '_', '.'}):
+      return
+  result =
+    (url.hostname, "repos/" & path[1] & "/" & path[2] & "/pulls/" & path[4] & "/merge")
+
+proc canMergePullRequest*(item: GitHubItem): bool =
+  ## Whether the snapshot supplies a target and head for a direct merge request.
+  item.pullRequestMergeTarget().endpoint.len > 0
+
+proc mergeGitHubPullRequest*(
+    rootPath: string,
+    item: GitHubItem,
+    mergeMethod: GitHubMergeMethod,
+    executable = "gh",
+    cancelled: proc(): bool {.closure, gcsafe.} = nil,
+): string =
+  ## Request a direct merge for this PR and head commit. Return GitHub's error on failure.
+  let (host, endpoint) = item.pullRequestMergeTarget()
+  if endpoint.len == 0:
+    return "The pull request is unavailable for merging."
+  let response = runGitHubCli(
+    rootPath,
+    executable,
+    @[
+      "api",
+      endpoint,
+      "--hostname",
+      host,
+      "--method",
+      "PUT",
+      "--raw-field",
+      "merge_method=" & $mergeMethod,
+      "--raw-field",
+      "sha=" & item.headSha,
+    ],
+    cancelled,
+    30_000,
+    64 * 1024,
+  )
+  if response.exitCode != 0:
+    let output = response.output.strip()
+    for line in output.splitLines():
+      if line.startsWith("gh: "):
+        return line[4 .. ^1]
+    return
+      if output.len > 0:
+        output
+      else:
+        "gh exited with code " & $response.exitCode
+  try:
+    let body = parseJson(response.output)
+    if body.kind == JObject:
+      if body.getOrDefault("merged").getBool():
+        return
+      let message = body.stringField("message")
+      if message.len > 0:
+        return message
+  except CatchableError:
+    discard
+  result = "GitHub did not confirm the merge."
+
 proc readGitHubSnapshot*(
     rootPath: string,
     state = ghsOpen,
@@ -340,47 +468,17 @@ proc readGitHubSnapshot*(
     GitHubSnapshot(rootPath: rootPath, state: state, kinds: kinds, itemLimit: itemLimit)
   if detailsOnly:
     result = previousSnapshot
-  let environment = newStringTable(modeCaseSensitive)
-  for key, value in envPairs():
-    environment[key] = value
-  environment.del("GH_REPO")
-  environment["GH_PROMPT_DISABLED"] = "1"
-  environment["GH_PAGER"] = "cat"
   var rateLimitResponse: BackgroundCommandResult
   proc request(endpoint: string): BackgroundCommandResult =
     if rateLimitResponse.exitCode != 0:
       return rateLimitResponse
-    var commandExecutable = executable
-    var arguments = @["api", endpoint]
-    when defined(posix):
-      if executable == "gh":
-        commandExecutable = getEnv("SHELL")
-        if commandExecutable.len == 0:
-          commandExecutable = "/bin/sh"
-        # Login profiles can change cwd or GitHub settings. Reapply these after
-        # startup, and exec the command so cancellation still reaps gh itself.
-        var commandParts = @[
-          "/usr/bin/env",
-          "-C",
-          absolutePath(rootPath),
-          "-u",
-          "GH_REPO",
-          "--",
-          "GH_PROMPT_DISABLED=1",
-          "GH_PAGER=cat",
-          executable,
-        ]
-        commandParts.add arguments
-        arguments = @["-l", "-c", "exec " & quoteShellCommand(commandParts)]
-    result = runBackgroundCommand(
-      commandExecutable,
-      arguments,
-      workingDirectory = rootPath,
-      timeoutMilliseconds = timeoutMilliseconds,
-      cancelled = cancelled,
-      maxOutputBytes = maxOutputBytes,
-      environment = environment,
-      diagnosticName = "GitHub CLI",
+    result = runGitHubCli(
+      rootPath,
+      executable,
+      @["api", endpoint],
+      cancelled,
+      timeoutMilliseconds,
+      maxOutputBytes,
     )
     if result.exitCode != 0 and "rate limit" in result.output.toLowerAscii():
       rateLimitResponse = result
@@ -433,7 +531,7 @@ proc readGitHubSnapshot*(
     item.jobsError = ""
     item.jobsTruncated = false
     item.reviewActivity = ""
-    if item.headSha.len notin [40, 64] or not item.headSha.allCharsInSet(HexDigits):
+    if not item.headSha.validHeadSha():
       item.jobsError = "The pull request head commit is unavailable."
       continue
     for endpoint in ["check-runs", "status"]:
@@ -637,7 +735,7 @@ proc gitHubHeadingIdentifiers*(snapshot: GitHubSnapshot): seq[string] =
       if item.kind == kind and item.matchesState(snapshot.state):
         result.add prefix & "-" & $item.number
 
-proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
+proc gitHubMarkdown*(snapshot: GitHubSnapshot, mergeActions = false): string =
   ## Render metadata as text and each item's body as an isolated Markdown quote.
   result = "# GitHub · " & snapshot.rootPath.lastPathPart().markdownText() & "\n\n"
   result.add snapshot.rootPath.markdownText() & "\n\n"
@@ -692,6 +790,10 @@ proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
         elif item.reviewActivity.len > 0:
           result.add "Review activity: " & item.reviewActivity.markdownText() & "\n\n"
         if item.kind == ghikPullRequest:
+          if mergeActions and item.canMergePullRequest():
+            # Reserve two text lines for the native buttons in the repository view.
+            result.add "[&#160;](" & GitHubMergeAnchorPrefix & $item.number &
+              ")  \n&#160;\n\n"
           if item.jobsPending:
             result.add "Jobs: Open this pull request to load checks.\n\n"
           elif item.jobsError.len > 0:

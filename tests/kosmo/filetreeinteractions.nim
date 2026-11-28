@@ -45,15 +45,18 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
           return true
 
 suite "Kosmo file tree interactions":
-  test "branch selector displays Git branches above the file tree":
+  test "branch selector switches directly and shows update and alternate actions":
     let root = createTempDir("kosmo-branch-selector-", "")
     let tree = newFileTree(root)
     let panel = newFileBrowserPanel(tree)
-    let window = newWindow("Git branches", rect(0, 0, 280, 320))
+    let window = newWindow("Git branches", rect(0, 0, 680, 320))
+    let content = newView(frame = rect(0, 0, 680, 320))
     defer:
       window.close()
       removeDir(root)
-    window.setContentView(panel)
+    panel.frame = rect(0, 0, 240, 320)
+    content.addSubview(panel)
+    window.setContentView(content)
     check panel.branchButton.hidden
     tree.applyGitStatus(
       GitStatusSnapshot(
@@ -67,16 +70,15 @@ suite "Kosmo file tree interactions":
     check not panel.branchButton.hidden
     check panel.branchButton.title == "main"
     check panel.branchButton.frame().maxY <= tree.frame().minY
-    require panel.branchButton.menu().items().len == 2
+    require panel.branchButton.menu().items().len == 3
     check panel.branchButton.menu()[0].state == bsOn
     check panel.branchButton.menu()[1].title == "feature"
     var selectedRoot, selectedBranch: string
     panel.onSelectBranch = proc(root, branch: string) =
       selectedRoot = root
       selectedBranch = branch
-    panel.branchButton.popupPresentation = ppInline
     panel.branchButton.openPopup()
-    let popup = panel.popupIn()
+    let popup = content.popupIn()
     require not popup.isNil
     let index = popup.choiceIndex("feature")
     require index >= 0
@@ -84,8 +86,101 @@ suite "Kosmo file tree interactions":
     check window.clickAt(popup.pointToWindow(itemBounds.center()))
     check selectedRoot == root
     check selectedBranch == "feature"
+
+    var updatedBranch: string
+    var updateAction: GitRepositoryAction
+    var updateCalls = 0
+    panel.onUpdateRepository = proc(root, branch: string, action: GitRepositoryAction) =
+      check root == tree.rootPath
+      updatedBranch = branch
+      updateAction = action
+      inc updateCalls
+    require window.makeFirstResponder(panel.branchButton)
+    panel.branchButton.openPopup()
+    let branchPopup = content.popupIn()
+    require not branchPopup.isNil
+    let updateIndex = branchPopup.choiceIndex("Update")
+    require updateIndex >= 0
+    check branchPopup.itemHasSubmenu(updateIndex)
+    check not branchPopup.itemHasSubmenu(index)
+    require window.dispatchFlagsChanged(KeyEvent(modifiers: {kmOption}))
+    check branchPopup.itemHasSubmenu(index)
+    require window.dispatchFlagsChanged(KeyEvent())
+    check not branchPopup.itemHasSubmenu(index)
+    check branchPopup.itemHasSubmenu(updateIndex)
+    require window.dispatchFlagsChanged(KeyEvent(modifiers: {kmOption}))
+    let branchBounds = branchPopup.popupListItemRect(branchPopup.bounds(), index)
+    require window.clickAt(branchPopup.pointToWindow(branchBounds.center()))
+    let branchActions = panel.branchButton.activeSubmenuButton()
+    require not branchActions.isNil
+    check branchActions.popupOpen()
+    discard window.dispatchFlagsChanged(KeyEvent())
+    require window.dispatchKeyDown(KeyEvent(key: keyEnd))
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    check updateCalls == 1
+    check updatedBranch == "feature"
+    check updateAction == GitRepositoryAction.UpdateBranch
+    check not panel.branchButton.popupOpen()
+
+    panel.branchButton.openPopup()
+    let updatePopup = content.popupIn()
+    require not updatePopup.isNil
+    let updateBounds = updatePopup.popupListItemRect(updatePopup.bounds(), updateIndex)
+    require window.mouseMovedAt(updatePopup.pointToWindow(updateBounds.center()))
+    let updateActions = updatePopup.popupIn()
+    require not updateActions.isNil
+    let fetchIndex = updateActions.choiceIndex("Fetch from Origin")
+    require fetchIndex >= 0
+    let fetchBounds =
+      updateActions.popupListItemRect(updateActions.bounds(), fetchIndex)
+    let fetchPoint = updateActions.pointToWindow(fetchBounds.center())
+    check not panel.bounds().contains(panel.pointFromWindow(fetchPoint))
+    require window.clickAt(fetchPoint)
+    check updateCalls == 2
+    check updateAction == GitRepositoryAction.FetchOrigin
+    check updatedBranch.len == 0
     check tree.removeRootPath(root)
     check panel.branchButton.hidden
+
+  test "branch cleanup menus offer only eligible local branches for bulk review":
+    let root = createTempDir("kosmo-branch-cleanup-menu-", "")
+    defer:
+      removeDir(root)
+    let tree = newFileTree(root)
+    let panel = newFileBrowserPanel(tree)
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: root,
+        isRepository: true,
+        branch: "main",
+        cleanupBase: "main",
+        branches: @["main", "done", "work", "linked"],
+        branchInfo: @[
+          GitBranchInfo(name: "main", head: "a", protected: true),
+          GitBranchInfo(name: "done", head: "b", merged: true),
+          GitBranchInfo(name: "work", head: "c"),
+          GitBranchInfo(name: "linked", head: "d", merged: true, protected: true),
+        ],
+      )
+    )
+    let menu = panel.branchButton.menu()
+    check menu[0].optionSubmenu().items()[^1].title == "Update from origin/main"
+    check menu[1].optionSubmenu().items()[^1].title == "Clean Up Branch…"
+    check menu[2].optionSubmenu().items()[^1].title == "Delete Branch…"
+    check menu[3].optionSubmenu().items()[^1].title == "Update from origin/linked"
+    let cleanupAll = menu[4].submenu().items()[^1]
+    check cleanupAll.title == "Clean Up All…"
+    var reviewed: seq[string]
+    panel.onRemoveBranches = proc(
+        target, base: string, branches: seq[GitBranchInfo], cleanup, bulk: bool
+    ) =
+      check target == root
+      check base == "main"
+      check cleanup and bulk
+      for branch in branches:
+        reviewed.add branch.name
+    require cleanupAll.perform(nil)
+    check reviewed == @["done"]
 
   test "h j k l navigate the focused tree exactly like arrow keys":
     let root = createTempDir("kosmo-tree-navigation-", "")

@@ -37,6 +37,14 @@ type
   FileTreeItemActionHandler* =
     proc(path: string, action: FileTreeItemAction) {.closure.}
 
+  BranchMenuAction {.pure.} = enum
+    Switch
+    Compare
+    CopyName
+    FetchOrigin
+    PullCurrent
+    UpdateBranch
+
   FileTreeSearchEntry = object
     path: string
     name: string
@@ -51,6 +59,12 @@ type
     onItemAction*: FileTreeItemActionHandler
     onGitStatus*: proc(snapshot: nimkit.GitStatusSnapshot) {.closure.}
     onBranchSwitched*: proc(root, branch: string, code: int, output: string) {.closure.}
+    onRepositoryUpdated*: proc(
+      root, branch: string,
+      action: nimkit.GitRepositoryAction,
+      code: int,
+      output: string,
+    ) {.closure.}
     xOpenDisposition: FileTreeOpenDisposition
     xGitStatusService: nimkit.GitStatusService
     xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
@@ -73,6 +87,12 @@ type
     scopeButton*: nimkit.PopupMenuButton
     branchButton*: nimkit.PopupMenuButton
     onSelectBranch*: proc(root, branch: string) {.closure.}
+    onCompareBranch*: proc(root, branch: string) {.closure.}
+    onUpdateRepository*:
+      proc(root, branch: string, action: nimkit.GitRepositoryAction) {.closure.}
+    onRemoveBranches*: proc(
+      root, base: string, branches: seq[nimkit.GitBranchInfo], cleanup, bulk: bool
+    ) {.closure.}
     closeFilterButton*: nimkit.Button
     expressionButton: nimkit.Button
     errorLabel: nimkit.Label
@@ -871,9 +891,29 @@ proc branchSwitched(
   if not tree.onBranchSwitched.isNil:
     tree.onBranchSwitched(root, branch, code, output)
 
+proc repositoryUpdated(
+    tree: FileTree,
+    root, branch: string,
+    action: nimkit.GitRepositoryAction,
+    code: int,
+    output: string,
+) {.slot.} =
+  if not tree.onRepositoryUpdated.isNil:
+    tree.onRepositoryUpdated(root, branch, action, code, output)
+
 proc switchBranch*(tree: FileTree, root, branch: string): bool {.discardable.} =
   not tree.isNil and not tree.xGitStatusService.isNil and
     tree.xGitStatusService.switchBranch(root, branch)
+
+proc performGitAction*(
+    tree: FileTree, root, branch: string, action: nimkit.GitRepositoryAction
+): bool {.discardable.} =
+  not tree.isNil and tree.xGitStatusService.performGitAction(root, branch, action)
+
+proc removeBranches*(
+    tree: FileTree, root: string, selected: seq[nimkit.GitBranchInfo], cleanup: bool
+): bool {.discardable.} =
+  not tree.isNil and tree.xGitStatusService.removeBranches(root, selected, cleanup)
 
 proc startGitStatusMonitoring*(
     tree: FileTree, refreshInterval: Duration = initDuration()
@@ -887,6 +927,7 @@ proc startGitStatusMonitoring*(
   result = nimkit.newGitStatusService(refreshInterval = refreshInterval)
   result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
   result.connect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
+  result.connect(nimkit.gitRepositoryDidUpdate, tree, repositoryUpdated)
   tree.xGitStatusService = result
   result.rootPaths = tree.xRootPaths
   tree.xWorkspaceFiles.connect(workspaceRepositoryDidChange, tree, workspaceGitChanged)
@@ -917,6 +958,9 @@ proc stopGitStatusMonitoring*(tree: FileTree) =
     nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus
   )
   tree.xGitStatusService.disconnect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
+  tree.xGitStatusService.disconnect(
+    nimkit.gitRepositoryDidUpdate, tree, repositoryUpdated
+  )
   tree.xGitStatusService.close()
   tree.xGitStatusService = nil
 
@@ -933,20 +977,58 @@ proc syncScopeControl(panel: FileBrowserPanel) =
   for index, item in panel.scopeButton.menu().items():
     item.state = if index == mode.ord: nimkit.bsOn else: nimkit.bsOff
 
-proc branchMenuItem(
-    panel: WeakRef[FileBrowserPanel], root, branch, label: string, current: bool
+proc branchActionItem(
+    panel: WeakRef[FileBrowserPanel],
+    root, branch, label: string,
+    branchAction: BranchMenuAction,
+    enabled = true,
 ): nimkit.MenuItem =
-  let action = nimkit.actionSelector(sig"kosmo.selectGitBranch")
+  let action = nimkit.actionSelector("kosmo.branch." & $branchAction)
   result = nimkit.newMenuItem(label, action)
-  result.state = if current: nimkit.bsOn else: nimkit.bsOff
+  result.enabled = enabled
   result.validates = false
   result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
     discard sender
-    if not panel.isNil and not panel[].onSelectBranch.isNil:
-      panel[].onSelectBranch(root, branch)
+    if not panel.isNil:
+      case branchAction
+      of BranchMenuAction.Switch:
+        if not panel[].onSelectBranch.isNil:
+          panel[].onSelectBranch(root, branch)
+      of BranchMenuAction.Compare:
+        if not panel[].onCompareBranch.isNil:
+          panel[].onCompareBranch(root, branch)
+      of BranchMenuAction.CopyName:
+        discard nimkit.generalPasteboard().replaceWithPlainText(branch)
+      of BranchMenuAction.FetchOrigin, BranchMenuAction.PullCurrent,
+          BranchMenuAction.UpdateBranch:
+        if not panel[].onUpdateRepository.isNil:
+          let action =
+            case branchAction
+            of BranchMenuAction.FetchOrigin:
+              nimkit.GitRepositoryAction.FetchOrigin
+            of BranchMenuAction.PullCurrent:
+              nimkit.GitRepositoryAction.PullCurrentBranch
+            else:
+              nimkit.GitRepositoryAction.UpdateBranch
+          panel[].onUpdateRepository(root, branch, action)
+
+proc branchRemovalItem(
+    panel: WeakRef[FileBrowserPanel],
+    root, base, title: string,
+    branches: seq[nimkit.GitBranchInfo],
+    cleanup, bulk: bool,
+): nimkit.MenuItem =
+  let action = nimkit.actionSelector("kosmo.branch.remove")
+  result = nimkit.newMenuItem(title, action)
+  result.enabled = branches.len > 0
+  result.validates = false
+  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
+    if not panel.isNil and not panel[].onRemoveBranches.isNil:
+      panel[].onRemoveBranches(root, base, branches, cleanup, bulk)
 
 proc updateBranches(panel: FileBrowserPanel) =
   let menu = panel.branchButton.menu()
+  let weakPanel = panel.unsafeWeakRef()
   menu.clear()
   var repositories = 0
   var current = ""
@@ -959,17 +1041,99 @@ proc updateBranches(panel: FileBrowserPanel) =
     inc repositories
     if current.len == 0:
       current = snapshot.branch
+    var
+      branchInfo: Table[string, nimkit.GitBranchInfo]
+      merged: seq[nimkit.GitBranchInfo]
+    for branch in snapshot.branchInfo:
+      if not branch.protected and branch.name != snapshot.branch:
+        branchInfo[branch.name] = branch
+        if branch.merged:
+          merged.add branch
+    let prefix =
+      if panel.fileTree.rootPaths.len > 1:
+        root.lastPathPart() & ": "
+      else:
+        ""
     for branch in snapshot.branches:
-      let label =
-        if panel.fileTree.rootPaths.len > 1:
-          root.lastPathPart() & ": " & branch
-        else:
-          branch
-      discard menu.add(
-        branchMenuItem(
-          panel.unsafeWeakRef(), root, branch, label, branch == snapshot.branch
+      let
+        item = branchActionItem(
+          weakPanel, root, branch, prefix & branch, BranchMenuAction.Switch
+        )
+        isCurrent = branch == snapshot.branch
+        actions = nimkit.newMenu(branch)
+      item.state = if isCurrent: nimkit.bsOn else: nimkit.bsOff
+      discard actions.add(
+        branchActionItem(
+          weakPanel,
+          root,
+          branch,
+          "Switch to Branch",
+          BranchMenuAction.Switch,
+          not isCurrent,
         )
       )
+      discard actions.add(
+        branchActionItem(
+          weakPanel,
+          root,
+          branch,
+          "Compare with Current Branch",
+          BranchMenuAction.Compare,
+          not isCurrent,
+        )
+      )
+      discard actions.add(
+        branchActionItem(
+          weakPanel, root, branch, "Copy Branch Name", BranchMenuAction.CopyName
+        )
+      )
+      actions.addSeparator()
+      discard actions.add(
+        branchActionItem(
+          weakPanel,
+          root,
+          branch,
+          "Update from origin/" & branch,
+          BranchMenuAction.UpdateBranch,
+          not isCurrent,
+        )
+      )
+      let info = branchInfo.getOrDefault(branch)
+      if info.head.len > 0:
+        let title = if info.merged: "Clean Up Branch…" else: "Delete Branch…"
+        discard actions.add(
+          branchRemovalItem(
+            weakPanel, root, snapshot.cleanupBase, title, @[info], info.merged, false
+          )
+        )
+      item.optionSubmenu = actions
+      discard menu.add(item)
+    let update = nimkit.newMenuItem(prefix & "Update")
+    update.validates = false
+    let actions = nimkit.newMenu("Update")
+    discard actions.add(
+      branchActionItem(
+        weakPanel, root, "", "Fetch from Origin", BranchMenuAction.FetchOrigin
+      )
+    )
+    discard actions.add(
+      branchActionItem(
+        weakPanel,
+        root,
+        snapshot.branch,
+        "Pull Current Branch (Fast-forward Only)",
+        BranchMenuAction.PullCurrent,
+        snapshot.branch in snapshot.branches,
+      )
+    )
+    actions.addSeparator()
+    discard actions.add(
+      branchRemovalItem(
+        weakPanel, root, snapshot.cleanupBase, "Clean Up All…", merged, true, true
+      )
+    )
+    update.submenu = actions
+    discard menu.add(update)
   panel.branchButton.title =
     if current.len == 0:
       "Git branch"
@@ -1323,6 +1487,13 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
   result.addSubview(result.errorLabel)
   result.addSubview(scopeButton)
   result.addSubview(branchButton)
+  # Cascading menus need room beyond the clipped sidebar and a native popup's bounds.
+  branchButton.popupPresentation = nimkit.ppInline
+  branchButton.toolTip =
+    when defined(macosx):
+      "Hold Option for branch actions"
+    else:
+      "Hold Alt for branch actions"
   branchButton.hidden = true
   tree.onGitStatus = proc(snapshot: nimkit.GitStatusSnapshot) =
     discard snapshot

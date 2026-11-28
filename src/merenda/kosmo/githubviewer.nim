@@ -1,6 +1,6 @@
-## A read-only, searchable GitHub document backed by a cancellable gh worker.
+## A searchable GitHub document backed by a cancellable gh worker.
 
-import std/[atomics, monotimes, options, os, strutils, times]
+import std/[atomics, monotimes, options, os, strutils, tables, times]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../nimkit as nimkit
@@ -42,6 +42,8 @@ type
     stateButton*: nimkit.PopupMenuButton
     autoRefreshSwitch*: nimkit.SwitchButton
     autoRefreshLabel: nimkit.Label
+    mergeStatusLabel: nimkit.Label
+    mergeButtons: Table[int, array[GitHubMergeMethod, nimkit.Button]]
     snapshot*: GitHubSnapshot
     search: KosmoViewerSearch
     pool: SigilThreadPoolPtr
@@ -55,6 +57,7 @@ type
     pullRequestSectionCollapsed: bool
     generation: uint64
     loading*: bool
+    merging: bool
     closed*: bool
     repositoryBacked: bool
     refreshPending: bool
@@ -85,6 +88,31 @@ proc readRepository(
 proc repositoryFinished(
   worker: GitHubWorker, snapshot: GitHubSnapshot, generation: uint64
 ) {.signal.}
+
+proc mergePullRequest(
+  worker: AgentProxy[GitHubWorker],
+  root, executable: string,
+  item: GitHubItem,
+  mergeMethod: GitHubMergeMethod,
+  control: SharedPtr[GitHubRequestControl],
+) {.signal.}
+
+proc mergeFinished(
+  worker: GitHubWorker, root: string, number: int, error: string
+) {.signal.}
+
+proc mergePullRequest(
+    worker: GitHubWorker,
+    root, executable: string,
+    item: GitHubItem,
+    mergeMethod: GitHubMergeMethod,
+    control: SharedPtr[GitHubRequestControl],
+) {.slot.} =
+  let cancelled = proc(): bool {.gcsafe.} =
+    control[].cancelled.load(moAcquire)
+  let error = mergeGitHubPullRequest(root, item, mergeMethod, executable, cancelled)
+  if not cancelled():
+    emit worker.mergeFinished(root, item.number, error)
 
 proc readRepository(
     worker: GitHubWorker,
@@ -127,8 +155,18 @@ proc syncControls(panel: KosmoGitHubPanel) =
     of ghsAll: "All States"
   panel.refreshButton.title = if panel.loading: "Loading…" else: "Refresh"
   panel.refreshButton.enabled =
-    panel.repositoryBacked and not panel.loading and not panel.closed
+    panel.repositoryBacked and not panel.loading and not panel.merging and
+    not panel.closed
   panel.autoRefreshSwitch.enabled = panel.repositoryBacked and not panel.closed
+  for buttons in panel.mergeButtons.values:
+    for button in buttons:
+      button.enabled = not panel.loading and not panel.merging and not panel.closed
+
+proc setMergeStatus(panel: KosmoGitHubPanel, status: string) =
+  panel.mergeStatusLabel.text = status.splitWhitespace().join(" ")
+  panel.mergeStatusLabel.toolTip = status
+  panel.mergeStatusLabel.hidden = status.len == 0
+  panel.needsLayout = true
 
 proc applySnapshot(panel: KosmoGitHubPanel, snapshot: GitHubSnapshot) =
   ## Show an already prepared snapshot, including offline fixtures.
@@ -142,7 +180,7 @@ proc applySnapshot(panel: KosmoGitHubPanel, snapshot: GitHubSnapshot) =
       collapsedItems.add identifier
   panel.snapshot = snapshot
   panel.markdownView.updateMarkdown(
-    snapshot.gitHubMarkdown(),
+    snapshot.gitHubMarkdown(mergeActions = panel.repositoryBacked),
     headingIdentifiers,
     preserveHeadingState = preserveHeadingState,
     initiallyCollapsedHeadings = collapsedItems,
@@ -157,15 +195,18 @@ proc repositoryFinished(
     panel.nextRefresh = getMonoTime() + panel.refreshInterval
     panel.applySnapshot(snapshot)
 
-proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
-  ## Cancel obsolete requests and load the current repository off the UI thread.
-  if panel.isNil or panel.closed or not panel.repositoryBacked:
-    return
+proc replaceRequestControl(panel: KosmoGitHubPanel) =
   if not panel.control.isNil:
     panel.control[].cancelled.store(true, moRelease)
   panel.control = newSharedPtr(GitHubRequestControl)
   panel.control[].cancelled.store(false, moRelaxed)
   inc panel.generation
+
+proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
+  ## Cancel obsolete requests and load the current repository off the UI thread.
+  if panel.isNil or panel.closed or not panel.repositoryBacked or panel.merging:
+    return
+  panel.replaceRequestControl()
   panel.refreshPending = false
   panel.nextRefresh = getMonoTime() + panel.refreshInterval
   panel.loading = true
@@ -189,6 +230,54 @@ proc startRefresh(panel: KosmoGitHubPanel, details: seq[int] = @[]) =
 proc refresh*(panel: KosmoGitHubPanel) =
   panel.startRefresh()
 
+proc mergeFinished(
+    panel: KosmoGitHubPanel, root: string, number: int, error: string
+) {.slot.} =
+  if not panel.closed:
+    panel.merging = false
+    if root == panel.rootPath:
+      panel.setMergeStatus(
+        if error.len == 0:
+          "Merged pull request #" & $number & "."
+        else:
+          "Could not merge pull request #" & $number & ". " & error
+      )
+    panel.refresh()
+
+proc mergeItem(panel: KosmoGitHubPanel, number: int): Option[GitHubItem] =
+  if not panel.closed and panel.repositoryBacked and not panel.merging and
+      panel.state != ghsClosed and ghikPullRequest in panel.kinds and
+      not panel.pullRequestSectionCollapsed and number in panel.openPullRequests:
+    for item in panel.snapshot.items:
+      if item.number == number and item.canMergePullRequest():
+        return some(item)
+
+proc startMerge(
+    panel: KosmoGitHubPanel,
+    root: string,
+    confirmed: GitHubItem,
+    mergeMethod: GitHubMergeMethod,
+) =
+  let current = panel.mergeItem(confirmed.number)
+  if root != panel.rootPath or current.isNone:
+    return
+  let item = current.get()
+  if item.url != confirmed.url or item.headSha != confirmed.headSha or
+      item.baseBranch != confirmed.baseBranch:
+    panel.setMergeStatus(
+      "Pull request #" & $item.number & " changed. Review it and try again."
+    )
+    return
+  panel.replaceRequestControl()
+  panel.loading = false
+  panel.refreshPending = false
+  panel.merging = true
+  panel.setMergeStatus("Merging pull request #" & $item.number & "…")
+  panel.syncControls()
+  emit panel.worker.mergePullRequest(
+    root, panel.executable, item, mergeMethod, panel.control
+  )
+
 proc pollRepositoryRefresh*(panel: KosmoGitHubPanel): bool {.discardable.} =
   ## Refresh periodically or after a quiet workspace notification, without overlap.
   if panel.isNil or panel.closed or not panel.repositoryBacked:
@@ -198,7 +287,7 @@ proc pollRepositoryRefresh*(panel: KosmoGitHubPanel): bool {.discardable.} =
     panel.refreshPending = false
     panel.nextRefresh = now + panel.refreshInterval
     return
-  if panel.loading:
+  if panel.loading or panel.merging:
     return
   if (panel.refreshPending and now >= panel.refreshDeadline) or now >= panel.nextRefresh:
     panel.refresh()
@@ -237,6 +326,7 @@ proc displayRepository*(panel: KosmoGitHubPanel, rootPath: string) =
     panel.openPullRequests.setLen(0)
     panel.pullRequestSectionCollapsed = false
     panel.rootPath = rootPath
+    panel.setMergeStatus("")
     panel.applySnapshot(
       GitHubSnapshot(rootPath: rootPath, state: panel.state, kinds: panel.kinds)
     )
@@ -294,7 +384,7 @@ proc waitForGitHub*(panel: KosmoGitHubPanel, timeoutMilliseconds = 60_000): bool
     discard panel.pollRepositoryRefresh()
     discard getCurrentSigilThread().pollAll(NonBlocking)
     discard drainMainThreadWork()
-    if not panel.loading and not panel.refreshPending and
+    if not panel.loading and not panel.merging and not panel.refreshPending and
         not panel.markdownView.isMarkdownParsing() and
         not panel.markdownView.isMarkdownRendering() and
         not panel.markdownView.textView().layoutManager().isBackgroundLayoutPending():
@@ -360,6 +450,127 @@ proc `diffHandler=`*(panel: KosmoGitHubPanel, handler: GitHubDiffHandler) =
   ## Open a PR comparison in the host application's Git diff viewer.
   panel.diffHandler = handler
 
+func mergeTitle(mergeMethod: GitHubMergeMethod): string =
+  case mergeMethod
+  of GitHubMergeMethod.Merge: "Create a merge commit"
+  of GitHubMergeMethod.Squash: "Squash and merge"
+  of GitHubMergeMethod.Rebase: "Rebase and merge"
+
+proc confirmMerge(
+    panel: KosmoGitHubPanel, number: int, mergeMethod: GitHubMergeMethod
+) =
+  let selected = panel.mergeItem(number)
+  let owner = panel.window()
+  if selected.isNone or not (owner of nimkit.Window):
+    return
+  let parent = nimkit.Window(owner)
+  let responder = parent.nextResponder()
+  if not (responder of nimkit.Application):
+    return
+  let app = nimkit.Application(responder)
+  if app.windowBlockedByModal(parent):
+    return
+  let
+    item = selected.get()
+    root = panel.rootPath
+    title = mergeMethod.mergeTitle()
+    destination =
+      if item.baseBranch.len > 0:
+        " into " & item.baseBranch
+      else:
+        ""
+    alert = nimkit.newAlert(
+      title & "?",
+      "Merge #" & $item.number & " " & item.title & destination & "?\n" & item.url,
+      style = nimkit.asWarning,
+      buttons = ["Cancel", title],
+    )
+    weakPanel = panel.unsafeWeakRef()
+    mergeResponse = alert.buttonResponse(1)
+  alert.window.setInheritedAppearance(parent.effectiveAppearance())
+  var session: nimkit.ModalSession
+  alert.prepareForModal(
+    proc(response: int) =
+      app.endModalSession(session)
+      alert.window.close()
+      if response == mergeResponse and not weakPanel.isNil:
+        weakPanel[].startMerge(root, item, mergeMethod)
+  )
+  session = app.beginModalSheet(parent, alert.window)
+
+proc newMergeButton(
+    panel: KosmoGitHubPanel, number: int, mergeMethod: GitHubMergeMethod
+): nimkit.Button =
+  result = nimkit.newButton(mergeMethod.mergeTitle())
+  result.accessibilityIdentifier = "kosmo.github.merge." & $number & "." & $mergeMethod
+  result.enabled = not panel.loading and not panel.merging
+  let
+    action = nimkit.actionSelector("kosmo.mergeGitHubPullRequest")
+    weakPanel = panel.unsafeWeakRef()
+  result.action = action
+  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
+    if not weakPanel.isNil:
+      weakPanel[].confirmMerge(number, mergeMethod)
+
+proc layoutMergeButtons(panel: KosmoGitHubPanel, snapshot: nimkit.TextLayoutSnapshot) =
+  if not panel.repositoryBacked:
+    return
+  let textView = panel.markdownView.textView()
+  var previous = move panel.mergeButtons
+  var anchors: Table[string, int]
+  if not panel.pullRequestSectionCollapsed and panel.state != ghsClosed and
+      ghikPullRequest in panel.kinds:
+    for item in panel.snapshot.items:
+      if item.number in panel.openPullRequests and item.canMergePullRequest():
+        anchors[GitHubMergeAnchorPrefix & $item.number] = item.number
+  var line = 0
+  if anchors.len > 0:
+    for run in textView.textStorage().attributeRuns():
+      let link = run.attributes.link
+      # PR descriptions are rendered as block quotes. Only the generated
+      # top-level paragraph can position merge controls.
+      if run.attributes.paragraphStyle.headIndent == 0 and link in anchors:
+        let location = int(run.range.location)
+        while line < snapshot.lineFragments.len and
+            snapshot.lineFragments[line].textRange.maxIndex <= location:
+          inc line
+        if line < snapshot.lineFragments.len and
+            int(snapshot.lineFragments[line].textRange.location) == location:
+          let
+            number = anchors[link]
+            fragment = snapshot.lineFragments[line]
+            x = fragment.usedRect.minX
+            gap = 6.0'f32
+          var buttons: array[GitHubMergeMethod, nimkit.Button]
+          if number in previous:
+            buttons = previous[number]
+            previous.del(number)
+          else:
+            for mergeMethod in GitHubMergeMethod:
+              buttons[mergeMethod] = panel.newMergeButton(number, mergeMethod)
+              textView.addSubview(buttons[mergeMethod])
+          var widths: array[GitHubMergeMethod, float32]
+          var totalWidth = 0.0'f32
+          for mergeMethod, button in buttons:
+            widths[mergeMethod] = button.sizeThatFits().width
+            totalWidth += widths[mergeMethod]
+          let scale = min(
+            1.0'f32,
+            max(fragment.fragmentRect.maxX - x - gap * 2, 0) / max(totalWidth, 1),
+          )
+          var nextX = x
+          for mergeMethod, button in buttons:
+            let width = widths[mergeMethod] * scale
+            button.setFrameFromLayout(
+              nimkit.rect(nextX, fragment.usedRect.minY, width, 24)
+            )
+            nextX += width + gap
+          panel.mergeButtons[number] = buttons
+          anchors.del(link)
+  for buttons in previous.values:
+    for button in buttons:
+      button.removeFromSuperview()
+
 protocol GitHubLinks of nimkit.TextViewDelegateProtocol:
   method tvClickedLink(
       delegate: GitHubLinkDelegate,
@@ -388,9 +599,10 @@ proc parsingFinished(panel: KosmoGitHubPanel, workerThreadId: int) {.slot.} =
 proc searchLayoutFinished(
     panel: KosmoGitHubPanel, snapshot: nimkit.TextLayoutSnapshot
 ) {.slot.} =
-  discard snapshot
-  if not panel.closed and panel.pendingSearchRange.isSome and
-      panel.search.searchVisible():
+  if panel.closed:
+    return
+  panel.layoutMergeButtons(snapshot)
+  if panel.pendingSearchRange.isSome and panel.search.searchVisible():
     let range = panel.pendingSearchRange.get()
     if revealTextMatch(
       panel.markdownView.textView(), panel.markdownView.scrollView(), range
@@ -425,8 +637,16 @@ protocol GitHubLayout of nimkit.ViewLayoutProtocol:
     panel.autoRefreshSwitch.setFrameFromLayout(
       nimkit.rect(switchX, 8, switchWidth * scale, 28)
     )
+    var contentTop = 44.0'f32
+    if not panel.mergeStatusLabel.hidden():
+      panel.mergeStatusLabel.setFrameFromLayout(
+        nimkit.rect(inset, contentTop, availableWidth, 24)
+      )
+      contentTop += 24
     panel.markdownView.setFrameFromLayout(
-      nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
+      nimkit.rect(
+        0, contentTop, bounds.size.width, max(bounds.size.height - contentTop, 0)
+      )
     )
 
 proc newGitHubFilterItem(
@@ -492,6 +712,7 @@ proc newKosmoGitHubPanel(
     stateButton: nimkit.newPopupMenuButton("Open", nimkit.newMenu("GitHub State")),
     autoRefreshLabel: nimkit.newLabel("Auto-refresh"),
     autoRefreshSwitch: nimkit.newSwitchButton(),
+    mergeStatusLabel: nimkit.newLabel(),
     rootPath: snapshot.rootPath,
     executable: executable,
     state: snapshot.state,
@@ -512,9 +733,12 @@ proc newKosmoGitHubPanel(
   discard result.withProtocol(GitHubLayout)
   result.markdownStyle = markdownStyle
   result.markdownView.headingsToggleOnClick = true
+  result.mergeStatusLabel.accessibilityIdentifier = "kosmo.github.mergeStatus"
+  result.setMergeStatus("")
   for view in [
     nimkit.View(result.refreshButton), result.kindButton, result.stateButton,
-    result.autoRefreshLabel, result.autoRefreshSwitch, result.markdownView,
+    result.autoRefreshLabel, result.autoRefreshSwitch, result.mergeStatusLabel,
+    result.markdownView,
   ]:
     result.addSubview(view)
   let weakPanel = result.unsafeWeakRef()
@@ -622,6 +846,10 @@ proc newKosmoGitHubPanel(
     connectThreaded(result.worker, readRepository, result.worker, readRepository)
     connectThreaded(
       result.worker, repositoryFinished, result, KosmoGitHubPanel.repositoryFinished()
+    )
+    connectThreaded(result.worker, mergePullRequest, result.worker, mergePullRequest)
+    connectThreaded(
+      result.worker, mergeFinished, result, KosmoGitHubPanel.mergeFinished()
     )
     result.refresh()
 

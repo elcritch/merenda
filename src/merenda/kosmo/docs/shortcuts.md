@@ -56,7 +56,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
 | `primary-Shift-D` | Show Git diff tab | |
-| `primary-Shift-H` | Show GitHub issues and PRs | |
+| `primary-Shift-H` | Show GitHub issues and PRs | In Files, focus a project root to open its repository. |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 | `F5` | Focus tool toolbar | Toggles keyboard focus between the focused tool's content and its toolbar controls. macOS also binds `Command-Control-T`, avoiding the fn-key row. |
 | `F6` | Open Link with Hints | Overlays markers on visible URLs; typing a marker's label opens it. macOS also binds `Command-Control-E`. |
@@ -485,6 +485,21 @@ as media keys, so `F5` may require the `fn` modifier or the
 standard-function-keys preference; macOS therefore also binds
 `Command-Control-T` to the action by default, which needs neither.
 `keybindings.json` can rebind or remove either spelling (see below).
+
+### Branch actions in Files
+
+Open the branch selector and hold Option on macOS or Alt elsewhere. Each
+local branch shows a submenu with actions to switch, compare with the current
+branch, copy its name, or fast-forward it from the matching branch on origin.
+The Update submenu is always available. It can fetch from origin or pull the
+current branch with a fast-forward only.
+
+Choose **Clean Up Branch** to remove one verified merged branch, or
+**Update → Clean Up All** to review a checklist of merged local branches.
+Kosmo checks the default branch's history and contents, which can also
+verify a squash merge. **Delete Branch** requires confirmation for a branch
+whose merge could not be verified. The default branch and branches checked
+out in worktrees are protected.
 
 ### Toggle Markdown source
 

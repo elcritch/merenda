@@ -1,8 +1,8 @@
-import std/[json, monotimes, os, strutils, tempfiles, times, unittest]
+import std/[json, monotimes, os, sequtils, strutils, tempfiles, times, unittest]
 import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/nimkit/foundation/[gitprocesses, mainthreadwork]
 import merenda/kosmo/kosmo
 
 proc headingDisclosure(panel: KosmoGitHubPanel, title: string): Button =
@@ -10,6 +10,22 @@ proc headingDisclosure(panel: KosmoGitHubPanel, title: string): Button =
     if subview of Button and subview.accessibilityRole() == arDisclosureButton and
         subview.accessibilityLabel() == title:
       return Button(subview)
+
+proc mergeButton(
+    panel: KosmoGitHubPanel, number: int, mergeMethod: GitHubMergeMethod
+): Button =
+  let identifier = "kosmo.github.merge." & $number & "." & $mergeMethod
+  for view in panel.markdownView.textView().subviews():
+    if view of Button and view.accessibilityIdentifier() == identifier:
+      return Button(view)
+
+proc buttonWithTitle(view: View, title: string): Button =
+  if view of Button and Button(view).title == title:
+    return Button(view)
+  for child in view.subviews():
+    result = child.buttonWithTitle(title)
+    if not result.isNil:
+      return
 
 proc waitForMarker(path: string): bool =
   let deadline = getMonoTime() + initDuration(seconds = 10)
@@ -208,6 +224,119 @@ suite "GitHub CLI document integration":
     require snapshot.items[0].jobs.len == 1
     check snapshot.items[0].jobs[0].name == "external"
     check "Some checks could not be loaded" in snapshot.gitHubMarkdown()
+
+  test "PR merge buttons confirm the selected method, show errors, and refresh":
+    let root = createTempDir("kosmo-github-merge-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "github-test-mode", "success")
+    writeFile(
+      root / "pr-response.json",
+      $(
+        %*[
+          {
+            "number": 9,
+            "title": "Open PR",
+            "state": "OPEN",
+            "url": "https://github.example.com/team/project/pull/9",
+            "baseRefName": "main",
+          },
+          {
+            "number": 10,
+            "title": "Draft PR",
+            "state": "OPEN",
+            "isDraft": true,
+            "url": "https://github.example.com/team/project/pull/10",
+          },
+        ]
+      ),
+    )
+    let
+      app = newApplication("GitHub merge test")
+      window = newWindow("GitHub", frame = rect(0, 0, 640, 540))
+      panel = newKosmoGitHubPanel(root, executable = getAppFilename())
+    defer:
+      panel.close()
+      window.close()
+    window.setContentView(panel)
+    app.addWindow(window)
+    panel.layoutSubtreeIfNeeded()
+    panel.selectFilter(ghsAll, {ghikPullRequest})
+    require panel.waitForGitHub()
+    require panel.markdownView.waitForMarkdownLayout()
+    check panel.mergeButton(9, GitHubMergeMethod.Merge).isNil
+    for title in ["#9 Open PR", "#10 Draft PR"]:
+      let heading = panel.headingDisclosure(title)
+      require not heading.isNil
+      require heading.accessibilityPerformAction(AccessibilityActionExpand)
+      require panel.waitForGitHub()
+      require panel.markdownView.waitForMarkdownLayout()
+    check panel.mergeButton(10, GitHubMergeMethod.Merge).isNil
+    let cancelMerge = panel.mergeButton(9, GitHubMergeMethod.Merge)
+    require not cancelMerge.isNil
+    require cancelMerge.sendAction()
+    require not app.modalSession().isNil
+    let cancel = app.modalSession().window.contentView().buttonWithTitle("Cancel")
+    require not cancel.isNil
+    require cancel.sendAction()
+    check app.modalSession().isNil
+    check not fileExists(root / "merge-request.json")
+
+    let status = panel.subviews().findIt(
+        it.accessibilityIdentifier() == "kosmo.github.mergeStatus"
+      )
+    require status >= 0
+    let statusLabel = Label(panel.subviews()[status])
+    let choices = [
+      (GitHubMergeMethod.Merge, "Create a merge commit"),
+      (GitHubMergeMethod.Squash, "Squash and merge"),
+      (GitHubMergeMethod.Rebase, "Rebase and merge"),
+    ]
+    for attempt in 0 .. 3:
+      let (mergeMethod, title) = choices[min(attempt, choices.high)]
+      if attempt == 2:
+        writeFile(root / "github-merge-error", "Required checks are pending")
+      let button = panel.mergeButton(9, mergeMethod)
+      require not button.isNil
+      check button.title == title
+      check button.frame().size.width > 0
+      require button.sendAction()
+      require not app.modalSession().isNil
+      let confirm = app.modalSession().window.contentView().buttonWithTitle(title)
+      require not confirm.isNil
+      require confirm.sendAction()
+      check not button.enabled
+      require panel.waitForGitHub()
+      require panel.markdownView.waitForMarkdownLayout()
+      let request = parseJson(readFile(root / "merge-request.json"))
+      check request ==
+        %(
+          @[
+            "api",
+            "repos/team/project/pulls/9/merge",
+            "--hostname",
+            "github.example.com",
+            "--method",
+            "PUT",
+            "--raw-field",
+            "merge_method=" & $mergeMethod,
+            "--raw-field",
+            "sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          ]
+        )
+      if attempt == 2:
+        check "Required checks are pending" in statusLabel.text
+        check not panel.mergeButton(9, mergeMethod).isNil
+        removeFile(root / "github-merge-error")
+      else:
+        check statusLabel.text == "Merged pull request #9."
+        check panel.snapshot.items[0].state == "MERGED"
+        check panel.mergeButton(9, mergeMethod).isNil
+        if attempt < 2:
+          removeFile(root / "github-merged-pr")
+          panel.refresh()
+          require panel.waitForGitHub()
+          require panel.markdownView.waitForMarkdownLayout()
 
   test "timed out gh commands are terminated and reaped":
     let root = createTempDir("kosmo-github-timeout-", "")
@@ -487,8 +616,10 @@ suite "GitHub CLI document integration":
     check parseInt(readFile(root / "pr-request-count")) == reads + 1
 
   when defined(posix):
-    test "menu opens one reusable project tab and closing releases its worker":
+    test "menu and shortcut open the requested project in one reusable tab":
       let root = createTempDir("kosmo-github-menu-", "")
+      let project = root / "workspace"
+      let otherRoot = root / "second-project"
       let previousPath = getEnv("PATH")
       let previousShell = getEnv("SHELL")
       let hadShell = existsEnv("SHELL")
@@ -499,6 +630,13 @@ suite "GitHub CLI document integration":
         else:
           delEnv("SHELL")
         removeDir(root)
+      for path in [project, otherRoot]:
+        createDir(path)
+      for path in [root, otherRoot]:
+        require runGitCommand(path, ["init", "-q"]).exitCode == 0
+        writeFile(path / "github-test-mode", "success")
+      let sourcePath = project / "source.txt"
+      writeFile(sourcePath, "first project")
       createSymlink(getAppFilename(), root / "gh")
       # Keep this menu test independent of the developer's login profile.
       let shell = root / "shell"
@@ -506,10 +644,9 @@ suite "GitHub CLI document integration":
       setFilePermissions(shell, {fpUserRead, fpUserWrite, fpUserExec})
       putEnv("SHELL", shell)
       putEnv("PATH", root & PathSep & previousPath)
-      writeFile(root / "github-test-mode", "success")
       let app = newApplication("GitHub menu")
       let frontend =
-        newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+        newKosmoApplication(app, filePath = project, monitorsGitStatus = false)
       defer:
         frontend.close()
       app.addWindow(frontend.window)
@@ -527,16 +664,29 @@ suite "GitHub CLI document integration":
       require frontend.showGitHub(root)
       check frontend.gitHubPanel == panel
       require panel.waitForGitHub()
-      require app.performMenuKeyEquivalent(
-        KeyEvent(
-          key: keyH,
-          keyCode: keyH.ord,
-          modifiers: shortcutModifiers() + {nimkit.kmShift},
-        )
+      let shortcut = KeyEvent(
+        key: keyH, keyCode: keyH.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
       )
+      require frontend.openPath(otherRoot)
+      require frontend.openPath(sourcePath)
+      require frontend.fileTree.selectItemWithIdentifier(otherRoot)
+      require frontend.window.makeFirstResponder(frontend.fileTree)
+      require frontend.window.dispatchKeyDown(shortcut)
       check frontend.gitHubPanel == panel
       require panel.waitForGitHub()
+      check panel.snapshot.rootPath == otherRoot
+      check panel.snapshot.items.len == 2
+      require app.performMenuKeyEquivalent(shortcut)
+      require panel.waitForGitHub()
+      check panel.snapshot.rootPath == otherRoot
+      require frontend.openPath(sourcePath)
+      require frontend.window.makeFirstResponder(frontend.editorView)
+      require frontend.window.dispatchKeyDown(shortcut)
+      check frontend.gitHubPanel == panel
+      require panel.waitForGitHub()
+      check panel.snapshot.rootPath == root
       let pr = panel.headingDisclosure("#9 pr open")
+      require not pr.isNil
       require pr.accessibilityPerformAction(AccessibilityActionExpand)
       require panel.waitForGitHub()
       require panel.autoRefreshSwitch.tryToPerform(

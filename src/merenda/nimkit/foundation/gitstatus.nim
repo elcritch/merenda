@@ -1,9 +1,11 @@
 ## Asynchronous Git work-tree status snapshots backed by a Sigils worker pool.
 
-import std/[monotimes, os, strutils, times]
+import std/[monotimes, os, strutils, tables, times]
 
 import sigils/[core, threadProxies, threads]
-import ./[backgroundworkers, gitprocesses, timerthreads]
+import ./[backgroundworkers, gitbranchcleanup, gitprocesses, timerthreads]
+
+export gitbranchcleanup except GitBranchMergeCache, readGitBranches, removeGitBranches
 
 const DefaultGitStatusRefreshInterval*: Duration = initDuration(seconds = 3)
 
@@ -28,12 +30,24 @@ type
     rootPath*: string
     branch*: string
     branches*: seq[string]
+    branchInfo*: seq[GitBranchInfo]
+    cleanupBase*: string
     entries*: seq[GitStatusEntry]
     isRepository*: bool
     errorMessage*: string
     workerThreadId*: int
 
+  GitRepositoryAction* {.pure.} = enum
+    SwitchBranch
+    FetchOrigin
+    PullCurrentBranch
+    UpdateBranch
+    CleanupBranches
+    DeleteBranch
+
   GitStatusWorker = ref object of AgentActor
+    branchCaches: Table[string, GitBranchMergeCache]
+
   GitStatusRefreshTicker = ref object of AgentActor
 
   GitStatusService* = ref object of Agent
@@ -47,7 +61,7 @@ type
     xNextIdentifier: uint64
     xActiveIdentifier: uint64
     xRefreshPending: bool
-    xSwitching: bool
+    xChangingRepository: bool
     xClosed: bool
 
 proc nextNulField(output: string, cursor: var int): string =
@@ -127,7 +141,9 @@ proc parseGitStatusPorcelain*(
         workTreeCode: code[1],
       )
 
-proc readGitStatus(rootPath: string): GitStatusSnapshot =
+proc readGitStatus(
+    rootPath: string, cache: var GitBranchMergeCache
+): GitStatusSnapshot =
   result.rootPath = absolutePath(rootPath)
   result.workerThreadId = getThreadId()
   if not dirExists(result.rootPath):
@@ -163,13 +179,11 @@ proc readGitStatus(rootPath: string): GitStatusSnapshot =
         let head = runGitCommand(result.rootPath, ["rev-parse", "--short", "HEAD"])
         if head.exitCode == 0:
           result.branch = "Detached HEAD · " & head.output.strip()
-      let branches = runGitCommand(
-        result.rootPath, ["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"]
-      )
-      if branches.exitCode == 0:
-        for name in branches.output.splitLines():
-          if name.len > 0:
-            result.branches.add name
+      let branches = readGitBranches(result.rootPath, cache)
+      result.cleanupBase = branches.base
+      result.branchInfo = branches.branches
+      for branch in result.branchInfo:
+        result.branches.add branch.name
       result.entries =
         parseGitStatusPorcelain(result.rootPath, status.output, repositoryPrefix)
       let gitMetadataPath = normalizedPath(result.rootPath / ".git")
@@ -196,48 +210,146 @@ proc executeGitStatus(
 ) {.slot.} =
   var snapshots: seq[GitStatusSnapshot]
   for root in rootPaths:
-    snapshots.add readGitStatus(root)
+    snapshots.add readGitStatus(
+      root, worker.branchCaches.mgetOrPut(root, GitBranchMergeCache())
+    )
   emit worker.gitStatusFinished(identifier, snapshots)
 
 proc gitStatusRefreshTicked(ticker: GitStatusRefreshTicker) {.signal.}
 proc refresh*(service: GitStatusService): bool {.discardable.}
 
-proc executeGitSwitch(
-  worker: AgentProxy[GitStatusWorker], root, branch: string
+proc executeGitAction(
+  worker: AgentProxy[GitStatusWorker],
+  root, branch: string,
+  action: GitRepositoryAction,
+  selected: seq[GitBranchInfo],
 ) {.signal.}
 
-proc gitSwitchFinished(
-  worker: GitStatusWorker, root, branch: string, code: int, output: string
+proc gitActionFinished(
+  worker: GitStatusWorker,
+  root, branch: string,
+  action: GitRepositoryAction,
+  code: int,
+  output: string,
 ) {.signal.}
 
-proc executeGitSwitch(worker: GitStatusWorker, root, branch: string) {.slot.} =
-  let command = runGitCommand(
-    root, ["switch", "--no-guess", "--", branch], timeoutMilliseconds = 120_000
-  )
-  emit worker.gitSwitchFinished(root, branch, command.exitCode, command.output)
+proc gitActionArguments(
+    root, branch: string, action: GitRepositoryAction
+): seq[string] =
+  case action
+  of GitRepositoryAction.SwitchBranch:
+    @["switch", "--no-guess", "--", branch]
+  of GitRepositoryAction.FetchOrigin:
+    @["fetch", "--", "origin"]
+  of GitRepositoryAction.PullCurrentBranch:
+    @["pull", "--ff-only"]
+  of GitRepositoryAction.UpdateBranch:
+    let reference = "refs/heads/" & branch
+    if runGitCommand(root, ["check-ref-format", reference]).exitCode == 0 and
+        runGitCommand(root, ["show-ref", "--verify", "--quiet", reference]).exitCode == 0:
+      return @["fetch", "--", "origin", reference & ":" & reference]
+    @[]
+  of GitRepositoryAction.CleanupBranches, GitRepositoryAction.DeleteBranch:
+    @[]
+
+proc executeGitAction(
+    worker: GitStatusWorker,
+    root, branch: string,
+    action: GitRepositoryAction,
+    selected: seq[GitBranchInfo],
+) {.slot.} =
+  var command: GitCommandResult
+  if action in {GitRepositoryAction.CleanupBranches, GitRepositoryAction.DeleteBranch}:
+    command = removeGitBranches(
+      root,
+      selected,
+      action == GitRepositoryAction.CleanupBranches,
+      worker.branchCaches.mgetOrPut(root, GitBranchMergeCache()),
+    )
+  else:
+    let arguments = gitActionArguments(root, branch, action)
+    command =
+      if arguments.len > 0:
+        runGitCommand(root, arguments, timeoutMilliseconds = 120_000)
+      else:
+        GitCommandResult(
+          exitCode: 1, output: "The selected local branch no longer exists."
+        )
+  emit worker.gitActionFinished(root, branch, action, command.exitCode, command.output)
 
 proc gitBranchDidSwitch*(
   service: GitStatusService, root, branch: string, code: int, output: string
 ) {.signal.}
 
-proc completeGitSwitch(
-    service: GitStatusService, root, branch: string, code: int, output: string
+proc gitRepositoryDidUpdate*(
+  service: GitStatusService,
+  root, branch: string,
+  action: GitRepositoryAction,
+  code: int,
+  output: string,
+) {.signal.}
+
+proc completeGitAction(
+    service: GitStatusService,
+    root, branch: string,
+    action: GitRepositoryAction,
+    code: int,
+    output: string,
 ) {.slot.} =
   if service.xClosed:
     return
-  service.xSwitching = false
-  emit service.gitBranchDidSwitch(root, branch, code, output)
+  service.xChangingRepository = false
+  if action == GitRepositoryAction.SwitchBranch:
+    emit service.gitBranchDidSwitch(root, branch, code, output)
+  else:
+    emit service.gitRepositoryDidUpdate(root, branch, action, code, output)
   discard service.refresh()
+
+proc queueGitAction(
+    service: GitStatusService,
+    root, branch: string,
+    action: GitRepositoryAction,
+    selected: seq[GitBranchInfo],
+): bool =
+  if service.isNil or service.xClosed or service.xChangingRepository or
+      root notin service.xRootPaths:
+    return
+  service.xChangingRepository = true
+  emit service.xWorker.executeGitAction(root, branch, action, selected)
+  true
+
+proc performGitAction*(
+    service: GitStatusService, root, branch: string, action: GitRepositoryAction
+): bool {.discardable.} =
+  ## Queue a Git action for a monitored repository on the status worker.
+  action notin {GitRepositoryAction.CleanupBranches, GitRepositoryAction.DeleteBranch} and
+    service.queueGitAction(root, branch, action, @[])
+
+proc removeBranches*(
+    service: GitStatusService,
+    root: string,
+    selected: seq[GitBranchInfo],
+    mergedOnly: bool,
+): bool {.discardable.} =
+  ## Revalidate the confirmed branch tips on the worker before deleting them.
+  if selected.len == 0 or (not mergedOnly and selected.len != 1):
+    return
+  let action =
+    if mergedOnly:
+      GitRepositoryAction.CleanupBranches
+    else:
+      GitRepositoryAction.DeleteBranch
+  let branch =
+    if selected.len == 1:
+      selected[0].name
+    else:
+      ""
+  service.queueGitAction(root, branch, action, selected)
 
 proc switchBranch*(
     service: GitStatusService, root, branch: string
 ): bool {.discardable.} =
-  if service.isNil or service.xClosed or service.xSwitching or
-      root notin service.xRootPaths:
-    return
-  service.xSwitching = true
-  emit service.xWorker.executeGitSwitch(root, branch)
-  true
+  service.performGitAction(root, branch, GitRepositoryAction.SwitchBranch)
 
 proc emitGitStatusRefreshTick(ticker: GitStatusRefreshTicker) {.slot.} =
   emit ticker.gitStatusRefreshTicked()
@@ -328,9 +440,9 @@ proc newGitStatusService*(
   var worker = GitStatusWorker()
   result.xWorker = worker.moveToThread(result.xPool)
   connectThreaded(result.xWorker, executeGitStatus, result.xWorker, executeGitStatus)
-  connectThreaded(result.xWorker, executeGitSwitch, result.xWorker, executeGitSwitch)
+  connectThreaded(result.xWorker, executeGitAction, result.xWorker, executeGitAction)
   connectThreaded(
-    result.xWorker, gitSwitchFinished, result, GitStatusService.completeGitSwitch()
+    result.xWorker, gitActionFinished, result, GitStatusService.completeGitAction()
   )
   connectThreaded(
     result.xWorker, gitStatusFinished, result, GitStatusService.completeGitStatus()
@@ -367,13 +479,16 @@ proc waitForIdle*(
 ): bool {.discardable.} =
   ## Poll until the active and coalesced refreshes have completed.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
-  while (service.isRefreshing() or service.xRefreshPending or service.xSwitching) and
-      getMonoTime() < deadline:
+  while (
+    service.isRefreshing() or service.xRefreshPending or service.xChangingRepository
+  ) and getMonoTime() < deadline
+  :
     discard service.poll()
-    if service.isRefreshing() or service.xRefreshPending or service.xSwitching:
+    if service.isRefreshing() or service.xRefreshPending or service.xChangingRepository:
       sleep(1)
   discard service.poll()
-  not service.isRefreshing() and not service.xRefreshPending and not service.xSwitching
+  not service.isRefreshing() and not service.xRefreshPending and
+    not service.xChangingRepository
 
 proc close*(service: GitStatusService) =
   ## Cancel this subscription, leaving the shared workers available to other clients.
@@ -388,9 +503,9 @@ proc close*(service: GitStatusService) =
     service.xTicker.disconnect(gitStatusRefreshTicked, service)
   if not service.xWorker.isNil:
     service.xWorker.disconnect(gitStatusFinished, service)
-    service.xWorker.disconnect(gitSwitchFinished, service)
+    service.xWorker.disconnect(gitActionFinished, service)
     service.xWorker.disconnect(executeGitStatus, service.xWorker)
-    service.xWorker.disconnect(executeGitSwitch, service.xWorker)
+    service.xWorker.disconnect(executeGitAction, service.xWorker)
   discard service.poll()
   service.xTimer = nil
   service.xTicker = nil
