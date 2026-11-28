@@ -1,5 +1,5 @@
-import ../foundation/types
-import ../foundation/urls
+import ../core/types
+import ../../foundation/urls
 
 from figdraw import SystemTypeface
 

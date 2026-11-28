@@ -3,7 +3,7 @@
 import std/[hashes, monotimes, os, tables, times]
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/viewprofiling
+import merenda/nimkit/debug/viewprofiling
 import merenda/nimkit/intrinsicprofiling
 import ./intrinsic_collection_fixture
 from merenda/nimkit/view/viewconstraints import solveBlocked

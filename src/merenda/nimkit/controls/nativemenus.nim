@@ -1,7 +1,7 @@
 import std/[sets, unicode]
 
-import ../foundation/events
-import ../foundation/types
+import ../core/events
+import ../core/types
 import ../responder/keybindings
 
 type

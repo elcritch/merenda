@@ -4,13 +4,13 @@ import sigils/core
 
 import ../accessibility/accessibilityprotocols
 import ../containers/listbasics
-import ../foundation/selectors
+import ../core/selectors
 import ../text/textfields
 import ../themes
 import ../drawing
-import ../foundation/events
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/events
+import ../core/types
+import ../../foundation/undomanagers
 import ../app/windows
 
 import ./controls

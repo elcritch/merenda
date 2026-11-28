@@ -8,19 +8,19 @@ when defined(macosx):
   import darwin/foundation/nsautoreleasepool
   import darwin/objc/runtime
 
-import ../foundation/events
-import ../foundation/mainthreadwork
-import ../foundation/terminaltrace
-import ../foundation/notifications
+import ../core/events
+import ../../foundation/mainthreadwork
+import ../terminal/terminaltrace
+import ./notifications
 import ../controls/menus
 import ../controls/fontpickers
 import ../controls/nativemenus as nativeMenus
 import ../drawing/images
 import ../responder/keybindings
 import ../responder/responders
-import ../foundation/selectors as nimkitSelectors
+import ../core/selectors as nimkitSelectors
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/views
 import ./userdefaults
 import ./animations

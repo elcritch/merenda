@@ -1,7 +1,8 @@
 ## Keep process termination coverage outside the shared widget/service runner.
 import std/[atomics, monotimes, os, strutils, tempfiles, times, unittest]
 import sigils/threads
-import merenda/nimkit/foundation/[backgroundprocesses, gitprocesses]
+import merenda/services/backgroundprocesses
+import merenda/services/git/processes
 import ./fixtures/backgroundcommand
 import merenda/nimkit/app/diagnostics
 

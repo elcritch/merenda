@@ -8,7 +8,7 @@ from threading/smartptrs import `[]`
 import pkg/pixie
 
 import merenda/nimkit
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import ../fixtures/nimbindings
 
 type

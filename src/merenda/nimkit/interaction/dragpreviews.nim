@@ -2,7 +2,7 @@
 import std/[sets, tables]
 import figdraw as fd
 import ../drawing/[drawing, rendering, renderscenes]
-import ../foundation/types
+import ../core/types
 import ../themes
 import ../view/views
 import ./dragbehaviors

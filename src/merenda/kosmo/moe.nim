@@ -70,12 +70,12 @@ import sigils/threads
 import sigils/weakrefs
 
 import ../nimkit/text/mattergrammarassets
-import ../nimkit/foundation/textsearch
+import ../services/textsearch
 import ./matterworkers
 import ./moelogging
 import ./cli
 import ../nimkit/contentthemes
-from ../nimkit/foundation/assetcache import nimkitAssetCacheDirectory
+from ../services/assetcache import assetCacheDirectory
 export contentthemes
 import ./vscodegrammars
 
@@ -413,7 +413,7 @@ proc moeThemesDirectory*(): string =
 
 proc bundledMoeThemesDirectory*(): string =
   ## Install embedded Moe themes and return their directory in Kosmo's asset cache.
-  installBundledContentThemes(nimkitAssetCacheDirectory("kosmo") / "moe")
+  installBundledContentThemes(assetCacheDirectory("kosmo") / "moe")
 
 proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
   ## Return the stable identifier for the theme currently configured in Moe.

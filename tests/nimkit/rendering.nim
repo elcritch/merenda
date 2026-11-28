@@ -5,7 +5,7 @@ import ./fixtures/rendergeometry
 import ./fixtures/widgetflows
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type CustomDrawView = ref object of View
 type PopupLayerBlankView = ref object of View

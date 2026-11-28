@@ -7,7 +7,7 @@
 import
   std/[algorithm, htmlparser, options, os, sets, streams, strtabs, strutils, xmltree]
 
-import ../foundation/types
+import ../core/types
 import ../themes/themecore
 import ./[resrccore, resrcregistry, resrcvalidation]
 import ./private/[htmlsyntax, htmlvalues]

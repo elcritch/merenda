@@ -5,7 +5,7 @@ import ../support/terminalhelpers
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
-import merenda/nimkit/foundation/textsearch
+import merenda/services/textsearch
 import fixtures/ui
 
 func center(rect: Rect): Point =

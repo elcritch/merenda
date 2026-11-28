@@ -2,7 +2,7 @@
 
 import std/[nativesockets, options, os, strutils]
 
-import ../foundation/urls
+import ../../foundation/urls
 
 type TerminalFileLocation* = object
   ## A local file and an optional one-based source position.

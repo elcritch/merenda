@@ -1,6 +1,6 @@
 import std/[monotimes, strformat, times]
 import merenda/nimkit/containers/stackviews
-import merenda/nimkit/foundation/[selectors, types]
+import merenda/nimkit/core/[selectors, types]
 import merenda/nimkit/view/viewgeometry
 
 var reads: int

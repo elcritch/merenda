@@ -10,6 +10,7 @@ type SiwinWindow = siwinshim.Window
 import sigils/core
 from sigils/hom import findFirst, findFirstReply, get, isSome
 
+import ../../foundation/backrefs
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
 import ./animations
@@ -19,19 +20,19 @@ import ../drawing/drawing
 import ../drawing/images
 import ../drawing/rendering as nimkitRendering
 import ../drawing/renderscenes
-import ../foundation/events
-import ../foundation/terminaltrace
-import ../foundation/notifications
+import ../core/events
+import ../terminal/terminaltrace
+import ./notifications
 import ../text/fieldeditors
 import ../text/texttypes
 from ../text/textstorage import AttributedString, TextStorage, stringValue
 from ../text/textviews import
   TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
   isInsertableText, `insertionPointVisible=`
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/types
+import ./undonotifications
 import ../view/views
 from ../view/viewgeometry import setFrameFromLayout, solvedFrameDidChange
 import ./windoweffects

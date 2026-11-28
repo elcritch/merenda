@@ -2,8 +2,8 @@ import std/strutils
 
 import merenda/nimkit except
   Rect, Point, Size, color, point, rect, Event, Key, KeyModifier, MouseButton
-import merenda/nimkit/foundation/events as nkEvents
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/events as nkEvents
+import merenda/nimkit/core/types as nimkitTypes
 import merenda/nimkit/view/uirelaysviews
 import uirelays as ui
 import widgets/terminal as uiTerminal

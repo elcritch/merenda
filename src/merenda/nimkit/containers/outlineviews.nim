@@ -11,10 +11,10 @@ import ../app/pasteboards
 import ../controls/controls
 import ../drawing
 import ../themes
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../responder/responders
 import ../view/viewprotos
 

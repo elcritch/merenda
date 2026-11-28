@@ -1,7 +1,7 @@
 ## File values, validation and the simulated backend shared by the upload examples.
 import std/[os, sequtils, strutils]
 import sigils/[core, threadProxies, threads]
-import merenda/nimkit/foundation/backgroundworkers
+import merenda/foundation/backgroundworkers
 
 type
   FileField* = enum
@@ -104,5 +104,5 @@ proc searchTags*(backend: TagBackend, query: string) {.slot.} =
 
 proc newTagBackend*(): AgentProxy[TagBackend] =
   var backend = TagBackend()
-  result = backend.moveToThread(nimkitWorkerPool())
+  result = backend.moveToThread(backgroundWorkerPool())
   connectThreaded(result, searchTags, result, searchTags)

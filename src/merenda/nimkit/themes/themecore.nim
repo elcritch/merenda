@@ -4,7 +4,7 @@ from std/unicode import toUpper
 import figdraw except CornerRadii
 from sigils/selectors import DynamicAgent
 
-import ../foundation/types
+import ../core/types
 import ./[stylevalues]
 import ./private/[cssproperties, cssvalues]
 from ./private/csstokens import CssDiagnostic

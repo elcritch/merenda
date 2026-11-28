@@ -4,8 +4,8 @@ from figdraw import SystemTypeface
 
 import sigils/core
 import sigils/selectors
-import ../foundation/undomanagers
-import ../foundation/types
+import ../../foundation/undomanagers
+import ../core/types
 import ./gaptextbuffers
 import ./textsnapshots
 import ./texttypes

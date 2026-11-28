@@ -4,6 +4,7 @@ import figdraw
 import sigils/core
 import sigils/selectors
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import ./fixtures/[rendergeometry, celltargetimports]
 

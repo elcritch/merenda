@@ -5,8 +5,9 @@ when defined(posix):
   import sigils/[core, threads]
   import threading/smartptrs
   import terminex
+  import merenda/foundation/[backgroundworkers, backrefs, mainthreadwork]
   import merenda/nimkit/app/[animations, diagnostics, windows]
-  import merenda/nimkit/foundation/[backgroundworkers, mainthreadwork, types]
+  import merenda/nimkit/core/types
   import merenda/nimkit/terminal/[terminalviews, terminalwatch]
   import merenda/nimkit/text/monotextviews
 

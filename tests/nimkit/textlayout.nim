@@ -5,7 +5,8 @@ import sigils/threads
 from figdraw import
   GlyphArrangement, len, sameUtf8Runes, sourceRunes, utf8RunesFromText, `[]`
 from threading/smartptrs import `[]`
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/backrefs
+import merenda/foundation/mainthreadwork
 
 import merenda/nimkit
 import merenda/nimkit/text/textlayoutworkers

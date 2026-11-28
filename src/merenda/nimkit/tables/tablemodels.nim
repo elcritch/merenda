@@ -2,9 +2,9 @@
 
 import ../app/dragging
 import ../controls/controls
-import ../foundation/objectvalues
-import ../foundation/selectors
-from ../foundation/private/itemcollections import itemColumnIdentifier, itemColumnTitle
+import ../core/objectvalues
+import ../core/selectors
+from ../core/private/itemcollections import itemColumnIdentifier, itemColumnTitle
 import ./tablecore
 import ./tablepresentation
 import ./tableselection

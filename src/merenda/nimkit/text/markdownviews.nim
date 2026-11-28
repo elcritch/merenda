@@ -28,13 +28,13 @@ from ../app/windows import Window, firstResponder, makeFirstResponder
 import ../containers/outlineviews
 import ../controls/buttons
 import ../drawing
-import ../foundation/backrefs
-import ../foundation/events
-import ../foundation/mainthreadwork
-import ../foundation/selectors
-import ../foundation/types
-import ../foundation/urlassets
-import ../foundation/urls
+import ../../foundation/backrefs
+import ../core/events
+import ../../foundation/mainthreadwork
+import ../core/selectors
+import ../core/types
+import ../../services/urlassets
+import ../../foundation/urls
 import ../themes
 from ../view/viewgeometry import setFrameFromLayout
 import ./textruneutils

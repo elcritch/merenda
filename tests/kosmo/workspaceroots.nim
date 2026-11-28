@@ -1,6 +1,7 @@
 import std/[options, os, osproc, strutils, tempfiles, times, unittest]
 
 import merenda/nimkit
+import merenda/services/git/status
 import merenda/kosmo/kosmo
 
 suite "Kosmo workspace roots":

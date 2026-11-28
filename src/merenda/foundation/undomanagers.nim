@@ -1,8 +1,6 @@
 import sigils/core
 import sigils/selectors
 
-import ./notifications
-
 type
   UndoOperation* = proc() {.closure.}
 
@@ -46,6 +44,7 @@ type
     redoGroups*: seq[UndoStackEntry]
 
   UndoManager* = ref object of DynamicAgent
+    xOnStateChanged: proc(manager: UndoManager) {.nimcall.}
     xUndoStack: seq[UndoGroup]
     xRedoStack: seq[UndoGroup]
     xGroupStack: seq[UndoGroup]
@@ -72,33 +71,8 @@ func undoStackEntry(group: UndoGroup): UndoStackEntry =
 
 proc notifyStateChanged(manager: UndoManager) =
   emit manager.stateDidChange(manager)
-  emit sharedNotificationCenter().notificationReceived(
-    initNotification(
-      nkUndoStateDidChange,
-      sender = DynamicAgent(manager),
-      payload = initUndoNotificationPayload(
-        undoCount = manager.xUndoStack.len.Natural,
-        redoCount = manager.xRedoStack.len.Natural,
-        groupingDepth = manager.xGroupStack.len.Natural,
-        disabledDepth = manager.xDisabledDepth,
-        undoing = manager.xIsUndoing,
-        redoing = manager.xIsRedoing,
-        clean =
-          manager.xHasCleanState and manager.xChangeIndex == manager.xCleanIndex and
-          manager.xBranchSerial == manager.xCleanBranchSerial,
-        nextUndoActionName =
-          if manager.xUndoStack.len > 0:
-            manager.xUndoStack[^1].actionName
-          else:
-            "",
-        nextRedoActionName =
-          if manager.xRedoStack.len > 0:
-            manager.xRedoStack[^1].actionName
-          else:
-            "",
-      ),
-    )
-  )
+  if not manager.xOnStateChanged.isNil:
+    manager.xOnStateChanged(manager)
 
 proc addCommand(group: var UndoGroup, command: sink UndoCommand) =
   if command.actionName.len > 0 and group.actionName.len == 0:
@@ -157,8 +131,11 @@ proc commitEndedGroup(manager: UndoManager, group: sink UndoGroup) =
   else:
     manager.commitNormalGroup(group)
 
-proc newUndoManager*(): UndoManager =
-  result = UndoManager(xHasCleanState: true)
+proc newUndoManager*(
+    onStateChanged: proc(manager: UndoManager) {.nimcall.} = nil
+): UndoManager =
+  ## Optionally notify the host after the state-change signal is delivered.
+  UndoManager(xHasCleanState: true, xOnStateChanged: onStateChanged)
 
 proc isUndoing*(manager: UndoManager): bool =
   manager.xIsUndoing
@@ -168,6 +145,9 @@ proc isRedoing*(manager: UndoManager): bool =
 
 proc isUndoRegistrationEnabled*(manager: UndoManager): bool =
   manager.xDisabledDepth == 0
+
+proc undoRegistrationDisableDepth*(manager: UndoManager): Natural =
+  manager.xDisabledDepth
 
 proc groupingDepth*(manager: UndoManager): Natural =
   manager.xGroupStack.len.Natural

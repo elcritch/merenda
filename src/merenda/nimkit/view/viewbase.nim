@@ -6,8 +6,8 @@ else:
 
 import ../responder/responders
 import ../themes
-import ../foundation/backrefs
-import ../foundation/types
+import ../../foundation/backrefs
+import ../core/types
 import ../drawing/renderresources
 
 import ../drawing/renderscenes

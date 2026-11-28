@@ -3,7 +3,7 @@ import std/[hashes, options, os, strutils, tables]
 import figdraw
 import figdraw/extras/systemfonts
 
-import ../foundation/types
+import ../core/types
 
 type
   FontFallbackGroups* = seq[seq[string]]

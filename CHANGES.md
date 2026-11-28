@@ -8,6 +8,15 @@
 - Clean up merged local branches, including squash merges whose changes
   are in the default branch. Update → Clean Up All shows a selectable list
   before deleting branches.
+- Import Git, subprocess, file listing, file search, workspace watch and
+  inventory, and HTTP download APIs from `merenda/services`.
+- Import URL values, atomic file writes, and back references from
+  `merenda/foundation/[urls, atomicfiles, backrefs]`.
+- Import shared workers, application-thread work scheduling, and timer dispatch
+  from `merenda/foundation/[backgroundworkers, mainthreadwork, timerthreads]`.
+- Import undo history and signal dispatch helpers from `merenda/foundation` and
+  asset installation and URL loading from `merenda/services`.
+- Import NimKit's shared UI types and selectors from `merenda/nimkit/core`.
 - Merge open pull requests from Kosmo's GitHub view with a merge commit,
   squash merge, or rebase merge.
 - Open the selected project's GitHub view with the shortcut when its root has

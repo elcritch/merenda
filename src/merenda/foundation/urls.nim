@@ -1,8 +1,4 @@
-## URL values and media-type inference shared by NimKit platform services.
-##
-## `Url` is a small Foundation-style value type. Existing APIs may continue to
-## accept strings, while URL-aware code can use one parser and one set of path,
-## scheme, and content-type rules.
+## URL parsing, local path resolution, and media-type inference.
 
 import std/[os, strutils, uri]
 

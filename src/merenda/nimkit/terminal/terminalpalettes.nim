@@ -1,6 +1,6 @@
 ## Colors shared by terminal themed content and terminal views.
 
-import ../foundation/types
+import ../core/types
 
 type TerminalPalette* = object
   colors*: array[16, Color]

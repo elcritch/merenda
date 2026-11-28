@@ -3,7 +3,8 @@ import std/[math, times]
 import sigils/[core, selectors]
 import ../app/[animations, windows]
 import ../drawing/drawing
-import ../foundation/[events, selectors, types, viewprofiling]
+import ../core/[events, selectors, types]
+import ../debug/viewprofiling
 import ../responder/responders
 import ../view/views
 import ./[dragbehaviors, dragpreviews]

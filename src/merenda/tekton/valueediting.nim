@@ -2,7 +2,7 @@
 
 import std/[math, sequtils, strutils]
 
-import ../nimkit/foundation/types
+import ../nimkit/core/types
 import ../nimkit/resources/resrccore
 import ../nimkit/themes
 

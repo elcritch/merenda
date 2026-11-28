@@ -1,10 +1,10 @@
-import ../foundation/selectors
+import ../core/selectors
 import ../responder/actiontargets
 import ../accessibility/accessibility
 import ../text/fieldeditors
 import ../text/texttypes
 import ../text/textviews
-import ../foundation/types
+import ../core/types
 import ../view/views
 
 export views

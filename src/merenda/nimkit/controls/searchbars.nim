@@ -7,8 +7,8 @@ import sigils/core
 import ../accessibility/accessibility
 import ../app/windows except performKeyEquivalent
 import ../containers/[boxes, stackviews]
-import ../foundation/[events, objectvalues, selectors, types]
-from ../foundation/selectors import performKeyEquivalent
+import ../core/[events, objectvalues, selectors, types]
+from ../core/selectors import performKeyEquivalent
 import ../responder/keybindings
 import ../text/textfields
 import ../themes

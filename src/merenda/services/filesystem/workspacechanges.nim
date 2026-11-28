@@ -1,7 +1,7 @@
 ## Git-aware filtering for native workspace notifications, run on a worker.
 
 import std/[os, strutils, tables]
-import ../nimkit/foundation/gitprocesses
+import ../git/processes
 
 proc directoryAliases(directories: openArray[string]): seq[string] =
   for directory in directories:

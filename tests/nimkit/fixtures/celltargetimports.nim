@@ -1,6 +1,6 @@
 import merenda/nimkit/controls/cells
 import merenda/nimkit/responder/actiontargets
-import merenda/nimkit/foundation/selectors
+import merenda/nimkit/core/selectors
 
 proc cellRetainsInlineAdapter*(): bool =
   let receiver = newResponder()

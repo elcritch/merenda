@@ -1,7 +1,7 @@
 ## Scoped shortcut routing for Kosmo terminal panes.
 
 import std/strutils
-import ../nimkit/foundation/events
+import ../nimkit/core/events
 import ./panekeys
 
 export panekeys

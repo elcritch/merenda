@@ -4,11 +4,11 @@ import sigils/core
 
 import ../accessibility/accessibilityprotocols
 import ../drawing
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
+import ../../foundation/undomanagers
 import ../responder/responders
 import ../themes
 import ../view/views

@@ -3,7 +3,8 @@ import figdraw
 import ./fixtures/rendergeometry
 import merenda/nimkit/interaction/dragcontrollers
 import merenda/nimkit/app/windows
-import merenda/nimkit/foundation/[events, selectors, types, undomanagers]
+import merenda/nimkit/core/[events, selectors, types]
+import merenda/nimkit/app/undonotifications
 import merenda/nimkit/drawing/[drawing, rendering]
 import merenda/nimkit/view/views
 import merenda/nimkit/themes

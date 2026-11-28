@@ -4,7 +4,8 @@ import std/[atomics, json, os, osproc, strtabs, strutils, tempfiles]
 import threading/smartptrs
 
 import sigils/[core, threadProxies, threads]
-import ../nimkit/foundation/[backgroundprocesses, backgroundworkers]
+import ../foundation/backgroundworkers
+import ../services/downloads
 
 const
   KosmoReleaseApi = "https://api.github.com/repos/elcritch/merenda/releases/latest"
@@ -120,14 +121,11 @@ proc checkRelease(
 proc releaseChecked(worker: UpdateWorker, response: string) {.signal.}
 
 proc checkRelease(worker: UpdateWorker, control: SharedPtr[UpdateControl]) {.slot.} =
-  let response = runBackgroundCommand(
-    "curl",
-    ["-fsSL", "--max-time", "10", "--user-agent", "Kosmo updater", KosmoReleaseApi],
-    timeoutMilliseconds = 12_000,
+  let response = downloadUrl(
+    KosmoReleaseApi,
+    "Kosmo updater",
     cancelled = proc(): bool {.gcsafe.} =
       control[].cancelled.load(moAcquire),
-    maxOutputBytes = 1024 * 1024,
-    diagnosticName = "Kosmo update check",
   )
   if response.exitCode == 0:
     emit worker.releaseChecked(response.output)
@@ -153,7 +151,7 @@ proc startKosmoUpdateCheck*(
   )
   result.control[].cancelled.store(false, moRelaxed)
   var worker = UpdateWorker()
-  result.worker = worker.moveToThread(nimkitWorkerPool())
+  result.worker = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result.worker, checkRelease, result.worker, checkRelease)
   connectThreaded(
     result.worker, releaseChecked, result, KosmoUpdateChecker.releaseChecked()

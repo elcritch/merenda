@@ -6,7 +6,7 @@ import pixie as fontRaster
 import figdraw
 
 import ./comboboxes
-import ../foundation/selectors
+import ../core/selectors
 
 export comboboxes
 

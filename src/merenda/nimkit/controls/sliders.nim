@@ -1,9 +1,9 @@
 import std/math
 
 import ../accessibility/accessibility
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../drawing
 import ../themes
 import ./controls

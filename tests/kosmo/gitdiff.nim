@@ -4,8 +4,8 @@ import figdraw
 import sigils/[core, threads]
 import merenda/nimkit
 import merenda/kosmo/kosmo
-import merenda/kosmo/workspacefiles
-from merenda/nimkit/foundation/mainthreadwork import drainMainThreadWork
+import merenda/services/filesystem/workspacefiles
+from merenda/foundation/mainthreadwork import drainMainThreadWork
 
 proc git(root: string, args: varargs[string]) =
   var arguments = @["-c", "commit.gpgsign=false", "-C", root]

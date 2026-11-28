@@ -5,7 +5,7 @@ import sigils/core
 import ../app/windows
 import ../containers/scrollviews
 import ../controls/searchbars
-import ../foundation/[events, types]
+import ../core/[events, types]
 import ../responder/keybindings
 import ./[textfields, textlayout, textviews]
 import ../view/[viewconstraints, views]

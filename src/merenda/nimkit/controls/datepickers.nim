@@ -10,10 +10,10 @@ import sigils/selectors
 import ../accessibility/accessibility
 import ../app/windows
 import ../drawing
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/views
 import ./buttons

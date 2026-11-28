@@ -1,5 +1,6 @@
 import std/[options, strutils, unittest]
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 
 suite "NimKit reusable search":

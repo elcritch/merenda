@@ -1,6 +1,6 @@
 ## Bounded Git commands for background workspace discovery.
 
-import ./backgroundprocesses
+import ../backgroundprocesses
 
 type GitCommandResult* = BackgroundCommandResult
 

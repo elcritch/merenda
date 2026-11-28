@@ -3,8 +3,8 @@ import
 
 import sigils/core
 
-import merenda/nimkit/foundation/gitstatus
-import merenda/nimkit/foundation/gitprocesses
+import merenda/services/git/status
+import merenda/services/git/processes
 
 type GitStatusSpy = ref object of Agent
   snapshots: seq[GitStatusSnapshot]

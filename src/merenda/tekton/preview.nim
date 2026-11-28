@@ -7,7 +7,7 @@ import sigils/selectors
 import ../nimkit/app/[viewcontrollers, windowcontrollers, windows]
 import ../nimkit/controls/menus
 import ../nimkit/drawing/images
-import ../nimkit/foundation/types
+import ../nimkit/core/types
 import ../nimkit/responder/keybindings
 import
   ../nimkit/resources/

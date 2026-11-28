@@ -1,8 +1,9 @@
 ## Action receivers with explicit weak or retained ownership.
 
 import std/macros
+import ../../foundation/backrefs
 import ./responders
-import ../foundation/selectors
+import ../core/selectors
 
 type
   ActionProc* = proc(sender: DynamicAgent) {.closure.}

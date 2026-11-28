@@ -19,8 +19,8 @@ import ../themes/themecore as themeCore
 import ../text/textstorage
 import ../text/textsnapshots
 import ../text/texttypes
-import ../foundation/types as nimkitTypes
-import ../foundation/assetcache
+import ../core/types as nimkitTypes
+import ../../services/assetcache
 
 export
   figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,

@@ -7,7 +7,7 @@ import sigils/selectors
 import ../app/[viewcontrollers, windowcontrollers, windows]
 import ../controls/menus
 import ../drawing/images
-import ../foundation/[selectors as nimkitSelectors, types]
+import ../core/[selectors as nimkitSelectors, types]
 import ../responder/keybindings
 import ../themes
 import ../view/views

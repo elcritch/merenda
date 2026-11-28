@@ -4,7 +4,7 @@ import std/[lists, locks, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
-import ../foundation/backgroundworkers
+import ../../foundation/backgroundworkers
 import ./[matterhighlighting, syntaxhighlighting, texttypes]
 
 type
@@ -252,9 +252,9 @@ proc requestMarkdownParse(
 
 proc newMarkdownParseWorker*(): AgentProxy[MarkdownParseWorker] =
   var worker = MarkdownParseWorker()
-  result = worker.moveToThread(nimkitWorkerPool())
+  result = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result, requestMarkdownParse, result, requestMarkdownParse)
   connectThreaded(result, continueMarkdownHighlight, result, continueMarkdownHighlight)
   connectThreaded(result, cancelMarkdownHighlight, result, cancelMarkdownHighlight)
 
-var markdownWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var markdownWorkerLifetime {.used.}: BackgroundWorkerLifetime

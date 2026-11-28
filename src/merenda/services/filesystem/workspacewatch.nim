@@ -5,7 +5,7 @@ import std/[algorithm, exitprocs, locks, monotimes, os, strutils, tables, times]
 import chronicles
 import dmon
 import sigils/[core, threadProxies, threads]
-import ../nimkit/foundation/[backgroundworkers, timerthreads]
+import ../../foundation/[backgroundworkers, timerthreads]
 import ./workspacechanges
 
 const DefaultWorkspaceReconciliationInterval* = initDuration(minutes = 2)
@@ -419,12 +419,12 @@ proc newWorkspaceWatch*(
   withLock inboxLock:
     inbox[result.token] = WorkspaceChanges(rescan: true)
   var filter = WorkspaceWatchFilter()
-  result.filter = filter.moveToThread(nimkitWorkerPool())
+  result.filter = filter.moveToThread(backgroundWorkerPool())
   connectThreaded(result.filter, filterChanges, result.filter, filterChanges)
   connectThreaded(
     result.filter, changesFiltered, result, WorkspaceWatch.changesFiltered()
   )
-  let timerThread = nimkitTimerThread()
+  let timerThread = backgroundTimerThread()
   var ticker = WorkspaceWatchTicker()
   result.ticker = ticker.moveToThread(timerThread)
   result.timer = newSigilTimer(initDuration(milliseconds = 100))
@@ -446,7 +446,7 @@ proc close*(watch: WorkspaceWatch) =
   if watch.isNil or not watch.active:
     return
   watch.active = false
-  watch.timer.cancel(nimkitTimerThread())
+  watch.timer.cancel(backgroundTimerThread())
   for id in watch.watches:
     unwatch(id)
   watch.watches.setLen(0)
@@ -457,4 +457,4 @@ proc close*(watch: WorkspaceWatch) =
   watch.ticker = nil
   watch.filter = nil
 
-var workspaceWatchWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var workspaceWatchWorkerLifetime {.used.}: BackgroundWorkerLifetime

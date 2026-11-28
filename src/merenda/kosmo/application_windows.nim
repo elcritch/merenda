@@ -2,8 +2,8 @@
 
 var
   convenienceSessions {.threadvar.}: seq[KosmoWindowManager]
-  knownSessions {.threadvar.}: seq[nimkit.BackRef[KosmoWindowManager]]
-  adaptiveSession {.threadvar.}: nimkit.BackRef[KosmoWindowManager]
+  knownSessions {.threadvar.}: seq[backrefs.BackRef[KosmoWindowManager]]
+  adaptiveSession {.threadvar.}: backrefs.BackRef[KosmoWindowManager]
   sessionTerminationObserver {.threadvar.}: nimkit.NotificationObserverToken
   sessionStoppedObserver {.threadvar.}: nimkit.NotificationObserverToken
 
@@ -15,7 +15,7 @@ proc registerKnownSession(manager: KosmoWindowManager): bool =
       knownSessions.delete(index)
     elif knownSessions[index]{} == manager:
       return
-  var reference: nimkit.BackRef[KosmoWindowManager]
+  var reference: backrefs.BackRef[KosmoWindowManager]
   reference.target = manager
   knownSessions.add reference
   result = true
@@ -1057,9 +1057,9 @@ proc showGitActionError(frontend: KosmoApplication, title, message: string) =
 proc confirmBranchRemoval(
     frontend: KosmoApplication,
     root, base: string,
-    branches: seq[nimkit.GitBranchInfo],
+    branches: seq[gitstatus.GitBranchInfo],
     cleanup, bulk: bool,
-): seq[nimkit.GitBranchInfo] =
+): seq[gitstatus.GitBranchInfo] =
   let title =
     if bulk:
       "Clean Up Merged Branches"
@@ -1537,7 +1537,7 @@ proc installKosmoSettingsSaveHandler(
   if manager.isNil or manager.configPath.len == 0:
     app.merendaSettingsSaveHandler = nil
   else:
-    var managerRef: nimkit.BackRef[KosmoWindowManager]
+    var managerRef: backrefs.BackRef[KosmoWindowManager]
     managerRef.target = manager
     app.merendaSettingsSaveHandler = proc(settings: nimkit.MerendaSettings): bool =
       let target = managerRef{}
@@ -1572,7 +1572,7 @@ proc newKosmoWindowManager*(
   )
   nimkit.initResponder(result)
   if not app.isNil:
-    var managerRef: nimkit.BackRef[KosmoWindowManager]
+    var managerRef: backrefs.BackRef[KosmoWindowManager]
     managerRef.target = result
     result.appearanceObserver = nimkit.sharedNotificationCenter().observe(
         nimkit.nkApplicationAppearanceDidChange,
@@ -1604,7 +1604,7 @@ func cliWindowId*(frontend: KosmoApplication): string =
 func projectWindowTitle(rootPaths: openArray[string]): string =
   result = "Kosmo"
   if rootPaths.len > 0:
-    result.add " • " & nimkit.fileBrowserDisplayName(rootPaths[0])
+    result.add " • " & listings.fileBrowserDisplayName(rootPaths[0])
     if rootPaths.len > 1:
       result.add " + " & $(rootPaths.len - 1)
 
@@ -2018,7 +2018,7 @@ proc newKosmoApplication*(
   fileTree.onItemAction = proc(path: string, action: FileTreeItemAction) =
     if not frontend.isNil:
       frontend[].performFileTreeAction(path, action)
-  var branchManager: nimkit.BackRef[KosmoWindowManager]
+  var branchManager: backrefs.BackRef[KosmoWindowManager]
   branchManager.target = manager
   fileBrowserPanel.onSelectBranch = proc(root, branch: string) =
     if not frontend.isNil and not branchManager.isNil and
@@ -2034,7 +2034,7 @@ proc newKosmoApplication*(
     if not frontend.isNil:
       frontend[].showBranchComparison(root, branch)
   fileBrowserPanel.onRemoveBranches = proc(
-      root, base: string, branches: seq[nimkit.GitBranchInfo], cleanup, bulk: bool
+      root, base: string, branches: seq[gitstatus.GitBranchInfo], cleanup, bulk: bool
   ) =
     if not frontend.isNil and branches.len > 0:
       let selected =
@@ -2042,11 +2042,11 @@ proc newKosmoApplication*(
       if fileTree.removeBranches(root, selected, cleanup):
         statusLabel.text = "Removing local branches…"
   fileBrowserPanel.onUpdateRepository = proc(
-      root, branch: string, action: nimkit.GitRepositoryAction
+      root, branch: string, action: gitstatus.GitRepositoryAction
   ) =
     if frontend.isNil or branchManager.isNil:
       return
-    if action == nimkit.GitRepositoryAction.PullCurrentBranch and
+    if action == gitstatus.GitRepositoryAction.PullCurrentBranch and
         not frontend[].canChangeGitWorkTree(
           branchManager{}, "Cannot pull current branch"
         ):
@@ -2055,30 +2055,30 @@ proc newKosmoApplication*(
       statusLabel.text = "Updating Git repository…"
   fileTree.onRepositoryUpdated = proc(
       root, branch: string,
-      action: nimkit.GitRepositoryAction,
+      action: gitstatus.GitRepositoryAction,
       code: int,
       output: string,
   ) =
     if frontend.isNil or branchManager.isNil:
       return
-    if action == nimkit.GitRepositoryAction.PullCurrentBranch:
+    if action == gitstatus.GitRepositoryAction.PullCurrentBranch:
       branchManager{}.reloadGitWorkTrees()
     statusLabel.text =
       if code == 0:
         case action
-        of nimkit.GitRepositoryAction.FetchOrigin:
+        of gitstatus.GitRepositoryAction.FetchOrigin:
           "Fetched from origin"
-        of nimkit.GitRepositoryAction.PullCurrentBranch:
+        of gitstatus.GitRepositoryAction.PullCurrentBranch:
           "Updated " & branch
-        of nimkit.GitRepositoryAction.CleanupBranches:
+        of gitstatus.GitRepositoryAction.CleanupBranches:
           "Cleaned up merged local branches"
-        of nimkit.GitRepositoryAction.DeleteBranch:
+        of gitstatus.GitRepositoryAction.DeleteBranch:
           "Deleted " & branch
         else:
           "Updated " & branch & " from origin"
       elif action in {
-        nimkit.GitRepositoryAction.CleanupBranches,
-        nimkit.GitRepositoryAction.DeleteBranch,
+        gitstatus.GitRepositoryAction.CleanupBranches,
+        gitstatus.GitRepositoryAction.DeleteBranch,
       }:
         "Could not remove some branches"
       else:
@@ -2086,7 +2086,7 @@ proc newKosmoApplication*(
     if code != 0:
       frontend[].showGitActionError(statusLabel.text, output.strip())
   searchPanel.onOpenResult = proc(
-      match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
+      match: filesearch.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) =
     if frontend.isNil:
       return
@@ -2541,7 +2541,7 @@ proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
     )
   defer:
     manager.close()
-  var cliManager: nimkit.BackRef[KosmoWindowManager]
+  var cliManager: backrefs.BackRef[KosmoWindowManager]
   cliManager.target = manager
   try:
     manager.cliServer = startKosmoCliOpenServer(

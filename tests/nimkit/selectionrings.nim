@@ -4,7 +4,7 @@ import figdraw
 import ./fixtures/rendergeometry
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type RingDrawView = ref object of View
 

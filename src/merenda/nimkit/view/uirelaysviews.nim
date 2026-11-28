@@ -6,9 +6,9 @@ import uirelays as ui
 
 import ../app/pasteboards
 import ../drawing
-import ../foundation/events as nkEvents
-import ../foundation/selectors
-import ../foundation/types as nimkitTypes
+import ../core/events as nkEvents
+import ../core/selectors
+import ../core/types as nimkitTypes
 import ../themes
 import ./views
 

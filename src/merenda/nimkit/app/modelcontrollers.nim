@@ -13,11 +13,11 @@ import ../controls/controls
 import ../controls/matrices
 import ../controls/menus
 import ../drawing/images
-import ../foundation/notifications
-import ../foundation/objectvalues
-import ../foundation/private/itemcollections
-import ../foundation/sourcedispatch
-import ../foundation/types
+import ./notifications
+import ../core/objectvalues
+import ../core/private/itemcollections
+import ../../foundation/sourcedispatch
+import ../core/types
 import ../responder/responders
 
 export objectvalues

@@ -2,7 +2,8 @@
 ## the unmodified DirectView task demo. Run the two builds sequentially.
 import std/[hashes, monotimes, os, times]
 include "../examples/direct_views_demo.nim"
-import merenda/nimkit/foundation/[mainthreadwork, viewprofiling]
+import merenda/foundation/mainthreadwork
+import merenda/nimkit/debug/viewprofiling
 import merenda/nimkit/view/viewbase
 from merenda/nimkit/view/viewconstraints import solveBlocked
 

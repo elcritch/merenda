@@ -1,7 +1,7 @@
 ## UI subscriptions to worker snapshots. PTY readiness belongs to the worker.
 
 import sigils/core
-import ../foundation/terminaltrace
+import ./terminaltrace
 import ./terminalsessions
 
 type TerminalOutputWatch* = ref object of Agent
@@ -22,6 +22,7 @@ var nextWatchIdentity {.threadvar.}: uint64
 
 proc newTerminalOutputWatch*(session: TerminalViewSession): TerminalOutputWatch =
   if not session.isNil:
+    registerTerminalWorkerShutdown()
     inc nextWatchIdentity
     result = TerminalOutputWatch(token: nextWatchIdentity, session: session)
 

@@ -8,8 +8,8 @@ when defined(macosx):
   import figdraw/extras/systemfonts
 
 import merenda/nimkit/drawing
-import merenda/nimkit/foundation/types
-import merenda/nimkit/foundation/assetcache
+import merenda/nimkit/core/types
+import merenda/services/assetcache
 import merenda/nimkit/themes
 import merenda/nimkit/text/[textstorage, texttypes]
 
@@ -269,7 +269,7 @@ suite "nimkit font layout":
     let style = TextStyle(fontName: path, fontSize: 14.0)
     let source = getTypefaceSource(style.textFont().font.typefaceId)
     check source.name.endsWith("-IBMPlexSans-Regular.ttf")
-    check source.name.parentDir == nimkitAssetCacheDirectory("nimkit")
+    check source.name.parentDir == assetCacheDirectory("nimkit")
     check fileExists(source.name)
 
   test "font loader falls back when a ZIP cannot be extracted":

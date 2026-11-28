@@ -6,8 +6,8 @@ from sigils/hom import sendEachTo
 import ../accessibility/accessibility
 import ../controls/buttons
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/views
 from ../view/viewgeometry import setFrameFromLayout

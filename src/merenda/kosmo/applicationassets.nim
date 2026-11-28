@@ -5,6 +5,7 @@ import std/[options, os, strutils]
 from figdraw/extras/systemfonttypes import SystemTypeface, initSystemTypeface
 
 import ../nimkit as nimkit
+import ../services/assetcache
 import ./config
 
 func nimblePackageVersion(manifest: string): string =
@@ -79,33 +80,33 @@ Licensed under the GNU General Public License v3.0 (GPL-3.0).""" %
 
 type KosmoBundledFontInstall* = object
   ## Cache installation results for Kosmo's bundled default fonts.
-  interfaceFont*: nimkit.EmbeddedAssetInstallResult
-  interfaceItalicFont*: nimkit.EmbeddedAssetInstallResult
-  interfaceBoldFont*: nimkit.EmbeddedAssetInstallResult
-  monospaceFont*: nimkit.EmbeddedAssetInstallResult
+  interfaceFont*: EmbeddedAssetInstallResult
+  interfaceItalicFont*: EmbeddedAssetInstallResult
+  interfaceBoldFont*: EmbeddedAssetInstallResult
+  monospaceFont*: EmbeddedAssetInstallResult
 
 proc installKosmoBundledFonts*(
     cacheDirectory = "", roles = {nimkit.frUI, nimkit.frMonospace}
 ): KosmoBundledFontInstall =
   ## Install Kosmo's statically embedded fonts in NimKit's application cache.
   if nimkit.frUI in roles:
-    result.interfaceFont = nimkit.installEmbeddedZipAsset(
-      nimkit.initEmbeddedZipAsset(
+    result.interfaceFont = installEmbeddedZipAsset(
+      initEmbeddedZipAsset(
         KosmoInterfaceFontFileName, KosmoInterfaceFontZip, KosmoInterfaceFontSha256
       ),
       KosmoApplicationIdentifier,
       cacheDirectory,
     )
-    result.interfaceItalicFont = nimkit.installEmbeddedZipAsset(
-      nimkit.initEmbeddedZipAsset(
+    result.interfaceItalicFont = installEmbeddedZipAsset(
+      initEmbeddedZipAsset(
         KosmoInterfaceItalicFontFileName, KosmoInterfaceItalicFontZip,
         KosmoInterfaceItalicFontSha256,
       ),
       KosmoApplicationIdentifier,
       cacheDirectory,
     )
-    result.interfaceBoldFont = nimkit.installEmbeddedZipAsset(
-      nimkit.initEmbeddedZipAsset(
+    result.interfaceBoldFont = installEmbeddedZipAsset(
+      initEmbeddedZipAsset(
         KosmoInterfaceBoldFontFileName, KosmoInterfaceBoldFontZip,
         KosmoInterfaceBoldFontSha256,
       ),
@@ -113,17 +114,15 @@ proc installKosmoBundledFonts*(
       cacheDirectory,
     )
   if nimkit.frMonospace in roles:
-    result.monospaceFont = nimkit.installEmbeddedZipAsset(
-      nimkit.initEmbeddedZipAsset(
+    result.monospaceFont = installEmbeddedZipAsset(
+      initEmbeddedZipAsset(
         KosmoMonospaceFontFileName, KosmoMonospaceFontZip, KosmoMonospaceFontSha256
       ),
       KosmoApplicationIdentifier,
       cacheDirectory,
     )
 
-func installedTypeface(
-    installResult: nimkit.EmbeddedAssetInstallResult
-): SystemTypeface =
+func installedTypeface(installResult: EmbeddedAssetInstallResult): SystemTypeface =
   if installResult.succeeded():
     result = initSystemTypeface(installResult.path)
 

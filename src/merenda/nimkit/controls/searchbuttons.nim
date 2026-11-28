@@ -2,7 +2,7 @@
 
 import ./buttons
 import ../accessibility/accessibility
-import ../foundation/types
+import ../core/types
 import ../themes
 import ../drawing
 

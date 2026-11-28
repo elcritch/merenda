@@ -3,8 +3,8 @@
 import sigils/core
 
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/viewgeometry
 import ../view/views

@@ -11,8 +11,8 @@ import
     buttons, comboboxes, controls, progressindicators, sliders, steppers, switchbuttons
   ]
 import ../drawing/images
-import ../foundation/types
-import ../foundation/selectors
+import ../core/types
+import ../core/selectors
 import ../text/[textfields, textviews]
 import ../themes
 import ../view/[imageviews, views]

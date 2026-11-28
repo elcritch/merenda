@@ -3,7 +3,9 @@ import std/[os, strutils, tempfiles, times, unicode, unittest]
 import figdraw
 
 import merenda/nimkit
-import merenda/kosmo/[kosmo, workspacefiles]
+import merenda/services/git/status
+import merenda/kosmo/kosmo
+import merenda/services/filesystem/workspacefiles
 import fixtures/ui
 
 func center(bounds: Rect): Point =

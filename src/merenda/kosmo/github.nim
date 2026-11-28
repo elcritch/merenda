@@ -1,7 +1,7 @@
 ## GitHub CLI snapshots and Markdown presentation for a local project repository.
 
 import std/[json, os, strtabs, strutils, tables, uri]
-import ../nimkit/foundation/backgroundprocesses
+import ../services/backgroundprocesses
 
 const GitHubDefaultItemLimit* = 100
 

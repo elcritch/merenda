@@ -10,8 +10,8 @@ import sigils/[core, threads]
 
 import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, application, pasteboards, windows]
-import merenda/nimkit/foundation/[events, selectors, types]
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/nimkit/core/[events, selectors, types]
+import merenda/foundation/mainthreadwork
 import merenda/nimkit/responder/responders
 import merenda/nimkit/terminal/terminalviews
 import merenda/nimkit/text/monotextviews

@@ -6,7 +6,7 @@
 
 import std/[algorithm, options, sets, tables]
 
-import ../foundation/undomanagers
+import ../app/undonotifications
 import ./[resrccore, resrcregistry, resrcvalidation]
 
 type

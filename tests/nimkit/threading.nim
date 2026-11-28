@@ -8,8 +8,8 @@ import sigils/[rchannels, weakrefs]
 import merenda/nimkit/app/application
 import merenda/nimkit/app/backend as nimkitBackend
 import merenda/nimkit/app/windows
-import merenda/nimkit/foundation/selectors
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/selectors
+import merenda/nimkit/core/types as nimkitTypes
 import merenda/nimkit/drawing
 import merenda/nimkit/drawing/renderscenes as retainedScenes
 import merenda/nimkit/view/views

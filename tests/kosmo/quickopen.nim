@@ -5,7 +5,7 @@ import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
 from merenda/kosmo/scrolling import KosmoControlScrollMultiplier
-import merenda/kosmo/workspacefiles
+import merenda/services/filesystem/workspacefiles
 import fixtures/ui
 
 type MeasuringQuickOpenCell = ref object of TextFieldCell

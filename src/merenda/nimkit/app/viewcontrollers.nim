@@ -20,8 +20,8 @@ import std/options
 
 import sigils/core
 
-import ../foundation/selectors
-import ../foundation/undomanagers
+import ../core/selectors
+import ./undonotifications
 import ../responder/responders
 import ../view/views
 

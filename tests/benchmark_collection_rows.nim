@@ -4,7 +4,7 @@ import std/[monotimes, times]
 import sigils/selectors
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/viewprofiling
+import merenda/nimkit/debug/viewprofiling
 from merenda/nimkit/view/viewconstraints import solveBlocked
 
 proc readTitle(controller: ArrayController, id: string): string =

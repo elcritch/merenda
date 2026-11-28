@@ -7,7 +7,7 @@ import sigils/core
 import merenda/nimkit
 import merenda/nimkit/tables/tablebasics as tableBasics
 import merenda/nimkit/tables/tableviews as tableViewsApi
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
   if node.kind != nkDrawable:

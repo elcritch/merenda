@@ -11,18 +11,18 @@ import sigils/core
 import ../accessibility/accessibility
 import ../app/dragging
 import ../drawing
-import ../foundation/events
+import ../core/events
 import ../app/pasteboards
 import ../app/workspaces
-import ../foundation/selectors
-import ../foundation/urls
+import ../core/selectors
+import ../../foundation/urls
 import ./textlayout
 import ./textstorage
 import ./textsnapshots
 import ./textruneutils
 import ./texttypes
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/views
 
 export views

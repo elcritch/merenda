@@ -8,8 +8,8 @@ import
 import faststreams/inputs
 import sigils/[core, threads]
 import threading/smartptrs
-import ./gitprocesses
-import ./textsearch
+import ../git/processes
+import ../textsearch
 
 const
   DefaultFileSearchMaxResults* = 10_000

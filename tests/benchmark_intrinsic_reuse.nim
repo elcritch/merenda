@@ -3,7 +3,8 @@
 ## -d:merendaProfile. No native window or GPU is involved.
 import std/[hashes, monotimes, os, tables, times]
 include "../examples/direct_views_demo.nim"
-import merenda/nimkit/foundation/[mainthreadwork, viewprofiling]
+import merenda/foundation/mainthreadwork
+import merenda/nimkit/debug/viewprofiling
 import merenda/nimkit/intrinsicprofiling
 import merenda/nimkit/view/viewgeometry
 from merenda/nimkit/view/viewconstraints import solveBlocked

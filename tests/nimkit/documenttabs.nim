@@ -5,7 +5,7 @@ import sigils/core
 import figdraw
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 type

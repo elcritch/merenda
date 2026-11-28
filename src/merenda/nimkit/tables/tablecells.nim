@@ -8,10 +8,10 @@ import sigils/core
 import ../accessibility/accessibilityprotocols
 import ../app/windows
 import ../controls/controls
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../text/fieldeditors
 import ../text/textviews

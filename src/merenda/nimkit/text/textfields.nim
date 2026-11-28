@@ -4,10 +4,10 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ../controls/controls
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/events
-import ../foundation/types
+import ../core/objectvalues
+import ../core/selectors
+import ../core/events
+import ../core/types
 import ../app/windows
 import ../themes
 import ../drawing

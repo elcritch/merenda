@@ -1,6 +1,6 @@
 import std/[monotimes, times, strformat]
 import merenda/nimkit/containers/stackviews
-import merenda/nimkit/foundation/types
+import merenda/nimkit/core/types
 
 proc micros(start: MonoTime): float =
   float((getMonoTime() - start).inNanoseconds) / 1000.0

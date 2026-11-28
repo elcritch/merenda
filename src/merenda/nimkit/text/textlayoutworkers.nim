@@ -8,8 +8,8 @@ import threading/smartptrs
 import figdraw
 
 import ../drawing
-import ../foundation/types
-import ../foundation/backgroundworkers
+import ../core/types
+import ../../foundation/backgroundworkers
 import ../themes
 import ./textstorage
 import ./textlayouttypes
@@ -81,7 +81,7 @@ proc newTextLayoutWorker*(
     snapshotBuilder: TextLayoutSnapshotBuilder
 ): AgentProxy[TextLayoutWorker] =
   var worker = TextLayoutWorker(snapshotBuilder: snapshotBuilder)
-  result = worker.moveToThread(nimkitWorkerPool())
+  result = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result, requestTextLayout, result, requestTextLayout)
 
-var textLayoutWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var textLayoutWorkerLifetime {.used.}: BackgroundWorkerLifetime

@@ -4,7 +4,7 @@ import std/[algorithm, json, nativesockets, net, os, sets, strutils, sysrand, ti
 
 import sigils/[core, threadProxies, threads]
 
-import ../nimkit/foundation/[backgroundworkers, timerthreads]
+import ../foundation/[backgroundworkers, timerthreads]
 
 const
   KosmoCliProtocolVersion* = 2
@@ -428,7 +428,7 @@ proc startKosmoCliOpenServer*(
       handler: handler,
     )
     var ticker = KosmoCliTicker()
-    let timerThread = nimkitTimerThread()
+    let timerThread = backgroundTimerThread()
     result.ticker = ticker.moveToThread(timerThread)
     result.timer = newSigilTimer(KosmoCliPollInterval)
     connectThreaded(result.timer, timeout, result.ticker, KosmoCliTicker.tick())
@@ -451,7 +451,7 @@ proc close*(server: KosmoCliOpenServer) =
     return
   server.closed = true
   if not server.timer.isNil:
-    server.timer.cancel(nimkitTimerThread())
+    server.timer.cancel(backgroundTimerThread())
   for client in server.clients.mitems:
     client.socket.close()
   server.clients.setLen(0)
@@ -464,4 +464,4 @@ proc close*(server: KosmoCliOpenServer) =
   server.timer = nil
   server.ticker = nil
 
-var cliOpenWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var cliOpenWorkerLifetime {.used.}: BackgroundWorkerLifetime

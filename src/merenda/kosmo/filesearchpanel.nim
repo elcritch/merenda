@@ -1,14 +1,14 @@
 ## Find-in-files sidebar UI backed by NimKit's worker-based file search.
 
 import std/[options, os, strutils, tables]
-import ../nimkit/foundation/atomicfiles
-import ../nimkit/foundation/textsearch
+import ../foundation/atomicfiles
+import ../services/textsearch
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./filetree
 import ./searchbuttons
-import ./workspacefiles
+import ../services/filesystem/[filesearch, workspacefiles]
 
 const
   DefaultKosmoSearchResultsPerFile* = 30
@@ -21,7 +21,7 @@ const
 
 type
   SearchResultOpenHandler* = proc(
-    match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
+    match: filesearch.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) {.closure.}
 
   SearchResultGroup = object
@@ -30,7 +30,7 @@ type
     visibleCount: int
 
   KosmoSearchResults* = ref object of nimkit.OutlineView
-    xMatches: seq[nimkit.FileSearchMatch]
+    xMatches: seq[filesearch.FileSearchMatch]
     xGroups: seq[SearchResultGroup]
     xGroupIndexes: Table[string, int]
     xMatchGroupIndexes: seq[int]
@@ -57,10 +57,10 @@ type
     progressIndicator*: nimkit.ProgressIndicator
     cancelButton*: nimkit.Button
     xRootPath: string
-    xSearchOptions: nimkit.FileSearchOptions
+    xSearchOptions: filesearch.FileSearchOptions
     xRootPaths: seq[string]
-    xService: nimkit.FileSearchService
-    xActiveSearch: nimkit.FileSearchHandle
+    xService: filesearch.FileSearchService
+    xActiveSearch: filesearch.FileSearchHandle
 
 func indexedIdentifier(prefix: string, index: int): string =
   prefix & $index
@@ -88,7 +88,7 @@ proc searchFileTitle(path: string, rootPaths: openArray[string]): string =
   else:
     path
 
-proc searchResultTitle(match: nimkit.FileSearchMatch): string =
+proc searchResultTitle(match: filesearch.FileSearchMatch): string =
   let lineText = match.lineText.strip()
   result = $match.line & ":" & $match.column
   if lineText.len > 0:
@@ -231,7 +231,7 @@ proc searchResultWasActivated(
   if index in 0 ..< results.xMatches.len and not results.xOnOpenResult.isNil:
     results.xOnOpenResult(results.xMatches[index], results.xOpenDisposition)
 
-proc matches*(results: KosmoSearchResults): lent seq[nimkit.FileSearchMatch] =
+proc matches*(results: KosmoSearchResults): lent seq[filesearch.FileSearchMatch] =
   results.xMatches
 
 proc matchIdentifier*(results: KosmoSearchResults, index: Natural): string =
@@ -243,13 +243,13 @@ proc `onOpenResult=`*(results: KosmoSearchResults, handler: SearchResultOpenHand
   results.xOnOpenResult = handler
 
 proc appendMatches(
-  results: KosmoSearchResults, matches: openArray[nimkit.FileSearchMatch]
+  results: KosmoSearchResults, matches: openArray[filesearch.FileSearchMatch]
 )
 
 proc setMatches(
     results: KosmoSearchResults,
     rootPaths: openArray[string],
-    matches: openArray[nimkit.FileSearchMatch],
+    matches: openArray[filesearch.FileSearchMatch],
 ) =
   results.selectedItemIdentifier = ""
   results.xRootPaths = @rootPaths
@@ -262,7 +262,7 @@ proc setMatches(
   results.appendMatches(matches)
 
 proc appendMatches(
-    results: KosmoSearchResults, matches: openArray[nimkit.FileSearchMatch]
+    results: KosmoSearchResults, matches: openArray[filesearch.FileSearchMatch]
 ) =
   if matches.len == 0:
     return
@@ -325,7 +325,7 @@ proc updateSearchControls(panel: KosmoFileSearchPanel, searching: bool) =
     panel.progressIndicator.stopAnimation()
 
 proc finishFileSearch(
-    panel: KosmoFileSearchPanel, handle: nimkit.FileSearchHandle
+    panel: KosmoFileSearchPanel, handle: filesearch.FileSearchHandle
 ) {.slot.} =
   if handle.isNil or handle != panel.xActiveSearch:
     return
@@ -335,22 +335,22 @@ proc finishFileSearch(
     panel.resultsView.setMatches(panel.xRootPaths, searchResult.matches)
   panel.statusLabel.text =
     case searchResult.reason
-    of nimkit.fsfrCancelled:
+    of filesearch.fsfrCancelled:
       "Search cancelled"
-    of nimkit.fsfrResultLimitReached:
+    of filesearch.fsfrResultLimitReached:
       $searchResult.matches.len & " results (limit reached)"
-    of nimkit.fsfrFileLimitReached:
+    of filesearch.fsfrFileLimitReached:
       $searchResult.matches.len & " results (file limit reached)"
-    of nimkit.fsfrPatternError:
+    of filesearch.fsfrPatternError:
       "Search error: " & searchResult.errorMessage
-    of nimkit.fsfrCompleted:
+    of filesearch.fsfrCompleted:
       if searchResult.matches.len == 1:
         "1 result"
       else:
         $searchResult.matches.len & " results"
 
   panel.updateSearchControls(false)
-  if searchResult.reason == nimkit.fsfrPatternError:
+  if searchResult.reason == filesearch.fsfrPatternError:
     panel.replaceButton.enabled = false
     panel.replaceAllButton.enabled = false
   if panel.xReplacementSummary.len > 0:
@@ -359,8 +359,8 @@ proc finishFileSearch(
 
 proc appendFileSearchMatches(
     panel: KosmoFileSearchPanel,
-    handle: nimkit.FileSearchHandle,
-    matches: seq[nimkit.FileSearchMatch],
+    handle: filesearch.FileSearchHandle,
+    matches: seq[filesearch.FileSearchMatch],
 ) {.slot.} =
   if handle.isNil or handle != panel.xActiveSearch:
     return
@@ -376,11 +376,11 @@ proc appendFileSearchMatches(
 
 proc ensureSearchService(panel: KosmoFileSearchPanel) =
   if panel.xService.isNil:
-    panel.xService = nimkit.newFileSearchService()
+    panel.xService = filesearch.newFileSearchService()
     panel.xService.connect(
-      nimkit.fileSearchDidFindMatches, panel, appendFileSearchMatches
+      filesearch.fileSearchDidFindMatches, panel, appendFileSearchMatches
     )
-    panel.xService.connect(nimkit.fileSearchDidFinish, panel, finishFileSearch)
+    panel.xService.connect(filesearch.fileSearchDidFinish, panel, finishFileSearch)
 
 proc cancelSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   ## Request cancellation of the running search and keep showing its progress
@@ -419,7 +419,7 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   try:
     panel.ensureSearchService()
     panel.xActiveSearch = panel.xService.search(
-      nimkit.initFileSearchQuery(panel.xRootPaths, pattern, panel.xSearchOptions)
+      filesearch.initFileSearchQuery(panel.xRootPaths, pattern, panel.xSearchOptions)
     )
     result = true
   except CatchableError as error:
@@ -431,14 +431,14 @@ proc replaceMatches*(panel: KosmoFileSearchPanel, all = false): int {.discardabl
   ## Replace displayed results, validating original lines, spans, and templates.
   if panel.isNil or panel.xActiveSearch.isNil or not panel.xActiveSearch.isFinished():
     return
-  if panel.xActiveSearch.result().reason == nimkit.fsfrPatternError:
+  if panel.xActiveSearch.result().reason == filesearch.fsfrPatternError:
     return
   if panel.queryField.text() != panel.xPattern or
       panel.xSearchOptions.regularExpression != panel.xRegularExpression or
       panel.xSearchOptions.caseSensitive != panel.xCaseSensitive:
     panel.statusLabel.text = "Run the changed search before replacing"
     return
-  var grouped = initOrderedTable[string, seq[nimkit.FileSearchMatch]]()
+  var grouped = initOrderedTable[string, seq[filesearch.FileSearchMatch]]()
   let selected = panel.resultsView.selectedItemIdentifier().identifierIndex(
       SearchResultIdentifierPrefix
     )
@@ -624,14 +624,16 @@ proc `rootPaths=`*(panel: KosmoFileSearchPanel, rootPaths: openArray[string]) =
 proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
   panel.rootPaths = [rootPath]
 
-proc activeSearch*(panel: KosmoFileSearchPanel): nimkit.FileSearchHandle =
+proc activeSearch*(panel: KosmoFileSearchPanel): filesearch.FileSearchHandle =
   panel.xActiveSearch
 
-proc searchOptions*(panel: KosmoFileSearchPanel): nimkit.FileSearchOptions =
+proc searchOptions*(panel: KosmoFileSearchPanel): filesearch.FileSearchOptions =
   ## Return the options applied to future searches from this panel.
   panel.xSearchOptions
 
-proc `searchOptions=`*(panel: KosmoFileSearchPanel, options: nimkit.FileSearchOptions) =
+proc `searchOptions=`*(
+    panel: KosmoFileSearchPanel, options: filesearch.FileSearchOptions
+) =
   ## Configure future searches without interrupting the current search.
   panel.xSearchOptions = options
   panel.expressionButton.state =
@@ -728,9 +730,9 @@ proc close*(panel: KosmoFileSearchPanel) =
   if panel.isNil or panel.xService.isNil:
     return
   panel.xService.disconnect(
-    nimkit.fileSearchDidFindMatches, panel, appendFileSearchMatches
+    filesearch.fileSearchDidFindMatches, panel, appendFileSearchMatches
   )
-  panel.xService.disconnect(nimkit.fileSearchDidFinish, panel, finishFileSearch)
+  panel.xService.disconnect(filesearch.fileSearchDidFinish, panel, finishFileSearch)
   panel.xService.close()
   panel.xService = nil
   panel.xActiveSearch = nil
@@ -757,7 +759,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
     progressIndicator: progressIndicator,
     cancelButton: cancelButton,
     xSearchOptions:
-      nimkit.initFileSearchOptions(caseSensitive = false, regularExpression = false),
+      filesearch.initFileSearchOptions(caseSensitive = false, regularExpression = false),
   )
   result.initViewFields()
   result.addSubview(queryField)

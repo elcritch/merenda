@@ -6,7 +6,7 @@ import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 const TextFieldGeometryEpsilon = 0.5'f32
 

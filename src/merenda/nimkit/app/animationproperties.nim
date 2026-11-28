@@ -7,8 +7,8 @@ import ../containers/cascadingviews
 import ../containers/scrollviews
 import ../containers/splitviews
 import ../controls/progressindicators
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../view/views
 
 type SplitDividerAnimationTarget = ref object of DynamicAgent

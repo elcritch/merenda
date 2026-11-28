@@ -1,5 +1,5 @@
 ## Defer binding disconnections while a source's synchronous signal is in flight.
-## All operations occur on the owning GUI thread.
+## All operations occur on the owning thread.
 import sigils/core
 
 type DeferredSourceWork = object

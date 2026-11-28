@@ -3,12 +3,10 @@ import std/options
 import sigils/selectors as dynamicSelectors
 from sigils/hom import findFirst, findFirstReply, get, isSome
 
-import ../foundation/events
-import ../foundation/backrefs
-import ../foundation/selectors
-import ../foundation/undomanagers
-
-export backrefs
+import ../core/events
+import ../../foundation/backrefs
+import ../core/selectors
+import ../../foundation/undomanagers
 
 type
   Responder* = ref object of DynamicAgent

@@ -1,7 +1,7 @@
 import std/[os, tempfiles, unittest]
 
 import merenda/nimkit
-import merenda/nimkit/foundation/selectors as nimkitSelectors
+import merenda/nimkit/core/selectors as nimkitSelectors
 import merenda/kosmo/kosmo
 
 proc keyEvent(key: Key, modifiers: set[nimkit.KeyModifier] = {}, text = ""): KeyEvent =

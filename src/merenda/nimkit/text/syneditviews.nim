@@ -12,8 +12,8 @@ import sigils/selectors
 import ../accessibility/accessibilityprotocols
 import ../containers/scrollviews
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../text/texteditors
 import ../text/textstorage

@@ -6,7 +6,7 @@ import pkg/bumpy
 import pkg/pixie
 
 import merenda/nimkit/drawing
-import merenda/nimkit/foundation/types
+import merenda/nimkit/core/types
 import merenda/nimkit/themes
 import merenda/nimkit/text/texttypes
 import merenda/kosmo/textbackendlogging

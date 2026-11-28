@@ -1,5 +1,5 @@
 import std/unittest
-import merenda/nimkit/foundation/viewprofiling
+import merenda/nimkit/debug/viewprofiling
 
 when defined(merendaProfile):
   import merenda/nimkit

@@ -4,13 +4,14 @@ import pkg/kiwiberry
 import sigils/core
 from sigils/hom import findFirst, isSome
 
+import ../../foundation/backrefs
 import ../themes
 from ../themes/themecore import
   layoutStyleSelection, constraintCount, validStyleConstraint
 import ../themes/private/cssproperties
-import ../foundation/selectors
-import ../foundation/viewprofiling
-import ../foundation/types
+import ../core/selectors
+import ../debug/viewprofiling
+import ../core/types
 import ./viewgeometry
 import ./viewbase
 import ./viewprotos

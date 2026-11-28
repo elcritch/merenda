@@ -2,7 +2,7 @@
 
 import std/tables
 
-import ../foundation/types
+import ../core/types
 import ../themes
 import ../view/views
 import ./resrccore

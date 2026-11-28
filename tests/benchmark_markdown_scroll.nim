@@ -18,7 +18,7 @@ import figdraw
 
 import merenda/nimkit
 import merenda/nimkit/app/backend as nimkitBackend
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 when defined(fragmentNativeProfile):
   import merenda/nimkit/drawing/renderscenes as retainedScenes
 

@@ -9,7 +9,7 @@ import ../accessibility/accessibility
 import ../app/windows
 import ../containers/tabviews
 import ../drawing
-import ../foundation/[events, selectors, types]
+import ../core/[events, selectors, types]
 import ../text/textfields
 import ../themes
 import ../view/views

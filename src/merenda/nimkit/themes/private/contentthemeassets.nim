@@ -2,7 +2,7 @@
 
 import std/[os, tempfiles]
 
-from ../../foundation/assetcache import nimkitAssetCacheDirectory
+from ../../../services/assetcache import assetCacheDirectory
 
 template embedTheme(name: string): untyped =
   (
@@ -86,7 +86,7 @@ proc installBundledContentThemes*(cacheDirectory = ""): string =
     if cacheDirectory.len > 0:
       cacheDirectory
     else:
-      nimkitAssetCacheDirectory("nimkit") / "content"
+      assetCacheDirectory("nimkit") / "content"
   result = cacheRoot / "themes"
   try:
     createDir(result)

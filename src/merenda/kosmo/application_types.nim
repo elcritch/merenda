@@ -27,13 +27,13 @@ type
   KosmoMarkdownView* = ref object of nimkit.MarkdownView
     search: KosmoViewerSearch
     pendingSearchRange: Option[nimkit.TextRange]
-    pendingFileSearchMatch: Option[nimkit.FileSearchMatch]
+    pendingFileSearchMatch: Option[filesearch.FileSearchMatch]
     editorView: WeakRef[KosmoEditorView]
     previewWatch: KosmoMarkdownCacheWatch
     previewGrammarRevision: uint64
 
   KosmoMarkdownCacheWatch = ref object of nimkit.DynamicAgent
-    controller: nimkit.BackRef[KosmoDockController]
+    controller: backrefs.BackRef[KosmoDockController]
 
   KosmoMarkdownPreviewState = object
     bufferId: KosmoBufferId
@@ -170,7 +170,7 @@ type
     markdownPreviewAccessClock: uint64
     markdownOwners: seq[KosmoMarkdownOwner]
     markdownRetirements: seq[KosmoMarkdownRetirement]
-    backRefs: nimkit.BackRefSet[KosmoDockController]
+    backRefs: backrefs.BackRefSet[KosmoDockController]
     markdownReconcileScheduled: bool
     markdownCacheClosed: bool
     shortcutBindings: nimkit.KeyBindingTable
@@ -183,7 +183,7 @@ type
     selected: bool
 
   KosmoStatusBar = ref object of nimkit.View
-    dockController: nimkit.BackRef[KosmoDockController]
+    dockController: backrefs.BackRef[KosmoDockController]
     label: nimkit.Label
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
@@ -245,8 +245,8 @@ type
     controller: WeakRef[KosmoDockController]
 
   KosmoNimdexSettingsTarget = ref object of nimkit.Responder
-    controller: nimkit.BackRef[KosmoDockController]
-    manager: nimkit.BackRef[KosmoWindowManager]
+    controller: backrefs.BackRef[KosmoDockController]
+    manager: backrefs.BackRef[KosmoWindowManager]
 
   KosmoApplication* = ref object
     application*: nimkit.Application
@@ -278,7 +278,7 @@ type
     xTerminalPalette: nimkit.TerminalPalette
     xTerminalTheme: string
     xRichTextThemes: array[KosmoThemeTarget, ContentTheme]
-    xWindowManager: nimkit.BackRef[KosmoWindowManager]
+    xWindowManager: backrefs.BackRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string
     xHasFileBrowser: bool

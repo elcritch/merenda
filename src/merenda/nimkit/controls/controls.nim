@@ -9,10 +9,10 @@ import ../app/dragging
 import ../app/pasteboards
 import ../app/windows
 import ../text/fieldeditors
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../view/views
 
 export cells, objectvalues, views, actiontargets

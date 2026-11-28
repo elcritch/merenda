@@ -7,10 +7,11 @@ when defined(windows):
 
 import ../nimkit as nimkit except performKeyEquivalent
 import ./config
-import ./workspacefiles
+import ../services/filesystem/[listings, workspacefiles]
+import ../services/git/status as gitstatus
 import ./searchbuttons
-import ../nimkit/foundation/textsearch
-from ../nimkit/foundation/selectors import performKeyEquivalent
+import ../services/textsearch
+from ../nimkit/core/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 type
@@ -57,19 +58,19 @@ type
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
     onItemAction*: FileTreeItemActionHandler
-    onGitStatus*: proc(snapshot: nimkit.GitStatusSnapshot) {.closure.}
+    onGitStatus*: proc(snapshot: gitstatus.GitStatusSnapshot) {.closure.}
     onBranchSwitched*: proc(root, branch: string, code: int, output: string) {.closure.}
     onRepositoryUpdated*: proc(
       root, branch: string,
-      action: nimkit.GitRepositoryAction,
+      action: gitstatus.GitRepositoryAction,
       code: int,
       output: string,
     ) {.closure.}
     xOpenDisposition: FileTreeOpenDisposition
-    xGitStatusService: nimkit.GitStatusService
-    xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
-    xGitFileStates: Table[string, nimkit.GitFileState]
-    xGitDescendantStates: Table[string, nimkit.GitFileState]
+    xGitStatusService: gitstatus.GitStatusService
+    xGitSnapshots: Table[string, gitstatus.GitStatusSnapshot]
+    xGitFileStates: Table[string, gitstatus.GitFileState]
+    xGitDescendantStates: Table[string, gitstatus.GitFileState]
     xGitChildren: Table[string, seq[string]]
     xVisibleChildren: Table[string, seq[string]]
     xMatchingPaths: HashSet[string]
@@ -89,9 +90,9 @@ type
     onSelectBranch*: proc(root, branch: string) {.closure.}
     onCompareBranch*: proc(root, branch: string) {.closure.}
     onUpdateRepository*:
-      proc(root, branch: string, action: nimkit.GitRepositoryAction) {.closure.}
+      proc(root, branch: string, action: gitstatus.GitRepositoryAction) {.closure.}
     onRemoveBranches*: proc(
-      root, base: string, branches: seq[nimkit.GitBranchInfo], cleanup, bulk: bool
+      root, base: string, branches: seq[gitstatus.GitBranchInfo], cleanup, bulk: bool
     ) {.closure.}
     closeFilterButton*: nimkit.Button
     expressionButton: nimkit.Button
@@ -168,7 +169,7 @@ proc ignoredPath(tree: FileTree, path: string): bool =
   var currentPath = path
   while currentPath.len > 0 and currentPath notin tree.xRootPaths:
     if currentPath in tree.xGitFileStates and
-        tree.xGitFileStates[currentPath] == nimkit.gfsIgnored:
+        tree.xGitFileStates[currentPath] == gitstatus.gfsIgnored:
       return true
     let parentPath = currentPath.parentDir()
     if parentPath == currentPath:
@@ -220,7 +221,7 @@ proc rebuildGitChildren(tree: FileTree) =
   tree.xGitChildren.clear()
   var seenChildren = initTable[string, HashSet[string]]()
   for path, state in tree.xGitFileStates:
-    if state == nimkit.gfsIgnored:
+    if state == gitstatus.gfsIgnored:
       continue
     var childPath = path
     while childPath.len > 0:
@@ -245,7 +246,7 @@ proc displayModeIncludes(tree: FileTree, path: string): bool =
   of FileTreeDisplayMode.VisibleFiles:
     path.treePathExists() and not tree.hiddenPath(path) and not tree.ignoredPath(path)
   of FileTreeDisplayMode.SourceControlChanges:
-    (path in tree.xGitFileStates and tree.xGitFileStates[path] != nimkit.gfsIgnored) or
+    (path in tree.xGitFileStates and tree.xGitFileStates[path] != gitstatus.gfsIgnored) or
       path in tree.xGitDescendantStates
 
 proc directChildPath(parentPath, path: string): string =
@@ -349,9 +350,8 @@ proc rebuildMatchingPaths(tree: FileTree): seq[string] =
       initTextSearchPattern(needle, tree.xRegularExpression, caseSensitive = false)
     if tree.xDisplayMode == FileTreeDisplayMode.SourceControlChanges:
       for path, state in tree.xGitFileStates:
-        if state != nimkit.gfsIgnored and pattern.contains(
-          path.fileBrowserDisplayName()
-        ):
+        if state != gitstatus.gfsIgnored and
+            pattern.contains(path.fileBrowserDisplayName()):
           tree.includePathAndAncestors(path, result)
     else:
       tree.rebuildSearchIndex()
@@ -375,49 +375,49 @@ proc reloadFilteredTree(tree: FileTree, updateSearchExpansion = true) =
       tree.expandedItemIdentifiers = expanded
   tree.reloadOutlineData()
 
-func gitStatePriority(state: nimkit.GitFileState): int =
+func gitStatePriority(state: gitstatus.GitFileState): int =
   case state
-  of nimkit.gfsConflicted: 6
-  of nimkit.gfsDeleted: 5
-  of nimkit.gfsModified: 4
-  of nimkit.gfsRenamed: 3
-  of nimkit.gfsAdded: 2
-  of nimkit.gfsUntracked: 1
-  of nimkit.gfsIgnored: 0
+  of gitstatus.gfsConflicted: 6
+  of gitstatus.gfsDeleted: 5
+  of gitstatus.gfsModified: 4
+  of gitstatus.gfsRenamed: 3
+  of gitstatus.gfsAdded: 2
+  of gitstatus.gfsUntracked: 1
+  of gitstatus.gfsIgnored: 0
 
-func gitStateTitle(state: nimkit.GitFileState): string =
+func gitStateTitle(state: gitstatus.GitFileState): string =
   case state
-  of nimkit.gfsModified: "Modified"
-  of nimkit.gfsAdded: "Added"
-  of nimkit.gfsDeleted: "Deleted"
-  of nimkit.gfsRenamed: "Renamed"
-  of nimkit.gfsUntracked: "Untracked"
-  of nimkit.gfsConflicted: "Merge conflict"
-  of nimkit.gfsIgnored: "Ignored"
+  of gitstatus.gfsModified: "Modified"
+  of gitstatus.gfsAdded: "Added"
+  of gitstatus.gfsDeleted: "Deleted"
+  of gitstatus.gfsRenamed: "Renamed"
+  of gitstatus.gfsUntracked: "Untracked"
+  of gitstatus.gfsConflicted: "Merge conflict"
+  of gitstatus.gfsIgnored: "Ignored"
 
-func gitStateBadge(state: nimkit.GitFileState): string =
+func gitStateBadge(state: gitstatus.GitFileState): string =
   case state
-  of nimkit.gfsModified: "M"
-  of nimkit.gfsAdded: "A"
-  of nimkit.gfsDeleted: "D"
-  of nimkit.gfsRenamed: "R"
-  of nimkit.gfsUntracked: "U"
-  of nimkit.gfsConflicted: "!"
-  of nimkit.gfsIgnored: ""
+  of gitstatus.gfsModified: "M"
+  of gitstatus.gfsAdded: "A"
+  of gitstatus.gfsDeleted: "D"
+  of gitstatus.gfsRenamed: "R"
+  of gitstatus.gfsUntracked: "U"
+  of gitstatus.gfsConflicted: "!"
+  of gitstatus.gfsIgnored: ""
 
-func gitStateColor(state: nimkit.GitFileState): nimkit.Color =
+func gitStateColor(state: gitstatus.GitFileState): nimkit.Color =
   case state
-  of nimkit.gfsModified: GitModifiedColor
-  of nimkit.gfsAdded, nimkit.gfsUntracked: GitAddedColor
-  of nimkit.gfsDeleted: GitDeletedColor
-  of nimkit.gfsRenamed: GitRenamedColor
-  of nimkit.gfsConflicted: GitConflictedColor
-  of nimkit.gfsIgnored: GitIgnoredColor
+  of gitstatus.gfsModified: GitModifiedColor
+  of gitstatus.gfsAdded, gitstatus.gfsUntracked: GitAddedColor
+  of gitstatus.gfsDeleted: GitDeletedColor
+  of gitstatus.gfsRenamed: GitRenamedColor
+  of gitstatus.gfsConflicted: GitConflictedColor
+  of gitstatus.gfsIgnored: GitIgnoredColor
 
 proc includeGitState(
-    states: var Table[string, nimkit.GitFileState],
+    states: var Table[string, gitstatus.GitFileState],
     path: string,
-    state: nimkit.GitFileState,
+    state: gitstatus.GitFileState,
 ) =
   if path notin states or state.gitStatePriority() > states[path].gitStatePriority():
     states[path] = state
@@ -444,9 +444,9 @@ proc gitDecoration(tree: FileTree, path: string): nimkit.OutlineItemDecoration =
   var parentPath = path.parentDir()
   while parentPath.len > 0:
     if parentPath in tree.xGitFileStates and
-        tree.xGitFileStates[parentPath] == nimkit.gfsIgnored:
+        tree.xGitFileStates[parentPath] == gitstatus.gfsIgnored:
       return nimkit.initOutlineItemDecoration(
-        color = some(GitIgnoredColor), tooltip = nimkit.gfsIgnored.gitStateTitle()
+        color = some(GitIgnoredColor), tooltip = gitstatus.gfsIgnored.gitStateTitle()
       )
     if parentPath in tree.xRootPaths:
       break
@@ -456,7 +456,7 @@ proc gitDecoration(tree: FileTree, path: string): nimkit.OutlineItemDecoration =
     parentPath = nextParent
   if tree.isWithinHiddenDirectory(path):
     return nimkit.initOutlineItemDecoration(
-      color = some(GitIgnoredColor), tooltip = nimkit.gfsIgnored.gitStateTitle()
+      color = some(GitIgnoredColor), tooltip = gitstatus.gfsIgnored.gitStateTitle()
     )
   if path in tree.xGitDescendantStates:
     let state = tree.xGitDescendantStates[path]
@@ -740,13 +740,13 @@ proc reloadRoots(tree: FileTree, expanded: seq[string]) =
 
 proc rebuildGitStates(tree: FileTree): bool =
   var
-    fileStates = initTable[string, nimkit.GitFileState]()
-    descendantStates = initTable[string, nimkit.GitFileState]()
+    fileStates = initTable[string, gitstatus.GitFileState]()
+    descendantStates = initTable[string, gitstatus.GitFileState]()
   for root, rootSnapshot in tree.xGitSnapshots:
     if rootSnapshot.isRepository:
       for entry in rootSnapshot.entries:
         fileStates.includeGitState(entry.path, entry.state)
-        if entry.state != nimkit.gfsIgnored:
+        if entry.state != gitstatus.gfsIgnored:
           var parentPath = entry.path.parentDir()
           while parentPath.len > 0:
             descendantStates.includeGitState(parentPath, entry.state)
@@ -784,7 +784,7 @@ proc `rootPath=`*(tree: FileTree, path: string) =
   tree.xGitChildren.clear()
   tree.xGitSnapshots.clear()
   if not tree.onGitStatus.isNil:
-    tree.onGitStatus(nimkit.GitStatusSnapshot())
+    tree.onGitStatus(gitstatus.GitStatusSnapshot())
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = nextRoots
   let expanded =
@@ -808,7 +808,7 @@ proc addRootPath*(tree: FileTree, path: string): bool {.discardable.} =
     tree.xGitChildren.clear()
   tree.xRootPaths.add next
   if not tree.onGitStatus.isNil:
-    tree.onGitStatus(nimkit.GitStatusSnapshot())
+    tree.onGitStatus(gitstatus.GitStatusSnapshot())
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = tree.xRootPaths
   var expanded = tree.expandedItemIdentifiers()
@@ -832,7 +832,7 @@ proc removeRootPath*(tree: FileTree, path: string): bool {.discardable.} =
       ""
   tree.xGitSnapshots.del(root)
   if not tree.onGitStatus.isNil:
-    tree.onGitStatus(nimkit.GitStatusSnapshot())
+    tree.onGitStatus(gitstatus.GitStatusSnapshot())
   discard tree.rebuildGitStates()
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = tree.xRootPaths
@@ -866,7 +866,7 @@ proc applyWorkspaceFiles(tree: FileTree) {.slot.} =
   tree.invalidateSearchIndex()
   tree.reloadFilteredTree()
 
-proc applyGitStatus*(tree: FileTree, snapshot: nimkit.GitStatusSnapshot) =
+proc applyGitStatus*(tree: FileTree, snapshot: gitstatus.GitStatusSnapshot) =
   ## Replace one root's decorations while retaining snapshots for the other roots.
   if tree.isNil or snapshot.rootPath notin tree.xRootPaths:
     return
@@ -877,7 +877,7 @@ proc applyGitStatus*(tree: FileTree, snapshot: nimkit.GitStatusSnapshot) =
     tree.reloadFilteredTree()
 
 proc applyRefreshedGitStatus(
-    tree: FileTree, snapshot: nimkit.GitStatusSnapshot
+    tree: FileTree, snapshot: gitstatus.GitStatusSnapshot
 ) {.slot.} =
   tree.applyGitStatus(snapshot)
 
@@ -894,7 +894,7 @@ proc branchSwitched(
 proc repositoryUpdated(
     tree: FileTree,
     root, branch: string,
-    action: nimkit.GitRepositoryAction,
+    action: gitstatus.GitRepositoryAction,
     code: int,
     output: string,
 ) {.slot.} =
@@ -906,28 +906,28 @@ proc switchBranch*(tree: FileTree, root, branch: string): bool {.discardable.} =
     tree.xGitStatusService.switchBranch(root, branch)
 
 proc performGitAction*(
-    tree: FileTree, root, branch: string, action: nimkit.GitRepositoryAction
+    tree: FileTree, root, branch: string, action: gitstatus.GitRepositoryAction
 ): bool {.discardable.} =
   not tree.isNil and tree.xGitStatusService.performGitAction(root, branch, action)
 
 proc removeBranches*(
-    tree: FileTree, root: string, selected: seq[nimkit.GitBranchInfo], cleanup: bool
+    tree: FileTree, root: string, selected: seq[gitstatus.GitBranchInfo], cleanup: bool
 ): bool {.discardable.} =
   not tree.isNil and tree.xGitStatusService.removeBranches(root, selected, cleanup)
 
 proc startGitStatusMonitoring*(
     tree: FileTree, refreshInterval: Duration = initDuration()
-): nimkit.GitStatusService =
+): gitstatus.GitStatusService =
   ## Watch workspace changes and refresh Git on demand. A positive interval
   ## explicitly opts into additional periodic refreshes for compatibility.
   if tree.isNil:
     return
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.close()
-  result = nimkit.newGitStatusService(refreshInterval = refreshInterval)
-  result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
-  result.connect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
-  result.connect(nimkit.gitRepositoryDidUpdate, tree, repositoryUpdated)
+  result = gitstatus.newGitStatusService(refreshInterval = refreshInterval)
+  result.connect(gitstatus.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
+  result.connect(gitstatus.gitBranchDidSwitch, tree, branchSwitched)
+  result.connect(gitstatus.gitRepositoryDidUpdate, tree, repositoryUpdated)
   tree.xGitStatusService = result
   result.rootPaths = tree.xRootPaths
   tree.xWorkspaceFiles.connect(workspaceRepositoryDidChange, tree, workspaceGitChanged)
@@ -955,11 +955,11 @@ proc stopGitStatusMonitoring*(tree: FileTree) =
     workspaceRepositoryDidChange, tree, workspaceGitChanged
   )
   tree.xGitStatusService.disconnect(
-    nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus
+    gitstatus.gitStatusDidRefresh, tree, applyRefreshedGitStatus
   )
-  tree.xGitStatusService.disconnect(nimkit.gitBranchDidSwitch, tree, branchSwitched)
+  tree.xGitStatusService.disconnect(gitstatus.gitBranchDidSwitch, tree, branchSwitched)
   tree.xGitStatusService.disconnect(
-    nimkit.gitRepositoryDidUpdate, tree, repositoryUpdated
+    gitstatus.gitRepositoryDidUpdate, tree, repositoryUpdated
   )
   tree.xGitStatusService.close()
   tree.xGitStatusService = nil
@@ -1005,17 +1005,17 @@ proc branchActionItem(
           let action =
             case branchAction
             of BranchMenuAction.FetchOrigin:
-              nimkit.GitRepositoryAction.FetchOrigin
+              gitstatus.GitRepositoryAction.FetchOrigin
             of BranchMenuAction.PullCurrent:
-              nimkit.GitRepositoryAction.PullCurrentBranch
+              gitstatus.GitRepositoryAction.PullCurrentBranch
             else:
-              nimkit.GitRepositoryAction.UpdateBranch
+              gitstatus.GitRepositoryAction.UpdateBranch
           panel[].onUpdateRepository(root, branch, action)
 
 proc branchRemovalItem(
     panel: WeakRef[FileBrowserPanel],
     root, base, title: string,
-    branches: seq[nimkit.GitBranchInfo],
+    branches: seq[gitstatus.GitBranchInfo],
     cleanup, bulk: bool,
 ): nimkit.MenuItem =
   let action = nimkit.actionSelector("kosmo.branch.remove")
@@ -1042,8 +1042,8 @@ proc updateBranches(panel: FileBrowserPanel) =
     if current.len == 0:
       current = snapshot.branch
     var
-      branchInfo: Table[string, nimkit.GitBranchInfo]
-      merged: seq[nimkit.GitBranchInfo]
+      branchInfo: Table[string, gitstatus.GitBranchInfo]
+      merged: seq[gitstatus.GitBranchInfo]
     for branch in snapshot.branchInfo:
       if not branch.protected and branch.name != snapshot.branch:
         branchInfo[branch.name] = branch
@@ -1413,7 +1413,7 @@ protocol FileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
 proc newFileTree*(
     rootPath = "",
     frame: nimkit.Rect = nimkit.AutoRect,
-    directoryEntryLimit: Positive = nimkit.DefaultFileBrowserEntryLimit,
+    directoryEntryLimit: Positive = DefaultFileBrowserEntryLimit,
     indentationPerLevel: float32 = DefaultFileTreeIndentation,
 ): FileTree =
   ## Create a file tree with configurable hierarchy spacing in points.
@@ -1422,8 +1422,8 @@ proc newFileTree*(
   result.indentationPerLevel = indentationPerLevel
   result.xWorkspaceFiles = newWorkspaceFiles(entryLimit = directoryEntryLimit)
   result.xWorkspaceFiles.connect(workspaceFilesDidChange, result, applyWorkspaceFiles)
-  result.xGitFileStates = initTable[string, nimkit.GitFileState]()
-  result.xGitDescendantStates = initTable[string, nimkit.GitFileState]()
+  result.xGitFileStates = initTable[string, gitstatus.GitFileState]()
+  result.xGitDescendantStates = initTable[string, gitstatus.GitFileState]()
   result.xGitChildren = initTable[string, seq[string]]()
   result.xVisibleChildren = initTable[string, seq[string]]()
   result.xMatchingPaths = initHashSet[string]()
@@ -1495,7 +1495,7 @@ proc newFileBrowserPanel*(tree: FileTree): FileBrowserPanel =
     else:
       "Hold Alt for branch actions"
   branchButton.hidden = true
-  tree.onGitStatus = proc(snapshot: nimkit.GitStatusSnapshot) =
+  tree.onGitStatus = proc(snapshot: gitstatus.GitStatusSnapshot) =
     discard snapshot
     if not panel.isNil:
       panel[].updateBranches()

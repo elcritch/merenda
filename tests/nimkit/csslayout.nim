@@ -1,6 +1,7 @@
 import std/[os, strutils, unittest]
 import figdraw except CornerRadii
 
+import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/view/viewbase
 from merenda/nimkit/view/viewgeometry import setFrameFromLayout

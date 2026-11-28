@@ -5,7 +5,7 @@ when defined(posix):
 
   import merenda/kosmo/config
   import merenda/nimkit/app/documents
-  import merenda/nimkit/foundation/atomicfiles
+  import merenda/foundation/atomicfiles
   import merenda/nimkit/resources/resrccore
   import merenda/tekton/editor
 

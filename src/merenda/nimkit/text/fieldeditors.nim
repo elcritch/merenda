@@ -1,12 +1,13 @@
-import ../foundation/events
+import ../../foundation/backrefs
+import ../core/events
 import ../drawing
 import ../responder/responders
-import ../foundation/objectvalues
-import ../foundation/selectors
+import ../core/objectvalues
+import ../core/selectors
 import ./textstorage
 import ./texttypes
 import ./textviews
-import ../foundation/types
+import ../core/types
 
 type FieldEditor* = ref object of TextView
   xClient: BackRef[Responder]

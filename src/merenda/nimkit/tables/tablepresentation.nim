@@ -12,12 +12,12 @@ import ../app/dragging
 import ../controls/controls
 import ../containers/listbasics
 import ../containers/scrollviews
-import ../foundation/events
-import ../foundation/selectors
+import ../core/events
+import ../core/selectors
 import ../themes
 import ../themes/themecore as themeCore
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/types
+import ../../foundation/undomanagers
 from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 

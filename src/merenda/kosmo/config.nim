@@ -2,7 +2,7 @@
 
 import std/[json, jsonutils, os]
 
-import ../nimkit/foundation/atomicfiles
+import ../foundation/atomicfiles
 
 const DefaultFileTreeIndentation* = 10.0'f32
 

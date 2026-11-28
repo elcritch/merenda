@@ -3,8 +3,8 @@ import sigils/core
 import ../accessibility/accessibility
 import ../drawing
 import ../drawing/images
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ./views
 
 export images

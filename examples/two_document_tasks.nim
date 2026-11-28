@@ -1,6 +1,7 @@
 ## Shared document, draft, undo, and simulated delayed validation policy.
 import std/[algorithm, strutils, tables]
 import sigils/[core, reactive]
+import merenda/foundation/backrefs
 import merenda/nimkit
 
 type

@@ -5,11 +5,11 @@ from std/options import Option, some
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../nimkit as nimkit
-import ../nimkit/foundation/backgroundworkers
-import ../nimkit/foundation/gitprocesses
-import ../nimkit/foundation/selectors as nimkitSelectors
+import ../foundation/backgroundworkers
+import ../services/git/processes
+import ../nimkit/core/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ../nimkit/foundation/mainthreadwork
+import ../foundation/mainthreadwork
 import ./readerpresentation
 import ./themetargets
 import ./scrolling
@@ -21,7 +21,7 @@ const
     ## Namespace for project-specific identifiers returned by `gitDiffTabIdentifier`.
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
-  # Highlighting runs on nimkitWorkerPool, so this deadline does not block the UI.
+  # Highlighting runs on backgroundWorkerPool, so this deadline does not block the UI.
   GitDiffHighlightTimeBudgetMs = 6000
   GitDiffMaximumHighlightSourceBytes = 1 * 1024 * 1024
   GitDiffMaximumHighlightQueuedBytes = 8 * 1024 * 1024
@@ -3661,7 +3661,7 @@ proc newKosmoGitDiffPanel(
   var highlighter = GitDiffHighlightWorker(
     cacheReservation: newGitDiffByteReservation(result.control, gdrCached)
   )
-  result.highlightWorker = highlighter.moveToThread(nimkitWorkerPool())
+  result.highlightWorker = highlighter.moveToThread(backgroundWorkerPool())
   connectThreaded(
     result.highlightWorker, highlightDiff, result.highlightWorker, highlightDiff
   )
@@ -3699,4 +3699,4 @@ proc newKosmoGitDiffPanel*(
     newKosmoGitDiffPanel(snapshot.rootPath, markdownStyle, refreshesRepository = false)
   result.displayDiff(snapshot)
 
-var gitDiffWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var gitDiffWorkerLifetime {.used.}: BackgroundWorkerLifetime

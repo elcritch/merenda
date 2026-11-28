@@ -2,7 +2,7 @@ import std/[options, os]
 
 import sigils/selectors
 
-import ../foundation/urls
+import ../../foundation/urls
 import ../text/textstorage
 import ../text/texttypes
 import ./pasteboards

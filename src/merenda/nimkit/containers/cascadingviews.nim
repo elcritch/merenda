@@ -7,11 +7,11 @@ import ../app/animations
 import ../app/windows
 import ../controls/controls
 import ../drawing
-import ../foundation/events
-import ../foundation/notifications
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../app/notifications
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/views
 import ./listbasics

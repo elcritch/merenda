@@ -2,7 +2,7 @@
 
 import ../accessibility/accessibility
 import ../containers/stackviews
-import ../foundation/types
+import ../core/types
 import ./datepickers
 
 import sigils/core

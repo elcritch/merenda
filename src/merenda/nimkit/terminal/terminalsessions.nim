@@ -2,8 +2,33 @@
 
 import std/math
 import terminex/threaded
+from ../../foundation/backgroundworkers import registerBackgroundWorkerShutdownHook
 
-export threaded
+export threaded except newThreadedTerminalSession, spawnThreadedTerminalSession,
+  terminalWorkerThread
+
+proc registerTerminalWorkerShutdown*() =
+  ## Include Terminex in Foundation shutdown on the calling thread.
+  registerBackgroundWorkerShutdownHook(shutdownTerminalWorkers)
+
+proc terminalWorkerThread*(): typeof(threaded.terminalWorkerThread()) =
+  registerTerminalWorkerShutdown()
+  threaded.terminalWorkerThread()
+
+proc newThreadedTerminalSession*(
+    columns = 80, rows = 24, maxScrollback = 10_000
+): ThreadedTerminalSession =
+  registerTerminalWorkerShutdown()
+  threaded.newThreadedTerminalSession(columns, rows, maxScrollback)
+
+proc spawnThreadedTerminalSession*(
+    options = initTerminalSpawnOptions(),
+    columns = 80,
+    rows = 24,
+    maxScrollback = 10_000,
+): ThreadedTerminalSession =
+  registerTerminalWorkerShutdown()
+  threaded.spawnThreadedTerminalSession(options, columns, rows, maxScrollback)
 
 type
   TerminalViewSession* = ThreadedTerminalSession

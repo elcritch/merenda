@@ -10,9 +10,10 @@ import ../nimkit/containers/[gridviews, outlineviews, scrollviews]
 import ../nimkit/tables/tableviews
 import ../nimkit/controls/[buttons, colorpicker, comboboxes]
 import ../nimkit/debug/selectionrings
-import ../nimkit/foundation/atomicfiles
-import ../nimkit/foundation/events
-import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers, urls]
+import ../foundation/[atomicfiles, urls]
+import ../nimkit/core/events
+import ../nimkit/core/[selectors as nimkitSelectors, types]
+import ../foundation/undomanagers
 import ../nimkit/responder/keybindings
 import
   ../nimkit/resources/[

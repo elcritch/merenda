@@ -4,9 +4,9 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ../drawing
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/viewgeometry
 import ../view/views
 

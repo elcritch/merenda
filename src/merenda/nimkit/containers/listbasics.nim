@@ -5,8 +5,8 @@ import ../drawing
 import ./scrollergeometry
 import ../themes
 import ../themes/themecore as themeCore
-import ../foundation/events
-import ../foundation/types
+import ../core/events
+import ../core/types
 
 type
   RowViewport* = object

@@ -2,7 +2,6 @@
 
 import std/algorithm
 
-import ../nimkit/foundation/backrefs
 import ../nimkit/text/markdownparsing
 import ./markdownpreviewbudget
 
@@ -1141,7 +1140,7 @@ protocol KosmoEditorHoverLifecycle of nimkit.ViewLifecycleProtocol:
 
 proc refresh*(view: KosmoEditorView)
 proc syncPopupMenu(pane: KosmoEditorPane)
-proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch)
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: filesearch.FileSearchMatch)
 
 proc shouldDeferInactiveRefresh(view: KosmoEditorView): bool =
   # Forced Input mode has no post-Insert state in which to drain deferred work;
@@ -1768,14 +1767,14 @@ proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   if not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
 
-proc bufferColumn(match: nimkit.FileSearchMatch): int =
+proc bufferColumn(match: filesearch.FileSearchMatch): int =
   let byteColumn = clamp(match.column - 1, 0, match.lineText.len)
   if byteColumn > 0:
     result = match.lineText[0 ..< byteColumn].runeLen
 
 proc openSearchResult(
     view: KosmoEditorView,
-    match: nimkit.FileSearchMatch,
+    match: filesearch.FileSearchMatch,
     disposition: FileTreeOpenDisposition,
 ): bool =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
@@ -4229,7 +4228,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       return false
     true
 
-proc localMarkdownLinkPath(pane: KosmoEditorPane, url: nimkit.Url): string =
+proc localMarkdownLinkPath(pane: KosmoEditorPane, url: urls.Url): string =
   if not url.isFileUrl() or (not url.hasScheme() and url.host().len > 0):
     return
   let path = url.localFilePath(pane.markdownView.imageBasePath)
@@ -4246,7 +4245,7 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
     if textView.attachmentAtIndex(int(range.location)).attachment.identifier.len > 0:
       return true
     let
-      url = nimkit.initUrl(link)
+      url = urls.initUrl(link)
       isWebLink = url.isHttpUrl()
       path = pane.localMarkdownLinkPath(url)
     if not isWebLink and path.len == 0:
@@ -4290,7 +4289,7 @@ proc revealPendingMarkdownSearch(view: KosmoMarkdownView) =
       view.selectMarkdownRange(range)
 
 proc renderedFileSearchRange(
-    view: KosmoMarkdownView, match: nimkit.FileSearchMatch
+    view: KosmoMarkdownView, match: filesearch.FileSearchMatch
 ): Option[nimkit.TextRange] =
   let
     column = clamp(match.column - 1, 0, match.lineText.len)
@@ -4330,11 +4329,11 @@ proc revealPendingFileSearchMatch(view: KosmoMarkdownView) =
   if view.pendingFileSearchMatch.isNone or view.isMarkdownParsing():
     return
   let match = view.pendingFileSearchMatch.get
-  view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
+  view.pendingFileSearchMatch = none(filesearch.FileSearchMatch)
   view.pendingSearchRange = view.renderedFileSearchRange(match)
   view.revealPendingMarkdownSearch()
 
-proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch) =
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: filesearch.FileSearchMatch) =
   view.pendingSearchRange = none(nimkit.TextRange)
   view.pendingFileSearchMatch = some(match)
   view.revealPendingFileSearchMatch()
@@ -4401,14 +4400,14 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
     proc(match: KosmoViewerMatch) =
       if not weakView.isNil:
         let view = weakView[]
-        view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
+        view.pendingFileSearchMatch = none(filesearch.FileSearchMatch)
         view.pendingSearchRange = some(match.range)
         view.revealPendingMarkdownSearch()
     ,
     proc() =
       if not weakView.isNil:
         weakView[].pendingSearchRange = none(nimkit.TextRange)
-        weakView[].pendingFileSearchMatch = none(nimkit.FileSearchMatch)
+        weakView[].pendingFileSearchMatch = none(filesearch.FileSearchMatch)
         weakView[].selectMarkdownRange(nimkit.initTextRange(0, 0))
     ,
   )

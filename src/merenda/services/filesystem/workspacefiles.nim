@@ -1,13 +1,11 @@
-## Shared, asynchronous file inventory for Kosmo's browser and quick open.
-## GUI consumers borrow one controller; worker snapshots contain only value data.
+## Shared asynchronous file inventory and workspace invalidation.
 
 import std/[algorithm, isolation, monotimes, os, sets, strutils, times]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
-import ../nimkit/containers/filebrowsers
-import ../nimkit/foundation/backgroundworkers
-import ./workspacewatch
-import ../nimkit/foundation/gitprocesses
+import ../../foundation/backgroundworkers
+import ../git/processes
+import ./[listings, workspacewatch]
 
 const
   DefaultWorkspaceDepth* = 8
@@ -259,7 +257,7 @@ proc newWorkspaceFiles*(
     reconciliationInterval: reconciliationInterval,
   )
   var worker = WorkspaceFileWorker()
-  result.worker = worker.moveToThread(nimkitWorkerPool())
+  result.worker = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result.worker, loadFiles, result.worker, loadFiles)
   connectThreaded(result.worker, filesLoaded, result, WorkspaceFiles.receiveFiles())
 
@@ -332,4 +330,4 @@ proc close*(files: WorkspaceFiles) =
     files.pending = false
     files.active = false
 
-var workspaceFilesWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var workspaceFilesWorkerLifetime {.used.}: BackgroundWorkerLifetime

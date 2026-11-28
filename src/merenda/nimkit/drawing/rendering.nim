@@ -6,10 +6,10 @@ from figdraw import
 
 import ./drawing
 import ./renderscenes
-import ../foundation/selectors
-import ../foundation/viewprofiling
+import ../core/selectors
+import ../debug/viewprofiling
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/views
 
 const ZeroPoint = types.Point(x: 0.0'f32, y: 0.0'f32)

@@ -5,9 +5,10 @@ import threading/smartptrs
 
 import figdraw except Hash, TextCaretPosition
 
+import ../../foundation/backrefs
 import ../drawing
-import ../foundation/mainthreadwork
-import ../foundation/selectors
+import ../../foundation/mainthreadwork
+import ../core/selectors
 import ../responder/responders
 import ./textstorage
 import ./textsnapshots
@@ -16,7 +17,7 @@ import ./textlayouttypes
 export textlayouttypes
 import ./texttypes
 import ../themes
-import ../foundation/types
+import ../core/types
 
 type
   TextLayoutBackend* = ref object of DynamicAgent

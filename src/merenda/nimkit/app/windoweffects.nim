@@ -1,6 +1,6 @@
 import std/math
 
-import ../foundation/types
+import ../core/types
 
 type
   WindowEffectCapability* = enum

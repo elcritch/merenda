@@ -3,9 +3,9 @@ import sigils/selectors
 
 import ../accessibility/accessibility
 import ../drawing
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 
 import ./buttons
 

@@ -3,7 +3,7 @@ import std/[json, os, strutils, tables, tempfiles, unittest]
 
 import zippy/ziparchives
 import merenda/kosmo/vscodegrammars
-import merenda/nimkit/foundation/textsearch
+import merenda/services/textsearch
 
 const
   FixtureCommit = "0123456789abcdef0123456789abcdef01234567"

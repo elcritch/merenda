@@ -2,6 +2,7 @@
 
 import std/[algorithm, os, strutils]
 
+import ../foundation/backrefs
 import ../nimkit as nimkit
 import ./themetargets
 export themetargets
@@ -143,7 +144,7 @@ type
     xInterfaceSettings: nimkit.MerendaSettingsController
     xNimdexMode: nimkit.ComboBox
     xNimdexLocal, xNimdexAddress: nimkit.TextField
-    xNimdexDelegate: nimkit.BackRef[nimkit.Responder]
+    xNimdexDelegate: backrefs.BackRef[nimkit.Responder]
     xNimdexStatus: nimkit.Label
     xNimdexStatusError: bool
     xShortcutsTable: nimkit.TableView

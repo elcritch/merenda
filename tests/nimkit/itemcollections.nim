@@ -1,6 +1,6 @@
 import std/[algorithm, random, unittest]
 
-import merenda/nimkit/foundation/private/itemcollections
+import merenda/nimkit/core/private/itemcollections
 
 type
   CollectionItem = object

@@ -9,7 +9,8 @@ when defined(macosx):
   import merenda/nimkit/app/[application, backend, windows]
   import merenda/nimkit/app/nativeeventloop
   import merenda/nimkit/controls/nativemenus
-  import merenda/nimkit/foundation/[mainthreadwork, types]
+  import merenda/foundation/mainthreadwork
+  import merenda/nimkit/core/types
   import merenda/nimkit/terminal/terminalviews
   import merenda/nimkit/text/monotextviews
   import ../support/terminalhelpers

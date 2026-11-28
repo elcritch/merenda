@@ -1,8 +1,8 @@
 ## Direct typed widget composition with structural slots and keyed siblings.
 import std/[macros, strutils]
 from sigils/selectors import DynamicAgent
-from ../foundation/selectors import ActionSelector
-import ../foundation/types
+from ../core/selectors import ActionSelector
+import ../core/types
 import ../view/views
 import ../containers/stackviews
 import ../controls/buttons

@@ -7,7 +7,7 @@ import sigils/core
 
 import ../accessibility/accessibilityprotocols
 import ../drawing
-import ../foundation/events
+import ../core/events
 import ../app/dragging
 import ../app/pasteboards
 import ../app/windows
@@ -16,11 +16,11 @@ import ../containers/listbasics
 import ./tablebasics
 import ./tablecoordination
 import ../containers/scrollviews
-import ../foundation/objectvalues
-import ../foundation/private/itemcollections
-import ../foundation/selectors
+import ../core/objectvalues
+import ../core/private/itemcollections
+import ../core/selectors
 import ../themes
-import ../foundation/types
+import ../core/types
 from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 

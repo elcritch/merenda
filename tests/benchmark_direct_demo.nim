@@ -39,7 +39,7 @@ when defined(directDemoBaseline) or defined(directDemoSigilBaseline):
 else:
   include "../examples/direct_views_demo.nim"
 
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 
 proc flushWork() =
   var passes = 0

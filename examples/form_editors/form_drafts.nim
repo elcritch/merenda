@@ -1,7 +1,8 @@
 ## A small form policy shared by the DirectView form examples.
 ## Draft identity is explicit: pass the same FormDraft to share an edit session.
 import sigils/[core, reactive, threadProxies, threads]
-import merenda/nimkit/foundation/backgroundworkers
+import merenda/foundation/backrefs
+import merenda/foundation/backgroundworkers
 import merenda/nimkit
 
 type
@@ -104,7 +105,7 @@ proc startSave*(document: FormDocument, path: string): bool =
     return
   if document.saveWorker.isNil:
     var worker = FormSaveWorker()
-    document.saveWorker = worker.moveToThread(nimkitWorkerPool())
+    document.saveWorker = worker.moveToThread(backgroundWorkerPool())
     connectThreaded(
       document.saveWorker, writeFormSnapshot, document.saveWorker, writeFormSnapshot
     )

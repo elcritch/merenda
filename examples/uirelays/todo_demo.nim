@@ -1,7 +1,7 @@
 import std/[strutils, tables, unicode]
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 import merenda/nimkit/view/uirelaysviews
 import uirelays as ui
 import uirelays/layout as uiLayout

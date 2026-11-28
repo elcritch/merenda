@@ -3,7 +3,7 @@ import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
-import merenda/kosmo/workspacefiles
+import merenda/services/filesystem/workspacefiles
 
 proc commandNumberEvent(number: range[1 .. 8]): KeyEvent =
   let key = Key(key1.ord + number - 1)
