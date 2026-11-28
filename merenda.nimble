@@ -1,4 +1,4 @@
-version       = "0.32.9"
+version       = "0.33.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -6,7 +6,7 @@ srcDir        = "src"
 bin           = @["merenda/kosmo/kosmo"]
 
 # Dependencies
-requires "nim >= 2.2.10"
+requires "nim >= 2.2.12"
 requires "msgpack4nim"
 requires "parsetoml >= 0.7.2"
 requires "chronicles >= 0.4"
@@ -16,7 +16,7 @@ requires "crunchy >= 0.1.11"
 #requires "gh:elcritch/siwin#fix/cocoa-stale-ime-state"
 requires "gh:elcritch/figdraw >= 0.49.0 [siwin]"
 requires "harfbuzzy >= 0.7.1 [runtime]"
-requires "sigils >= 0.37.3 [sigNameAsString, closures, siwin]"
+requires "sigils#thetos-persistent [sigNameAsString, closures, siwin]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry ^= 0.6.1"
 requires "cborious"
