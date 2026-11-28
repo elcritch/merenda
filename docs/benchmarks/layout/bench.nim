@@ -1,6 +1,6 @@
 import std/[monotimes, times, strformat]
 import merenda/nimkit/containers/[formviews, stackviews]
-import merenda/nimkit/foundation/types
+import merenda/nimkit/core/types
 import merenda/nimkit/view/viewgeometry
 
 proc micros(start: MonoTime): float =

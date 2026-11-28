@@ -75,7 +75,7 @@ Compile with `-d:merendaProfile` and install a classifier on the GUI thread to
 collect intrinsic-cache decisions by widget category:
 
 ```nim
-import merenda/nimkit/foundation/viewprofiling
+import merenda/nimkit/debug/viewprofiling
 import merenda/nimkit/intrinsicprofiling
 import merenda/nimkit/view/viewgeometry
 

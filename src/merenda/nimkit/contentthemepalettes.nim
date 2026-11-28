@@ -6,7 +6,7 @@
 
 import std/[algorithm, os, strutils]
 import parsetoml
-import ./foundation/types
+import ./core/types
 import ./themes/private/contentthemeassets
 
 export contentthemeassets

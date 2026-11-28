@@ -2,7 +2,7 @@ import std/[options, os, unittest]
 
 import figdraw/windowing/siwinshim as figdrawSiwin
 import merenda/nimkit/app/backend as nimkitBackend
-import merenda/nimkit/foundation/events
+import merenda/nimkit/core/events
 
 when defined(merenda.softwareRenderer) or (
   defined(windows) and (
@@ -12,7 +12,7 @@ when defined(merenda.softwareRenderer) or (
 ):
   import std/[monotimes, times]
   import figdraw
-  import merenda/nimkit/foundation/types as nimkitTypes
+  import merenda/nimkit/core/types as nimkitTypes
 
 type EnvSnapshot = object
   name: string

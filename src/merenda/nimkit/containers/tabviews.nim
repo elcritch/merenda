@@ -6,10 +6,10 @@ import sigils/core
 
 import ../accessibility/accessibilityprotocols
 import ../drawing
-import ../foundation/events
-import ../foundation/selectors
+import ../core/events
+import ../core/selectors
 import ../themes
-import ../foundation/types
+import ../core/types
 from ../view/viewgeometry import setFrameFromLayout
 from ../view/viewconstraints import applyConstraintsForSubtree
 import ../view/views

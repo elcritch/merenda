@@ -13,7 +13,7 @@ import std/[assertions, monotimes, strformat, times]
 import figdraw
 
 import merenda/nimkit/app/backend as nimkitBackend
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type BenchmarkCase = object
   nodeCount: int

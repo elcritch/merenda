@@ -2,7 +2,7 @@ import std/[math, unittest]
 
 import merenda/nimkit/app/windoweffects
 import merenda/nimkit/app/windows
-import merenda/nimkit/foundation/types
+import merenda/nimkit/core/types
 
 suite "nimkit window effects":
   test "backdrop constructors retain independent logical regions":

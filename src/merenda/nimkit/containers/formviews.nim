@@ -1,9 +1,9 @@
 import sigils/core
 
-import ../foundation/selectors
-import ../foundation/objectvalues
+import ../core/selectors
+import ../core/objectvalues
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/viewgeometry
 import ../view/views
 

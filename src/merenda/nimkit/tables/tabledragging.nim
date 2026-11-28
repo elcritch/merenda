@@ -4,9 +4,9 @@ import std/options
 import ../app/dragging
 import ../app/pasteboards
 import ../controls/controls
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../view/views
 import ./tablecore
 import ./tablepresentation

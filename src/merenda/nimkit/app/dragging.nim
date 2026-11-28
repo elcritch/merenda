@@ -3,7 +3,7 @@ import std/options
 import sigils/selectors
 
 import ../drawing/images
-import ../foundation/types
+import ../core/types
 import ./pasteboards
 import ./workspaces
 

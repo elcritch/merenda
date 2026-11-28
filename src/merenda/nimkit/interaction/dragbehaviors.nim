@@ -1,6 +1,6 @@
 ## Geometry-only discrete D2 behavior. Preview and drop state remain separate.
 import std/math
-import ../foundation/types
+import ../core/types
 
 type
   DragTarget* = object

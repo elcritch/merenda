@@ -6,10 +6,10 @@ import ../accessibility/accessibilityprotocols
 import ./controls
 import ../drawing
 import ../containers/listbasics
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
-import ../foundation/events
-import ../foundation/types
+import ../core/events
+import ../core/types
 
 type
   PopupListItem* = object

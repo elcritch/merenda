@@ -8,10 +8,10 @@ from ../app/windows import Window, startAnimation, stopAnimation
 import ../accessibility/accessibilityprotocols
 import ../drawing
 import ./scrollergeometry
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
-import ../foundation/events
-import ../foundation/types
+import ../core/events
+import ../core/types
 import ../view/viewgeometry
 import ../view/views
 

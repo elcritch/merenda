@@ -3,8 +3,8 @@ import std/math
 import ../app/animations
 import ../accessibility/accessibility
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../themes
 import ./controls
 

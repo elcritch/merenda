@@ -7,9 +7,9 @@ from figdraw import
 import ../accessibility/accessibilityprotocols
 from ../app/windows import Window, makeFirstResponder
 import ../drawing
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types as nimkitTypes
+import ../core/events
+import ../core/selectors
+import ../core/types as nimkitTypes
 import ../themes
 import ../view/views
 import ./texttypes

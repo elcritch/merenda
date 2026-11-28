@@ -2,7 +2,7 @@ import std/unittest
 import sigils/core
 import sigils/reactive
 import merenda/foundation/backrefs
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import merenda/nimkit
 import merenda/nimkit/directviews
 import merenda/nimkit/directviews/dsl
@@ -11,7 +11,7 @@ import merenda/nimkit/text/textfields
 import merenda/nimkit/view/views
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/responder/responders
-import merenda/nimkit/foundation/selectors
+import merenda/nimkit/core/selectors
 
 type
   DirectController = ref object of Responder

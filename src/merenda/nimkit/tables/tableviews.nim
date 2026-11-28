@@ -5,8 +5,8 @@
 
 import sigils/core
 import ../controls/controls
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../view/views
 import ../containers/scrollviews
 import ./tablecore

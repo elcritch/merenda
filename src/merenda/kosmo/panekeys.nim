@@ -1,6 +1,6 @@
 ## Shared Vim pane commands for editors, previews and hybrid terminals.
 
-import ../nimkit/foundation/events
+import ../nimkit/core/events
 
 type KosmoPaneCommand* = enum
   kpcNone

@@ -2,7 +2,7 @@ import std/[monotimes, os, sequtils, strutils, times, unittest]
 import sigils/[core, reactive, threads]
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import
   ../../examples/uploads/
     [upload_form_direct_demo, upload_form_mvc_demo, upload_form_reactive_mvc_demo]

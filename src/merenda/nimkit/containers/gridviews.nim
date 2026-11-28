@@ -1,8 +1,8 @@
 import sigils/core
 
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../view/viewgeometry
 import ../view/views
 

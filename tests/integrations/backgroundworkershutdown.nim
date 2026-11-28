@@ -4,7 +4,8 @@ import std/[atomics, monotimes, os, strtabs, strutils, times, unittest]
 
 import sigils/[core, threads]
 import terminex/workerthreads
-import merenda/nimkit/foundation/backgroundworkers
+import merenda/foundation/backgroundworkers
+import merenda/nimkit/app/workerlifecycle
 import merenda/services/backgroundprocesses
 import ./fixtures/markdownworkerlifetime
 import merenda/nimkit/text/markdownparsing
@@ -31,6 +32,16 @@ proc releaseWorkerForFailedExit*() =
 
 proc parseAtExit(worker: AgentProxy[ExitParseWorker]) {.signal.}
 
+var shutdownHookOrder: seq[int]
+
+proc firstShutdownHook() {.noconv.} =
+  shutdownHookOrder.add 1
+
+proc failingShutdownHook() {.noconv.} =
+  shutdownHookOrder.add 2
+  shutdownBackgroundWorkers()
+  raise newException(ValueError, "shutdown hook failure")
+
 proc parseAtExit(worker: ExitParseWorker) {.slot.} =
   let deadline = getMonoTime() + initDuration(seconds = 60)
   workerStarted.store(true, moRelease)
@@ -45,8 +56,21 @@ proc parseAtExit(worker: ExitParseWorker) {.slot.} =
   workerFinished.store(true, moRelease)
 
 suite "NimKit direct-import worker shutdown":
+  test "shutdown hooks run once in reverse order and tolerate failures":
+    shutdownHookOrder.setLen(0)
+    discard backgroundTimerThread()
+    registerBackgroundWorkerShutdownHook(firstShutdownHook)
+    registerBackgroundWorkerShutdownHook(failingShutdownHook)
+    registerBackgroundWorkerShutdownHook(failingShutdownHook)
+    shutdownBackgroundWorkers()
+    shutdownBackgroundWorkers()
+    check shutdownHookOrder == @[2, 1]
+    registerBackgroundWorkerShutdownHook(firstShutdownHook)
+    shutdownBackgroundWorkers()
+    check shutdownHookOrder == @[2, 1, 1]
+
   test "explicit shutdown joins readiness and timer dispatchers and allows repeated shutdown":
-    discard nimkitTimerThread()
+    discard backgroundTimerThread()
     discard terminalWorkerThread()
     shutdownNimkitBackgroundWorkers()
     shutdownNimkitBackgroundWorkers()
@@ -73,7 +97,7 @@ suite "NimKit direct-import worker shutdown":
 
   test "joins active parsing before dependency globals are destroyed":
     var actor = ExitParseWorker()
-    workerPool = nimkitWorkerPool()
+    workerPool = backgroundWorkerPool()
     let worker = actor.moveToThread(workerPool)
     connectThreaded(worker, parseAtExit, worker, parseAtExit)
     emit worker.parseAtExit()

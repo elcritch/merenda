@@ -7,7 +7,7 @@ import matter/rawgrammar
 import zippy/ziparchives
 import sigils/core
 import ../nimkit as nimkit
-import ../services/textsearch
+import ../services/[textsearch, urlassets]
 
 const
   KosmoVscodeGrammarDirectoryName* = "grammars"
@@ -54,7 +54,7 @@ type
     extension: OpenVsxGrammarExtension
 
   KosmoVscodeGrammarCatalog* = ref object of Agent
-    loader: nimkit.UrlAssetLoader
+    loader: UrlAssetLoader
     pending: Table[uint64, VscodeGrammarAssetRequest]
     candidates: seq[VscodeGrammarCandidate]
     generation: int
@@ -690,7 +690,7 @@ proc processAsset(
       catalog.finishCatalogSearch()
 
 proc receiveUrlAsset(
-    catalog: KosmoVscodeGrammarCatalog, handle: nimkit.UrlAssetHandle
+    catalog: KosmoVscodeGrammarCatalog, handle: UrlAssetHandle
 ) {.slot.} =
   if catalog.closed or handle.isNil or handle.identifier() notin catalog.pending:
     return
@@ -704,11 +704,11 @@ proc newKosmoVscodeGrammarCatalog*(): KosmoVscodeGrammarCatalog =
 
 proc initLoader(catalog: KosmoVscodeGrammarCatalog) =
   if catalog.loader.isNil and not catalog.closed:
-    catalog.loader = nimkit.newUrlAssetLoader(
+    catalog.loader = newUrlAssetLoader(
       "kosmo-openvsx-grammars", maximumAssetBytes = OpenVsxMaximumPackageBytes
     )
     catalog.loader.connect(
-      nimkit.urlAssetDidFinish, catalog, KosmoVscodeGrammarCatalog.receiveUrlAsset
+      urlAssetDidFinish, catalog, KosmoVscodeGrammarCatalog.receiveUrlAsset
     )
 
 proc search*(catalog: KosmoVscodeGrammarCatalog, query: string) =

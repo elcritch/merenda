@@ -7,7 +7,7 @@ import ./fixtures/rendergeometry
 import ./fixtures/widgetflows
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type
   TabDelegateSpy = ref object of Responder

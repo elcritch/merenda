@@ -3,7 +3,7 @@ import sigils/[core, reactive]
 import merenda/foundation/backrefs
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import ../../examples/[two_document_tasks, two_document_direct]
 
 template waitUntil(condition: untyped) =

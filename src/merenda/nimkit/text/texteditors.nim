@@ -4,9 +4,9 @@ import sigils/core
 import ../accessibility/accessibility
 import ../containers/scrollviews
 import ../drawing
-import ../foundation/selectors
-import ../foundation/events
-import ../foundation/types
+import ../core/selectors
+import ../core/events
+import ../core/types
 import ../responder/responders
 import ../themes
 import ../view/viewgeometry

@@ -3,7 +3,7 @@
 import std/[monotimes, os, strutils, tables, times]
 
 import sigils/[core, threadProxies, threads]
-import ../../nimkit/foundation/[backgroundworkers, timerthreads]
+import ../../foundation/[backgroundworkers, timerthreads]
 import ./[branches, processes]
 
 export branches except GitBranchMergeCache, readGitBranches, removeGitBranches
@@ -437,7 +437,7 @@ proc newGitStatusService*(
 ): GitStatusService =
   ## Start a one-worker Git service and optionally refresh it on an interval.
   startLocalThreadDefault()
-  result = GitStatusService(xPool: nimkitWorkerPool())
+  result = GitStatusService(xPool: backgroundWorkerPool())
   var worker = GitStatusWorker()
   result.xWorker = worker.moveToThread(result.xPool)
   connectThreaded(result.xWorker, executeGitStatus, result.xWorker, executeGitStatus)
@@ -450,7 +450,7 @@ proc newGitStatusService*(
   )
 
   if refreshInterval.inNanoseconds > 0:
-    result.xTimerThread = nimkitTimerThread()
+    result.xTimerThread = backgroundTimerThread()
     var ticker = GitStatusRefreshTicker()
     result.xTicker = ticker.moveToThread(result.xTimerThread)
     result.xTimer = newSigilTimer(refreshInterval)
@@ -516,4 +516,4 @@ proc close*(service: GitStatusService) =
   service.xActiveIdentifier = 0
   service.xRefreshPending = false
 
-var gitStatusWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var gitStatusWorkerLifetime {.used.}: BackgroundWorkerLifetime

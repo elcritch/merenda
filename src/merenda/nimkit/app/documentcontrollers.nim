@@ -3,9 +3,9 @@ import std/options
 import sigils/core
 
 import ../containers/documenttabs
-import ../foundation/notifications
-import ../foundation/objectvalues
-import ../foundation/selectors
+import ./notifications
+import ../core/objectvalues
+import ../core/selectors
 import ../responder/responders
 import ./application
 import ./documents except newDocument

@@ -5,11 +5,11 @@ import sigils/selectors
 import ../accessibility/accessibility
 import ../app/windows except sendAction
 import ../drawing
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
+import ../../foundation/undomanagers
 import ../responder/responders
 import ../text/fieldeditors
 import ./buttons except isEnabled, setEnabled

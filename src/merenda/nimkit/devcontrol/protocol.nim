@@ -2,7 +2,7 @@
 import std/[json, math]
 import sigils/selectors
 import sigils/rpcs/jsonrpc
-import ../foundation/sigilnames
+import ../../foundation/sigilnames
 
 export jsonrpc
 

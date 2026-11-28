@@ -5,10 +5,10 @@ import sigils/core
 from sigils/hom import findFirst, get
 import ../accessibility/accessibilityprotocols
 import ../controls/controls
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/events
+import ../core/selectors
+import ../core/types
+import ../../foundation/undomanagers
 import ../view/views
 import ../containers/scrollviews
 import ./tablecore

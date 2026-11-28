@@ -2,7 +2,7 @@
 
 import std/[options, strutils, typetraits]
 
-import ../nimkit/foundation/types
+import ../nimkit/core/types
 import ../nimkit/themes
 import ../nimkit/resources/[resrccore, resrcdocument, resrcregistry]
 import ./valueediting

@@ -2,7 +2,7 @@ import std/options
 
 import sigils/core
 
-import ../foundation/selectors
+import ../core/selectors
 import ../responder/responders
 import ./application
 import ./viewcontrollers

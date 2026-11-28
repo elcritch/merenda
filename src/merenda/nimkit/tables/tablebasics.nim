@@ -5,8 +5,8 @@ import std/[options, tables]
 
 from sigils/selectors import DynamicAgent
 
-import ../foundation/objectvalues
-import ../foundation/types
+import ../core/objectvalues
+import ../core/types
 import ../themes/themecore
 
 const

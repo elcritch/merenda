@@ -2,7 +2,7 @@ import std/algorithm
 
 import ./buttons
 import ../containers/stackviews
-import ../foundation/types
+import ../core/types
 import ../view/views
 
 export buttons, stackviews

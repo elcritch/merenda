@@ -11,7 +11,7 @@ import ../services/filesystem/[listings, workspacefiles]
 import ../services/git/status as gitstatus
 import ./searchbuttons
 import ../services/textsearch
-from ../nimkit/foundation/selectors import performKeyEquivalent
+from ../nimkit/core/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 type

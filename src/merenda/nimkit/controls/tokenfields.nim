@@ -8,10 +8,10 @@ import ../accessibility/accessibility
 import ../containers/scrollviews
 import ../containers/stackviews
 import ../drawing
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 from ../text/textviews import isInsertableText
 
 import ./chips

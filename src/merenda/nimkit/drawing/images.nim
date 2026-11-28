@@ -2,7 +2,7 @@ import std/[hashes, os, tables]
 
 import figdraw
 
-import ../foundation/types
+import ../core/types
 
 type
   ImageCachePolicy* = enum

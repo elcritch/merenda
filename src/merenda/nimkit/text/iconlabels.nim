@@ -2,8 +2,8 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/views
 

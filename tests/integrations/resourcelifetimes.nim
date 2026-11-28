@@ -4,7 +4,7 @@ import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-import merenda/nimkit/foundation/backgroundworkers
+import merenda/foundation/backgroundworkers
 import merenda/services/git/processes
 import merenda/kosmo/kosmo
 import merenda/services/filesystem/workspacefiles
@@ -207,7 +207,7 @@ suite "Workspace resource lifetimes":
       require runGitCommand(root, ["init", "-q"]).exitCode == 0
       let app = newApplication("Git settlement test")
       let deadline = getMonoTime() + initDuration(seconds = 60)
-      let timer = nimkitTimerThread()
+      let timer = backgroundTimerThread()
       while getMonoTime() < deadline:
         if getThreadId(timer.toSigilThread()[]) >= 0 and
             processResourceUsage().childProcesses == 0:
@@ -220,7 +220,7 @@ suite "Workspace resource lifetimes":
       require baseline.fileDescriptors >= 0
       let control = newSharedPtr(GitSettlementControl())
       var actor = GitSettlementWorker()
-      let worker = actor.moveToThread(nimkitWorkerPool())
+      let worker = actor.moveToThread(backgroundWorkerPool())
       connectThreaded(worker, runBoundedGit, worker, runBoundedGit)
       defer:
         control[].cancelled.store(true, moRelease)

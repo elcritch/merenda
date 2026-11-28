@@ -1,7 +1,7 @@
 import std/[monotimes, os, times, unittest]
 import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import ../../examples/direct_lifetimes_demo
 
 suite "explicit controller visibility policy":

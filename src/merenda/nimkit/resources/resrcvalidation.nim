@@ -2,7 +2,7 @@
 
 import std/[math, options, os, sets, tables]
 
-import ../foundation/types
+import ../core/types
 import ../themes
 import ./[resrccore, resrcregistry]
 

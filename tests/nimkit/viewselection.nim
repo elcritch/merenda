@@ -1,7 +1,7 @@
 import std/unittest
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type SelectionSpyView = ref object of View
   consumesMouseDown: bool

@@ -5,7 +5,7 @@ import
     times, unittest,
   ]
 
-import merenda/nimkit/foundation/urlassets
+import merenda/services/urlassets
 import merenda/foundation/urls
 import merenda/nimkit/text/markdownviews
 

@@ -6,9 +6,9 @@ import sigils/core
 import ../../services/filesystem/listings
 
 import ../controls/buttons
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../text/textfields
 import ../view/views
 from ../view/viewgeometry import setFrameFromLayout

@@ -2,7 +2,8 @@ import std/[algorithm, locks, math, monotimes, options, times]
 
 import sigils/[reactive, threadProxies, threads]
 
-import ../foundation/[selectors, timerthreads, types]
+import ../../foundation/timerthreads
+import ../core/[selectors, types]
 
 export reactive
 

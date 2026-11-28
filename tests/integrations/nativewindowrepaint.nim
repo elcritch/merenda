@@ -7,7 +7,8 @@ from siwin/platforms/any/window import eventLoopWaker, wake
 import merenda/nimkit/app/application
 from merenda/nimkit/app/backend import remMainThread
 import merenda/nimkit/app/windows as nimkitWindows
-import merenda/nimkit/foundation/[mainthreadwork, types]
+import merenda/foundation/mainthreadwork
+import merenda/nimkit/core/types
 import merenda/nimkit/view/views
 
 when defined(linux) or defined(bsd):

@@ -29,11 +29,11 @@ import ../containers/outlineviews
 import ../controls/buttons
 import ../drawing
 import ../../foundation/backrefs
-import ../foundation/events
-import ../foundation/mainthreadwork
-import ../foundation/selectors
-import ../foundation/types
-import ../foundation/urlassets
+import ../core/events
+import ../../foundation/mainthreadwork
+import ../core/selectors
+import ../core/types
+import ../../services/urlassets
 import ../../foundation/urls
 import ../themes
 from ../view/viewgeometry import setFrameFromLayout

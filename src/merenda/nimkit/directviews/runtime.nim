@@ -7,7 +7,7 @@ import ../containers/stackviews
 import ../controls/buttons
 import ../text/textfields
 import ../responder/actiontargets
-import ../foundation/[selectors, types]
+import ../core/[selectors, types]
 import ./actions
 import ./bindings
 

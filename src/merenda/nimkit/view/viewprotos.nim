@@ -3,10 +3,10 @@ from sigils/hom import findFirst, get
 
 import ../../foundation/backrefs
 import ../app/animations
-import ../foundation/selectors
+import ../core/selectors
 import ../themes
 import ../drawing/drawing
-import ../foundation/types
+import ../core/types
 import ./viewgeometry
 import ./viewbase
 import sigils/core

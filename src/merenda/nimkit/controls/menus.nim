@@ -10,15 +10,15 @@ import sigils/selectors
 import ../accessibility/accessibilityprotocols
 import ./controls
 import ../drawing
-import ../foundation/events
+import ../core/events
 import ../responder/keybindings
 import ../containers/listbasics
 import ../containers/stackviews
 import ./popuplists
 import ../responder/responders
-import ../foundation/selectors as nimkitSelectors
+import ../core/selectors as nimkitSelectors
 import ../themes
-import ../foundation/types
+import ../core/types
 import ../app/windows
 when defined(macosx):
   import ./nativemenus as nativeMenus

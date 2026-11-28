@@ -5,8 +5,8 @@ import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../foundation/urls
 import ../nimkit as nimkit
-import ../nimkit/foundation/mainthreadwork
-import ../nimkit/foundation/selectors as nimkitSelectors
+import ../foundation/mainthreadwork
+import ../nimkit/core/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./readerpresentation
 import ./themetargets

@@ -534,7 +534,7 @@ Pointer selection requests focus for the collection and follows the window's nor
 end-editing and validation behavior.
 
 Compile with `-d:merendaProfile` and import
-`merenda/nimkit/foundation/viewprofiling` to reset and read thread-local phase
+`merenda/nimkit/debug/viewprofiling` to reset and read thread-local phase
 counters. Times are inclusive: solving includes construction and insertion, and
 intrinsic measurement may occur inside generation. Do not add the phase times.
 The profiler also reports exclusive times, excluding nested instrumented phases;

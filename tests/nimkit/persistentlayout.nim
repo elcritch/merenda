@@ -5,7 +5,7 @@ when defined(merendaPersistentLayout) and defined(merendaProfile):
   import merenda/nimkit
   import merenda/nimkit/view/viewbase
   from pkg/kiwiberry import sameVariable
-  import merenda/nimkit/foundation/viewprofiling
+  import merenda/nimkit/debug/viewprofiling
   from merenda/nimkit/view/viewconstraints import solveBlocked
 
   type PersistentFixture = object

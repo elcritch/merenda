@@ -6,8 +6,8 @@ import ../containers/filebrowsers
 import ../../services/filesystem/listings
 import ../containers/stackviews
 import ../controls/buttons
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ../../foundation/urls
 import ../text/textfields
 import ../themes

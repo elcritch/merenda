@@ -8,7 +8,7 @@ when defined(macosx):
   import darwin/foundation/[nsarray, nsautoreleasepool, nsdate, nsrunloop, nsstring]
   import darwin/objc/runtime
   import merenda/nimkit/controls/nativemenus as nativeMenus
-  import merenda/nimkit/foundation/mainthreadwork
+  import merenda/foundation/mainthreadwork
 
 import figdraw
 import sigils/selectors

@@ -1,4 +1,4 @@
-import ../foundation/types
+import ../core/types
 import ../view/viewgeometry
 
 type ScrollViewport* = object

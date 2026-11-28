@@ -2,6 +2,7 @@ import figdraw
 
 import ./nimkit/app/application
 import ./nimkit/app/settings
+import ./nimkit/app/workerlifecycle
 import ./nimkit/accessibility/accessibility
 import ./nimkit/app/animations
 import ./nimkit/app/animationproperties
@@ -33,9 +34,7 @@ import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/interaction/dragcontrollers
 import ./nimkit/viewbindings
-import ./nimkit/foundation/assetcache
-import ./nimkit/foundation/backgroundworkers
-import ./nimkit/foundation/events
+import ./nimkit/core/events
 import ./nimkit/text/fieldeditors
 import ./nimkit/text/gaptextbuffers
 import ./nimkit/text/texteditors
@@ -58,8 +57,8 @@ import ./nimkit/text/matterhighlighting
 import ./nimkit/text/monotextviews
 import ./nimkit/text/syneditviews
 import ./nimkit/text/syntaxhighlighting
-import ./nimkit/foundation/notifications
-import ./nimkit/foundation/objectvalues
+import ./nimkit/app/notifications
+import ./nimkit/core/objectvalues
 import ./nimkit/containers/outlineviews
 import ./nimkit/app/panels
 import ./nimkit/app/pasteboards
@@ -71,7 +70,7 @@ import ./nimkit/controls/sliders
 import ./nimkit/controls/steppers
 import ./nimkit/containers/splitviews
 import ./nimkit/controls/switchbuttons
-import ./nimkit/foundation/selectors
+import ./nimkit/core/selectors
 import ./nimkit/containers/stackviews
 import ./nimkit/containers/scrollviews
 import ./nimkit/containers/tabviews
@@ -88,9 +87,8 @@ import ./nimkit/text/textviews
 import ./nimkit/themes
 import ./nimkit/contentthemepalettes
 import ./nimkit/contentthemes
-import ./nimkit/foundation/types
-import ./nimkit/foundation/undomanagers
-import ./nimkit/foundation/urlassets
+import ./nimkit/core/types
+import ./nimkit/app/undonotifications
 import ./nimkit/app/userdefaults
 import ./nimkit/app/viewcontrollers
 import ./nimkit/view/views
@@ -136,7 +134,6 @@ export viewinspectors
 export dragging
 export dragcontrollers
 export viewbindings
-export assetcache
 export events
 export fieldeditors
 export gaptextbuffers
@@ -191,8 +188,7 @@ export textviews
 export themes
 export contentthemes
 export types
-export undomanagers
-export urlassets
+export undonotifications
 export userdefaults
 export viewcontrollers
 export views

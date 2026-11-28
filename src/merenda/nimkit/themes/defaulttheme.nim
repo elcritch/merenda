@@ -3,7 +3,7 @@
 import std/[os, strutils, tables]
 import ./themecore
 import ./private/bundledthemes
-import ../foundation/types
+import ../core/types
 
 proc clearBackgroundPinstripes*(theme: var ThemeBuilder, selector: StyleSelector) =
   theme[selector, StyleBackgroundPinstripeHighlightColor] = color(0.0, 0.0, 0.0, 0.0)

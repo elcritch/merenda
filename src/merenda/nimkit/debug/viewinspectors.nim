@@ -10,9 +10,9 @@ import ../controls/comboboxes
 import ../controls/controls
 import ../controls/sliders
 import ../controls/switchbuttons
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../containers/scrollviews
 import ../containers/stackviews
 import ./selectionrings

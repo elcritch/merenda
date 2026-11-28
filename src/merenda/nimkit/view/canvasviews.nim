@@ -8,8 +8,8 @@ import figdraw as fd
 
 import ../accessibility/accessibilityprotocols
 import ../drawing
-import ../foundation/selectors
-import ../foundation/types
+import ../core/selectors
+import ../core/types
 import ./views
 
 type

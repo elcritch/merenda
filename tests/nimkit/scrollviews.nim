@@ -6,7 +6,7 @@ import ./fixtures/rendergeometry
 
 import merenda/foundation/backrefs
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 
 type ScrollResizeFixture = object
   root: View

@@ -1,8 +1,8 @@
 import sigils/core
 import sigils/selectors
 
-import ../foundation/events
-import ../foundation/selectors as nimkitSelectors
+import ../core/events
+import ../core/selectors as nimkitSelectors
 import ../view/views
 
 type

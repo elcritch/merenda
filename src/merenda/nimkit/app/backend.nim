@@ -42,9 +42,9 @@ when defined(macosx):
 import ../drawing/images
 import ../drawing/renderresources
 import ../drawing/renderscenes
-import ../foundation/types
-import ../foundation/events
-import ../foundation/terminaltrace
+import ../core/types
+import ../core/events
+import ../terminal/terminaltrace
 import ./pasteboards
 import ./workspaces
 import ./windoweffects

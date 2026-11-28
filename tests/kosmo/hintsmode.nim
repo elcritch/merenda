@@ -7,7 +7,7 @@ import fixtures/ui
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/hintsmode
-from merenda/nimkit/foundation/mainthreadwork import drainMainThreadWork
+from merenda/foundation/mainthreadwork import drainMainThreadWork
 
 proc labelEvent(value: char, text = $value): KeyEvent =
   let key =

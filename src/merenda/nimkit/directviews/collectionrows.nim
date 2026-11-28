@@ -5,8 +5,8 @@ import ../../foundation/backrefs
 import ../accessibility/accessibilityprotocols
 import ../app/[modelcontrollers, windows]
 import ../containers/collectionviews
-import ../foundation/selectors
-import ../foundation/sourcedispatch
+import ../core/selectors
+import ../../foundation/sourcedispatch
 import ../text/fieldeditors
 import ./[bindings, runtime]
 

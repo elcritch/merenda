@@ -5,7 +5,7 @@ import stylus
 from figdraw import SystemTypeface
 
 import ../stylevalues
-import ../../foundation/types
+import ../../core/types
 import ./[cssproperties, csstokens]
 
 proc singleVariable(tokens: seq[LocatedToken], value: var StyleValue): bool =

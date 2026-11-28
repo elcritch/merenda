@@ -2,13 +2,13 @@ import ./controls
 from ./cells import nil
 import ../app/animations
 import ../app/windows
-import ../foundation/selectors
+import ../core/selectors
 import ../drawing
 import ../themes
 import ../text/fieldeditors
 import ../text/textviews
-import ../foundation/events
-import ../foundation/types
+import ../core/events
+import ../core/types
 import ../accessibility/accessibility
 from figdraw import ColorRGBA
 from pkg/vmath import x, y

@@ -22,7 +22,7 @@ import std/[hashes, tables]
 import figdraw
 
 import ./renderresources
-import ../foundation/types
+import ../core/types
 
 type
   RenderViewId* = distinct uint64

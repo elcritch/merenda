@@ -5,11 +5,11 @@ import sigils/core
 
 import ../app/animations
 import ../responder/responders
-import ../foundation/selectors
-import ../foundation/viewprofiling
-import ../foundation/types
+import ../core/selectors
+import ../debug/viewprofiling
+import ../core/types
 import ./viewconstraints
-import ../foundation/events
+import ../core/events
 import ../themes
 import ../drawing/renderscenes
 import ./viewgeometry

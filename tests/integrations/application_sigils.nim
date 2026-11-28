@@ -4,7 +4,7 @@ import std/[times, unittest]
 import sigils/threadBase
 
 import merenda/nimkit/app/application
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 
 suite "NimKit application Sigils scheduler":
   test "automatic local scheduler can be disabled before running":

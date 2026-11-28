@@ -2,7 +2,7 @@
 import std/[sequtils, unittest]
 import sigils/[core, reactive]
 import merenda/nimkit
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import ../../examples/declarative_tasks
 
 proc findDemoView(controller: TaskController, id: string): View =

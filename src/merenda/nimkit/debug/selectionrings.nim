@@ -2,8 +2,8 @@ import sigils/selectors
 
 import ../drawing
 import ../themes
-import ../foundation/selectors as nimkitSelectors
-import ../foundation/types
+import ../core/selectors as nimkitSelectors
+import ../core/types
 import ../view/views
 
 type

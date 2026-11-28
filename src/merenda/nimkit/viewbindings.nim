@@ -3,9 +3,9 @@ import std/tables
 import sigils/[collections, core, reactive, selectors]
 import ../foundation/backrefs
 import ./responder/responders
-import ./foundation/mainthreadwork
-import ./foundation/sourcedispatch
-import ./foundation/viewprofiling
+import ../foundation/mainthreadwork
+import ../foundation/sourcedispatch
+import ./debug/viewprofiling
 import ./text/textfields
 
 type

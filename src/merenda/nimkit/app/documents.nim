@@ -2,9 +2,9 @@ import std/[options, os]
 
 import sigils/core
 
-import ../foundation/notifications
-import ../foundation/selectors
-import ../foundation/undomanagers
+import ./notifications
+import ../core/selectors
+import ./undonotifications
 import ../../foundation/urls
 import ../responder/responders
 import ./userdefaults

@@ -1,7 +1,7 @@
 ## Internal CSS property vocabulary shared by compilation and typed resolution.
 
 import std/strutils
-import ../../foundation/types
+import ../../core/types
 
 type
   CssPropertyKind* = enum

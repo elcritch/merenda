@@ -20,7 +20,7 @@ from sigils/hom import findFirstReply, get, isSome
 
 import ../foundation/backrefs
 import ../nimkit as nimkit except performKeyEquivalent
-from ../nimkit/foundation/selectors import performKeyEquivalent, interceptKeyEquivalent
+from ../nimkit/core/selectors import performKeyEquivalent, interceptKeyEquivalent
 import ../nimkit/text/[searchmatching, textbytecursors]
 
 type

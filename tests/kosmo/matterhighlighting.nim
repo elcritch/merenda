@@ -10,7 +10,7 @@ import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
 import merenda/nimkit/contentthemes
 import merenda/nimkit
-from merenda/nimkit/foundation/mainthreadwork import
+from merenda/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
 import ../fixtures/nimbindings
 

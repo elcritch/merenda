@@ -2,8 +2,8 @@
 
 import ../app/windows
 import ../controls/controls
-import ../foundation/events
-import ../foundation/selectors
+import ../core/events
+import ../core/selectors
 import ../view/views
 import ./tablecore
 import ./tablepresentation

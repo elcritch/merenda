@@ -1,7 +1,7 @@
 import sigils/core
 import sigils/selectors
 
-import ../../foundation/types
+import ../../core/types
 import ../../themes
 import ../chrome
 import ../drawing

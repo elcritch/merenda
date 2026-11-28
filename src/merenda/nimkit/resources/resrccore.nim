@@ -6,7 +6,7 @@
 
 import std/[hashes, options]
 
-from ../foundation/types import Color, Rect, Size
+from ../core/types import Color, Rect, Size
 from ../themes/themecore import EdgeInsets
 
 type

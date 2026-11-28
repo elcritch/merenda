@@ -4,7 +4,7 @@ import std/[appdirs, monotimes, os, paths, strutils, tables, tempfiles, times]
 import crunchy/[common, sha256]
 import sigils/[core, threads]
 
-import ../../foundation/urls
+import ../foundation/urls
 
 when defined(features.merenda.chronos):
   from std/uri import Uri, parseUri
@@ -17,7 +17,7 @@ else:
   import std/atomics
   from std/uri import parseUri
 
-  import ./backgroundworkers
+  import ../foundation/backgroundworkers
   from ./urlassethttp import
     UrlAssetCancellation, UrlAssetHttpResponse, checkCancelled, fetchUrlAsset
 
@@ -718,7 +718,7 @@ proc newUrlAssetLoader*(
       UrlAssetLoader.completeUrlAssetWorkerClose(),
     )
   else:
-    result.xPool = nimkitWorkerPool()
+    result.xPool = backgroundWorkerPool()
     result.xMaximumConcurrentLoads = maximumConcurrentLoads
 
 proc load*(loader: UrlAssetLoader, url: string): UrlAssetHandle {.discardable.} =
@@ -843,4 +843,4 @@ proc close*(loader: UrlAssetLoader) =
   loader.xActiveUrls.clear()
 
 when not defined(features.merenda.chronos):
-  var urlAssetWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+  var urlAssetWorkerLifetime {.used.}: BackgroundWorkerLifetime

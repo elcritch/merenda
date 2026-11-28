@@ -6,7 +6,7 @@ import crunchy/[common, sha256]
 import zippy/ziparchives
 
 const
-  NimKitAssetCacheDirectoryName* = "assets"
+  AssetCacheDirectoryName* = "assets"
   DefaultMaximumEmbeddedAssetBytes* = 64'i64 * 1024'i64 * 1024'i64
 
 type
@@ -70,14 +70,11 @@ func succeeded*(installResult: EmbeddedAssetInstallResult): bool =
   ## Return whether the asset is ready for use at `installResult.path`.
   installResult.state == eaisReady
 
-proc nimkitAssetCacheDirectory*(applicationIdentifier: string): string =
+proc assetCacheDirectory*(applicationIdentifier: string): string =
   ## Return the platform cache directory for one application's installed assets.
   if applicationIdentifier.strip().len == 0:
     raise newException(ValueError, "application identifier cannot be empty")
-  $(
-    appdirs.getCacheDir(Path(applicationIdentifier)) /
-    Path(NimKitAssetCacheDirectoryName)
-  )
+  $(appdirs.getCacheDir(Path(applicationIdentifier)) / Path(AssetCacheDirectoryName))
 
 func embeddedAssetCachePath(asset: EmbeddedZipAsset, cacheDirectory: string): string =
   cacheDirectory / (asset.contentSha256.toLowerAscii() & "-" & asset.fileName)
@@ -132,7 +129,7 @@ proc installZipAsset(
         if cacheDirectory.len > 0:
           cacheDirectory
         else:
-          nimkitAssetCacheDirectory(applicationIdentifier)
+          assetCacheDirectory(applicationIdentifier)
       targetPath = asset.embeddedAssetCachePath(resolvedCacheDirectory)
     createDir(resolvedCacheDirectory)
 

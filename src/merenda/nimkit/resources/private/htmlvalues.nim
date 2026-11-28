@@ -2,7 +2,7 @@
 
 import std/[math, strutils]
 
-import ../../foundation/types
+import ../../core/types
 import ../../themes/themecore
 import ../[resrccore, resrcregistry]
 

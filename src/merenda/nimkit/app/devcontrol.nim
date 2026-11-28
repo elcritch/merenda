@@ -7,7 +7,7 @@ when not defined(merenda.devControl):
 
 import std/[base64, json, monotimes, os, strutils, times]
 import ../devcontrol/[protocol, transport]
-import ../foundation/[events, types]
+import ../core/[events, types]
 import ../themes
 import ./[backend, windows]
 

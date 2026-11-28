@@ -13,9 +13,9 @@ import ../controls/buttons
 import ../controls/comboboxes
 import ../controls/fontpickers
 import ../controls/steppers
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/types
+import ../core/objectvalues
+import ../core/selectors
+import ../core/types
 import ../responder/responders
 import ../text/textfields
 import ../themes

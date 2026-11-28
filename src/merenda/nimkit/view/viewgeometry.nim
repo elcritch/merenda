@@ -2,10 +2,10 @@ import std/options
 
 import sigils/core
 
-import ../foundation/selectors
-import ../foundation/viewprofiling
+import ../core/selectors
+import ../debug/viewprofiling
 import ../themes
-import ../foundation/types
+import ../core/types
 import ./viewbase
 
 type

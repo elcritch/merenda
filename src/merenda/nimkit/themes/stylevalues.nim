@@ -2,7 +2,7 @@
 
 import std/[math, strutils, tables]
 import figdraw
-import ../foundation/types
+import ../core/types
 
 export
   figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,

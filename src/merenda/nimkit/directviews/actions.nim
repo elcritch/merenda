@@ -1,6 +1,6 @@
 ## Declarative event bindings use NimKit's existing target ownership rules.
 import ../responder/[actiontargets, responders]
-import ../foundation/selectors
+import ../core/selectors
 
 type ViewAction* = object
   target: ActionTarget

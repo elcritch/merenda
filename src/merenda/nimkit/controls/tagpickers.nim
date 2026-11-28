@@ -32,9 +32,9 @@ import ../app/windows
 import ../containers/listbasics
 import ../containers/stackviews
 import ../drawing
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../text/fieldeditors
 import ../text/textfields
 import ../themes

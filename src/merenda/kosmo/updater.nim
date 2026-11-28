@@ -4,7 +4,7 @@ import std/[atomics, json, os, osproc, strtabs, strutils, tempfiles]
 import threading/smartptrs
 
 import sigils/[core, threadProxies, threads]
-import ../nimkit/foundation/backgroundworkers
+import ../foundation/backgroundworkers
 import ../services/downloads
 
 const
@@ -151,7 +151,7 @@ proc startKosmoUpdateCheck*(
   )
   result.control[].cancelled.store(false, moRelaxed)
   var worker = UpdateWorker()
-  result.worker = worker.moveToThread(nimkitWorkerPool())
+  result.worker = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result.worker, checkRelease, result.worker, checkRelease)
   connectThreaded(
     result.worker, releaseChecked, result, KosmoUpdateChecker.releaseChecked()

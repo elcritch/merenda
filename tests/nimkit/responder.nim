@@ -6,7 +6,7 @@ from sigils/hom import findFirstReply, get, isNone, isSome
 import merenda/foundation/backrefs
 import merenda/nimkit except performKeyEquivalent, undoManager
 from merenda/nimkit/app/backend import HostTextComposition
-from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
+from merenda/nimkit/core/selectors import performKeyEquivalent, undoManager
 from merenda/nimkit/view/viewprotos import nil
 from fixtures/widgetflows import clickView
 

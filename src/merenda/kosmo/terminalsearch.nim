@@ -6,7 +6,7 @@ import sigils/core
 
 import ../foundation/backrefs
 import ../nimkit as nimkit except performKeyEquivalent
-from ../nimkit/foundation/selectors import performKeyEquivalent
+from ../nimkit/core/selectors import performKeyEquivalent
 import ../nimkit/text/searchmatching
 import ./[hintsmode, terminalinput]
 import ./scrolling

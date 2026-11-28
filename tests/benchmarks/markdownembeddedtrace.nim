@@ -4,7 +4,7 @@
 import std/[json, monotimes, os, strutils, times]
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 
 when defined(macosx):
   {.

@@ -1,7 +1,7 @@
 import std/[options, strutils]
 
-import ../foundation/selectors
-import ../foundation/events
+import ../core/selectors
+import ../core/events
 
 type
   ShortcutModifier* = enum

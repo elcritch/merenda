@@ -8,9 +8,9 @@ import terminex/[compactscrollback, terminput, termscreen, termsessions]
 import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
 import ../../foundation/[backrefs, urls]
-import ../foundation/[events, selectors, types]
-import ../foundation/terminaltrace
-import ../foundation/mainthreadwork
+import ../core/[events, selectors, types]
+import ./terminaltrace
+import ../../foundation/mainthreadwork
 import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
@@ -297,6 +297,7 @@ proc stopTerminalPolling(view: TerminalView)
 proc scheduleTerminalFrame(view: TerminalView)
 
 proc `session=`*(view: TerminalView, session: TerminalViewSession) =
+  registerTerminalWorkerShutdown()
   let next =
     if session.isNil:
       newTerminalViewSession()
@@ -1385,6 +1386,7 @@ proc initTerminalViewFields*(
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ) =
+  registerTerminalWorkerShutdown()
   initMonoTextViewFields(view, frame = frame)
   view.xSession =
     if session.isNil:

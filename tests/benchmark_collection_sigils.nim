@@ -4,7 +4,7 @@ import sigils/[core, reactive]
 import merenda/nimkit/responder/responders
 import merenda/nimkit/app/collectionsigils
 import merenda/nimkit/viewbindings
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 
 type
   Row = object

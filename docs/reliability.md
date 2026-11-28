@@ -77,7 +77,8 @@ reuse, and edit notifications.
 
 ## Bounded URL loading
 
-`newUrlAssetLoader` accepts `maximumAssetBytes`, `maximumConcurrentLoads`, and
+`newUrlAssetLoader` from `merenda/services/urlassets` accepts
+`maximumAssetBytes`, `maximumConcurrentLoads`, and
 `maximumPendingLoads`. Defaults are 64 MiB per asset, four network transfers, and
 256 active plus queued distinct URLs. Duplicate URLs share a handle. Queue
 admission happens on the caller thread, bounding queued worker messages as well

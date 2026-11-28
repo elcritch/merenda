@@ -9,7 +9,7 @@ import stylus
 
 import ../themecore
 import ./[cssproperties, cssvalues, csstokens]
-import ../../foundation/types
+import ../../core/types
 
 export csstokens.CssDiagnostic
 

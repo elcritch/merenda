@@ -15,7 +15,7 @@ import moepkg/highlight as moeHighlight
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/syntax/tokenizer as moeTokenizer
 
-import ../nimkit/foundation/backgroundworkers
+import ../foundation/backgroundworkers
 
 const KosmoMatterTimeLimitMs* {.intdefine.} = 100
   ## Soft per-line deadline used by the asynchronous adapter. A zero value
@@ -834,7 +834,7 @@ proc newMatterHighlighting*(
       tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
     ](),
   )
-  result.worker = worker.moveToThread(nimkitWorkerPool())
+  result.worker = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(
     result.worker, requestMatterHighlight, result.worker, requestMatterHighlight
   )
@@ -982,4 +982,4 @@ proc close*(highlighting: MatterHighlighting) =
   highlighting.sourceProvider = nil
   highlighting.worker = nil
 
-var matterWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var matterWorkerLifetime {.used.}: BackgroundWorkerLifetime

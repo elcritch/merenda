@@ -1,6 +1,6 @@
 import std/unittest
 import sigils/core
-import merenda/nimkit/foundation/sourcedispatch
+import merenda/foundation/sourcedispatch
 
 suite "source dispatch cleanup":
   test "disconnects wait for the outermost dispatch of their own source":

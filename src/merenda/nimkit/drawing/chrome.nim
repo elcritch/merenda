@@ -8,7 +8,7 @@ import sigils/selectors
 import ./drawing
 import ../themes
 import ../themes/themecore as themeCore
-import ../foundation/types
+import ../core/types
 
 type
   ChromeRole* = enum

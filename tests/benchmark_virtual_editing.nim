@@ -2,7 +2,7 @@
 import std/[monotimes, times]
 import merenda/nimkit
 import merenda/nimkit/directviews
-import merenda/nimkit/foundation/viewprofiling
+import merenda/nimkit/debug/viewprofiling
 import ./intrinsic_collection_fixture
 
 for cache in [false, true]:

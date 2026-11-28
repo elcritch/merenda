@@ -19,12 +19,12 @@ import ../controls/controls
 import ../containers/listbasics
 import ../containers/scrollviews
 import ../drawing
-import ../foundation/events
-import ../foundation/objectvalues
-import ../foundation/selectors
-import ../foundation/sourcedispatch
-import ../foundation/types
-import ../foundation/undomanagers
+import ../core/events
+import ../core/objectvalues
+import ../core/selectors
+import ../../foundation/sourcedispatch
+import ../core/types
+import ../../foundation/undomanagers
 import ../themes
 import ../view/views
 

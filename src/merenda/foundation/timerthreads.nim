@@ -1,4 +1,4 @@
-## Timer dispatcher shared by NimKit's background services and animation clocks.
+## Cross-thread timer dispatch backed by Sigils.
 
 when defined(features.merenda.chronos):
   import sigils/threadChronos
@@ -16,7 +16,6 @@ else:
   import std/[locks, selectors, tables]
   import sigils/core
   import sigils/threadSelectors
-  import ./sigilnames
   export threadSelectors
 
   type
@@ -80,7 +79,7 @@ else:
         tgt: thread.agent.unsafeWeakRef().asAgent(),
         slot: applyTimerUpdate,
         req: initSigilRequest[ptr TimerUpdate, ptr TimerUpdate](
-          sig"nimkitTimerUpdate", addr update
+          toSigilName("nimkitTimerUpdate"), addr update
         ),
       )
       while not update.finished:

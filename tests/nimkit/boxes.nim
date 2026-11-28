@@ -6,7 +6,7 @@ import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
-import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/core/types as nimkitTypes
 import ./fixtures/rendergeometry
 
 type FixedIntrinsicView = ref object of View

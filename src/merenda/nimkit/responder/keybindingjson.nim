@@ -2,7 +2,7 @@
 
 import std/json
 
-import ../foundation/selectors
+import ../core/selectors
 import ./keybindings
 
 type KeyBindingJsonResult* = object

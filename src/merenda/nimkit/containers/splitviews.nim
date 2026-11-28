@@ -5,9 +5,9 @@ import sigils/core
 import ../accessibility/accessibility
 import ../app/animations
 import ../drawing
-import ../foundation/events
-import ../foundation/selectors
-import ../foundation/types
+import ../core/events
+import ../core/selectors
+import ../core/types
 import ../themes
 import ../view/viewgeometry
 import ../view/views

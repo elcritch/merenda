@@ -20,9 +20,9 @@ import ../nimkit as nimkit
 import ../services/filesystem/[filesearch, listings, workspacefiles]
 import ../services/git/status as gitstatus
 from ../nimkit/text/textruneutils import utf8RunesForText
-from ../nimkit/foundation/mainthreadwork import scheduleMainThreadWork
+from ../foundation/mainthreadwork import scheduleMainThreadWork
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ../nimkit/foundation/selectors as nimkitSelectors
+import ../nimkit/core/selectors as nimkitSelectors
 import
   ./[
     about, applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,

@@ -6,12 +6,12 @@ from figdraw import ZLevel
 
 import ../drawing/drawing
 from ../themes/themecore import StyleContext
-import ./undomanagers
+import ../../foundation/undomanagers
 import ./events
 import ../text/texttypes
 import ../text/textstorage
 import ./types
-import ./sigilnames
+import ../../foundation/sigilnames
 
 export selectors, sigilnames
 

@@ -1,7 +1,7 @@
 ## Value-only text layout data shared by the UI manager and background workers.
 
 import std/[hashes, options]
-import ../foundation/types
+import ../core/types
 import ./texttypes
 from ../themes/themecore import EdgeInsets
 

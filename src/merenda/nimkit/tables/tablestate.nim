@@ -5,7 +5,7 @@ import sigils/core
 from sigils/hom import findFirst, get
 import ../app/userdefaults
 import ../app/windows
-import ../foundation/selectors
+import ../core/selectors
 import ../view/views
 import ./tablecore
 import ./tablepresentation

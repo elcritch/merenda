@@ -8,7 +8,7 @@
 
 import std/[algorithm, monotimes, strformat, strutils, times, unicode]
 
-import merenda/nimkit/foundation/types
+import merenda/nimkit/core/types
 import merenda/nimkit/text/[textstorage, texttypes]
 
 const

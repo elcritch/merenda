@@ -3,7 +3,7 @@
 import std/[algorithm, isolation, monotimes, os, sets, strutils, times]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
-import ../../nimkit/foundation/backgroundworkers
+import ../../foundation/backgroundworkers
 import ../git/processes
 import ./[listings, workspacewatch]
 
@@ -257,7 +257,7 @@ proc newWorkspaceFiles*(
     reconciliationInterval: reconciliationInterval,
   )
   var worker = WorkspaceFileWorker()
-  result.worker = worker.moveToThread(nimkitWorkerPool())
+  result.worker = worker.moveToThread(backgroundWorkerPool())
   connectThreaded(result.worker, loadFiles, result.worker, loadFiles)
   connectThreaded(result.worker, filesLoaded, result, WorkspaceFiles.receiveFiles())
 
@@ -330,4 +330,4 @@ proc close*(files: WorkspaceFiles) =
     files.pending = false
     files.active = false
 
-var workspaceFilesWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+var workspaceFilesWorkerLifetime {.used.}: BackgroundWorkerLifetime

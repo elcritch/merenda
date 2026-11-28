@@ -3,7 +3,7 @@ import std/[options, tables]
 import sigils/core
 import sigils/selectors
 
-import ../foundation/notifications
+import ./notifications
 
 type UserDefaults* = ref object of DynamicAgent
   xObjects: Table[string, DynamicAgent]

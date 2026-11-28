@@ -1,7 +1,7 @@
 import std/[os, strutils, tables, tempfiles, unittest]
 
 import crunchy/[common, sha256]
-import merenda/nimkit
+import merenda/services/assetcache
 import zippy/ziparchives
 
 suite "nimkit embedded asset cache":

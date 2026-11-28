@@ -3,7 +3,7 @@ import sigils/[core, reactive]
 import merenda/foundation/backrefs
 import merenda/nimkit/directviews/bindings
 import merenda/nimkit/responder/responders
-import merenda/nimkit/foundation/mainthreadwork
+import merenda/foundation/mainthreadwork
 import merenda/nimkit/text/textfields
 
 type Model = ref object of Responder

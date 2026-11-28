@@ -11,7 +11,8 @@ when not defined(nimkitTerminalTrace):
 import std/[json, monotimes, os, times]
 import sigils/core
 import merenda/nimkit/app/[animations, application, windows]
-import merenda/nimkit/foundation/[terminaltrace, types]
+import merenda/nimkit/terminal/terminaltrace
+import merenda/nimkit/core/types
 import merenda/nimkit/terminal/terminalviews
 import merenda/nimkit/responder/responders
 import merenda/nimkit/view/views
