@@ -25,7 +25,7 @@ DarkBSD is the default.
 
 ## Try Merenda
 
-You'll need Nim 2.2.10 or newer, a C compiler, Git, and a recent
+You'll need Nim 2.2.12 or newer, a C compiler, Git, and a recent
 [Atlas](https://github.com/nim-lang/atlas#installation) (0.16.3 or newer).
 On Linux and FreeBSD, you'll also need the system libraries for your windowing
 and graphics backend. On Windows, use MinGW-w64 GCC.
